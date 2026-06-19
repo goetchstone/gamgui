@@ -1,0 +1,1 @@
+[{"email": "alice@example.com", "role": "MEMBER", "type": "USER", "status": "ACTIVE"}, {"email": "bob@example.com", "role": "MANAGER", "type": "USER", "status": "ACTIVE"}]

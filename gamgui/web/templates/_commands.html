@@ -1,0 +1,15 @@
+<div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm mt-2">
+  <h2 class="eyebrow text-sh-blue">Fresh setup — run in Terminal</h2>
+  <p class="text-sm text-sh-blueink/80 mt-2">
+    These open a browser for sign-in and ask a few questions. Run them in order, then come back and
+    import from the folder below.
+  </p>
+  <pre class="mt-4 overflow-x-auto rounded-xl bg-ink text-sh-white text-[12.5px] leading-relaxed p-4"><code>{{ info.env }}
+{% for cmd in info.commands %}{{ cmd }}
+{% endfor %}</code></pre>
+  <p class="text-xs text-sh-gray mt-3">Then authorize Domain-Wide Delegation in the Admin Console (next step shows the details).</p>
+  <button class="mt-4 inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors"
+          hx-post="/setup/import" hx-target="#wizard-next" hx-swap="innerHTML"
+          hx-include="[name='domain'],[name='admin']"
+          hx-vals='{"config_dir": {{ info.cfgdir | tojson }} }'>I've run these — import credentials</button>
+</div>

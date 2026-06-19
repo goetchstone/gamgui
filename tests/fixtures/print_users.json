@@ -1,0 +1,3 @@
+{"primaryEmail": "alice@example.com", "name": {"givenName": "Alice", "familyName": "Anders"}, "suspended": false, "orgUnitPath": "/Staff", "isAdmin": true}
+{"primaryEmail": "bob@example.com", "name": {"givenName": "Bob", "familyName": "Brown"}, "suspended": true, "orgUnitPath": "/Staff", "isAdmin": false}
+{"primaryEmail": "carol@example.com", "name": {"givenName": "Carol", "familyName": "Clark"}, "suspended": false, "orgUnitPath": "/Students", "isAdmin": false}

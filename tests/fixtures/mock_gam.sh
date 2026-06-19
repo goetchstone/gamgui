@@ -1,0 +1,62 @@
+#!/bin/sh
+# Mock `gam` binary for offline tests. Behavior is driven by the argument vector and a couple of
+# env vars set by the test:
+#   GAM_MOCK_FIXTURES  - directory holding the *.json fixtures to echo back
+#   GAM_MOCK_REFRESH   - if set, simulate an OAuth token refresh by rewriting oauth2.txt in GAMCFGDIR
+#
+# It also asserts (for authenticated calls) that GAMCFGDIR was set, so the materialization path is
+# genuinely exercised.
+
+set -eu
+
+case "${1:-}" in
+  version)
+    echo "GAM 7.46.01 - mock"
+    exit 0
+    ;;
+  MOCKFAIL)
+    # MOCKFAIL <kind> -> emit a representative stderr line and exit non-zero.
+    case "${2:-unknown}" in
+      notfound) echo "ERROR: 404: Entity User does not exist - notFound" 1>&2 ;;
+      scope)    echo "ERROR: 403: Request had insufficient authentication scopes" 1>&2 ;;
+      rate)     echo "ERROR: 429: userRateLimitExceeded - rate limit" 1>&2 ;;
+      auth)     echo "ERROR: invalid_grant: Token has been expired or revoked" 1>&2 ;;
+      *)        echo "ERROR: something unexpected happened" 1>&2 ;;
+    esac
+    exit 1
+    ;;
+esac
+
+# Read commands -> echo the matching fixture.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
+  cat "$GAM_MOCK_FIXTURES/print_users.json"
+  exit 0
+fi
+if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
+  cat "$GAM_MOCK_FIXTURES/info_user.json"
+  exit 0
+fi
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
+  cat "$GAM_MOCK_FIXTURES/group_members.json"
+  exit 0
+fi
+
+# `gam user <admin> check svcacct` -> simulate a fully-authorized service account.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "svcacct" ]; then
+  cat <<'EOF'
+System time status: PASS
+Service account private key authentication: PASS
+https://www.googleapis.com/auth/admin.directory.user: PASS
+https://www.googleapis.com/auth/admin.directory.group: PASS
+https://www.googleapis.com/auth/gmail.settings.basic: PASS
+All scopes PASS
+EOF
+  exit 0
+fi
+
+# Anything else is treated as a mutation: optionally simulate a token refresh, then succeed.
+if [ -n "${GAM_MOCK_REFRESH:-}" ] && [ -n "${GAMCFGDIR:-}" ] && [ -f "$GAMCFGDIR/oauth2.txt" ]; then
+  printf 'refreshed-token-payload\n' > "$GAMCFGDIR/oauth2.txt"
+fi
+echo "ok"
+exit 0

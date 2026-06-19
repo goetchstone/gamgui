@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Vendored GAM7 binary — fetched via scripts/fetch_gam.sh, never committed
+gamgui/resources/gam7/*
+!gamgui/resources/gam7/.gitkeep
+!gamgui/resources/gam7/VERSION
+
+# Secrets / local runtime state must never be committed
+*.oauth2service.json
+oauth2.txt
+client_secrets.json
+*.local
+.gamgui/
+
+# macOS
+.DS_Store

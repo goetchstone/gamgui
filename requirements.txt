@@ -1,0 +1,19 @@
+# Pinned, known-good dependency set (macOS / Linux, Python 3.9+).
+# Runtime + test tooling. For an exact reproducible install:  pip install -r requirements.txt
+# (pyproject.toml is the flexible source of truth: pip install -e ".[dev]")
+#
+# The native window uses pywebview, kept separate because it pulls heavy macOS bindings:
+#   pip install "pywebview>=5.1"
+# The ABM/Mosyle connectors are optional and require the companion 'abapit' package (see README).
+
+# --- runtime ---
+fastapi==0.128.8
+uvicorn[standard]==0.39.0
+jinja2==3.1.6
+python-multipart==0.0.20
+keyring==25.7.0
+
+# --- tests ---
+pytest==8.4.2
+pytest-asyncio==1.2.0
+httpx==0.28.1

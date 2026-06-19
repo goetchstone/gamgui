@@ -1,0 +1,32 @@
+<div class="rounded-2xl border {{ 'border-emerald-300' if result.ok else 'border-amber-300' }} bg-sh-white p-6 shadow-sm mt-2 space-y-4">
+  <div class="flex items-center gap-2.5">
+    <span class="inline-block h-2.5 w-2.5 rounded-full {{ 'bg-emerald-600' if result.ok else 'bg-amber-500' }}"></span>
+    <span class="font-serif text-lg text-sh-black">{{ result.summary }}</span>
+  </div>
+
+  {% if result.lines %}
+  <ul class="space-y-1.5">
+    {% for label, status in result.lines %}
+      <li class="flex items-center justify-between text-sm border-b border-sh-gray/20 pb-1.5">
+        <span class="text-sh-blueink truncate pr-3">{{ label }}</span>
+        <span class="text-[11px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-emerald-50 text-emerald-700' if status == 'PASS' else 'bg-red-50 text-red-700' }}">{{ status }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if result.ok %}
+    <div class="border-t border-sh-gray/30 pt-4">
+      <p class="text-sm text-sh-blueink/80">{{ domain }} is connected. You're ready to manage users.</p>
+      <a href="/" class="mt-3 inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors">Go to console</a>
+    </div>
+  {% else %}
+    <div class="border-t border-sh-gray/30 pt-4">
+      <p class="text-sm text-sh-blueink/80">Fix the delegation (scopes / client ID), then verify again.</p>
+      <button class="mt-3 inline-flex items-center rounded-lg border border-sh-blue/60 px-3.5 py-2 text-sm font-medium text-sh-blueink hover:bg-sh-blue/5 transition-colors"
+              hx-post="/setup/verify" hx-target="#wizard-next" hx-swap="innerHTML"
+              hx-include="[name='domain'],[name='admin']">Verify again</button>
+      {% if result.raw %}<pre class="mt-3 overflow-x-auto rounded-lg bg-paper border border-sh-gray/40 text-[12px] p-3 text-sh-blueink"><code>{{ result.raw[:600] }}</code></pre>{% endif %}
+    </div>
+  {% endif %}
+</div>
