@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Groups — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-6">
+  <div>
+    <p class="eyebrow text-brand-blue">Membership</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Groups</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Pick a group, then <strong>drag people in</strong> from the right to add — drag a member onto the people list (or hit ×) to remove.</p>
+  </div>
+  {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
+
+  <div class="grid gap-5 sm:grid-cols-2">
+    <!-- group panel: drop a person here to ADD -->
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <select id="group-select" name="group" hx-get="/groups/members" hx-target="#members" hx-trigger="change" hx-include="this"
+              class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none">
+        <option value="">Select a group…</option>
+        {% for g in groups %}<option value="{{ g.email }}">{{ g.name or g.email }} ({{ g.email }})</option>{% endfor %}
+      </select>
+      <div id="members" class="mt-4 min-h-[8rem] rounded-xl border-2 border-dashed border-brand-gray/40 p-3"
+           ondragover="gqAllow(event)" ondrop="gqDropAdd(event)">
+        <p class="text-sm text-brand-gray">Pick a group, then drag people in.</p>
+      </div>
+    </div>
+
+    <!-- people pool: source to drag from; drop a member here to REMOVE -->
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" ondragover="gqAllow(event)" ondrop="gqDropRemove(event)">
+      <input type="search" id="people-filter" placeholder="Filter people…" oninput="gqFilter()"
+             class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none" />
+      <div id="people" class="mt-3 max-h-96 overflow-auto space-y-1">
+        {% for u in users %}
+        <div class="ucard flex items-center justify-between rounded-lg border border-brand-gray/30 px-3 py-1.5 text-sm cursor-grab hover:bg-paper"
+             draggable="true" ondragstart="gqDrag(event, {{ u.primary_email | tojson }}, 'add')"
+             data-search="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}">
+          <span class="text-brand-black">{{ u.full_name }}</span>
+          <span class="text-brand-gray text-xs">{{ u.primary_email }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function gqDrag(ev, email, op) {
+    ev.dataTransfer.setData("text/plain", JSON.stringify({ email: email, op: op }));
+    ev.dataTransfer.effectAllowed = "move";
+  }
+  function gqAllow(ev) { ev.preventDefault(); }
+  function gqPayload(ev) { try { return JSON.parse(ev.dataTransfer.getData("text/plain")); } catch (e) { return null; } }
+  function gqGroup() { var s = document.getElementById("group-select"); return s ? s.value : ""; }
+  function gqMutate(email, op) {
+    var g = gqGroup();
+    if (!g) { return; }
+    htmx.ajax("POST", "/groups/members", { values: { group: g, email: email, op: op }, target: "#members", swap: "innerHTML" });
+  }
+  function gqDropAdd(ev) { ev.preventDefault(); var p = gqPayload(ev); if (p && p.op === "add") { gqMutate(p.email, "add"); } }
+  function gqDropRemove(ev) { ev.preventDefault(); var p = gqPayload(ev); if (p && p.op === "remove") { gqMutate(p.email, "remove"); } }
+  function gqFilter() {
+    var q = (document.getElementById("people-filter").value || "").toLowerCase();
+    document.querySelectorAll("#people .ucard").forEach(function (c) {
+      c.style.display = c.getAttribute("data-search").indexOf(q) >= 0 ? "" : "none";
+    });
+  }
+</script>
+{% endif %}
+{% endblock %}

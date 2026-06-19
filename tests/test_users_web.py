@@ -96,6 +96,23 @@ def test_reports_requires_connection(unconnected_client):
     assert "Connect a domain first" in r.text
 
 
+def test_groups_board_renders(client):
+    r = client.get("/groups")
+    assert r.status_code == 200
+    assert "alice@example.com" in r.text       # draggable person card
+    assert "sales@example.com" in r.text        # group option
+
+
+def test_groups_board_members_view_and_mutate(client):
+    r = client.get("/groups/members", params={"group": "sales@example.com"})
+    assert r.status_code == 200
+    assert "alice@example.com" in r.text        # member from the group-members fixture
+    add = client.post("/groups/members", data={"group": "sales@example.com", "email": "carol@example.com", "op": "add"})
+    assert add.status_code == 200
+    rem = client.post("/groups/members", data={"group": "sales@example.com", "email": "alice@example.com", "op": "remove"})
+    assert rem.status_code == 200
+
+
 def test_signature_current_renders(client):
     r = client.get("/users/signature/current", params={"email": "alice@example.com"})
     assert r.status_code == 200

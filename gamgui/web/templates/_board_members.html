@@ -1,0 +1,19 @@
+{% if empty %}
+<p class="text-sm text-brand-gray">Pick a group, then drag people in from the right. Drag a member out to remove.</p>
+{% else %}
+{% if error %}<div class="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">{{ error }}</div>{% endif %}
+<p class="text-xs text-brand-gray mb-2">{{ members | length }} member{{ "s" if members | length != 1 }} in {{ group }}</p>
+<ul class="flex flex-wrap gap-2">
+  {% for m in members %}
+  <li class="inline-flex items-center gap-1.5 rounded-full bg-paper border border-brand-gray/40 pl-3 pr-1.5 py-1 text-sm cursor-grab"
+      draggable="true" ondragstart="gqDrag(event, {{ m.email | tojson }}, 'remove')">
+    <span class="text-brand-black">{{ m.email }}</span>
+    <button class="text-brand-gray hover:text-red-700 text-base leading-none" aria-label="Remove {{ m.email }}"
+            hx-post="/groups/members" hx-target="#members" hx-swap="innerHTML"
+            hx-vals='{"group": {{ group | tojson }}, "email": {{ m.email | tojson }}, "op": "remove"}'>&times;</button>
+  </li>
+  {% else %}
+  <li class="text-sm text-brand-gray">No members yet — drag someone in.</li>
+  {% endfor %}
+</ul>
+{% endif %}
