@@ -21,7 +21,11 @@
     </p>
     <div class="mt-3">
       <span class="text-xs text-brand-gray">Client ID</span>
-      <pre class="mt-1 overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 text-[12.5px] p-3"><code>{{ dwd.client_id or "(client_id not found in oauth2service.json)" }}</code></pre>
+      <div class="copy-wrap mt-1 flex items-center gap-2 rounded-lg bg-paper border border-brand-gray/40 p-2.5">
+        <code class="flex-1 overflow-x-auto whitespace-pre text-[12.5px] text-ink px-1">{{ dwd.client_id or "(client_id not found in oauth2service.json)" }}</code>
+        <button type="button" onclick="copyEl(this)"
+                class="copy-btn shrink-0 rounded-md border border-brand-gray/60 px-2.5 py-1 text-xs font-medium text-brand-blueink hover:bg-brand-gray/10 transition-colors">Copy</button>
+      </div>
     </div>
     <a href="{{ dwd.admin_console_url }}" target="_blank" rel="noopener"
        class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-blueink hover:text-brand-black">

@@ -39,6 +39,7 @@ def test_import_shows_dwd_and_stores_creds(ctx):
     r = client.post("/setup/import", data={"domain": "ex.com", "admin": "a@ex.com", "config_dir": str(cfg)})
     assert r.status_code == 200
     assert "CID.apps" in r.text                 # DWD client id surfaced
+    assert "copyEl(" in r.text                   # client id has a copy button
     assert vault.has_credentials("ex.com")
 
 
@@ -62,3 +63,4 @@ def test_fresh_shows_commands(ctx):
     r = client.post("/setup/fresh", data={"domain": "ex.com", "admin": "a@ex.com"})
     assert "create project" in r.text
     assert "GAMCFGDIR" in r.text
+    assert "copyEl(" in r.text  # each command has a copy button

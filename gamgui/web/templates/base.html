@@ -64,5 +64,36 @@
       GamGUI — a local admin console for Google Workspace
     </footer>
   </div>
+  <script>
+    // Copy the text of the code/input inside the clicked button's .copy-wrap.
+    function copyEl(btn) {
+      var wrap = btn.closest(".copy-wrap") || btn.parentElement;
+      var src = wrap && wrap.querySelector("code, pre, input");
+      if (!src) return;
+      var text = src.tagName === "INPUT" ? src.value : src.innerText;
+      function done() {
+        var prev = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = prev; }, 1200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text); done(); });
+      } else {
+        legacyCopy(text);
+        done();
+      }
+    }
+    function legacyCopy(text) {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  </script>
 </body>
 </html>
