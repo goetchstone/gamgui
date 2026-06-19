@@ -24,6 +24,8 @@ GROUP_ROLES = ("member", "manager", "owner")
 USER_LIST_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin")
 # Fields for the detail view (adds aliases + last login on top of the list fields).
 USER_DETAIL_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin", "lastLoginTime", "aliases")
+# `gam print groups` likewise returns only email unless fields are requested.
+GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
 
 
 class GAMCommands:
@@ -144,10 +146,7 @@ class GAMCommands:
     # --- groups -----------------------------------------------------------------------
     @staticmethod
     def print_groups(fields: Optional[Sequence[str]] = None) -> List[str]:
-        argv = ["print", "groups"]
-        if fields:
-            argv += ["fields", ",".join(fields)]
-        argv.append("formatjson")
+        argv = ["print", "groups", "fields", ",".join(fields or GROUP_LIST_FIELDS), "formatjson"]
         return argv
 
     @staticmethod
