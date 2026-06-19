@@ -45,9 +45,9 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   exit 0
 fi
 
-# `gam user <email> print delegates formatjson`
+# `gam user <email> print delegates` (no formatjson) -> plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
-  cat "$GAM_MOCK_FIXTURES/delegates.json"
+  printf 'User,delegateAddress,delegationStatus\n%s,assistant@example.com,accepted\n%s,backup@example.com,accepted\n' "${2:-}" "${2:-}"
   exit 0
 fi
 

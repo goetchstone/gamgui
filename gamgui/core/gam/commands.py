@@ -123,7 +123,9 @@ class GAMCommands:
 
     @staticmethod
     def print_delegates(email: str) -> List[str]:
-        return ["user", email, "print", "delegates", "formatjson"]
+        # NOTE: `print delegates` does NOT support `formatjson` (it errors "Invalid argument").
+        # Output is plain CSV with a `delegateAddress` column.
+        return ["user", email, "print", "delegates"]
 
     @staticmethod
     def set_vacation(

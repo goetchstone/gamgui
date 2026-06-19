@@ -35,6 +35,13 @@ def test_set_signature_html_flag():
     assert GAMCommands.set_signature("a@e.com", "Hi", html=False) == ["user", "a@e.com", "signature", "Hi"]
 
 
+def test_print_delegates_has_no_formatjson():
+    # `print delegates` errors if given formatjson; it returns plain CSV.
+    argv = GAMCommands.print_delegates("a@e.com")
+    assert argv == ["user", "a@e.com", "print", "delegates"]
+    assert "formatjson" not in argv
+
+
 def test_delegate_add_remove():
     assert GAMCommands.add_delegate("a@e.com", "b@e.com") == ["user", "a@e.com", "add", "delegate", "b@e.com"]
     assert GAMCommands.remove_delegate("a@e.com", "b@e.com") == ["user", "a@e.com", "delete", "delegate", "b@e.com"]
