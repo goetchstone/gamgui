@@ -82,7 +82,11 @@ def create_app(state: AppState) -> FastAPI:
     app = FastAPI(title="GamGUI", docs_url=None, redoc_url=None)
     app.state.gamgui = state
     app.add_middleware(TokenGateMiddleware, token=state.token)
-    app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
+    # Ensure the dir exists before mounting — a fresh clone or a stripped bundle may lack it,
+    # and StaticFiles raises on a missing directory.
+    static_dir = _WEB_DIR / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.get("/healthz")
     async def healthz() -> JSONResponse:
