@@ -32,4 +32,18 @@
     </tbody>
   </table>
 </div>
-{% if users %}<p class="mt-2 text-xs text-brand-gray">{{ users | length }} shown</p>{% endif %}
+<div class="mt-2 flex items-center justify-between text-xs text-brand-gray">
+  <span>{{ total }} total{% if q or scope != 'all' %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
+  {% if pages > 1 %}
+  <div class="flex items-center gap-2">
+    {% if page > 1 %}
+    <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
+            hx-get="/users/table?q={{ q | urlencode }}&scope={{ scope }}&page={{ page - 1 }}" hx-target="#users-table">Prev</button>
+    {% endif %}
+    {% if page < pages %}
+    <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
+            hx-get="/users/table?q={{ q | urlencode }}&scope={{ scope }}&page={{ page + 1 }}" hx-target="#users-table">Next</button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>

@@ -30,6 +30,11 @@ USER_DETAIL_FIELDS = (
 )
 # `gam print groups` likewise returns only email unless fields are requested.
 GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
+# Superset fetched once and cached to serve BOTH the users list (needs title) and reports.
+CACHE_FIELDS = (
+    "primaryEmail", "name", "suspended", "orgUnitPath", "organizations",
+    "isAdmin", "isDelegatedAdmin", "isEnrolledIn2Sv", "lastLoginTime", "recoveryEmail",
+)
 
 
 class GAMCommands:

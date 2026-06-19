@@ -24,12 +24,17 @@
 
     <form hx-get="/users/table" hx-target="#users-table" hx-trigger="input changed delay:300ms, change"
           class="flex gap-3">
-      <input type="search" name="q" placeholder="Search name or email…"
+      <input type="search" name="q" placeholder="Search name, email, or title…"
              class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
       <select name="scope" class="rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none">
         <option value="all">All</option>
         <option value="active">Active only</option>
+        <option value="suspended">Suspended</option>
       </select>
+      <button type="button" title="Reload from Google"
+              class="rounded-lg border border-brand-gray/60 px-3 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+              hx-get="/users/table" hx-vals='{"refresh": "1"}' hx-include="[name='q'],[name='scope']"
+              hx-target="#users-table">Refresh</button>
     </form>
 
     <div id="users-table">

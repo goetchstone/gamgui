@@ -11,7 +11,7 @@ HTTP layer offline.
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +25,7 @@ from ..core.connectors.gam_connector import GAMConnector
 from ..core.gam.runner import GAMRunner
 from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
+from ..core.usercache import UserCache
 
 _WEB_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -38,6 +39,20 @@ class AppState:
     audit_domain: str = ""              # the active Workspace domain, if configured
     connector: Optional[GAMConnector] = None
     token: str = ""
+    user_cache: UserCache = field(default_factory=UserCache)
+
+    async def users(self, force: bool = False) -> list:
+        """The cached user list (one ``gam print users`` shared by the list + reports)."""
+        if self.connector is None:
+            return []
+        from ..core.gam.commands import CACHE_FIELDS
+
+        return await self.user_cache.get(
+            lambda: self.connector.list_users(fields=CACHE_FIELDS), force=force
+        )
+
+    def invalidate_users(self) -> None:
+        self.user_cache.invalidate()
 
     @classmethod
     def create(cls, vault: Optional[SecretsVault] = None, token: Optional[str] = None) -> "AppState":

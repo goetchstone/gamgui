@@ -14,11 +14,11 @@ router = APIRouter(prefix="/reports")
 
 @router.get("", response_class=HTMLResponse)
 async def reports_page(request: Request) -> HTMLResponse:
-    conn = request.app.state.gamgui.connector
-    if conn is None:
+    st = request.app.state.gamgui
+    if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "reports.html", {"connected": False, "reports": []})
     try:
-        users = await conn.list_users(fields=reports_mod.REPORT_FIELDS)
+        users = await st.users()  # shared cache (CACHE_FIELDS superset covers REPORT_FIELDS)
     except Exception as exc:
         msg = exc.remediation if isinstance(exc, GAMError) else "Couldn't load users."
         return TEMPLATES.TemplateResponse(

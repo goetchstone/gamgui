@@ -46,10 +46,11 @@ def test_users_list(client):
     assert "Suspended" in r.text  # bob is suspended in the fixture
 
 
-def test_users_table_search_partial(client):
+def test_users_table_search_filters(client):
     r = client.get("/users/table", params={"q": "ali", "scope": "all"})
     assert r.status_code == 200
-    assert "carol@example.com" in r.text  # mock returns the full fixture set
+    assert "alice@example.com" in r.text
+    assert "carol@example.com" not in r.text  # in-memory filter excludes non-matches
 
 
 def test_user_detail_shows_info_and_delegates(client):

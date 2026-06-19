@@ -10,6 +10,8 @@ whose ``ok`` flag is always checked before reporting success.
 
 from __future__ import annotations
 
+import math
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
@@ -19,9 +21,36 @@ from ..server import TEMPLATES
 
 router = APIRouter(prefix="/users")
 
+PAGE_SIZE = 50
+
 
 def _conn(request: Request):
     return request.app.state.gamgui.connector
+
+
+def _filter_users(users, q: str, scope: str):
+    """In-memory filter over the cached list — instant, no GAM call per keystroke."""
+    out = users
+    if scope == "active":
+        out = [u for u in out if not u.suspended]
+    elif scope == "suspended":
+        out = [u for u in out if u.suspended]
+    q = (q or "").strip().lower()
+    if q:
+        out = [u for u in out if q in u.primary_email.lower() or q in u.full_name.lower() or q in (u.title or "").lower()]
+    return out
+
+
+def _table_context(users, q: str = "", scope: str = "all", page: int = 1) -> dict:
+    filtered = _filter_users(users, q, scope)
+    total = len(filtered)
+    pages = max(1, math.ceil(total / PAGE_SIZE))
+    page = max(1, min(page, pages))
+    start = (page - 1) * PAGE_SIZE
+    return {
+        "users": filtered[start:start + PAGE_SIZE],
+        "q": q, "scope": scope, "page": page, "pages": pages, "total": total,
+    }
 
 
 def _err(request: Request, message: str) -> HTMLResponse:
@@ -42,31 +71,33 @@ def _friendly(exc: Exception) -> str:
 
 @router.get("", response_class=HTMLResponse)
 async def users_page(request: Request) -> HTMLResponse:
-    conn = _conn(request)
-    if conn is None:
-        return TEMPLATES.TemplateResponse(request, "users.html", {"connected": False, "users": []})
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, "users.html", {"connected": False})
     try:
-        users = await conn.list_users()
+        users = await st.users()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, "users.html",
-            {"connected": True, "users": [], "domain": conn.domain, "error": _friendly(exc)},
+            {"connected": True, "domain": st.connector.domain, "error": _friendly(exc), **_table_context([])},
         )
     return TEMPLATES.TemplateResponse(
-        request, "users.html", {"connected": True, "users": users, "domain": conn.domain}
+        request, "users.html", {"connected": True, "domain": st.connector.domain, **_table_context(users)}
     )
 
 
 @router.get("/table", response_class=HTMLResponse)
-async def users_table(request: Request, q: str = "", scope: str = "all") -> HTMLResponse:
-    conn = _conn(request)
-    if conn is None:
+async def users_table(
+    request: Request, q: str = "", scope: str = "all", page: int = 1, refresh: int = 0
+) -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
         return _err(request, "Not connected — run setup first.")
     try:
-        users = await conn.list_users(search=q.strip(), include_suspended=(scope != "active"))
+        users = await st.users(force=bool(refresh))
     except Exception as exc:
         return _err(request, _friendly(exc))
-    return TEMPLATES.TemplateResponse(request, "_users_table.html", {"users": users})
+    return TEMPLATES.TemplateResponse(request, "_users_table.html", _table_context(users, q, scope, page))
 
 
 @router.get("/detail", response_class=HTMLResponse)
@@ -275,6 +306,7 @@ async def suspend_apply(request: Request, email: str = Form(...), suspend: str =
     if not (results and all(r.ok for r in results)):
         detail = results[0].detail if results else "no change applied"
         return _err(request, f"Failed: {detail}")
+    request.app.state.gamgui.invalidate_users()  # status changed -> cached list is stale
     return TEMPLATES.TemplateResponse(
         request, "_suspend_zone.html", {"email": email, "suspended": want_suspend}
     )
