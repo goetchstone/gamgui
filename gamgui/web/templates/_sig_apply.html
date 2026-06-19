@@ -1,0 +1,8 @@
+{% if error %}
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+{% else %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  Applied to {{ applied }} of {{ total }} user{{ "s" if total != 1 }}.
+  {% if failed %}<br>Failed: {{ failed | join(", ") }}{% endif %}
+</div>
+{% endif %}

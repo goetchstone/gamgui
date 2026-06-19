@@ -135,10 +135,12 @@ def create_app(state: AppState) -> FastAPI:
     from .routes.groups import router as groups_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
+    from .routes.signatures import router as signatures_router
     from .routes.users import router as users_router
 
     app.include_router(setup_router)
     app.include_router(users_router)
     app.include_router(reports_router)
     app.include_router(groups_router)
+    app.include_router(signatures_router)
     return app

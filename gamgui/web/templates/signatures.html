@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Signatures — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-6">
+  <div>
+    <p class="eyebrow text-brand-blue">Branding</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Signature designer</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Design one signature with variables, scope it to the company, an OU, or a department, preview it for a real person, then apply it to everyone in scope.</p>
+  </div>
+  {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
+
+  <div class="grid gap-5 lg:grid-cols-2">
+    <!-- editor -->
+    <form id="sig-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block">
+          <span class="text-sm text-brand-blueink">Scope</span>
+          <select name="scope_type" id="scope_type" onchange="sigPopulate()"
+                  class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none">
+            <option value="company">Whole company</option>
+            <option value="group">Group</option>
+            <option value="ou">Org unit</option>
+            <option value="department">Department</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-sm text-brand-blueink">Which</span>
+          <select name="scope_value" id="scope_value"
+                  class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none"></select>
+        </label>
+      </div>
+
+      <label class="block">
+        <span class="text-sm text-brand-blueink">Signature template (HTML)</span>
+        <textarea name="template" rows="10" placeholder="&lt;div&gt;{name}&lt;br&gt;{role} · Saybrook Home&lt;br&gt;{email}&lt;/div&gt;"
+                  class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[12.5px] font-mono text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"></textarea>
+      </label>
+
+      <div class="text-xs text-brand-blueink/80">
+        <span class="text-brand-gray">Variables:</span>
+        {% for v, desc in variables.items() %}<code class="ml-1 rounded bg-paper border border-brand-gray/40 px-1.5 py-0.5" title="{{ desc }}">{{ v }}</code>{% endfor %}
+      </div>
+
+      <button type="button"
+              class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+              hx-post="/signatures/preview" hx-include="#sig-form" hx-target="#sig-preview" hx-swap="innerHTML">Preview</button>
+    </form>
+
+    <!-- preview -->
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <h2 class="eyebrow text-brand-gray">Preview</h2>
+      <div id="sig-preview" class="mt-3">
+        <p class="text-sm text-brand-gray">Design a template and hit Preview to see it rendered for a real person.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var SIG_OUS = {{ options.ous | tojson }};
+  var SIG_DEPTS = {{ options.departments | tojson }};
+  var SIG_GROUPS = {{ groups | tojson }};
+  function sigPopulate() {
+    var t = document.getElementById("scope_type").value;
+    var sel = document.getElementById("scope_value");
+    var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "group" ? SIG_GROUPS : []));
+    sel.innerHTML = list.map(function (v) { return '<option value="' + v + '">' + v + "</option>"; }).join("");
+    sel.disabled = list.length === 0;
+    sel.style.visibility = list.length ? "visible" : "hidden";
+  }
+  sigPopulate();
+</script>
+{% endif %}
+{% endblock %}

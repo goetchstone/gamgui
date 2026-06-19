@@ -120,6 +120,33 @@ def test_usage_report_renders(client):
     assert "bob@example.com" in r.text  # largest storage in the mock
 
 
+def test_signatures_page_renders(client):
+    r = client.get("/signatures")
+    assert r.status_code == 200
+    assert "Signature designer" in r.text
+    assert "{role}" in r.text  # variable reference present
+
+
+def test_signatures_preview(client):
+    r = client.post("/signatures/preview", data={"template": "{name} | {email}", "scope_type": "company", "scope_value": ""})
+    assert r.status_code == 200
+    assert "Applies to" in r.text
+    assert "Alice Anders" in r.text   # rendered for a real (active) sample user
+
+
+def test_signatures_apply(client):
+    r = client.post("/signatures/apply", data={"template": "{name}", "scope_type": "company", "scope_value": ""})
+    assert r.status_code == 200
+    assert "Applied to" in r.text
+
+
+def test_signatures_preview_group_scope(client):
+    r = client.post("/signatures/preview", data={"template": "{name}", "scope_type": "group", "scope_value": "sales@example.com"})
+    assert r.status_code == 200
+    assert "Applies to" in r.text
+    assert "Alice Anders" in r.text  # group member (suspended members excluded)
+
+
 def test_signature_current_renders(client):
     r = client.get("/users/signature/current", params={"email": "alice@example.com"})
     assert r.status_code == 200
