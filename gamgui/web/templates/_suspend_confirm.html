@@ -10,7 +10,7 @@
     <button class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors"
             hx-post="/users/suspend/apply" hx-target="#suspend-zone" hx-swap="innerHTML"
             hx-vals='{"email": {{ email | tojson }}, "suspend": "on"}'>Confirm suspend</button>
-    <button class="inline-flex items-center rounded-lg border border-sh-gray/60 px-3.5 py-2 text-sm text-sh-blueink hover:bg-paper transition-colors"
+    <button class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
             hx-get="/users/suspend/zone?email={{ email | urlencode }}&suspended=false" hx-target="#suspend-zone" hx-swap="innerHTML">Cancel</button>
   </div>
 </div>

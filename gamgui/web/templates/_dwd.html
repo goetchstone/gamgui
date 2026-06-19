@@ -1,8 +1,8 @@
-<div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm mt-2 space-y-5">
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm mt-2 space-y-5">
   <div>
-    <h2 class="eyebrow text-sh-blue">Imported</h2>
+    <h2 class="eyebrow text-brand-blue">Imported</h2>
     {% if imported %}
-      <p class="text-sm text-sh-blueink mt-2">Stored in Keychain for <span class="font-serif text-sh-black">{{ domain }}</span>:
+      <p class="text-sm text-brand-blueink mt-2">Stored in Keychain for <span class="font-serif text-brand-black">{{ domain }}</span>:
         {% for name in imported %}<span class="text-[11px] uppercase tracking-wide rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5">{{ name }}</span> {% endfor %}
       </p>
     {% else %}
@@ -14,24 +14,24 @@
   </div>
 
   {% if ready %}
-  <div class="border-t border-sh-gray/30 pt-5">
-    <h2 class="eyebrow text-sh-gray">Domain-Wide Delegation</h2>
-    <p class="text-sm text-sh-blueink/80 mt-2">
+  <div class="border-t border-brand-gray/30 pt-5">
+    <h2 class="eyebrow text-brand-gray">Domain-Wide Delegation</h2>
+    <p class="text-sm text-brand-blueink/80 mt-2">
       One manual step Google requires: authorize this service account's client ID in the Admin Console.
     </p>
     <div class="mt-3">
-      <span class="text-xs text-sh-gray">Client ID</span>
-      <pre class="mt-1 overflow-x-auto rounded-lg bg-paper border border-sh-gray/40 text-[12.5px] p-3"><code>{{ dwd.client_id or "(client_id not found in oauth2service.json)" }}</code></pre>
+      <span class="text-xs text-brand-gray">Client ID</span>
+      <pre class="mt-1 overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 text-[12.5px] p-3"><code>{{ dwd.client_id or "(client_id not found in oauth2service.json)" }}</code></pre>
     </div>
     <a href="{{ dwd.admin_console_url }}" target="_blank" rel="noopener"
-       class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-sh-blueink hover:text-sh-black">
+       class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-blueink hover:text-brand-black">
       Open Admin Console → Domain-Wide Delegation ↗
     </a>
-    <p class="text-xs text-sh-gray mt-2">Paste the client ID, add the scopes GAM needs, and authorize. Then verify below.</p>
+    <p class="text-xs text-brand-gray mt-2">Paste the client ID, add the scopes GAM needs, and authorize. Then verify below.</p>
   </div>
 
-  <div class="border-t border-sh-gray/30 pt-5">
-    <button class="inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors"
+  <div class="border-t border-brand-gray/30 pt-5">
+    <button class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
             hx-post="/setup/verify" hx-target="#wizard-next" hx-swap="innerHTML"
             hx-include="[name='domain'],[name='admin']">Verify access</button>
   </div>

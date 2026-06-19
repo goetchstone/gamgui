@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Set up Workspace — Saybrook Home Console{% endblock %}
+{% block title %}Set up Workspace — GamGUI Console{% endblock %}
 {% block content %}
-{% set input_cls = "w-full rounded-lg border border-sh-gray/60 bg-sh-white px-3 py-2 text-[15px] text-ink placeholder:text-sh-gray focus:border-sh-blue focus:outline-none focus:ring-2 focus:ring-sh-blue/30" %}
-{% set btn_primary = "inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors" %}
+{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set btn_primary = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}
 <div class="space-y-8">
   <div>
-    <p class="eyebrow text-sh-blue">Setup</p>
-    <h1 class="mt-2 font-serif text-3xl text-sh-black tracking-tight">Connect Google Workspace</h1>
-    <p class="text-sh-blueink/80 mt-2 text-[15px] max-w-2xl">
+    <p class="eyebrow text-brand-blue">Setup</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Connect Google Workspace</h1>
+    <p class="text-brand-blueink/80 mt-2 text-[15px] max-w-2xl">
       Point the console at your GAM credentials. If you already run GAM, import its config; otherwise
       follow the guided steps. Credentials are stored in your macOS Keychain.
     </p>
@@ -17,41 +17,41 @@
   <div class="flex items-center gap-2.5 text-sm">
     {% if binary_present %}
       <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-      <span class="text-sh-blueink">Engine: <span class="font-serif text-sh-black">{{ gam_version or "GAM detected" }}</span></span>
+      <span class="text-brand-blueink">Engine: <span class="font-serif text-brand-black">{{ gam_version or "GAM detected" }}</span></span>
     {% else %}
       <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-      <span class="text-sh-blueink">GAM not vendored — run <code class="text-xs bg-sh-white border border-sh-gray/50 px-1.5 py-0.5 rounded">scripts/fetch_gam.sh</code></span>
+      <span class="text-brand-blueink">GAM not vendored — run <code class="text-xs bg-brand-white border border-brand-gray/50 px-1.5 py-0.5 rounded">scripts/fetch_gam.sh</code></span>
     {% endif %}
   </div>
 
   <!-- domain + admin (included by every step) -->
-  <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
-    <h2 class="eyebrow text-sh-gray">Your domain</h2>
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Your domain</h2>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
       <label class="block">
-        <span class="text-sm text-sh-blueink">Primary domain</span>
-        <input class="{{ input_cls }} mt-1.5" type="text" name="domain" placeholder="saybrookhome.com" />
+        <span class="text-sm text-brand-blueink">Primary domain</span>
+        <input class="{{ input_cls }} mt-1.5" type="text" name="domain" placeholder="yourdomain.com" />
       </label>
       <label class="block">
-        <span class="text-sm text-sh-blueink">Super-admin email</span>
-        <input class="{{ input_cls }} mt-1.5" type="email" name="admin" placeholder="admin@saybrookhome.com" />
+        <span class="text-sm text-brand-blueink">Super-admin email</span>
+        <input class="{{ input_cls }} mt-1.5" type="email" name="admin" placeholder="admin@yourdomain.com" />
       </label>
     </div>
   </div>
 
   <!-- path A: import existing -->
-  <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
-    <h2 class="eyebrow text-sh-gray">Import existing credentials</h2>
-    <p class="text-sm text-sh-blueink/80 mt-2">Found these GAM config folders. Import one into the Keychain.</p>
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Import existing credentials</h2>
+    <p class="text-sm text-brand-blueink/80 mt-2">Found these GAM config folders. Import one into the Keychain.</p>
     <div class="mt-4 space-y-3">
       {% for d in candidate_dirs %}
-        <div class="flex items-center gap-3 rounded-xl border {{ 'border-sh-blue/50' if d.has_required else 'border-sh-gray/40' }} px-4 py-3">
+        <div class="flex items-center gap-3 rounded-xl border {{ 'border-brand-blue/50' if d.has_required else 'border-brand-gray/40' }} px-4 py-3">
           <div class="min-w-0">
-            <p class="text-sm text-sh-black truncate">{{ d.label }}</p>
-            <p class="text-xs text-sh-gray truncate">{{ d.path }}</p>
+            <p class="text-sm text-brand-black truncate">{{ d.label }}</p>
+            <p class="text-xs text-brand-gray truncate">{{ d.path }}</p>
             <div class="mt-1.5 flex gap-1.5">
               {% for name, present in d.files.items() %}
-                <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-emerald-50 text-emerald-700' if present else 'bg-paper text-sh-gray' }}">{{ name }}</span>
+                <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-emerald-50 text-emerald-700' if present else 'bg-paper text-brand-gray' }}">{{ name }}</span>
               {% endfor %}
             </div>
           </div>
@@ -61,12 +61,12 @@
                   hx-vals='{"config_dir": {{ d.path | tojson }} }'>Import</button>
         </div>
       {% else %}
-        <p class="text-sm text-sh-gray">No existing GAM config found in the usual places.</p>
+        <p class="text-sm text-brand-gray">No existing GAM config found in the usual places.</p>
       {% endfor %}
 
       <div class="flex items-end gap-3 pt-2">
         <label class="block flex-1">
-          <span class="text-sm text-sh-blueink">…or a custom folder</span>
+          <span class="text-sm text-brand-blueink">…or a custom folder</span>
           <input class="{{ input_cls }} mt-1.5" type="text" name="config_dir" placeholder="/path/to/gam/config" />
         </label>
         <button class="{{ btn_primary }}"
@@ -77,10 +77,10 @@
   </div>
 
   <!-- path B: fresh -->
-  <div class="rounded-2xl border border-dashed border-sh-gray/60 p-6">
-    <h2 class="eyebrow text-sh-gray">No credentials yet?</h2>
-    <p class="text-sm text-sh-blueink/80 mt-2">Generate them fresh. We'll give you the exact commands to run in Terminal.</p>
-    <button class="mt-4 inline-flex items-center rounded-lg border border-sh-blue/60 px-3.5 py-2 text-sm font-medium text-sh-blueink hover:bg-sh-blue/5 transition-colors"
+  <div class="rounded-2xl border border-dashed border-brand-gray/60 p-6">
+    <h2 class="eyebrow text-brand-gray">No credentials yet?</h2>
+    <p class="text-sm text-brand-blueink/80 mt-2">Generate them fresh. We'll give you the exact commands to run in Terminal.</p>
+    <button class="mt-4 inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
             hx-post="/setup/fresh" hx-target="#wizard-next" hx-swap="innerHTML"
             hx-include="[name='domain'],[name='admin']">Show setup commands</button>
   </div>

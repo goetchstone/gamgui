@@ -1,10 +1,10 @@
 {% if suspended %}
-<p class="flex items-center gap-2.5 text-sm"><span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span><span class="text-sh-black">Suspended — sign-in blocked</span></p>
-<button class="mt-3 inline-flex items-center rounded-lg border border-sh-blue/60 px-3.5 py-2 text-sm font-medium text-sh-blueink hover:bg-sh-blue/5 transition-colors"
+<p class="flex items-center gap-2.5 text-sm"><span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span><span class="text-brand-black">Suspended — sign-in blocked</span></p>
+<button class="mt-3 inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
         hx-post="/users/suspend/apply" hx-target="#suspend-zone" hx-swap="innerHTML"
         hx-vals='{"email": {{ email | tojson }}, "suspend": "off"}'>Unsuspend</button>
 {% else %}
-<p class="flex items-center gap-2.5 text-sm"><span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span><span class="text-sh-black">Active</span></p>
+<p class="flex items-center gap-2.5 text-sm"><span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span><span class="text-brand-black">Active</span></p>
 <button class="mt-3 inline-flex items-center rounded-lg border border-red-300 px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors"
         hx-post="/users/suspend/preview" hx-target="#suspend-zone" hx-swap="innerHTML"
         hx-vals='{"email": {{ email | tojson }} }'>Suspend…</button>

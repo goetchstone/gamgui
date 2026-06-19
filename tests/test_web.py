@@ -32,7 +32,7 @@ def test_root_requires_token(client):
 def test_root_with_token_renders_and_sets_cookie(client):
     r = client.get("/?token=testtoken")
     assert r.status_code == 200
-    assert "Saybrook" in r.text  # Saybrook Home brand applied
+    assert "GamGUI" in r.text  # neutral product name
     assert "Not configured" in r.text  # no creds in the in-memory vault
     # cookie now set on the client -> a token-less follow-up is allowed
     assert client.get("/").status_code == 200

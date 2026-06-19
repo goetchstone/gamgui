@@ -41,6 +41,6 @@ app = BUNDLE(
     coll,
     name="GamGUI.app",
     icon=None,
-    bundle_identifier="com.saybrookhome.gamgui",
+    bundle_identifier="io.github.goetchstone.gamgui",
     info_plist={"NSHighResolutionCapable": True, "LSMinimumSystemVersion": "12.0"},
 )

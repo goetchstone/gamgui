@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}Saybrook Home — Console{% endblock %}</title>
+  <title>{% block title %}GamGUI — Console{% endblock %}</title>
 
-  <!-- Type: Source Serif 4 / Source Sans 3 are the open-source twins of the brand's
+  <!-- Type: Source Serif 4 / Source Sans 3 are the open-source twins of
        Minion Pro / Myriad Pro (same foundry lineage). System serif/sans fall back if offline. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,11 +20,11 @@
           colors: {
             ink: "#141414",        // near-black body text (brand black is #000000)
             paper: "#FAF9F6",      // warm off-white page
-            sh: {
+            brand: {
               black: "#000000",
               white: "#FFFFFF",
-              gray: "#B2B4BB",     // Pantone 421 C
-              blue: "#69829E",     // Pantone 2165 C
+              gray: "#B2B4BB",     // warm gray
+              blue: "#69829E",     // slate blue
               blueink: "#52647B",  // darker slate for text/hover contrast on white
             },
           },
@@ -39,29 +39,29 @@
   <style>
     :root { color-scheme: light; }
     body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-    /* Tracked caps label, echoing the style guide's caption treatment. */
+    /* Tracked caps label. */
     .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.68rem; font-weight: 600; }
     .wordmark { text-transform: uppercase; letter-spacing: 0.22em; }
   </style>
 </head>
 <body class="h-full bg-paper text-ink font-sans">
   <div class="min-h-full">
-    <header class="border-b border-sh-gray/40 bg-sh-white/80 backdrop-blur">
+    <header class="border-b border-brand-gray/40 bg-brand-white/80 backdrop-blur">
       <div class="mx-auto max-w-5xl px-6 py-4 flex items-center gap-4">
-        <a href="/" class="wordmark font-serif text-lg text-sh-black">Saybrook&nbsp;Home</a>
-        <span class="h-4 w-px bg-sh-gray/60"></span>
-        <span class="eyebrow text-sh-blueink">Console</span>
-        <nav class="ml-auto text-sm flex items-center gap-5 text-sh-blueink/80">
-          <a class="hover:text-sh-black transition-colors" href="/">Home</a>
-          <a class="hover:text-sh-black transition-colors" href="/users">Users</a>
+        <a href="/" class="wordmark font-serif text-lg text-brand-black">GamGUI</a>
+        <span class="h-4 w-px bg-brand-gray/60"></span>
+        <span class="eyebrow text-brand-blueink">Console</span>
+        <nav class="ml-auto text-sm flex items-center gap-5 text-brand-blueink/80">
+          <a class="hover:text-brand-black transition-colors" href="/">Home</a>
+          <a class="hover:text-brand-black transition-colors" href="/users">Users</a>
         </nav>
       </div>
     </header>
     <main class="mx-auto max-w-5xl px-6 py-10">
       {% block content %}{% endblock %}
     </main>
-    <footer class="mx-auto max-w-5xl px-6 py-8 text-xs text-sh-gray">
-      Saybrook Home · 2 Main Street, Old Saybrook, CT
+    <footer class="mx-auto max-w-5xl px-6 py-8 text-xs text-brand-gray">
+      GamGUI — a local admin console for Google Workspace
     </footer>
   </div>
 </body>

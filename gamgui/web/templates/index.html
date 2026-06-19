@@ -2,59 +2,58 @@
 {% block content %}
 <div class="space-y-8">
   <div>
-    <p class="eyebrow text-sh-blue">Administration</p>
-    <h1 class="mt-2 font-serif text-4xl text-sh-black tracking-tight">Welcome</h1>
-    <p class="text-sh-blueink/80 mt-2 text-[15px] max-w-xl">
-      A local, secure console for Google Workspace — and, as connectors come online, the rest of the
-      Saybrook&nbsp;Home stack.
+    <p class="eyebrow text-brand-blue">Administration</p>
+    <h1 class="mt-2 font-serif text-4xl text-brand-black tracking-tight">Welcome</h1>
+    <p class="text-brand-blueink/80 mt-2 text-[15px] max-w-xl">
+      A local, secure console for Google Workspace — and, as connectors come online, the rest of your stack.
     </p>
   </div>
 
   <div class="grid gap-5 sm:grid-cols-2">
     <!-- GAM engine status -->
-    <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
-      <h2 class="eyebrow text-sh-gray">GAM engine</h2>
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+      <h2 class="eyebrow text-brand-gray">GAM engine</h2>
       {% if binary_present %}
         <p class="mt-3 flex items-center gap-2.5">
           <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-          <span class="font-serif text-lg text-sh-black">{{ gam_version or "Detected" }}</span>
+          <span class="font-serif text-lg text-brand-black">{{ gam_version or "Detected" }}</span>
         </p>
       {% else %}
         <p class="mt-3 flex items-center gap-2.5">
           <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-          <span class="font-serif text-lg text-sh-black">Not vendored yet</span>
+          <span class="font-serif text-lg text-brand-black">Not vendored yet</span>
         </p>
-        <p class="text-sm text-sh-blueink/70 mt-1.5">Run <code class="text-xs bg-paper px-1.5 py-0.5 rounded">scripts/fetch_gam.sh</code>.</p>
+        <p class="text-sm text-brand-blueink/70 mt-1.5">Run <code class="text-xs bg-paper px-1.5 py-0.5 rounded">scripts/fetch_gam.sh</code>.</p>
       {% endif %}
-      <p class="text-xs text-sh-gray mt-4 break-all">{{ gam_binary }}</p>
+      <p class="text-xs text-brand-gray mt-4 break-all">{{ gam_binary }}</p>
     </div>
 
     <!-- Workspace connection -->
-    <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
-      <h2 class="eyebrow text-sh-gray">Workspace</h2>
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+      <h2 class="eyebrow text-brand-gray">Workspace</h2>
       {% if configured %}
         <p class="mt-3 flex items-center gap-2.5">
           <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-          <span class="font-serif text-lg text-sh-black">{{ active_domain }}</span>
+          <span class="font-serif text-lg text-brand-black">{{ active_domain }}</span>
         </p>
-        <p class="text-sm text-sh-blueink/70 mt-1.5">Credentials in Keychain. Ready to manage users.</p>
-        <a href="/users" class="mt-4 inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors">Manage users</a>
+        <p class="text-sm text-brand-blueink/70 mt-1.5">Credentials in Keychain. Ready to manage users.</p>
+        <a href="/users" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Manage users</a>
       {% else %}
         <p class="mt-3 flex items-center gap-2.5">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-sh-gray"></span>
-          <span class="font-serif text-lg text-sh-black">Not configured</span>
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-brand-gray"></span>
+          <span class="font-serif text-lg text-brand-black">Not configured</span>
         </p>
-        <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors">
+        <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">
           Run setup
         </a>
       {% endif %}
     </div>
   </div>
 
-  <div class="rounded-2xl border border-dashed border-sh-gray/60 p-6 text-sm text-sh-blueink/80">
-    <p class="eyebrow text-sh-blue">What's ready</p>
+  <div class="rounded-2xl border border-dashed border-brand-gray/60 p-6 text-sm text-brand-blueink/80">
+    <p class="eyebrow text-brand-blue">What's ready</p>
     <p class="mt-2 leading-relaxed">
-      The secure engine and the <a href="/setup" class="text-sh-blueink underline decoration-sh-gray/60 underline-offset-2 hover:text-sh-black">setup wizard</a>
+      The secure engine and the <a href="/setup" class="text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">setup wizard</a>
       are in place. Connect a domain to begin; the user, group, signature, and delegate screens come next.
     </p>
   </div>
