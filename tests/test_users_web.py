@@ -82,6 +82,19 @@ def test_users_list_has_title_column(client):
     assert "Title" in r.text and "IT Director" in r.text
 
 
+def test_reports_page_renders(client):
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "No 2-step verification" in r.text
+    assert "carol@example.com" in r.text  # carol: active, no 2SV
+
+
+def test_reports_requires_connection(unconnected_client):
+    r = unconnected_client.get("/reports")
+    assert r.status_code == 200
+    assert "Connect a domain first" in r.text
+
+
 def test_signature_current_renders(client):
     r = client.get("/users/signature/current", params={"email": "alice@example.com"})
     assert r.status_code == 200

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Reports — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+  <div class="space-y-6">
+    <div>
+      <p class="eyebrow text-brand-blue">Insights</p>
+      <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Reports</h1>
+      <p class="text-brand-blueink/80 mt-1 text-sm">Across {{ total }} accounts — the gaps the Admin Console doesn't surface at a glance.</p>
+    </div>
+
+    {% if error %}
+      <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+    {% endif %}
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      {% for r in reports %}
+      <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+        <div class="flex items-baseline justify-between gap-3">
+          <h2 class="eyebrow text-brand-gray">{{ r.title }}</h2>
+          <span class="font-serif text-2xl {{ 'text-brand-black' if r.count else 'text-brand-gray' }}">{{ r.count }}</span>
+        </div>
+        <p class="text-xs text-brand-blueink/70 mt-1">{{ r.description }}</p>
+        {% if r.users %}
+        <details class="mt-3">
+          <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ r.count }}</summary>
+          <ul class="mt-2 space-y-1 max-h-56 overflow-auto">
+            {% for u in r.users %}
+            <li class="text-sm">
+              <a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
+              <span class="text-brand-gray">— {{ u.primary_email }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% else %}
+        <p class="mt-3 text-sm text-emerald-700">None — all clear.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
