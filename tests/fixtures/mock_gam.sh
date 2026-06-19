@@ -51,8 +51,8 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]
   exit 0
 fi
 
-# `gam user <admin> check svcacct` -> simulate a fully-authorized service account.
-if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "svcacct" ]; then
+# `gam user <admin> check serviceaccount` -> simulate a fully-authorized service account.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
   cat <<'EOF'
 System time status: PASS
 Service account private key authentication: PASS

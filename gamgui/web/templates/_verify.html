@@ -21,12 +21,21 @@
       <a href="/" class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Go to console</a>
     </div>
   {% else %}
-    <div class="border-t border-brand-gray/30 pt-4">
-      <p class="text-sm text-brand-blueink/80">Fix the delegation (scopes / client ID), then verify again.</p>
-      <button class="mt-3 inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
+    <div class="border-t border-brand-gray/30 pt-4 space-y-3">
+      {% if result.auth_url %}
+        <p class="text-sm text-brand-blueink/80">Authorize the service account in the Admin Console, then verify again:</p>
+        <a href="{{ result.auth_url }}" target="_blank" rel="noopener"
+           class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">
+          Authorize Domain-Wide Delegation ↗
+        </a>
+        <p class="text-xs text-brand-gray">Sign in as a super-admin, tick "Overwrite existing client ID", click AUTHORIZE, then wait ~30s.</p>
+      {% else %}
+        <p class="text-sm text-brand-blueink/80">Fix the delegation (scopes / client ID), then verify again.</p>
+      {% endif %}
+      <button class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
               hx-post="/setup/verify" hx-target="#wizard-next" hx-swap="innerHTML"
               hx-include="[name='domain'],[name='admin']">Verify again</button>
-      {% if result.raw %}<pre class="mt-3 overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 text-[12px] p-3 text-brand-blueink"><code>{{ result.raw[:600] }}</code></pre>{% endif %}
+      {% if result.raw %}<pre class="mt-3 max-h-56 overflow-auto rounded-lg bg-paper border border-brand-gray/40 text-[12px] p-3 text-brand-blueink"><code>{{ result.raw[:1500] }}</code></pre>{% endif %}
     </div>
   {% endif %}
 </div>

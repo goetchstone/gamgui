@@ -44,8 +44,9 @@ class GAMCommands:
 
     @staticmethod
     def check_svcacct(admin: str) -> List[str]:
-        # Verifies domain-wide delegation scopes for the service account.
-        return ["user", admin, "check", "svcacct"]
+        # Verifies domain-wide delegation scopes. NOTE: the noun is `serviceaccount`
+        # here (GAM uses `create svcacct` but `check serviceaccount` — not symmetric).
+        return ["user", admin, "check", "serviceaccount"]
 
     # --- users (read) -----------------------------------------------------------------
     @staticmethod

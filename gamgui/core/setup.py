@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -51,6 +52,7 @@ class VerifyResult:
     summary: str
     lines: List[Tuple[str, str]] = field(default_factory=list)   # (label, status)
     raw: str = ""
+    auth_url: str = ""   # GAM-provided link to authorize Domain-Wide Delegation, if it failed
 
 
 class SetupService:
@@ -156,27 +158,46 @@ class SetupService:
         except GAMError as exc:
             return VerifyResult(ok=False, summary=exc.message, raw=exc.stderr)
         lines = _parse_check(out)
-        failed = any(status.upper() == "FAIL" for _, status in lines)
+        up = out.upper()
+        failed = ("FAILED" in up) or ("DISABLED!" in up) or any(s == "FAIL" for _, s in lines)
         ok = bool(lines) and not failed
         return VerifyResult(
             ok=ok,
-            summary="All scopes authorized." if ok else "Some checks failed — re-do the delegation step.",
+            summary=(
+                "All scopes authorized."
+                if ok
+                else "Domain-Wide Delegation isn't authorized yet — use the link below, then verify again."
+            ),
             lines=lines,
             raw=out,
+            auth_url=("" if ok else _extract_auth_url(out)),
         )
 
 
+_STATUS_RE = re.compile(r"\b(PASS|FAIL)\b")
+_AUTH_URL_RE = re.compile(r"https://(?:gam-shortn\.appspot\.com|admin\.google\.com)/\S+")
+
+
 def _parse_check(stdout: str) -> List[Tuple[str, str]]:
-    """Pull (label, PASS/FAIL) pairs out of `gam ... check svcacct` output, tolerantly."""
+    """Pull (label, PASS/FAIL) pairs from `gam ... check serviceaccount` output, tolerantly.
+
+    Handles both ``Label: PASS`` and GAM's scope-table form ``<scope-url>   FAIL (n/m)``.
+    """
     results: List[Tuple[str, str]] = []
     for line in (stdout or "").splitlines():
         line = line.strip()
-        if not line or ":" not in line:
+        if not line:
             continue
-        label, _, rest = line.rpartition(":")
-        rest_u = rest.strip().upper()
-        if "PASS" in rest_u:
-            results.append((label.strip(), "PASS"))
-        elif "FAIL" in rest_u:
-            results.append((label.strip(), "FAIL"))
+        m = _STATUS_RE.search(line)
+        if not m:
+            continue
+        label = line[: m.start()].strip().rstrip(":").strip()
+        if label:
+            results.append((label, m.group(1).upper()))
     return results
+
+
+def _extract_auth_url(stdout: str) -> str:
+    """The Admin Console / gam-shortn link GAM prints to authorize Domain-Wide Delegation."""
+    m = _AUTH_URL_RE.search(stdout or "")
+    return m.group(0).rstrip(".,") if m else ""

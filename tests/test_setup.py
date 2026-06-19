@@ -5,7 +5,7 @@ from pathlib import Path
 
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import FILENAMES, InMemoryBackend, SecretsVault
-from gamgui.core.setup import SetupService, _parse_check
+from gamgui.core.setup import SetupService, _extract_auth_url, _parse_check
 
 
 def _write_config(d: Path, with_client_id: bool = True) -> None:
@@ -71,6 +71,24 @@ def test_parse_check_pulls_pass_fail():
     assert ("System time status", "PASS") in lines
     assert ("Some scope", "FAIL") in lines
     assert len(lines) == 2
+
+
+def test_parse_check_handles_scope_table_format():
+    # GAM's real `check serviceaccount` output: "<scope-url>   FAIL (n/m)"
+    out = (
+        "Domain-wide Delegation authentication:, User: a@e.com, Scopes: 2\n"
+        "  https://mail.google.com/                         FAIL (1/2)\n"
+        "  https://www.googleapis.com/auth/calendar         PASS (2/2)\n"
+    )
+    lines = _parse_check(out)
+    assert ("https://mail.google.com/", "FAIL") in lines
+    assert ("https://www.googleapis.com/auth/calendar", "PASS") in lines
+
+
+def test_extract_auth_url():
+    out = "Some scopes FAILED!\nplease go to:\n    https://gam-shortn.appspot.com/qhhmzr\nthen retry"
+    assert _extract_auth_url(out) == "https://gam-shortn.appspot.com/qhhmzr"
+    assert _extract_auth_url("all good, no link") == ""
 
 
 async def test_engine_version(runner, vault):
