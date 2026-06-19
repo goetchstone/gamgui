@@ -118,6 +118,11 @@ class GAMCommands:
         return argv
 
     @staticmethod
+    def show_signature(email: str) -> List[str]:
+        # `show signature` returns text (no formatjson).
+        return ["user", email, "show", "signature"]
+
+    @staticmethod
     def add_delegate(email: str, delegate: str) -> List[str]:
         return ["user", email, "add", "delegate", delegate]
 
@@ -182,6 +187,11 @@ class GAMCommands:
     @staticmethod
     def print_group_members(group: str) -> List[str]:
         return ["print", "group-members", "group", group, "formatjson"]
+
+    @staticmethod
+    def print_groups_member(email: str) -> List[str]:
+        # Groups that <email> belongs to. Returns CSV with an `email` column.
+        return ["print", "groups", "member", email]
 
     @staticmethod
     def add_group_member(group: str, member: str, role: str = "member") -> List[str]:

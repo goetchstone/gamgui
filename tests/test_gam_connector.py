@@ -61,6 +61,16 @@ async def test_list_users_have_titles(connector):
     assert by_email["alice@example.com"].title == "IT Director"
 
 
+async def test_get_signature(connector):
+    sig = await connector.get_signature("alice@example.com")
+    assert "Best," in sig
+
+
+async def test_list_user_groups(connector):
+    groups = await connector.list_user_groups("alice@example.com")
+    assert groups == ["sales@example.com", "staff@example.com"]
+
+
 async def test_get_vacation(connector):
     vac = await connector.get_vacation("alice@example.com")
     assert vac.enabled is True

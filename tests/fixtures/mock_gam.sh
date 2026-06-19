@@ -59,6 +59,33 @@ EOF
   exit 0
 fi
 
+# `gam user <email> show signature` (no formatjson) -> text.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "signature" ]; then
+  cat <<'EOF'
+SendAs Address: <someone@example.com>
+  IsPrimary: True
+  Default: True
+  Signature:
+    Best,<br>Alice
+EOF
+  exit 0
+fi
+
+# `gam print groups member <email>` -> CSV of the user's group emails.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ] && [ "${3:-}" = "member" ]; then
+  printf 'email\nsales@example.com\nstaff@example.com\n'
+  exit 0
+fi
+
+# `gam print groups [fields ...]` -> NDJSON list of groups.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
+  printf '%s\n' \
+    '{"email":"sales@example.com","name":"Sales","directMembersCount":3}' \
+    '{"email":"staff@example.com","name":"Staff","directMembersCount":10}' \
+    '{"email":"it@example.com","name":"IT","directMembersCount":2}'
+  exit 0
+fi
+
 # `gam user <email> print delegates` (no formatjson) -> plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
   printf 'User,delegateAddress,delegationStatus\n%s,assistant@example.com,accepted\n%s,backup@example.com,accepted\n' "${2:-}" "${2:-}"

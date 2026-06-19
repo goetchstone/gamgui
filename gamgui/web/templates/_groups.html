@@ -1,0 +1,26 @@
+<div class="space-y-3">
+  {% if member_of %}
+  <ul class="flex flex-wrap gap-2">
+    {% for g in member_of %}
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-paper border border-brand-gray/40 pl-3 pr-1.5 py-1 text-sm">
+      <span class="text-brand-black">{{ g }}</span>
+      <button class="text-brand-gray hover:text-red-700 text-base leading-none" aria-label="Remove from {{ g }}"
+              hx-post="/users/groups/remove" hx-target="#user-groups" hx-swap="innerHTML"
+              hx-vals='{"email": {{ email | tojson }}, "group": {{ g | tojson }} }'>&times;</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-brand-gray">Not a member of any groups.</p>
+  {% endif %}
+
+  {% if available %}
+  <form class="flex gap-2" hx-post="/users/groups/add" hx-target="#user-groups" hx-swap="innerHTML">
+    <input type="hidden" name="email" value="{{ email }}" />
+    <select name="group" class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none">
+      {% for g in available %}<option value="{{ g.email }}">{{ g.name or g.email }} ({{ g.email }})</option>{% endfor %}
+    </select>
+    <button type="submit" class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors">Add</button>
+  </form>
+  {% endif %}
+</div>

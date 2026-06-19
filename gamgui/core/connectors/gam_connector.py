@@ -27,6 +27,26 @@ from .base import (
 from .person import ConnectorAccount, Person
 
 
+def _parse_signature(text: str) -> str:
+    """Pull the signature body out of ``gam user X show signature`` text output.
+
+    Format is ``Signature:`` followed by indented lines (or ``None`` when empty).
+    """
+    lines = (text or "").splitlines()
+    body: List[str] = []
+    capturing = False
+    for ln in lines:
+        if capturing:
+            # stop at the next non-indented line (e.g. another "SendAs Address:")
+            if ln.strip() and not ln.startswith(" "):
+                break
+            body.append(ln.strip())
+        elif ln.strip().rstrip(":") == "Signature":
+            capturing = True
+    sig = "\n".join(body).strip()
+    return "" if sig in ("", "None") else sig
+
+
 class GAMConnector(Connector):
     id = ConnectorID.GOOGLE_WORKSPACE
     capabilities = {Capability.DIRECTORY, Capability.GROUPS, Capability.MAIL}
@@ -95,6 +115,15 @@ class GAMConnector(Connector):
     async def set_signature(self, email: str, signature: str, html: bool = True) -> ChangeResult:
         argv = GAMCommands.set_signature(email, signature, html=html)
         return await self._run_write("set_signature", email, argv, RiskLevel.LOW)
+
+    async def get_signature(self, email: str) -> str:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.show_signature(email))
+        return _parse_signature(out)
+
+    async def list_user_groups(self, email: str) -> List[str]:
+        """Group emails that ``email`` is a member of."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_groups_member(email))
+        return [str(r.get("email")) for r in parse_records(out) if r.get("email") and "@" in str(r.get("email"))]
 
     async def add_delegate(self, email: str, delegate: str) -> ChangeResult:
         argv = GAMCommands.add_delegate(email, delegate)

@@ -82,6 +82,23 @@ def test_users_list_has_title_column(client):
     assert "Title" in r.text and "IT Director" in r.text
 
 
+def test_signature_current_renders(client):
+    r = client.get("/users/signature/current", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Best," in r.text  # current signature read from the mailbox
+
+
+def test_user_groups_view_add_remove(client):
+    r = client.get("/users/groups", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "sales@example.com" in r.text            # current membership
+    assert "it@example.com" in r.text               # available group in the add picker
+    add = client.post("/users/groups/add", data={"email": "alice@example.com", "group": "it@example.com"})
+    assert add.status_code == 200
+    rem = client.post("/users/groups/remove", data={"email": "alice@example.com", "group": "sales@example.com"})
+    assert rem.status_code == 200
+
+
 def test_suspended_user_detail_shows_unsuspend(client):
     # Regression: the _suspend_zone include must receive `suspended` from the user.
     r = client.get("/users/detail", params={"email": "bob@example.com"})

@@ -102,6 +102,62 @@ async def set_signature(
     )
 
 
+@router.get("/signature/current", response_class=HTMLResponse)
+async def signature_current(request: Request, email: str) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    try:
+        sig = await conn.get_signature(email)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    return TEMPLATES.TemplateResponse(request, "_sig_current.html", {"signature": sig})
+
+
+# --- group membership (view + add/remove; the function behind drag-and-drop) -----------
+@router.get("/groups", response_class=HTMLResponse)
+async def user_groups(request: Request, email: str) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    return await _groups_partial(request, conn, email)
+
+
+async def _groups_partial(request: Request, conn, email: str) -> HTMLResponse:
+    try:
+        member_of = await conn.list_user_groups(email)
+        all_groups = await conn.list_groups()
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    member_set = set(member_of)
+    available = [g for g in all_groups if g.email not in member_set]
+    return TEMPLATES.TemplateResponse(
+        request, "_groups.html", {"email": email, "member_of": member_of, "available": available}
+    )
+
+
+@router.post("/groups/add", response_class=HTMLResponse)
+async def groups_add(request: Request, email: str = Form(...), group: str = Form(...)) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    result = await conn.add_group_member(group.strip(), email)
+    if not result.ok:
+        return _err(request, f"Couldn't add to group: {result.detail}")
+    return await _groups_partial(request, conn, email)
+
+
+@router.post("/groups/remove", response_class=HTMLResponse)
+async def groups_remove(request: Request, email: str = Form(...), group: str = Form(...)) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    result = await conn.remove_group_member(group.strip(), email)
+    if not result.ok:
+        return _err(request, f"Couldn't remove from group: {result.detail}")
+    return await _groups_partial(request, conn, email)
+
+
 @router.post("/delegate/add", response_class=HTMLResponse)
 async def add_delegate(request: Request, email: str = Form(...), delegate: str = Form(...)) -> HTMLResponse:
     conn = _conn(request)

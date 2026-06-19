@@ -1,0 +1,8 @@
+{% if signature %}
+<div class="mb-3">
+  <p class="text-xs text-brand-gray mb-1">Current signature</p>
+  <pre class="overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 p-3 text-[12.5px] text-ink whitespace-pre-wrap">{{ signature }}</pre>
+</div>
+{% else %}
+<p class="text-sm text-brand-gray mb-3">No signature set.</p>
+{% endif %}

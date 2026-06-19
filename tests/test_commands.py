@@ -35,6 +35,11 @@ def test_set_signature_html_flag():
     assert GAMCommands.set_signature("a@e.com", "Hi", html=False) == ["user", "a@e.com", "signature", "Hi"]
 
 
+def test_show_signature_and_groups_member():
+    assert GAMCommands.show_signature("a@e.com") == ["user", "a@e.com", "show", "signature"]
+    assert GAMCommands.print_groups_member("a@e.com") == ["print", "groups", "member", "a@e.com"]
+
+
 def test_print_delegates_has_no_formatjson():
     # `print delegates` errors if given formatjson; it returns plain CSV.
     argv = GAMCommands.print_delegates("a@e.com")
