@@ -1,27 +1,34 @@
 # PyInstaller spec — builds GamGUI.app (macOS).
-# Use scripts/build_app.sh, which vendors GAM and installs PyInstaller first.
+# Use scripts/build_app.sh, which vendors GAM and installs PyInstaller + pywebview first.
 import os
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = [
     ("gamgui/web/templates", "gamgui/web/templates"),
     ("gamgui/web/static", "gamgui/web/static"),
 ]
-# Bundle the vendored GAM7 binary (resolved at runtime via sys._MEIPASS/resources/gam7/gam).
-if os.path.isdir("gamgui/resources/gam7") and os.path.exists("gamgui/resources/gam7/gam"):
-    datas.append(("gamgui/resources/gam7", "resources/gam7"))
-
+binaries = []
 hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("keyring.backends")
     + ["uvicorn.lifespan.on", "uvicorn.loops.auto", "uvicorn.protocols.http.auto"]
 )
 
+# pywebview + its macOS (Cocoa/WebKit via pyobjc) backend — collect everything it needs.
+_wv_datas, _wv_binaries, _wv_hidden = collect_all("webview")
+datas += _wv_datas
+binaries += _wv_binaries
+hiddenimports += _wv_hidden
+
+# Bundle the vendored GAM7 binary (resolved at runtime via sys._MEIPASS/resources/gam7/gam).
+if os.path.isdir("gamgui/resources/gam7") and os.path.exists("gamgui/resources/gam7/gam"):
+    datas.append(("gamgui/resources/gam7", "resources/gam7"))
+
 a = Analysis(
-    ["gamgui/app.py"],
+    ["main.py"],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=["tkinter"],
