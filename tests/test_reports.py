@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from gamgui.core.gam.models import GAMUser
-from gamgui.core.reports import build_reports
+from gamgui.core.reports import build_reports, parse_usage
 
 
 def _u(email, **kw):
@@ -30,3 +30,14 @@ def test_never_logged_in_counts_as_inactive():
     now = datetime(2026, 6, 19, tzinfo=timezone.utc)
     reports = {r.key: r for r in build_reports([_u("n@e.com", isEnrolledIn2Sv=True, recoveryEmail="r@e.com")], now=now)}
     assert [u.primary_email for u in reports["inactive"].users] == ["n@e.com"]
+
+
+def test_parse_usage_sorts_by_storage_and_converts_gb():
+    rows = [
+        {"email": "small@e.com", "accounts:used_quota_in_mb": "2048", "gmail:num_emails_received": "40", "gmail:num_emails_sent": "3"},
+        {"email": "big@e.com", "accounts:used_quota_in_mb": "1048576", "gmail:num_emails_received": "5", "gmail:num_emails_sent": "0"},
+    ]
+    u = parse_usage(rows)
+    assert u[0].email == "big@e.com" and u[0].storage_gb == 1024.0
+    assert u[1].email == "small@e.com" and u[1].storage_gb == 2.0
+    assert u[1].received == 40 and u[1].sent == 3

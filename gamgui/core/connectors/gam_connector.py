@@ -7,6 +7,7 @@ The rest of the app talks to this object and never sees GAM syntax.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Sequence
 
 from ..audit import AuditLog
@@ -25,6 +26,15 @@ from .base import (
     RiskLevel,
 )
 from .person import ConnectorAccount, Person
+
+
+def _csv_from(out: str) -> str:
+    """Drop GAM progress lines before the CSV header (`gam report` prints status text first)."""
+    lines = (out or "").splitlines()
+    for i, ln in enumerate(lines):
+        if ln.lstrip().lower().startswith("email,"):
+            return "\n".join(lines[i:])
+    return out or ""
 
 
 def _parse_signature(text: str) -> str:
@@ -124,6 +134,17 @@ class GAMConnector(Connector):
         """Group emails that ``email`` is a member of."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_groups_member(email))
         return [str(r.get("email")) for r in parse_records(out) if r.get("email") and "@" in str(r.get("email"))]
+
+    async def usage_report(self, params: Sequence[str], max_lookback: int = 6) -> dict:
+        """Per-user usage (storage/mail/drive). Usage lags ~2-3 days, so walk back to a date with data."""
+        today = datetime.now(timezone.utc).date()
+        for back in range(2, 2 + max_lookback):
+            date = (today - timedelta(days=back)).isoformat()
+            out = await self.runner.run_authenticated(self.domain, GAMCommands.report_users(date, params))
+            rows = parse_records(_csv_from(out))
+            if rows:
+                return {"date": date, "rows": rows}
+        return {"date": "", "rows": []}
 
     async def add_delegate(self, email: str, delegate: str) -> ChangeResult:
         argv = GAMCommands.add_delegate(email, delegate)

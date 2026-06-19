@@ -113,6 +113,13 @@ def test_groups_board_members_view_and_mutate(client):
     assert rem.status_code == 200
 
 
+def test_usage_report_renders(client):
+    r = client.get("/reports/usage")
+    assert r.status_code == 200
+    assert "GB" in r.text
+    assert "bob@example.com" in r.text  # largest storage in the mock
+
+
 def test_signature_current_renders(client):
     r = client.get("/users/signature/current", params={"email": "alice@example.com"})
     assert r.status_code == 200

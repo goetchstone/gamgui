@@ -42,9 +42,17 @@
     /* Tracked caps label. */
     .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.68rem; font-weight: 600; }
     .wordmark { text-transform: uppercase; letter-spacing: 0.22em; }
+    /* Global indeterminate loading bar (shown during HTMX requests + page navigations). */
+    #loadbar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60; overflow: hidden; opacity: 0; transition: opacity .15s; pointer-events: none; }
+    #loadbar.on { opacity: 1; }
+    #loadbar::before { content: ""; position: absolute; height: 100%; width: 35%; background: #69829E; animation: lbslide 1s ease-in-out infinite; }
+    @keyframes lbslide { 0% { left: -35%; } 50% { left: 50%; } 100% { left: 100%; } }
+    .spinner { display: inline-block; width: 0.9rem; height: 0.9rem; border: 2px solid rgba(105,130,158,.3); border-top-color: #69829E; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="h-full bg-paper text-ink font-sans">
+  <div id="loadbar"></div>
   <div class="min-h-full">
     <header class="border-b border-brand-gray/40 bg-brand-white/80 backdrop-blur">
       <div class="mx-auto max-w-5xl px-6 py-4 flex items-center gap-4">
@@ -96,6 +104,24 @@
       try { document.execCommand("copy"); } catch (e) {}
       document.body.removeChild(ta);
     }
+
+    // Global loading bar: visible during HTMX requests and full-page navigations.
+    (function () {
+      var bar = document.getElementById("loadbar");
+      var pending = 0;
+      function show() { if (bar) bar.classList.add("on"); }
+      function hide() { if (bar) bar.classList.remove("on"); }
+      document.body.addEventListener("htmx:beforeRequest", function () { pending++; show(); });
+      document.body.addEventListener("htmx:afterRequest", function () { pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
+      document.body.addEventListener("htmx:responseError", hide);
+      document.addEventListener("click", function (e) {
+        var a = e.target.closest && e.target.closest("a[href]");
+        if (!a) return;
+        var href = a.getAttribute("href") || "";
+        if (a.target === "_blank" || href.charAt(0) === "#" || href.indexOf("://") >= 0) return;
+        show();  // full-page nav — cleared automatically when the new page loads
+      }, true);
+    })();
   </script>
 </body>
 </html>

@@ -1,0 +1,30 @@
+{% if error %}
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+{% elif not rows %}
+<p class="text-sm text-brand-gray">Usage data isn't available yet — Google's reports lag a few days. Check back later.</p>
+{% else %}
+<p class="text-xs text-brand-gray mb-2">Top {{ rows | length }} by storage · as of {{ date }}</p>
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-brand-gray border-b border-brand-gray/30">
+        <th class="font-medium px-5 py-3 eyebrow">User</th>
+        <th class="font-medium px-5 py-3 eyebrow text-right">Storage</th>
+        <th class="font-medium px-5 py-3 eyebrow text-right">Received</th>
+        <th class="font-medium px-5 py-3 eyebrow text-right">Sent</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in rows %}
+      <tr class="border-b border-brand-gray/15 hover:bg-paper/70 transition-colors">
+        <td class="px-5 py-2.5"><a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ u.email | urlencode }}">{{ u.email }}</a></td>
+        <td class="px-5 py-2.5 text-right text-brand-black">{{ "%.1f"|format(u.storage_gb) }} GB</td>
+        <td class="px-5 py-2.5 text-right text-brand-blueink/70">{{ u.received }}</td>
+        <td class="px-5 py-2.5 text-right text-brand-blueink/70">{{ u.sent }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="mt-2 text-xs text-brand-gray">Mail counts are for {{ date }} only; storage is cumulative.</p>
+{% endif %}

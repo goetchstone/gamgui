@@ -66,6 +66,14 @@ async def test_get_signature(connector):
     assert "Best," in sig
 
 
+async def test_usage_report(connector):
+    from gamgui.core.reports import USAGE_PARAMS
+
+    data = await connector.usage_report(USAGE_PARAMS)
+    assert data["rows"]  # mock returns rows for the first date tried
+    assert "bob@example.com" in {r.get("email") for r in data["rows"]}
+
+
 async def test_list_user_groups(connector):
     groups = await connector.list_user_groups("alice@example.com")
     assert groups == ["sales@example.com", "staff@example.com"]

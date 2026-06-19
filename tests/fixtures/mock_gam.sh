@@ -59,6 +59,18 @@ EOF
   exit 0
 fi
 
+# `gam report users ...` -> usage CSV (with a leading progress line, like real GAM).
+if [ "${1:-}" = "report" ] && [ "${2:-}" = "users" ]; then
+  cat <<'EOF'
+Getting Reports for the customer
+email,date,accounts:used_quota_in_mb,drive:num_items_created,gmail:num_emails_received,gmail:num_emails_sent
+alice@example.com,2026-06-16,608873,1,125,10
+bob@example.com,2026-06-16,1048576,0,5,0
+carol@example.com,2026-06-16,2048,2,40,3
+EOF
+  exit 0
+fi
+
 # `gam user <email> show signature` (no formatjson) -> text.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "signature" ]; then
   cat <<'EOF'

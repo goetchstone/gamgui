@@ -75,6 +75,11 @@ class GAMCommands:
         return argv
 
     @staticmethod
+    def report_users(date: str, params: Sequence[str]) -> List[str]:
+        # Admin SDK usage report (storage, mail, drive). Data lags ~2-3 days.
+        return ["report", "users", "date", date, "parameters", ",".join(params)]
+
+    @staticmethod
     def info_user(email: str, fields: Optional[Sequence[str]] = None) -> List[str]:
         argv = ["info", "user", email, "fields", ",".join(fields or USER_DETAIL_FIELDS)]
         argv.append("formatjson")

@@ -20,6 +20,48 @@ REPORT_FIELDS = (
 
 INACTIVE_DAYS = 90
 
+# Usage-report parameters (Admin SDK reports API). Data lags ~2-3 days.
+USAGE_PARAMS = (
+    "accounts:used_quota_in_mb",
+    "gmail:num_emails_received",
+    "gmail:num_emails_sent",
+    "drive:num_items_created",
+)
+
+
+@dataclass
+class UsageRow:
+    email: str
+    quota_mb: int
+    storage_gb: float
+    received: int
+    sent: int
+    drive_created: int
+
+
+def _int(v) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def parse_usage(rows: List[dict]) -> List[UsageRow]:
+    """Turn raw `gam report users` CSV rows into UsageRows, sorted by storage (desc)."""
+    out = []
+    for r in rows:
+        mb = _int(r.get("accounts:used_quota_in_mb"))
+        out.append(UsageRow(
+            email=str(r.get("email", "")),
+            quota_mb=mb,
+            storage_gb=round(mb / 1024, 1),
+            received=_int(r.get("gmail:num_emails_received")),
+            sent=_int(r.get("gmail:num_emails_sent")),
+            drive_created=_int(r.get("drive:num_items_created")),
+        ))
+    out.sort(key=lambda u: u.quota_mb, reverse=True)
+    return out
+
 
 @dataclass
 class Report:

@@ -48,7 +48,7 @@
   <!-- signature -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <h2 class="eyebrow text-brand-gray">Gmail signature</h2>
-    <div id="sig-current" class="mt-3" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"></div>
+    <div id="sig-current" class="mt-3" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"><p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p></div>
     <form class="mt-1 space-y-3" hx-post="/users/signature" hx-target="#sig-result" hx-swap="innerHTML">
       <input type="hidden" name="email" value="{{ email }}" />
       <textarea name="signature" rows="4" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
@@ -72,7 +72,7 @@
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <h2 class="eyebrow text-brand-gray">Vacation responder</h2>
     <div id="vacation" class="mt-3" hx-get="/users/vacation?email={{ email | urlencode }}" hx-trigger="load">
-      <p class="text-sm text-brand-gray">Loading…</p>
+      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
     </div>
   </div>
 
@@ -80,7 +80,7 @@
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <h2 class="eyebrow text-brand-gray">Groups</h2>
     <div id="user-groups" class="mt-3" hx-get="/users/groups?email={{ email | urlencode }}" hx-trigger="load">
-      <p class="text-sm text-brand-gray">Loading…</p>
+      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
     </div>
   </div>
 </div>

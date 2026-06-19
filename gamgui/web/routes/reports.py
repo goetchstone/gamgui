@@ -12,6 +12,10 @@ from ..server import TEMPLATES
 router = APIRouter(prefix="/reports")
 
 
+def _friendly(exc: Exception) -> str:
+    return exc.remediation if isinstance(exc, GAMError) else "Couldn't load report data."
+
+
 @router.get("", response_class=HTMLResponse)
 async def reports_page(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
@@ -29,3 +33,17 @@ async def reports_page(request: Request) -> HTMLResponse:
         "reports.html",
         {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users)},
     )
+
+
+@router.get("/usage", response_class=HTMLResponse)
+async def usage(request: Request) -> HTMLResponse:
+    """Lazy-loaded storage/mail usage (a separate, slower Reports-API call)."""
+    conn = request.app.state.gamgui.connector
+    if conn is None:
+        return TEMPLATES.TemplateResponse(request, "_usage_report.html", {"rows": [], "date": "", "error": "Not connected."})
+    try:
+        data = await conn.usage_report(reports_mod.USAGE_PARAMS)
+    except Exception as exc:
+        return TEMPLATES.TemplateResponse(request, "_usage_report.html", {"rows": [], "date": "", "error": _friendly(exc)})
+    rows = reports_mod.parse_usage(data["rows"])[:25]
+    return TEMPLATES.TemplateResponse(request, "_usage_report.html", {"rows": rows, "date": data["date"]})
