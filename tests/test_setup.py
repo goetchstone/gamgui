@@ -54,9 +54,15 @@ def test_dwd_details_extracts_client_id(tmp_path):
 
 def test_setup_commands_shape(tmp_path):
     info = _svc(SecretsVault(InMemoryBackend()), tmp_path).setup_commands("admin@ex.com")
+    cmds = info["commands"]
     assert "GAMCFGDIR" in info["env"]
-    assert any("admin@ex.com" in c for c in info["commands"])
-    assert any("create project" in c for c in info["commands"])
+    # `create project` takes the admin; oauth create / svcacct must NOT (that bug dropped oauth2.txt)
+    assert any("create project admin@ex.com" in c for c in cmds)
+    assert any(c.endswith("oauth create") for c in cmds)
+    assert any(c.endswith("create svcacct") for c in cmds)
+    # oauth create (writes oauth2.txt) must come before svcacct
+    order = [i for i, c in enumerate(cmds) if "oauth create" in c or "create svcacct" in c]
+    assert cmds[order[0]].endswith("oauth create")
 
 
 def test_parse_check_pulls_pass_fail():

@@ -138,10 +138,12 @@ class SetupService:
         return {
             "cfgdir": str(cfgdir),
             "env": f'export GAMCFGDIR="{cfgdir}"',
+            # Canonical GAM7 order. `create project` takes the admin; `oauth create`
+            # (browser sign-in) and `create svcacct` take no positional admin.
             "commands": [
                 f'"{gam}" create project {admin}',
-                f'"{gam}" create svcacct {admin}',
-                f'"{gam}" oauth create {admin}',
+                f'"{gam}" oauth create',
+                f'"{gam}" create svcacct',
             ],
         }
 
