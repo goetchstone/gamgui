@@ -33,11 +33,21 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
   exit 0
 fi
 if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
-  cat "$GAM_MOCK_FIXTURES/info_user.json"
+  if [ "${3:-}" = "bob@example.com" ]; then
+    cat "$GAM_MOCK_FIXTURES/info_user_suspended.json"
+  else
+    cat "$GAM_MOCK_FIXTURES/info_user.json"
+  fi
   exit 0
 fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   cat "$GAM_MOCK_FIXTURES/group_members.json"
+  exit 0
+fi
+
+# `gam user <email> print delegates formatjson`
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
+  cat "$GAM_MOCK_FIXTURES/delegates.json"
   exit 0
 fi
 

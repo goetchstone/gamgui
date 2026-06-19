@@ -1,0 +1,33 @@
+<div class="rounded-2xl border border-sh-gray/40 bg-sh-white shadow-sm overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-sh-gray border-b border-sh-gray/30">
+        <th class="font-medium px-5 py-3 eyebrow">Name</th>
+        <th class="font-medium px-5 py-3 eyebrow">Email</th>
+        <th class="font-medium px-5 py-3 eyebrow">Org unit</th>
+        <th class="font-medium px-5 py-3 eyebrow text-right">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+        <tr class="border-b border-sh-gray/15 hover:bg-paper/70 transition-colors">
+          <td class="px-5 py-3">
+            <a class="font-medium text-sh-black hover:text-sh-blueink" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
+          </td>
+          <td class="px-5 py-3 text-sh-blueink/80">{{ u.primary_email }}</td>
+          <td class="px-5 py-3 text-sh-blueink/70">{{ u.org_unit_path }}</td>
+          <td class="px-5 py-3 text-right">
+            {% if u.suspended %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
+            {% else %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-emerald-50 text-emerald-700">Active</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="px-5 py-8 text-center text-sh-gray">No users found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if users %}<p class="mt-2 text-xs text-sh-gray">{{ users | length }} shown</p>{% endif %}

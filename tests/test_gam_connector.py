@@ -51,6 +51,11 @@ async def test_connection_test_ok(connector):
     assert "7.46.01" in status.version
 
 
+async def test_list_delegates(connector):
+    delegates = await connector.list_delegates("alice@example.com")
+    assert delegates == ["assistant@example.com", "backup@example.com"]
+
+
 async def test_resolve_links_workspace_account(connector):
     from gamgui.core.connectors.person import Person
 

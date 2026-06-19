@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Users — Saybrook Home Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
+    <p class="eyebrow text-sh-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-sh-black">Connect a domain first</h1>
+    <p class="text-sm text-sh-blueink/80 mt-2">Run setup to authorize Google Workspace, then manage users here.</p>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+  <div class="space-y-6">
+    <div class="flex items-end justify-between gap-4">
+      <div>
+        <p class="eyebrow text-sh-blue">Directory</p>
+        <h1 class="mt-2 font-serif text-3xl text-sh-black tracking-tight">Users</h1>
+      </div>
+      <span class="text-sm text-sh-gray">{{ domain }}</span>
+    </div>
+
+    {% if error %}
+    <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+    {% endif %}
+
+    <form hx-get="/users/table" hx-target="#users-table" hx-trigger="input changed delay:300ms, change"
+          class="flex gap-3">
+      <input type="search" name="q" placeholder="Search name or email…"
+             class="flex-1 rounded-lg border border-sh-gray/60 bg-sh-white px-3 py-2 text-[15px] text-ink placeholder:text-sh-gray focus:border-sh-blue focus:outline-none focus:ring-2 focus:ring-sh-blue/30" />
+      <select name="scope" class="rounded-lg border border-sh-gray/60 bg-sh-white px-3 py-2 text-sm text-ink focus:border-sh-blue focus:outline-none">
+        <option value="all">All</option>
+        <option value="active">Active only</option>
+      </select>
+    </form>
+
+    <div id="users-table">
+      {% include "_users_table.html" %}
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

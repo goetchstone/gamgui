@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Problem — Saybrook Home Console{% endblock %}
+{% block content %}
+<div class="rounded-2xl border border-amber-300 bg-amber-50 p-6">
+  <p class="eyebrow text-amber-700">Something went wrong</p>
+  <p class="mt-2 text-sm text-amber-800">{{ message }}</p>
+  <a href="/users" class="mt-4 inline-flex items-center rounded-lg border border-amber-400 px-3.5 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 transition-colors">← Back to users</a>
+</div>
+{% endblock %}

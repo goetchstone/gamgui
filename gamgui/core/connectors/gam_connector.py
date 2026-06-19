@@ -74,6 +74,16 @@ class GAMConnector(Connector):
         stdout = await self.runner.run_authenticated(self.domain, argv)
         return [GroupMember.from_json(r) for r in parse_records(stdout)]
 
+    async def list_delegates(self, email: str) -> List[str]:
+        """Return the email addresses delegated access to ``email``'s mailbox."""
+        stdout = await self.runner.run_authenticated(self.domain, GAMCommands.print_delegates(email))
+        out: List[str] = []
+        for rec in parse_records(stdout):
+            addr = rec.get("delegateAddress") or rec.get("delegate") or rec.get("Delegate Address")
+            if addr:
+                out.append(str(addr))
+        return out
+
     async def resolve(self, person: Person) -> Optional[ConnectorAccount]:
         try:
             user = await self.get_user(person.primary_email)

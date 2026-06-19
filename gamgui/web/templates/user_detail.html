@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ user.full_name }} — Saybrook Home Console{% endblock %}
+{% block content %}
+{% set input_cls = "w-full rounded-lg border border-sh-gray/60 bg-sh-white px-3 py-2 text-[15px] text-ink placeholder:text-sh-gray focus:border-sh-blue focus:outline-none focus:ring-2 focus:ring-sh-blue/30" %}
+{% set btn = "inline-flex items-center rounded-lg bg-sh-blue px-3.5 py-2 text-sm font-medium text-sh-white hover:bg-sh-blueink transition-colors" %}
+<div class="space-y-6">
+  <a href="/users" class="text-sm text-sh-blueink/70 hover:text-sh-black">← Users</a>
+
+  <div class="flex items-center gap-4">
+    <div>
+      <h1 class="font-serif text-3xl text-sh-black tracking-tight">{{ user.full_name }}</h1>
+      <p class="text-sh-blueink/80">{{ user.primary_email }}</p>
+    </div>
+    {% if user.suspended %}
+      <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
+    {% else %}
+      <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-emerald-50 text-emerald-700">Active</span>
+    {% endif %}
+  </div>
+
+  <div class="grid gap-5 sm:grid-cols-2">
+    <!-- info -->
+    <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
+      <h2 class="eyebrow text-sh-gray">Account</h2>
+      <dl class="mt-3 text-sm space-y-2">
+        <div class="flex justify-between gap-3"><dt class="text-sh-blueink/70">Org unit</dt><dd class="text-sh-black">{{ user.org_unit_path }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-sh-blueink/70">Admin</dt><dd class="text-sh-black">{{ "Yes" if user.is_admin else "No" }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-sh-blueink/70">Last login</dt><dd class="text-sh-black">{{ user.last_login_time or "—" }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-sh-blueink/70">Aliases</dt><dd class="text-sh-black text-right">{{ user.aliases | join(", ") or "—" }}</dd></div>
+      </dl>
+    </div>
+
+    <!-- danger / suspend -->
+    <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
+      <h2 class="eyebrow text-sh-gray">Access</h2>
+      <div id="suspend-zone" class="mt-3">
+        {% include "_suspend_zone.html" %}
+      </div>
+    </div>
+  </div>
+
+  <!-- signature -->
+  <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
+    <h2 class="eyebrow text-sh-gray">Gmail signature</h2>
+    <form class="mt-3 space-y-3" hx-post="/users/signature" hx-target="#sig-result" hx-swap="innerHTML">
+      <input type="hidden" name="email" value="{{ email }}" />
+      <textarea name="signature" rows="4" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 text-sm text-sh-blueink"><input type="checkbox" name="html" value="on" checked /> HTML</label>
+        <button class="{{ btn }}" type="submit">Save signature</button>
+      </div>
+    </form>
+    <div id="sig-result" class="mt-2"></div>
+  </div>
+
+  <!-- delegates -->
+  <div class="rounded-2xl border border-sh-gray/40 bg-sh-white p-6 shadow-sm">
+    <h2 class="eyebrow text-sh-gray">Mailbox delegates</h2>
+    <div id="delegates" class="mt-3">
+      {% include "_delegates.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %}
