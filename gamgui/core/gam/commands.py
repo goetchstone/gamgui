@@ -21,9 +21,13 @@ from typing import List, Optional, Sequence
 GROUP_ROLES = ("member", "manager", "owner")
 
 # `gam print users` returns ONLY primaryEmail unless fields are requested — these populate the list.
-USER_LIST_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin")
-# Fields for the detail view (adds aliases + last login on top of the list fields).
-USER_DETAIL_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin", "lastLoginTime", "aliases")
+# `organizations` carries the job title (the practical "role" for automations).
+USER_LIST_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "organizations")
+# Fields for the detail view: identity + role/automation signals + security flags.
+USER_DETAIL_FIELDS = (
+    "primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin", "isDelegatedAdmin",
+    "isEnrolledIn2Sv", "lastLoginTime", "aliases", "organizations", "locations", "recoveryEmail",
+)
 # `gam print groups` likewise returns only email unless fields are requested.
 GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
 
@@ -132,18 +136,33 @@ class GAMCommands:
         email: str,
         subject: str,
         message: str,
-        html: bool = False,
+        html: bool = True,
         start: Optional[str] = None,
         end: Optional[str] = None,
+        contacts_only: bool = False,
+        domain_only: bool = False,
     ) -> List[str]:
         argv = ["user", email, "vacation", "on", "subject", subject, "message", message]
         if html:
             argv.append("html")
+        if contacts_only:
+            argv.append("contactsonly")
+        if domain_only:
+            argv.append("domainonly")
         if start:
             argv += ["start", start]
         if end:
             argv += ["end", end]
         return argv
+
+    @staticmethod
+    def vacation_off(email: str) -> List[str]:
+        return ["user", email, "vacation", "off"]
+
+    @staticmethod
+    def show_vacation(email: str) -> List[str]:
+        # `show vacation` does NOT support formatjson — returns parseable text.
+        return ["user", email, "show", "vacation"]
 
     # --- groups -----------------------------------------------------------------------
     @staticmethod

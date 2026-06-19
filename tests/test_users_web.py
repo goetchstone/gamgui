@@ -59,6 +59,27 @@ def test_user_detail_shows_info_and_delegates(client):
     assert "a.anders@example.com" in r.text          # alias
     assert "assistant@example.com" in r.text          # delegate from fixture
     assert "Gmail signature" in r.text
+    assert "IT Director" in r.text                    # title / role surfaced
+    assert "Vacation responder" in r.text
+
+
+def test_vacation_get_renders_current_state(client):
+    r = client.get("/users/vacation", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Out of office" in r.text                  # current subject from mock
+    assert "Save auto-reply" in r.text
+
+
+def test_vacation_set_and_off(client):
+    r = client.post("/users/vacation/set", data={"email": "alice@example.com", "subject": "OOO", "message": "away"})
+    assert r.status_code == 200
+    r2 = client.post("/users/vacation/off", data={"email": "alice@example.com"})
+    assert r2.status_code == 200
+
+
+def test_users_list_has_title_column(client):
+    r = client.get("/users")
+    assert "Title" in r.text and "IT Director" in r.text
 
 
 def test_suspended_user_detail_shows_unsuspend(client):

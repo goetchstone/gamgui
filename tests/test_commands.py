@@ -61,6 +61,22 @@ def test_signature_value_is_a_single_arg_not_shell():
     assert argv[3] == "Hi; rm -rf / `whoami`"
 
 
+def test_vacation_commands():
+    assert GAMCommands.vacation_off("a@e.com") == ["user", "a@e.com", "vacation", "off"]
+    assert GAMCommands.show_vacation("a@e.com") == ["user", "a@e.com", "show", "vacation"]
+    argv = GAMCommands.set_vacation("a@e.com", "S", "M", html=True, start="2026-07-01", contacts_only=True)
+    assert argv[:6] == ["user", "a@e.com", "vacation", "on", "subject", "S"]
+    assert "message" in argv and "M" in argv and "html" in argv
+    assert "contactsonly" in argv and "start" in argv
+    assert "formatjson" not in argv  # vacation/show don't take formatjson
+
+
+def test_list_fields_include_organizations():
+    from gamgui.core.gam.commands import USER_LIST_FIELDS
+
+    assert "organizations" in USER_LIST_FIELDS  # carries job title for the list
+
+
 def test_build_user_query():
     assert build_user_query("") is None
     assert build_user_query("", include_suspended=False) == "isSuspended=false"

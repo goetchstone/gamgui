@@ -56,6 +56,24 @@ async def test_list_delegates(connector):
     assert delegates == ["assistant@example.com", "backup@example.com"]
 
 
+async def test_list_users_have_titles(connector):
+    by_email = {u.primary_email: u for u in await connector.list_users()}
+    assert by_email["alice@example.com"].title == "IT Director"
+
+
+async def test_get_vacation(connector):
+    vac = await connector.get_vacation("alice@example.com")
+    assert vac.enabled is True
+    assert vac.subject == "Out of office"
+
+
+async def test_set_and_clear_vacation(connector):
+    r = await connector.set_vacation("alice@example.com", "OOO", "away", start="2026-07-01")
+    assert r.ok is True
+    r2 = await connector.clear_vacation("alice@example.com")
+    assert r2.ok is True
+
+
 async def test_resolve_links_workspace_account(connector):
     from gamgui.core.connectors.person import Person
 

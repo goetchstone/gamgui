@@ -135,6 +135,58 @@ async def _delegates_partial(request: Request, conn, email: str) -> HTMLResponse
     return TEMPLATES.TemplateResponse(request, "_delegates.html", {"delegates": delegates, "email": email})
 
 
+# --- vacation / auto-responder (lazy-loaded into the detail page) ----------------------
+@router.get("/vacation", response_class=HTMLResponse)
+async def vacation_get(request: Request, email: str) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    return await _vacation_partial(request, conn, email)
+
+
+async def _vacation_partial(request: Request, conn, email: str) -> HTMLResponse:
+    try:
+        vac = await conn.get_vacation(email)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    return TEMPLATES.TemplateResponse(request, "_vacation.html", {"vac": vac, "email": email})
+
+
+@router.post("/vacation/set", response_class=HTMLResponse)
+async def vacation_set(
+    request: Request,
+    email: str = Form(...),
+    subject: str = Form(""),
+    message: str = Form(""),
+    contactsonly: str = Form("off"),
+    domainonly: str = Form("off"),
+    start: str = Form(""),
+    end: str = Form(""),
+) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    result = await conn.set_vacation(
+        email, subject, message, html=True,
+        start=start.strip() or None, end=end.strip() or None,
+        contacts_only=(contactsonly == "on"), domain_only=(domainonly == "on"),
+    )
+    if not result.ok:
+        return _err(request, f"Couldn't set auto-reply: {result.detail}")
+    return await _vacation_partial(request, conn, email)
+
+
+@router.post("/vacation/off", response_class=HTMLResponse)
+async def vacation_off(request: Request, email: str = Form(...)) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    result = await conn.clear_vacation(email)
+    if not result.ok:
+        return _err(request, f"Couldn't turn off auto-reply: {result.detail}")
+    return await _vacation_partial(request, conn, email)
+
+
 @router.get("/suspend/zone", response_class=HTMLResponse)
 async def suspend_zone(request: Request, email: str, suspended: str = "false") -> HTMLResponse:
     return TEMPLATES.TemplateResponse(

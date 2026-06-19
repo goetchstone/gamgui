@@ -6,6 +6,7 @@ read the handful of fields the UI needs and stash the rest in ``raw`` for detail
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +19,16 @@ def _get(d: Dict[str, Any], *keys: str, default: Any = None) -> Any:
     return default
 
 
+def _primary(items: Any) -> Dict[str, Any]:
+    """Pick the ``primary`` entry from a Directory list (organizations/locations), else the first."""
+    if not isinstance(items, list) or not items:
+        return {}
+    for it in items:
+        if isinstance(it, dict) and it.get("primary"):
+            return it
+    return items[0] if isinstance(items[0], dict) else {}
+
+
 @dataclass
 class GAMUser:
     primary_email: str
@@ -26,6 +37,12 @@ class GAMUser:
     suspended: bool = False
     org_unit_path: str = "/"
     is_admin: bool = False
+    is_delegated_admin: bool = False
+    enrolled_2sv: bool = False
+    title: str = ""
+    department: str = ""
+    location: str = ""
+    recovery_email: str = ""
     last_login_time: Optional[str] = None
     aliases: List[str] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
@@ -40,6 +57,8 @@ class GAMUser:
         name = d.get("name") or {}
         if not isinstance(name, dict):
             name = {}
+        org = _primary(d.get("organizations"))      # job title / department live here
+        loc = _primary(d.get("locations"))           # building / desk
         return cls(
             primary_email=_get(d, "primaryEmail", "email", "User", default=""),
             given_name=_get(name, "givenName") or _get(d, "givenName", "First Name", default=""),
@@ -47,9 +66,57 @@ class GAMUser:
             suspended=_as_bool(_get(d, "suspended", "Suspended", default=False)),
             org_unit_path=_get(d, "orgUnitPath", "OrgUnitPath", default="/"),
             is_admin=_as_bool(_get(d, "isAdmin", "Is Admin", default=False)),
+            is_delegated_admin=_as_bool(_get(d, "isDelegatedAdmin", default=False)),
+            enrolled_2sv=_as_bool(_get(d, "isEnrolledIn2Sv", default=False)),
+            title=str(org.get("title") or _get(d, "Organization Title", default="") or ""),
+            department=str(org.get("department") or _get(d, "Organization Department", default="") or ""),
+            location=str(loc.get("buildingName") or loc.get("buildingId") or ""),
+            recovery_email=str(_get(d, "recoveryEmail", default="") or ""),
             last_login_time=_get(d, "lastLoginTime", "Last Login Time"),
             aliases=_as_list(_get(d, "aliases", "Aliases", default=[])),
             raw=d,
+        )
+
+
+@dataclass
+class Vacation:
+    enabled: bool = False
+    subject: str = ""
+    message: str = ""
+    contacts_only: bool = False
+    domain_only: bool = False
+
+    @classmethod
+    def from_show_text(cls, text: str) -> "Vacation":
+        """Parse the text output of ``gam user X show vacation`` (formatjson isn't supported)."""
+        enabled = contacts = domain = False
+        subject = ""
+        msg_lines: List[str] = []
+        in_message = False
+        for line in (text or "").splitlines():
+            s = line.strip()
+            if in_message:
+                if s.startswith(("Enabled:", "Subject:", "Contacts Only:", "Domain Only:")):
+                    in_message = False
+                else:
+                    msg_lines.append(s)
+                    continue
+            if s.startswith("Enabled:"):
+                enabled = "true" in s.lower()
+            elif s.startswith("Contacts Only:"):
+                contacts = "true" in s.lower()
+            elif s.startswith("Domain Only:"):
+                domain = "true" in s.lower()
+            elif s.startswith("Subject:"):
+                subject = s[len("Subject:"):].strip()
+            elif s.startswith("Message:"):
+                in_message = True
+        return cls(
+            enabled=enabled,
+            subject=subject,
+            message="\n".join(msg_lines).strip(),
+            contacts_only=contacts,
+            domain_only=domain,
         )
 
 
@@ -108,12 +175,9 @@ def _as_list(v: Any) -> List[str]:
     if isinstance(v, list):
         return [str(x) for x in v]
     if isinstance(v, str) and v:
-        # GAM CSV sometimes joins multi-values with a space or comma.
         return [p for p in re_split(v) if p]
     return []
 
 
 def re_split(v: str) -> List[str]:
-    import re
-
     return [p.strip() for p in re.split(r"[\s,]+", v.strip())]

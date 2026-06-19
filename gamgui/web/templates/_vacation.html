@@ -1,0 +1,30 @@
+{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="space-y-3">
+  <div class="flex items-center gap-2.5 text-sm">
+    {% if vac.enabled %}
+      <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
+      <span class="text-brand-black">On{% if vac.subject %} — “{{ vac.subject }}”{% endif %}</span>
+      <button class="ml-auto text-xs text-red-700 hover:underline"
+              hx-post="/users/vacation/off" hx-target="#vacation" hx-swap="innerHTML"
+              hx-vals='{"email": {{ email | tojson }} }'>Turn off</button>
+    {% else %}
+      <span class="inline-block h-2.5 w-2.5 rounded-full bg-brand-gray"></span>
+      <span class="text-brand-blueink">Off</span>
+    {% endif %}
+  </div>
+
+  <form class="space-y-3" hx-post="/users/vacation/set" hx-target="#vacation" hx-swap="innerHTML">
+    <input type="hidden" name="email" value="{{ email }}" />
+    <input type="text" name="subject" value="{{ vac.subject }}" placeholder="Subject" class="{{ input_cls }}" />
+    <textarea name="message" rows="3" placeholder="Auto-reply message" class="{{ input_cls }}">{% if vac.enabled %}{{ vac.message }}{% endif %}</textarea>
+    <div class="flex flex-wrap items-center gap-4 text-sm text-brand-blueink">
+      <label class="flex items-center gap-2"><input type="checkbox" name="contactsonly" value="on" {{ "checked" if vac.contacts_only }} /> Contacts only</label>
+      <label class="flex items-center gap-2"><input type="checkbox" name="domainonly" value="on" {{ "checked" if vac.domain_only }} /> Domain only</label>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="text-sm text-brand-blueink">Start<input type="date" name="start" class="{{ input_cls }} mt-1" /></label>
+      <label class="text-sm text-brand-blueink">End<input type="date" name="end" class="{{ input_cls }} mt-1" /></label>
+    </div>
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Save auto-reply</button>
+  </form>
+</div>

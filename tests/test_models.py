@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gamgui.core.gam.models import GAMGroup, GAMUser, GroupMember
+from gamgui.core.gam.models import GAMGroup, GAMUser, GroupMember, Vacation
 
 
 def test_gam_user_nested_name_and_bool_coercion():
@@ -32,3 +32,38 @@ def test_gam_group_member_count_parsing():
 def test_group_member_role_uppercased():
     m = GroupMember.from_json({"email": "a@e.com", "role": "manager"})
     assert m.role == "MANAGER"
+
+
+def test_gam_user_parses_title_location_and_flags():
+    u = GAMUser.from_json(
+        {
+            "primaryEmail": "a@e.com",
+            "organizations": [{"title": "IT Director", "department": "IT", "primary": True}],
+            "locations": [{"buildingName": "HQ", "primary": True}],
+            "isEnrolledIn2Sv": True,
+            "isDelegatedAdmin": True,
+            "recoveryEmail": "r@e.com",
+        }
+    )
+    assert u.title == "IT Director"
+    assert u.department == "IT"
+    assert u.location == "HQ"
+    assert u.enrolled_2sv is True
+    assert u.is_delegated_admin is True
+    assert u.recovery_email == "r@e.com"
+
+
+def test_vacation_from_show_text():
+    text = (
+        "User: x@e.com, Vacation:\n  Enabled: True\n  Contacts Only: False\n"
+        "  Domain Only: False\n  Subject: OOO\n  Message:\n    Back next week.\n"
+    )
+    v = Vacation.from_show_text(text)
+    assert v.enabled is True
+    assert v.subject == "OOO"
+    assert "Back next week." in v.message
+
+
+def test_vacation_disabled_parse():
+    v = Vacation.from_show_text("User: x, Vacation:\n  Enabled: False\n  Subject:\n")
+    assert v.enabled is False

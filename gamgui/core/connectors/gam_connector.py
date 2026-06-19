@@ -11,7 +11,7 @@ from typing import List, Optional, Sequence
 
 from ..audit import AuditLog
 from ..gam.commands import GAMCommands, build_user_query
-from ..gam.models import GAMGroup, GAMUser, GroupMember
+from ..gam.models import GAMGroup, GAMUser, GroupMember, Vacation
 from ..gam.parser import parse_one, parse_records
 from ..gam.runner import GAMRunner
 from .base import (
@@ -103,6 +103,31 @@ class GAMConnector(Connector):
     async def remove_delegate(self, email: str, delegate: str) -> ChangeResult:
         argv = GAMCommands.remove_delegate(email, delegate)
         return await self._run_write("remove_delegate", email, argv, RiskLevel.LOW)
+
+    # --- vacation / auto-responder -----------------------------------------------------
+    async def get_vacation(self, email: str) -> Vacation:
+        stdout = await self.runner.run_authenticated(self.domain, GAMCommands.show_vacation(email))
+        return Vacation.from_show_text(stdout)
+
+    async def set_vacation(
+        self,
+        email: str,
+        subject: str,
+        message: str,
+        html: bool = True,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        contacts_only: bool = False,
+        domain_only: bool = False,
+    ) -> ChangeResult:
+        argv = GAMCommands.set_vacation(
+            email, subject, message, html=html, start=start, end=end,
+            contacts_only=contacts_only, domain_only=domain_only,
+        )
+        return await self._run_write("set_vacation", email, argv, RiskLevel.LOW)
+
+    async def clear_vacation(self, email: str) -> ChangeResult:
+        return await self._run_write("clear_vacation", email, GAMCommands.vacation_off(email), RiskLevel.LOW)
 
     async def add_group_member(self, group: str, member: str, role: str = "member") -> ChangeResult:
         argv = GAMCommands.add_group_member(group, member, role=role)

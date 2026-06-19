@@ -45,6 +45,20 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   exit 0
 fi
 
+# `gam user <email> show vacation` (no formatjson) -> parseable text, like real GAM.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "vacation" ]; then
+  cat <<'EOF'
+User: someone@example.com, Vacation:
+  Enabled: True
+  Contacts Only: False
+  Domain Only: False
+  Subject: Out of office
+  Message:
+    I am away until next week.
+EOF
+  exit 0
+fi
+
 # `gam user <email> print delegates` (no formatjson) -> plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
   printf 'User,delegateAddress,delegationStatus\n%s,assistant@example.com,accepted\n%s,backup@example.com,accepted\n' "${2:-}" "${2:-}"

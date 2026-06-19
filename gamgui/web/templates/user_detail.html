@@ -10,6 +10,7 @@
     <div>
       <h1 class="font-serif text-3xl text-brand-black tracking-tight">{{ user.full_name }}</h1>
       <p class="text-brand-blueink/80">{{ user.primary_email }}</p>
+      {% if user.title %}<p class="text-sm text-brand-gray">{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}</p>{% endif %}
     </div>
     {% if user.suspended %}
       <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
@@ -23,9 +24,14 @@
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
       <h2 class="eyebrow text-brand-gray">Account</h2>
       <dl class="mt-3 text-sm space-y-2">
+        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
+        {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
         <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Admin</dt><dd class="text-brand-black">{{ "Yes" if user.is_admin else "No" }}</dd></div>
+        {% if user.location %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Location</dt><dd class="text-brand-black text-right">{{ user.location }}</dd></div>{% endif %}
+        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Admin</dt><dd class="text-brand-black">{{ "Super" if user.is_admin else ("Delegated" if user.is_delegated_admin else "No") }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">2-step</dt><dd class="text-brand-black">{{ "Enrolled" if user.enrolled_2sv else "Not enrolled" }}</dd></div>
         <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Last login</dt><dd class="text-brand-black">{{ user.last_login_time or "—" }}</dd></div>
+        {% if user.recovery_email %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Recovery</dt><dd class="text-brand-black text-right">{{ user.recovery_email }}</dd></div>{% endif %}
         <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Aliases</dt><dd class="text-brand-black text-right">{{ user.aliases | join(", ") or "—" }}</dd></div>
       </dl>
     </div>
@@ -58,6 +64,14 @@
     <h2 class="eyebrow text-brand-gray">Mailbox delegates</h2>
     <div id="delegates" class="mt-3">
       {% include "_delegates.html" %}
+    </div>
+  </div>
+
+  <!-- vacation responder (lazy-loaded) -->
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Vacation responder</h2>
+    <div id="vacation" class="mt-3" hx-get="/users/vacation?email={{ email | urlencode }}" hx-trigger="load">
+      <p class="text-sm text-brand-gray">Loading…</p>
     </div>
   </div>
 </div>
