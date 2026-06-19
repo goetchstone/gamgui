@@ -19,6 +19,12 @@ def test_redact_masks_signature_value():
     assert "secret sig" not in red
 
 
+def test_redact_masks_recovery_fields():
+    red = redact_argv(["update", "user", "a@e.com", "recoveryemail", "secret@personal.com", "recoveryphone", "+15551234"])
+    assert "secret@personal.com" not in red and "+15551234" not in red
+    assert red[red.index("recoveryemail") + 1] == "***redacted***"
+
+
 def test_record_and_tail(tmp_path):
     log = AuditLog(tmp_path / "audit.jsonl")
     log.record("set_signature", target="a@e.com", argv=["user", "a@e.com", "signature", "x"], ok=True)

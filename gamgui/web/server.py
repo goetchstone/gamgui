@@ -23,6 +23,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..core.connectors.gam_connector import GAMConnector
 from ..core.gam.runner import GAMRunner
+from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
 
 _WEB_DIR = Path(__file__).resolve().parent
@@ -40,6 +41,7 @@ class AppState:
 
     @classmethod
     def create(cls, vault: Optional[SecretsVault] = None, token: Optional[str] = None) -> "AppState":
+        sweep_stale_configs()  # clean up any credential temp dirs orphaned by a prior crash/kill
         vault = vault or SecretsVault()
         runner = GAMRunner(vault=vault)
         domains = vault.list_domains()

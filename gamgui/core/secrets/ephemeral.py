@@ -18,6 +18,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from types import TracebackType
 from typing import Optional, Type
@@ -33,6 +34,28 @@ def app_runtime_dir() -> Path:
     base.mkdir(parents=True, exist_ok=True)
     os.chmod(base, 0o700)
     return base
+
+
+def sweep_stale_configs(base_dir: Optional[Path] = None, max_age_seconds: float = 600) -> int:
+    """Remove orphaned ``gamcfg-*`` dirs left by a crash/force-kill before the wipe could run.
+
+    Normal exits wipe their own dir; this is the safety net for SIGKILL. Call once at startup.
+    Returns the number of stale directories removed.
+    """
+    base = Path(base_dir) if base_dir else app_runtime_dir()
+    removed = 0
+    now = time.time()
+    try:
+        for child in base.glob("gamcfg-*"):
+            try:
+                if child.is_dir() and (now - child.stat().st_mtime) > max_age_seconds:
+                    shutil.rmtree(child, ignore_errors=True)
+                    removed += 1
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return removed
 
 
 def _sha(data: str) -> str:

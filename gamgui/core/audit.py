@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 # gam argument keys whose following value must be masked in the log.
-_SENSITIVE_KEYS = {"password", "signature"}
+_SENSITIVE_KEYS = {"password", "signature", "recoveryemail", "recoveryphone", "alternateemail"}
 _MASK = "***redacted***"
 
 
