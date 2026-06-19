@@ -78,9 +78,11 @@ def _parse_csv(text: str) -> List[Dict[str, Any]]:
     rows = list(reader)
     if not rows:
         return []
-    # GAM's `formatjson` CSV variant: a single column named "JSON" holding an object per row.
+    # GAM's `formatjson` output is a CSV that carries a "JSON" column holding the full record
+    # (often alongside a plain key column, e.g. `primaryEmail,JSON`). When present, that column
+    # is the source of truth — parse it.
     fieldnames = [f for f in (reader.fieldnames or []) if f is not None]
-    if fieldnames == ["JSON"]:
+    if "JSON" in fieldnames:
         out: List[Dict[str, Any]] = []
         for row in rows:
             parsed = _try_json(row.get("JSON") or "")

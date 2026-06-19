@@ -5,8 +5,13 @@ import pytest
 from gamgui.core.gam.commands import GAMCommands, build_user_query
 
 
-def test_print_users_minimal_appends_formatjson():
-    assert GAMCommands.print_users() == ["print", "users", "formatjson"]
+def test_print_users_requests_list_fields():
+    argv = GAMCommands.print_users()
+    assert argv[:2] == ["print", "users"]
+    assert argv[-1] == "formatjson"
+    fields = argv[argv.index("fields") + 1]
+    # without explicit fields GAM returns only primaryEmail, so we must request these
+    assert all(f in fields for f in ("name", "suspended", "orgUnitPath"))
 
 
 def test_print_users_with_query_and_fields():
@@ -15,7 +20,9 @@ def test_print_users_with_query_and_fields():
 
 
 def test_info_user():
-    assert GAMCommands.info_user("a@e.com") == ["info", "user", "a@e.com", "formatjson"]
+    argv = GAMCommands.info_user("a@e.com")
+    assert argv[:3] == ["info", "user", "a@e.com"]
+    assert argv[-1] == "formatjson" and "fields" in argv
 
 
 def test_set_suspended_on_off():

@@ -20,6 +20,11 @@ from typing import List, Optional, Sequence
 # Roles accepted by Google Directory for group membership.
 GROUP_ROLES = ("member", "manager", "owner")
 
+# `gam print users` returns ONLY primaryEmail unless fields are requested — these populate the list.
+USER_LIST_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin")
+# Fields for the detail view (adds aliases + last login on top of the list fields).
+USER_DETAIL_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin", "lastLoginTime", "aliases")
+
 
 class GAMCommands:
     # --- diagnostics / setup ----------------------------------------------------------
@@ -54,16 +59,13 @@ class GAMCommands:
         argv = ["print", "users"]
         if query:
             argv += ["query", query]
-        if fields:
-            argv += ["fields", ",".join(fields)]
+        argv += ["fields", ",".join(fields or USER_LIST_FIELDS)]
         argv.append("formatjson")
         return argv
 
     @staticmethod
     def info_user(email: str, fields: Optional[Sequence[str]] = None) -> List[str]:
-        argv = ["info", "user", email]
-        if fields:
-            argv += ["fields", ",".join(fields)]
+        argv = ["info", "user", email, "fields", ",".join(fields or USER_DETAIL_FIELDS)]
         argv.append("formatjson")
         return argv
 

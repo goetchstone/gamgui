@@ -39,6 +39,13 @@ def test_csv_with_json_column():
     assert recs == [{"primaryEmail": "x@e.com", "suspended": False}]
 
 
+def test_csv_with_key_and_json_columns():
+    # GAM's real `print users formatjson` shape: a plain key column alongside the JSON blob.
+    text = 'primaryEmail,JSON\n"x@e.com","{""primaryEmail"":""x@e.com"",""suspended"":true}"\n'
+    recs = parse_records(text)
+    assert recs == [{"primaryEmail": "x@e.com", "suspended": True}]
+
+
 def test_plain_csv():
     text = "primaryEmail,suspended\nx@e.com,False\ny@e.com,True\n"
     recs = parse_records(text)
