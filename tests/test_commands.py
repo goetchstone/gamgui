@@ -39,6 +39,22 @@ def test_calendar_acl_commands():
         ["user", "a@e.com", "delete", "calendaracls", "primary", "bob@e.com"]
 
 
+def test_calendar_event_commands():
+    assert GAMCommands.print_resources("aspen")[:4] == ["print", "resources", "fields", "id,name,email,resourcetype,buildingid"]
+    assert GAMCommands.print_resources("aspen")[-3:] == ["query", "aspen", "formatjson"]
+    assert GAMCommands.print_user_calendars("a@e.com")[:4] == ["user", "a@e.com", "print", "calendars"]
+    assert GAMCommands.print_calendar_acls_cal("room@x") == ["calendars", "room@x", "print", "calendaracls", "formatjson"]
+
+    ev = GAMCommands.print_events("room@x", query="standup", after="2026-01-01")
+    assert ev[:4] == ["calendars", "room@x", "print", "events"]
+    assert "query" in ev and "standup" in ev and "after" in ev and ev[-1] == "formatjson"
+
+    # Destructive: includes `doit` only when asked; targets a specific event id.
+    assert GAMCommands.delete_event("room@x", "evt1", doit=True) == \
+        ["calendars", "room@x", "delete", "events", "eventid", "evt1", "doit", "sendupdates", "none"]
+    assert "doit" not in GAMCommands.delete_event("room@x", "evt1", doit=False)
+
+
 def test_set_suspended_on_off():
     assert GAMCommands.set_suspended("a@e.com", True) == ["update", "user", "a@e.com", "suspended", "on"]
     assert GAMCommands.set_suspended("a@e.com", False) == ["update", "user", "a@e.com", "suspended", "off"]

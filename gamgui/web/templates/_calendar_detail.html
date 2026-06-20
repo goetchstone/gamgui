@@ -1,0 +1,32 @@
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm space-y-5">
+  <div>
+    <h2 class="eyebrow text-brand-gray">Calendar</h2>
+    <p class="mt-1 font-serif text-lg text-brand-black break-all">{{ cal }}</p>
+  </div>
+
+  <div>
+    <h3 class="eyebrow text-brand-gray">Who has access</h3>
+    {% if acls %}
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for a in acls %}
+      <li class="border-b border-brand-gray/20 pb-1"><span class="text-brand-black">{{ a.who }}</span> <span class="text-brand-gray">— {{ a.role_label }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="mt-2 text-sm text-brand-gray">No access rules returned.</p>
+    {% endif %}
+  </div>
+
+  <div>
+    <h3 class="eyebrow text-brand-gray">Find an event</h3>
+    <form class="mt-2 flex flex-wrap gap-2" hx-get="/calendars/events" hx-target="#event-results" hx-swap="innerHTML">
+      <input type="hidden" name="cal" value="{{ cal }}" />
+      <input class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" name="q" placeholder="event title contains…" />
+      <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none" type="date" name="after" title="on/after" />
+      <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none" type="date" name="before" title="before" />
+      <button class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Search</button>
+    </form>
+    <div id="event-results" class="mt-3"></div>
+    <div id="event-action" class="mt-3"></div>
+  </div>
+</div>

@@ -1,0 +1,2 @@
+{"id": "evt-weekly-standup", "summary": "Weekly Standup", "start": {"dateTime": "2026-06-22T09:00:00Z"}, "end": {"dateTime": "2026-06-22T09:30:00Z"}, "organizer": {"email": "alice@example.com"}, "creator": {"email": "alice@example.com"}, "status": "confirmed", "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=MO"]}
+{"id": "evt-allhands", "summary": "All Hands", "start": {"dateTime": "2026-07-01T16:00:00Z"}, "end": {"dateTime": "2026-07-01T17:00:00Z"}, "organizer": {"email": "ceo@example.com"}, "creator": {"email": "ceo@example.com"}, "status": "confirmed"}

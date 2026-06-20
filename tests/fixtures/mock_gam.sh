@@ -110,6 +110,28 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls
   exit 0
 fi
 
+# `gam print resources ...` -> NDJSON of resource (room) calendars.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "resources" ]; then
+  cat "$GAM_MOCK_FIXTURES/resources.json"
+  exit 0
+fi
+
+# `gam user <email> print calendars ...` -> NDJSON of a user's calendars.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]; then
+  cat "$GAM_MOCK_FIXTURES/user_calendars.json"
+  exit 0
+fi
+
+# `gam calendars <id> print calendaracls|events ...` -> NDJSON (standalone calendar form).
+if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls" ]; then
+  cat "$GAM_MOCK_FIXTURES/calendar_acls.json"
+  exit 0
+fi
+if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events" ]; then
+  cat "$GAM_MOCK_FIXTURES/events.json"
+  exit 0
+fi
+
 # `gam user <admin> check serviceaccount` -> simulate a fully-authorized service account.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
   cat <<'EOF'

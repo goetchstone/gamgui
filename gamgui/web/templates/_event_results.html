@@ -1,0 +1,21 @@
+{% if need_filter %}
+<p class="text-sm text-brand-gray">Enter a title to search for, or a date range.</p>
+{% elif events %}
+{% if capped %}<p class="text-xs text-amber-700 mb-2">Showing the first {{ events|length }} matches — narrow your search to see the rest.</p>{% endif %}
+<ul class="space-y-2">
+  {% for e in events %}
+  <li class="flex items-center justify-between gap-3 text-sm border-b border-brand-gray/20 pb-2">
+    <span class="min-w-0">
+      <span class="text-brand-black">{{ e.summary }}</span>
+      {% if e.is_recurring %}<span class="ml-1 text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-brand-blue/10 text-brand-blueink">recurring</span>{% endif %}
+      <span class="block text-brand-gray">{{ e.when }}{% if e.organizer %} · {{ e.organizer }}{% endif %}</span>
+    </span>
+    <button class="shrink-0 text-xs text-red-700 hover:underline"
+            hx-post="/calendars/event/preview" hx-target="#event-action" hx-swap="innerHTML"
+            hx-vals='{"cal": {{ cal | tojson }}, "event_id": {{ e.id | tojson }} }'>Delete…</button>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-sm text-brand-gray">No matching events.</p>
+{% endif %}

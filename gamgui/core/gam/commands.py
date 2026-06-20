@@ -150,6 +150,53 @@ class GAMCommands:
     def delete_calendar_acl(email: str, scope: str, calendar: str = "primary") -> List[str]:
         return ["user", email, "delete", "calendaracls", calendar, scope]
 
+    # --- calendars / resources / events ------------------------------------------------
+    @staticmethod
+    def print_resources(query: str = "") -> List[str]:
+        argv = ["print", "resources", "fields", "id,name,email,resourcetype,buildingid"]
+        if query:
+            argv += ["query", query]
+        argv.append("formatjson")
+        return argv
+
+    @staticmethod
+    def print_user_calendars(email: str) -> List[str]:
+        return ["user", email, "print", "calendars", "fields", "id,summary,accessrole,primary", "formatjson"]
+
+    @staticmethod
+    def print_calendar_acls_cal(calendar_id: str) -> List[str]:
+        # Standalone form: ACLs for ANY calendar id (room/secondary) via admin access.
+        return ["calendars", calendar_id, "print", "calendaracls", "formatjson"]
+
+    _EVENT_FIELDS = "id,summary,start,end,recurrence,recurringeventid,organizer,creator,status"
+
+    @staticmethod
+    def print_events(calendar_id: str, query: str = "", after: str = "", before: str = "") -> List[str]:
+        argv = ["calendars", calendar_id, "print", "events"]
+        if query:
+            argv += ["query", query]
+        if after:
+            argv += ["after", after]
+        if before:
+            argv += ["before", before]
+        argv += ["fields", GAMCommands._EVENT_FIELDS, "formatjson"]
+        return argv
+
+    @staticmethod
+    def get_event(calendar_id: str, event_id: str) -> List[str]:
+        # Re-read one event by id for the delete preview.
+        return ["calendars", calendar_id, "print", "events", "eventid", event_id,
+                "fields", GAMCommands._EVENT_FIELDS, "formatjson"]
+
+    @staticmethod
+    def delete_event(calendar_id: str, event_id: str, doit: bool = True) -> List[str]:
+        # GAM dry-runs `delete events` without `doit`. Deleting a recurring master id drops the series.
+        argv = ["calendars", calendar_id, "delete", "events", "eventid", event_id]
+        if doit:
+            argv.append("doit")
+        argv += ["sendupdates", "none"]
+        return argv
+
     # --- gmail: signature / delegate / forwarding / vacation --------------------------
     @staticmethod
     def set_signature(email: str, signature: str, html: bool = True) -> List[str]:

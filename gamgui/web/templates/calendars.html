@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Calendars — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="space-y-6">
+  <div>
+    <p class="eyebrow text-brand-blue">Calendars</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Calendars</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Find a room or a user's calendar, see who has access, search its events, and remove a stray one.</p>
+  </div>
+
+  <div class="grid gap-5 lg:grid-cols-2">
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <h2 class="eyebrow text-brand-gray">Room / resource calendars</h2>
+      <input class="{{ fld }} mt-2" type="search" name="q" placeholder="Search rooms…"
+             hx-get="/calendars/resources" hx-target="#cal-results" hx-swap="innerHTML"
+             hx-trigger="keyup changed delay:300ms, search" hx-include="this" />
+      <button class="mt-2 text-sm text-brand-blueink hover:underline"
+              hx-get="/calendars/resources" hx-target="#cal-results" hx-swap="innerHTML">List all rooms</button>
+    </div>
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <h2 class="eyebrow text-brand-gray">A user's calendars</h2>
+      <form class="mt-2 flex gap-2" hx-get="/calendars/user" hx-target="#cal-results" hx-swap="innerHTML">
+        <input class="{{ fld }} flex-1" type="email" name="email" placeholder="person@domain.com" />
+        <button class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Find</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="cal-results"></div>
+  <div id="cal-detail"></div>
+</div>
+{% endif %}
+{% endblock %}

@@ -12,7 +12,16 @@ from typing import List, Optional, Sequence
 
 from ..audit import AuditLog
 from ..gam.commands import GAMCommands, build_user_query
-from ..gam.models import CalendarACL, GAMGroup, GAMUser, GroupMember, Vacation
+from ..gam.models import (
+    CalendarACL,
+    CalendarEvent,
+    GAMGroup,
+    GAMUser,
+    GroupMember,
+    ResourceCalendar,
+    UserCalendar,
+    Vacation,
+)
 from ..gam.parser import parse_one, parse_records
 from ..gam.runner import GAMRunner
 from .base import (
@@ -204,6 +213,35 @@ class GAMConnector(Connector):
     async def remove_calendar_acl(self, email: str, scope: str, calendar: str = "primary") -> ChangeResult:
         argv = GAMCommands.delete_calendar_acl(email, scope, calendar=calendar)
         return await self._run_write("remove_calendar_acl", email, argv, RiskLevel.LOW, target_extra=scope)
+
+    # --- calendars / resources / events ------------------------------------------------
+    async def list_resources(self, query: str = "") -> List[ResourceCalendar]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_resources(query))
+        return [ResourceCalendar.from_json(r) for r in parse_records(out)]
+
+    async def list_user_calendars(self, email: str) -> List[UserCalendar]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_user_calendars(email))
+        return [UserCalendar.from_json(r) for r in parse_records(out)]
+
+    async def list_calendar_acls_for(self, calendar_id: str) -> List[CalendarACL]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_acls_cal(calendar_id))
+        return [CalendarACL.from_json(r) for r in parse_records(out)]
+
+    async def search_events(
+        self, calendar_id: str, query: str = "", after: str = "", before: str = "", cap: int = 200
+    ) -> List[CalendarEvent]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_events(calendar_id, query, after, before))
+        events = [CalendarEvent.from_json(r) for r in parse_records(out)]
+        return events[:cap]
+
+    async def get_event(self, calendar_id: str, event_id: str) -> Optional[CalendarEvent]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.get_event(calendar_id, event_id))
+        recs = parse_records(out)
+        return CalendarEvent.from_json(recs[0]) if recs else None
+
+    async def delete_event(self, calendar_id: str, event_id: str) -> ChangeResult:
+        argv = GAMCommands.delete_event(calendar_id, event_id, doit=True)
+        return await self._run_write("delete_event", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=event_id)
 
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:

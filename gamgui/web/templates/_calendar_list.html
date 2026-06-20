@@ -1,0 +1,18 @@
+{% if items %}
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
+  <ul class="divide-y divide-brand-gray/20">
+    {% for it in items %}
+    <li class="flex items-center justify-between gap-3 py-2 text-sm">
+      <span class="min-w-0 truncate">
+        <span class="text-brand-black">{{ it.label }}</span>
+        <span class="text-brand-gray">— {{ it.cal_id }}{% if it.meta %} · {{ it.meta }}{% endif %}</span>
+      </span>
+      <button class="shrink-0 text-xs font-medium text-brand-blueink hover:underline"
+              hx-get="/calendars/detail?cal={{ it.cal_id | urlencode }}" hx-target="#cal-detail" hx-swap="innerHTML">View access &amp; events →</button>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="text-sm text-brand-gray">No calendars found.</p>
+{% endif %}

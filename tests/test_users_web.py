@@ -345,6 +345,59 @@ def test_calendar_access_add_requires_target(client):
     assert "Enter an email to share with." in r.text
 
 
+def test_calendars_page_renders(client):
+    r = client.get("/calendars")
+    assert r.status_code == 200
+    assert "Calendars" in r.text and "Room / resource calendars" in r.text
+
+
+def test_calendars_resources_search(client):
+    r = client.get("/calendars/resources", params={"q": "aspen"})
+    assert r.status_code == 200
+    assert "Aspen Conference Room" in r.text and "View access" in r.text
+
+
+def test_calendars_user_list(client):
+    r = client.get("/calendars/user", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Team Events" in r.text
+
+
+def test_calendars_detail_shows_access_and_event_search(client):
+    r = client.get("/calendars/detail", params={"cal": "aspen@resource.calendar.google.com"})
+    assert r.status_code == 200
+    assert "Who has access" in r.text
+    assert "assistant@example.com" in r.text          # ACL rule from the fixture
+    assert 'hx-get="/calendars/events"' in r.text      # event-search form present
+
+
+def test_calendars_event_search_requires_filter(client):
+    # No query/date -> no unbounded all-events scan.
+    r = client.get("/calendars/events", params={"cal": "aspen@resource.calendar.google.com"})
+    assert "Enter a title" in r.text
+
+
+def test_calendars_event_search_flags_recurring(client):
+    r = client.get("/calendars/events", params={"cal": "aspen@resource.calendar.google.com", "q": "stand"})
+    assert "Weekly Standup" in r.text and "recurring" in r.text and "Delete" in r.text
+
+
+def test_calendars_event_delete_preview_warns_on_recurring(client):
+    r = client.post("/calendars/event/preview",
+                    data={"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"})
+    assert r.status_code == 200
+    assert "Delete this event?" in r.text
+    assert "entire series" in r.text                    # recurring warning
+    assert 'hx-post="/calendars/event/delete"' in r.text  # confirm button (guarded)
+
+
+def test_calendars_event_delete_applies(client):
+    r = client.post("/calendars/event/delete",
+                    data={"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"})
+    assert r.status_code == 200
+    assert "Event deleted." in r.text
+
+
 def test_set_signature(client):
     r = client.post("/users/signature", data={"email": "alice@example.com", "signature": "Best,\nAlice", "html": "on"})
     assert r.status_code == 200

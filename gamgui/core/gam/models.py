@@ -227,6 +227,103 @@ class CalendarACL:
         return self.scope_value  # user -> bare email
 
 
+@dataclass
+class ResourceCalendar:
+    """A resource (room / equipment) calendar."""
+
+    resource_id: str = ""
+    name: str = ""
+    email: str = ""
+    resource_type: str = ""
+    building_id: str = ""
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any]) -> "ResourceCalendar":
+        return cls(
+            resource_id=str(_get(d, "resourceId", "id", "ResourceID", default="")),
+            name=str(_get(d, "resourceName", "name", "Name", default="")),
+            email=str(_get(d, "resourceEmail", "email", "Email", default="")),
+            resource_type=str(_get(d, "resourceType", "type", default="")),
+            building_id=str(_get(d, "buildingId", default="")),
+            raw=d,
+        )
+
+
+@dataclass
+class UserCalendar:
+    """A calendar in a user's calendar list, with the user's access role."""
+
+    id: str = ""
+    summary: str = ""
+    access_role: str = ""
+    primary: bool = False
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any]) -> "UserCalendar":
+        return cls(
+            id=str(_get(d, "id", "calendarId", default="")),
+            summary=str(_get(d, "summary", "Summary", default="")),
+            access_role=str(_get(d, "accessRole", "accessrole", default="")),
+            primary=_as_bool(_get(d, "primary", default=False)),
+            raw=d,
+        )
+
+
+@dataclass
+class CalendarEvent:
+    """A calendar event — used for search results and the delete preview."""
+
+    id: str = ""
+    summary: str = ""
+    start: str = ""
+    end: str = ""
+    organizer: str = ""
+    creator: str = ""
+    status: str = ""
+    recurrence: List[str] = field(default_factory=list)
+    recurring_event_id: str = ""
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @staticmethod
+    def _when(obj: Any, d: Dict[str, Any], prefix: str) -> str:
+        if isinstance(obj, dict):
+            return str(obj.get("dateTime") or obj.get("date") or "")
+        return str(d.get(prefix + ".dateTime") or d.get(prefix + ".date") or d.get(prefix) or "")
+
+    @staticmethod
+    def _person(obj: Any, d: Dict[str, Any], prefix: str) -> str:
+        if isinstance(obj, dict):
+            return str(obj.get("email") or "")
+        return str(d.get(prefix + ".email") or d.get(prefix) or "")
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any]) -> "CalendarEvent":
+        rec = d.get("recurrence")
+        rec_list = rec if isinstance(rec, list) else ([rec] if rec else [])
+        return cls(
+            id=str(_get(d, "id", "eventId", default="")),
+            summary=str(_get(d, "summary", "Summary", default="") or "(no title)"),
+            start=cls._when(d.get("start"), d, "start"),
+            end=cls._when(d.get("end"), d, "end"),
+            organizer=cls._person(d.get("organizer"), d, "organizer"),
+            creator=cls._person(d.get("creator"), d, "creator"),
+            status=str(_get(d, "status", default="")),
+            recurrence=[str(x) for x in rec_list],
+            recurring_event_id=str(_get(d, "recurringEventId", "recurringeventid", default="")),
+            raw=d,
+        )
+
+    @property
+    def is_recurring(self) -> bool:
+        return bool(self.recurrence) or bool(self.recurring_event_id)
+
+    @property
+    def when(self) -> str:
+        return self.start or "—"
+
+
 def _as_bool(v: Any) -> bool:
     if isinstance(v, bool):
         return v

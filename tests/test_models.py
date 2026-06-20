@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from gamgui.core.gam.models import CalendarACL, GAMGroup, GAMUser, GroupMember, Vacation
+from gamgui.core.gam.models import (
+    CalendarACL,
+    CalendarEvent,
+    GAMGroup,
+    GAMUser,
+    GroupMember,
+    ResourceCalendar,
+    UserCalendar,
+    Vacation,
+)
 
 
 def test_gam_user_nested_name_and_bool_coercion():
@@ -79,6 +88,28 @@ def test_calendar_acl_parse_user_and_default():
     pub = CalendarACL.from_json({"id": "default", "role": "freebusyreader"})
     assert pub.scope_type == "default" and pub.who == "Public (anyone)"
     assert pub.role_label == "See free/busy only" and pub.scope_token == "default"
+
+
+def test_resource_and_user_calendar_parse():
+    r = ResourceCalendar.from_json({"resourceId": "room-1", "resourceName": "Aspen",
+                                    "resourceEmail": "aspen@resource.calendar.google.com", "resourceType": "Room"})
+    assert r.email.startswith("aspen@") and r.name == "Aspen" and r.resource_type == "Room"
+    c = UserCalendar.from_json({"id": "a@e.com", "summary": "Alice", "accessRole": "owner", "primary": True})
+    assert c.primary is True and c.access_role == "owner"
+
+
+def test_calendar_event_parse_recurring_and_organizer():
+    ev = CalendarEvent.from_json({
+        "id": "evt1", "summary": "Standup",
+        "start": {"dateTime": "2026-06-22T09:00:00Z"},
+        "organizer": {"email": "boss@e.com"},
+        "recurrence": ["RRULE:FREQ=WEEKLY"],
+    })
+    assert ev.summary == "Standup" and ev.organizer == "boss@e.com"
+    assert ev.is_recurring is True and ev.when == "2026-06-22T09:00:00Z"
+    # No title + no recurrence -> graceful defaults.
+    plain = CalendarEvent.from_json({"id": "e2", "start": {"date": "2026-07-01"}})
+    assert plain.summary == "(no title)" and plain.is_recurring is False and plain.when == "2026-07-01"
 
 
 def test_vacation_message_excludes_gam_init_banner():

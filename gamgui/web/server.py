@@ -133,6 +133,7 @@ def create_app(state: AppState) -> FastAPI:
         )
 
     # Imported here (not at module top) to avoid a cycle: routes import TEMPLATES from this module.
+    from .routes.calendars import router as calendars_router
     from .routes.groups import router as groups_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
@@ -144,4 +145,5 @@ def create_app(state: AppState) -> FastAPI:
     app.include_router(reports_router)
     app.include_router(groups_router)
     app.include_router(signatures_router)
+    app.include_router(calendars_router)
     return app

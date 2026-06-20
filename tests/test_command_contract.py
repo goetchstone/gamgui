@@ -36,6 +36,10 @@ REQUIRED_TOKENS = [
     "print groups",
     "update group",   # add/remove members
     "calendaracls",   # calendar access view/add/remove
+    "print resources",  # resource/room calendars
+    "print calendars",  # a user's calendars
+    "print events",     # event search
+    "delete events",    # event deletion
     "report users",   # usage report
     "serviceaccount", # check serviceaccount (setup verify)
     "formatjson",     # JSON output mode we parse
