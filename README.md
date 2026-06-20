@@ -10,7 +10,13 @@ kept in the macOS **Keychain**.
 
 ## Status
 
-Early development (Phase 0 — foundations). Not yet ready for general use.
+Actively developed and used against live Google Workspace tenants. Working today: first-run setup
+wizard, user list/search/detail, **Gmail signatures** (a scoped designer with a live preview + bulk
+apply), mailbox delegates, vacation responders, group membership (incl. a drag-and-drop board),
+guarded suspend, directory profile editing (title/department/location) with a bulk "assign store"
+tool, and a reports screen (2SV gaps, inactive accounts, admins, missing recovery, and
+directory-completeness). You build and run it yourself; it is not yet notarized for distribution to
+other Macs.
 
 ## Design goals
 
@@ -101,6 +107,56 @@ actions doesn't re-prompt; tune with `GAMGUI_SECRET_CACHE_TTL` (seconds; `0` dis
 
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across
 Python 3.9 and 3.12 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+## Email signatures
+
+The **Signatures** screen designs one HTML signature with variables, previews it rendered for a real
+person, and applies it in bulk — scoped to a single user (for testing), a group, an org unit, a
+department, a location, or the whole company. Each user's current signature is also shown *rendered*
+on their detail page.
+
+**Template variables** (filled per user from the directory):
+`{name}` `{first}` `{last}` `{email}` `{title}` (`{role}` is an alias) `{phone}` `{department}`
+`{location}` `{ou}`. Wrap a fragment in `[[ … ]]` to drop it when a variable inside is empty — e.g.
+`[[{title} · ]]` vanishes for people with no title, so one template can roll out before every profile
+is filled in.
+
+### Hosting signature images (logo, social icons)
+
+Gmail does **not** allow inline/base64 images or Google Drive links in signatures — every image must
+be a file at a **public HTTPS URL**. GamGUI is a local app and doesn't host images itself; you point
+the template's `<img src="…">` at wherever you host them. Whatever host you choose, the URL must be:
+
+- **HTTPS** and **anonymously reachable** — Gmail fetches images through its own proxy (no
+  cookies/referer) and caches them. Test a URL in a private/incognito window; if it loads there,
+  Gmail can fetch it.
+- served with the correct **`Content-Type`** (`image/png`, …) and **no hotlink/referer protection**
+  — referer-based protection is the usual cause of "the logo shows for me but not for recipients."
+- **versioned by filename** when an image changes (`logo-2026.png`) — Gmail caches by URL, so
+  overwriting the same name can keep serving the old one.
+
+Size icons ~2× their display size and set explicit `width`/`height` on each `<img>`.
+
+**Where to host — pick one:**
+
+- **A web host you already have (simplest).** Drop the files in a public folder, e.g.
+  `https://yourdomain.com/email/logo.png`. Done.
+- **Google Cloud Storage** (Google-native; reuse the GCP project GAM created). Requires a **billing
+  account** linked to the project — but small signature assets fall under the Always-Free tier, so
+  the bill rounds to **$0**:
+  1. Cloud Console → **Billing** → link a billing account to the project (if not already).
+  2. **Cloud Storage → Create bucket** — globally-unique name, a US region, Standard class, Uniform
+     bucket-level access.
+  3. Make objects public: bucket **Permissions → Grant access → principal `allUsers` → role
+     `Storage Object Viewer`**. (If your org enforces *Public access prevention*, allow it on this
+     bucket.)
+  4. Upload the images.
+  5. Reference them at `https://storage.googleapis.com/<bucket>/<path>/logo.png`.
+  (Pricing changes — confirm the current free-tier limits, but for a handful of small PNGs it is
+  effectively free.)
+- **GitHub + jsDelivr (free, no billing).** Commit the images to a public repo and serve them via the
+  jsDelivr CDN: `https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch>/path/logo.png`. CDN-fast, no card.
+- **Cloudflare R2 / Amazon S3** — or any public-object store — also work.
 
 ## Connectors
 
