@@ -30,10 +30,12 @@ USER_DETAIL_FIELDS = (
 )
 # `gam print groups` likewise returns only email unless fields are requested.
 GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
-# Superset fetched once and cached to serve BOTH the users list (needs title) and reports.
+# Superset fetched once and cached to serve the users list (needs title), reports, AND the detail
+# view (so opening a user is instant + uses the reliable JSON path, not the `info user` text format).
 CACHE_FIELDS = (
     "primaryEmail", "name", "suspended", "orgUnitPath", "organizations",
     "isAdmin", "isDelegatedAdmin", "isEnrolledIn2Sv", "lastLoginTime", "recoveryEmail",
+    "aliases", "locations",
 )
 
 

@@ -49,10 +49,17 @@
     @keyframes lbslide { 0% { left: -35%; } 50% { left: 50%; } 100% { left: 100%; } }
     .spinner { display: inline-block; width: 0.9rem; height: 0.9rem; border: 2px solid rgba(105,130,158,.3); border-top-color: #69829E; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* Unmissable "working" pill (bottom-right) — shown whenever a request is in flight. */
+    #busy { position: fixed; bottom: 1rem; right: 1rem; z-index: 70; display: none; align-items: center; gap: .5rem;
+            padding: .5rem .85rem; border-radius: 9999px; background: #141414; color: #fff; font-size: .8rem;
+            box-shadow: 0 6px 20px rgba(0,0,0,.18); pointer-events: none; }
+    #busy.on { display: inline-flex; }
+    #busy .spinner { border-color: rgba(255,255,255,.35); border-top-color: #fff; }
   </style>
 </head>
 <body class="h-full bg-paper text-ink font-sans">
   <div id="loadbar"></div>
+  <div id="busy" aria-live="polite"><span class="spinner"></span><span>Working…</span></div>
   <div class="min-h-full">
     <header class="border-b border-brand-gray/40 bg-brand-white/80 backdrop-blur">
       <div class="mx-auto max-w-5xl px-6 py-4 flex items-center gap-4">
@@ -106,15 +113,38 @@
       document.body.removeChild(ta);
     }
 
-    // Global loading bar: visible during HTMX requests and full-page navigations.
+    // Global activity indicators: a top bar + a "Working…" pill, shown during HTMX requests and
+    // full-page navigations so it's never ambiguous whether the app is busy.
     (function () {
       var bar = document.getElementById("loadbar");
-      var pending = 0;
-      function show() { if (bar) bar.classList.add("on"); }
-      function hide() { if (bar) bar.classList.remove("on"); }
-      document.body.addEventListener("htmx:beforeRequest", function () { pending++; show(); });
-      document.body.addEventListener("htmx:afterRequest", function () { pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
-      document.body.addEventListener("htmx:responseError", hide);
+      var pill = document.getElementById("busy");
+      var pending = 0, hideTimer = null;
+      function show() {
+        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        if (bar) bar.classList.add("on");
+        if (pill) pill.classList.add("on");
+      }
+      function hide() {
+        if (hideTimer) clearTimeout(hideTimer);
+        // Brief debounce so back-to-back requests don't make the indicators blink.
+        hideTimer = setTimeout(function () {
+          if (bar) bar.classList.remove("on");
+          if (pill) pill.classList.remove("on");
+          hideTimer = null;
+        }, 180);
+      }
+      // The signature-apply progress panel polls itself every second and shows its own spinner +
+      // live count — don't let those background polls flicker the global pill.
+      function isPoll(evt) {
+        try {
+          var d = evt.detail || {};
+          var p = (d.pathInfo && d.pathInfo.requestPath) || (d.requestConfig && d.requestConfig.path) || "";
+          return p.indexOf("/apply/status") >= 0;
+        } catch (e) { return false; }
+      }
+      document.body.addEventListener("htmx:beforeRequest", function (e) { if (isPoll(e)) return; pending++; show(); });
+      document.body.addEventListener("htmx:afterRequest", function (e) { if (isPoll(e)) return; pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
+      document.body.addEventListener("htmx:responseError", function (e) { if (isPoll(e)) return; pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
       document.addEventListener("click", function (e) {
         var a = e.target.closest && e.target.closest("a[href]");
         if (!a) return;

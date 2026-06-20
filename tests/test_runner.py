@@ -46,3 +46,28 @@ async def test_oauth_token_write_back_through_a_real_run(runner, vault, domain, 
     after = vault.get(domain, "oauth2")
     assert after != before
     assert "refreshed" in after
+
+
+def test_strip_cfgdir_noise_removes_gam_init_banner():
+    from pathlib import Path
+
+    from gamgui.core.gam.runner import strip_cfgdir_noise
+
+    cfg = Path("/var/run/gamcfg-xyz")
+    out = (
+        f"Created: {cfg}/gamcache\n"
+        f"Config File: {cfg}/gam.cfg, Initialized\n"
+        "User: x@e.com, Vacation:\n  Enabled: True\n"
+    )
+    cleaned = strip_cfgdir_noise(out, cfg)
+    assert "gamcache" not in cleaned and "Initialized" not in cleaned
+    assert cleaned == "User: x@e.com, Vacation:\n  Enabled: True"  # only the real data survives
+
+
+def test_strip_cfgdir_noise_keeps_unrelated_output():
+    from pathlib import Path
+
+    from gamgui.core.gam.runner import strip_cfgdir_noise
+
+    out = "primaryEmail\na@e.com\nb@e.com"
+    assert strip_cfgdir_noise(out, Path("/var/run/gamcfg-xyz")) == out  # untouched when dir not present

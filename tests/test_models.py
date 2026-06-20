@@ -67,3 +67,17 @@ def test_vacation_from_show_text():
 def test_vacation_disabled_parse():
     v = Vacation.from_show_text("User: x, Vacation:\n  Enabled: False\n  Subject:\n")
     assert v.enabled is False
+
+
+def test_vacation_message_excludes_gam_init_banner():
+    # Regression: GAM's config-init banner can flush AFTER the message block; it must not be
+    # absorbed into the auto-reply message.
+    text = (
+        "User: ashley@e.com, Vacation:\n  Enabled: True\n  Subject: Away\n  Message:\n"
+        "    I am out of office.\n"
+        "Created: /tmp/gamcfg-abc/gamcache\n"
+        "Config File: /tmp/gamcfg-abc/gam.cfg, Initialized\n"
+    )
+    v = Vacation.from_show_text(text)
+    assert v.message == "I am out of office."
+    assert "Config File" not in v.message and "gamcache" not in v.message

@@ -96,7 +96,9 @@ class Vacation:
         for line in (text or "").splitlines():
             s = line.strip()
             if in_message:
-                if s.startswith(("Enabled:", "Subject:", "Contacts Only:", "Domain Only:")):
+                # Stop the message at the next field — or at GAM's config-init banner, in case any
+                # slipped past the runner's filter (defense in depth so it never lands in the reply).
+                if s.startswith(("Enabled:", "Subject:", "Contacts Only:", "Domain Only:", "Created:", "Config File:")):
                     in_message = False
                 else:
                     msg_lines.append(s)

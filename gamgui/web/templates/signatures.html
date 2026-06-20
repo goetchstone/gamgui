@@ -12,7 +12,7 @@
   <div>
     <p class="eyebrow text-brand-blue">Branding</p>
     <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Signature designer</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Design one signature with variables, scope it to the company, an OU, or a department, preview it for a real person, then apply it to everyone in scope.</p>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Design one signature with variables, scope it to a single user (to test), a group, an OU, a department, or the whole company, preview it for a real person, then apply it to everyone in scope.</p>
   </div>
   {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
 
@@ -25,6 +25,7 @@
           <select name="scope_type" id="scope_type" onchange="sigPopulate()"
                   class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none">
             <option value="company">Whole company</option>
+            <option value="user">Specific user (test)</option>
             <option value="group">Group</option>
             <option value="ou">Org unit</option>
             <option value="department">Department</option>
@@ -39,7 +40,7 @@
 
       <label class="block">
         <span class="text-sm text-brand-blueink">Signature template (HTML)</span>
-        <textarea name="template" rows="10" placeholder="&lt;div&gt;{name}&lt;br&gt;{role} · Saybrook Home&lt;br&gt;{email}&lt;/div&gt;"
+        <textarea name="template" rows="10" placeholder="&lt;div&gt;{name}&lt;br&gt;{title} · Your Company&lt;br&gt;{email}&lt;/div&gt;"
                   class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[12.5px] font-mono text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"></textarea>
       </label>
 
@@ -67,10 +68,11 @@
   var SIG_OUS = {{ options.ous | tojson }};
   var SIG_DEPTS = {{ options.departments | tojson }};
   var SIG_GROUPS = {{ groups | tojson }};
+  var SIG_USERS = {{ options.users | tojson }};
   function sigPopulate() {
     var t = document.getElementById("scope_type").value;
     var sel = document.getElementById("scope_value");
-    var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "group" ? SIG_GROUPS : []));
+    var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "group" ? SIG_GROUPS : (t === "user" ? SIG_USERS : [])));
     sel.innerHTML = list.map(function (v) { return '<option value="' + v + '">' + v + "</option>"; }).join("");
     sel.disabled = list.length === 0;
     sel.style.visibility = list.length ? "visible" : "hidden";

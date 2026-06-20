@@ -24,6 +24,20 @@ GAM_BINARY_ENV = "GAMGUI_GAM_BINARY"
 DEFAULT_TIMEOUT = 120.0
 
 
+def strip_cfgdir_noise(stdout: str, cfgdir: Path) -> str:
+    """Drop GAM's config-init banner from stdout.
+
+    Because we hand GAM a brand-new ``GAMCFGDIR`` per call, it prints lines like
+    ``Created: <dir>/gamcache`` and ``Config File: <dir>/gam.cfg, Initialized`` on stdout every time.
+    Those reference our ephemeral dir and never appear in real data, so any line mentioning the dir
+    is safe to remove — otherwise they leak into text parsers (e.g. the vacation message).
+    """
+    needle = str(cfgdir)
+    if not needle or needle not in stdout:
+        return stdout
+    return "\n".join(line for line in stdout.splitlines() if needle not in line)
+
+
 @dataclass
 class RunResult:
     stdout: str
@@ -120,7 +134,7 @@ class GAMRunner:
                 res = await self._exec(argv, cfgdir, timeout)
             if res.returncode != 0:
                 raise GAMError.from_run(res.returncode, res.stderr, argv)
-            return res.stdout
+            return strip_cfgdir_noise(res.stdout, cfgdir)
 
         if serialize:
             async with self._write_lock:

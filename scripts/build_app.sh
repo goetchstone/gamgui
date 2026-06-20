@@ -23,9 +23,30 @@ fi
 
 echo "==> Installing PyInstaller (and the native window) into the venv..."
 "$PY" -m pip install -q --upgrade pyinstaller "pywebview>=5.1"
+if [ "$(uname)" = "Darwin" ]; then
+  # Touch ID gate uses LocalAuthentication; pulled in only on macOS.
+  "$PY" -m pip install -q --upgrade "pyobjc-framework-LocalAuthentication>=10.0"
+fi
 
 echo "==> Building..."
 "$PY" -m PyInstaller --noconfirm --clean gamgui.spec
 
-echo "==> Done: dist/GamGUI.app"
-echo "    For distribution to other Macs, codesign + notarize (the bundled gam binary must be signed too)."
+APP="dist/GamGUI.app"
+# Optional: sign with a STABLE self-signed identity so macOS "Always Allow" sticks across rebuilds
+# and the Keychain stops prompting. Create a free "Code Signing" cert in Keychain Access once, then:
+#   export CODESIGN_IDENTITY="GamGUI Local"   # the cert's name
+# Leave it unset to keep PyInstaller's ad-hoc signature (builds for anyone, but macOS re-prompts).
+if [ -n "${CODESIGN_IDENTITY:-}" ] && [ "$(uname)" = "Darwin" ]; then
+  echo "==> Codesigning with stable identity: $CODESIGN_IDENTITY"
+  GAM_BIN="$(find "$APP" -type f -name gam -path '*resources/gam7/*' 2>/dev/null | head -1)"
+  [ -n "$GAM_BIN" ] && codesign --force --sign "$CODESIGN_IDENTITY" "$GAM_BIN"
+  codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP"
+  codesign --verify --deep --strict "$APP" && echo "    signed + verified OK"
+else
+  echo "==> No CODESIGN_IDENTITY set — keeping the ad-hoc signature."
+  echo "    For a silent Keychain, make a self-signed Code Signing cert and re-run with"
+  echo "    CODESIGN_IDENTITY set (see README → 'Stop the Keychain prompts')."
+fi
+
+echo "==> Done: $APP"
+echo "    For distribution to OTHER Macs you still need an Apple Developer ID + notarization."

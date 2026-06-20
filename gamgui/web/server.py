@@ -40,6 +40,7 @@ class AppState:
     connector: Optional[GAMConnector] = None
     token: str = ""
     user_cache: UserCache = field(default_factory=UserCache)
+    jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
 
     async def users(self, force: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports)."""

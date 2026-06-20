@@ -1,6 +1,11 @@
-"""Signature designer routes: scoped template -> preview -> apply."""
+"""Signature designer routes: scoped template -> preview -> apply (with live progress)."""
 
 from __future__ import annotations
+
+import asyncio
+import secrets
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -10,6 +15,21 @@ from ...core.gam.errors import GAMError
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/signatures")
+
+
+@dataclass
+class ApplyJob:
+    """In-memory progress for one bulk signature apply, polled by the UI."""
+
+    id: str
+    total: int
+    applied: int = 0
+    done: int = 0
+    failed: List[str] = field(default_factory=list)
+    current: str = ""
+    finished: bool = False
+    error: Optional[str] = None
+    task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
 
 def _friendly(exc: Exception) -> str:
@@ -28,6 +48,35 @@ async def _matched(st, users, scope_type: str, scope_value: str):
     return sig.match_scope(users, scope_type, scope_value)
 
 
+def _prune_jobs(st, keep: int = 10) -> None:
+    """Drop the oldest finished jobs so the registry can't grow without bound."""
+    finished = [jid for jid, j in st.jobs.items() if j.finished]
+    for jid in finished[:-keep] if len(finished) > keep else []:
+        st.jobs.pop(jid, None)
+
+
+async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
+    """Background task: set each user's signature, updating ``job`` as it goes."""
+    try:
+        for u in matched:
+            job.current = u.primary_email
+            try:
+                result = await conn.set_signature(u.primary_email, sig.render_signature(template, u), html=True)
+                ok = bool(getattr(result, "ok", False))
+            except Exception:
+                ok = False
+            if ok:
+                job.applied += 1
+            else:
+                job.failed.append(u.primary_email)
+            job.done += 1
+    except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
+        job.error = _friendly(exc)
+    finally:
+        job.current = ""
+        job.finished = True
+
+
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
@@ -39,7 +88,7 @@ async def page(request: Request) -> HTMLResponse:
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, "signatures.html",
-            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": []}, "groups": [], "variables": sig.VARIABLES},
+            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "users": []}, "groups": [], "variables": sig.VARIABLES},
         )
     return TEMPLATES.TemplateResponse(
         request, "signatures.html",
@@ -70,19 +119,30 @@ async def preview(
 async def apply(
     request: Request, template: str = Form(""), scope_type: str = Form("company"), scope_value: str = Form("")
 ) -> HTMLResponse:
-    conn = request.app.state.gamgui.connector
-    if conn is None:
+    st = request.app.state.gamgui
+    if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": "Not connected."})
     try:
-        users = await request.app.state.gamgui.users()
+        users = await st.users()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": _friendly(exc)})
-    matched = await _matched(request.app.state.gamgui, users, scope_type, scope_value)
-    applied, failed = 0, []
-    for u in matched:
-        result = await conn.set_signature(u.primary_email, sig.render_signature(template, u), html=True)
-        if result.ok:
-            applied += 1
-        else:
-            failed.append(u.primary_email)
-    return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"applied": applied, "total": len(matched), "failed": failed})
+    matched = await _matched(st, users, scope_type, scope_value)
+    if not matched:
+        return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": "No active users match this scope."})
+
+    # Run the (potentially minutes-long) per-user loop in the background and report progress by polling,
+    # so the UI never looks frozen on a large apply.
+    job = ApplyJob(id=secrets.token_urlsafe(8), total=len(matched))
+    _prune_jobs(st)
+    st.jobs[job.id] = job
+    job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template))
+    return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"job": job})
+
+
+@router.get("/apply/status", response_class=HTMLResponse)
+async def apply_status(request: Request, job: str = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    j = st.jobs.get(job)
+    if j is None:
+        return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": "That apply job is no longer available — re-run apply."})
+    return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"job": j})

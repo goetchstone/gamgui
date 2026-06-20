@@ -44,9 +44,14 @@ def render_signature(template: str, user: GAMUser) -> str:
 
 
 def match_scope(users: List[GAMUser], scope_type: str, scope_value: str = "") -> List[GAMUser]:
-    """Active users matching a scope: ``company`` (all), ``ou`` (path + children), or ``department``."""
+    """Active users matching a scope: ``user`` (a single email, for testing), ``company`` (all),
+    ``ou`` (path + children), or ``department``."""
     active = [u for u in users if not u.suspended]
     value = (scope_value or "").strip()
+    if scope_type == "user":
+        # Single-user scope: exact (case-insensitive) email match. An empty selection matches
+        # nobody — never silently fall through to the whole company.
+        return [u for u in active if u.primary_email.lower() == value.lower()] if value else []
     if scope_type == "ou" and value:
         prefix = value.rstrip("/") + "/"
         return [u for u in active if u.org_unit_path == value or u.org_unit_path.startswith(prefix)]
@@ -56,7 +61,8 @@ def match_scope(users: List[GAMUser], scope_type: str, scope_value: str = "") ->
 
 
 def scope_options(users: List[GAMUser]) -> Dict[str, List[str]]:
-    """The distinct OUs and departments present, for the scope dropdowns."""
+    """The distinct OUs, departments, and active user emails present, for the scope dropdowns."""
     ous = sorted({u.org_unit_path for u in users if u.org_unit_path})
     departments = sorted({u.department for u in users if u.department})
-    return {"ous": ous, "departments": departments}
+    user_emails = sorted(u.primary_email for u in users if not u.suspended)
+    return {"ous": ous, "departments": departments, "users": user_emails}

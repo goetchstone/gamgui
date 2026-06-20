@@ -102,17 +102,23 @@ async def users_table(
 
 @router.get("/detail", response_class=HTMLResponse)
 async def user_detail(request: Request, email: str) -> HTMLResponse:
-    conn = _conn(request)
+    st = request.app.state.gamgui
+    conn = st.connector
     if conn is None:
         return TEMPLATES.TemplateResponse(request, "users.html", {"connected": False, "users": []})
     try:
-        user = await conn.get_user(email)
-        delegates = await conn.list_delegates(email)
+        # Serve identity/role/security from the cached directory (reliable JSON path) so opening a
+        # user is instant. Delegates and mail settings load lazily. Fall back to a direct lookup
+        # only for a user not in the cached list (e.g. a deep link).
+        users = await st.users()
+        user = next((u for u in users if u.primary_email.lower() == email.lower()), None)
+        if user is None:
+            user = await conn.get_user(email)
     except Exception as exc:
         return _error_page(request, _friendly(exc))
     return TEMPLATES.TemplateResponse(
         request, "user_detail.html",
-        {"user": user, "delegates": delegates, "email": email, "suspended": user.suspended},
+        {"user": user, "email": user.primary_email, "suspended": user.suspended},
     )
 
 
@@ -211,6 +217,15 @@ async def remove_delegate(request: Request, email: str = Form(...), delegate: st
     result = await conn.remove_delegate(email, delegate.strip())
     if not result.ok:
         return _err(request, f"Couldn't remove delegate: {result.detail}")
+    return await _delegates_partial(request, conn, email)
+
+
+@router.get("/delegates", response_class=HTMLResponse)
+async def delegates_get(request: Request, email: str) -> HTMLResponse:
+    """Lazy-loaded into the detail page so the page renders before this gam call returns."""
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
     return await _delegates_partial(request, conn, email)
 
 

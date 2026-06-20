@@ -14,7 +14,9 @@ the real Keychain. The default backend uses ``keyring``, which maps to the macOS
 from __future__ import annotations
 
 import json
-from typing import Dict, Optional, Protocol
+import os
+import time
+from typing import Dict, Optional, Protocol, Tuple
 
 # Logical credential name -> the filename GAM expects inside GAMCFGDIR.
 FILENAMES: Dict[str, str] = {
@@ -82,26 +84,55 @@ class _KeyringBackend:
 
 
 class SecretsVault:
-    def __init__(self, backend: Optional[VaultBackend] = None) -> None:
+    # Default lifetime (seconds) for the in-process secret cache: a "session-reuse window" so a
+    # burst of gam calls doesn't re-prompt the Keychain on every read. Sliding (extends on use).
+    # Override with env GAMGUI_SECRET_CACHE_TTL; set to 0 to disable (re-read the Keychain every call).
+    DEFAULT_CACHE_TTL = 300.0
+
+    def __init__(self, backend: Optional[VaultBackend] = None, cache_ttl: Optional[float] = None) -> None:
         self.backend: VaultBackend = backend or _KeyringBackend()
+        if cache_ttl is None:
+            try:
+                cache_ttl = float(os.environ.get("GAMGUI_SECRET_CACHE_TTL", self.DEFAULT_CACHE_TTL))
+            except ValueError:
+                cache_ttl = self.DEFAULT_CACHE_TTL
+        self._cache_ttl = max(0.0, cache_ttl)
+        self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
 
     @staticmethod
     def _service(domain: str) -> str:
         return f"gamgui:{domain}"
 
+    def clear_cache(self) -> None:
+        """Forget cached secrets so the next read re-prompts the Keychain (an explicit 'lock')."""
+        self._cache.clear()
+
     # --- single credential -------------------------------------------------------------
     def get(self, domain: str, name: str) -> Optional[str]:
         _check_name(name)
-        return self.backend.get_password(self._service(domain), name)
+        key = (domain, name)
+        if self._cache_ttl:
+            now = time.monotonic()
+            hit = self._cache.get(key)
+            if hit is not None and hit[1] > now:
+                self._cache[key] = (hit[0], now + self._cache_ttl)  # sliding: extend on use
+                return hit[0]
+        value = self.backend.get_password(self._service(domain), name)
+        if self._cache_ttl:
+            self._cache[key] = (value, time.monotonic() + self._cache_ttl)
+        return value
 
     def set(self, domain: str, name: str, value: str) -> None:
         _check_name(name)
         self.backend.set_password(self._service(domain), name, value)
+        if self._cache_ttl:
+            self._cache[(domain, name)] = (value, time.monotonic() + self._cache_ttl)
         self._register_domain(domain)
 
     def delete(self, domain: str, name: str) -> None:
         _check_name(name)
         self.backend.delete_password(self._service(domain), name)
+        self._cache.pop((domain, name), None)
 
     # --- whole credential set ----------------------------------------------------------
     def get_all(self, domain: str) -> Dict[str, Optional[str]]:

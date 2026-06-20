@@ -13,6 +13,8 @@ hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("keyring.backends")
     + ["uvicorn.lifespan.on", "uvicorn.loops.auto", "uvicorn.protocols.http.auto"]
+    # Touch ID gate (optional; pyobjc frameworks are imported lazily at runtime).
+    + ["LocalAuthentication", "Foundation", "AppKit"]
 )
 
 # pywebview + its macOS (Cocoa/WebKit via pyobjc) backend — collect everything it needs.
@@ -42,5 +44,10 @@ app = BUNDLE(
     name="GamGUI.app",
     icon=None,
     bundle_identifier="io.github.goetchstone.gamgui",
-    info_plist={"NSHighResolutionCapable": True, "LSMinimumSystemVersion": "12.0"},
+    info_plist={
+        "NSHighResolutionCapable": True,
+        "LSMinimumSystemVersion": "12.0",
+        # Shown by the system if biometric auth uses Face ID (Touch ID uses the localizedReason).
+        "NSFaceIDUsageDescription": "Unlock GamGUI with Touch ID.",
+    },
 )

@@ -74,6 +74,29 @@ make app       # PyInstaller -> dist/GamGUI.app (bundles Python + the GAM7 binar
 For distribution to other Macs you must codesign + notarize the bundle (including the embedded gam
 binary); running it yourself needs no signing.
 
+### Unlock & Keychain prompts
+
+By default the app is **ad-hoc signed**, so macOS treats each rebuild as a new identity and
+re-prompts for the Keychain — and "Always Allow" never sticks. Two optional, **free** improvements:
+
+- **Touch ID unlock.** If your Mac has Touch ID, the app prompts for it on launch (it fails open —
+  Macs without Touch ID just skip it, so it's safe for anyone who builds). Turn it off with
+  `GAMGUI_NO_BIOMETRICS=1`.
+- **Silence the Keychain with a stable self-signed certificate** (no Apple Developer account; that's
+  only needed to ship the app to *other* people's Macs). Once macOS sees a stable signing identity,
+  your one-time **Always Allow** persists across rebuilds:
+  1. Keychain Access → *Certificate Assistant → Create a Certificate…*
+  2. Name it e.g. `GamGUI Local`, Identity Type **Self-Signed Root**, Certificate Type **Code
+     Signing**; create it (login keychain).
+  3. Build signed with it:
+     ```bash
+     CODESIGN_IDENTITY="GamGUI Local" make app
+     ```
+  The first launch still asks once; click **Always Allow** and you won't be asked again.
+
+The app also caches the three secrets in-process for a sliding window (default 5 min) so a burst of
+actions doesn't re-prompt; tune with `GAMGUI_SECRET_CACHE_TTL` (seconds; `0` disables).
+
 ### Tests & CI
 
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across

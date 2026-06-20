@@ -12,11 +12,18 @@
       <p class="text-brand-blueink/80">{{ user.primary_email }}</p>
       {% if user.title %}<p class="text-sm text-brand-gray">{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}</p>{% endif %}
     </div>
-    {% if user.suspended %}
-      <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
-    {% else %}
-      <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-emerald-50 text-emerald-700">Active</span>
-    {% endif %}
+    <div class="flex items-center gap-2">
+      {% if user.suspended %}
+        <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
+      {% else %}
+        <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-emerald-50 text-emerald-700">Active</span>
+      {% endif %}
+      {% if user.is_admin %}
+        <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-brand-blue/15 text-brand-blueink">Super admin</span>
+      {% elif user.is_delegated_admin %}
+        <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-brand-blue/10 text-brand-blueink">Admin</span>
+      {% endif %}
+    </div>
   </div>
 
   <div class="grid gap-5 sm:grid-cols-2">
@@ -24,6 +31,8 @@
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
       <h2 class="eyebrow text-brand-gray">Account</h2>
       <dl class="mt-3 text-sm space-y-2">
+        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Name</dt><dd class="text-brand-black text-right">{{ user.full_name or "—" }}</dd></div>
+        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Email</dt><dd class="text-brand-black text-right">{{ user.primary_email }}</dd></div>
         <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
         {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
         <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
@@ -63,8 +72,8 @@
   <!-- delegates -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <h2 class="eyebrow text-brand-gray">Mailbox delegates</h2>
-    <div id="delegates" class="mt-3">
-      {% include "_delegates.html" %}
+    <div id="delegates" class="mt-3" hx-get="/users/delegates?email={{ email | urlencode }}" hx-trigger="load">
+      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
     </div>
   </div>
 

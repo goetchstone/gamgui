@@ -53,15 +53,35 @@ def test_users_table_search_filters(client):
     assert "carol@example.com" not in r.text  # in-memory filter excludes non-matches
 
 
-def test_user_detail_shows_info_and_delegates(client):
+def test_user_detail_shows_info(client):
     r = client.get("/users/detail", params={"email": "alice@example.com"})
     assert r.status_code == 200
-    assert "Alice Anders" in r.text
-    assert "a.anders@example.com" in r.text          # alias
-    assert "assistant@example.com" in r.text          # delegate from fixture
+    assert "Alice Anders" in r.text                   # name shown (header + info block)
+    assert "a.anders@example.com" in r.text           # alias (served from the cached directory)
     assert "Gmail signature" in r.text
     assert "IT Director" in r.text                    # title / role surfaced
     assert "Vacation responder" in r.text
+    assert "Super admin" in r.text                    # admin status is visible in the header
+
+
+def test_user_detail_marks_admin_status(client):
+    # Regression: clicking your own (super-admin) account must surface the admin status.
+    r = client.get("/users/detail", params={"email": "alice@example.com"})
+    assert "Super admin" in r.text
+    # A non-admin must NOT be labelled as one.
+    r2 = client.get("/users/detail", params={"email": "carol@example.com"})
+    assert "Super admin" not in r2.text
+
+
+def test_user_detail_lazy_loads_delegates(client):
+    # The detail page renders before the delegates gam call; delegates arrive via a lazy endpoint.
+    page = client.get("/users/detail", params={"email": "alice@example.com"})
+    assert "/users/delegates?email=" in page.text     # lazy trigger present
+    assert "assistant@example.com" not in page.text   # not fetched inline
+    lazy = client.get("/users/delegates", params={"email": "alice@example.com"})
+    assert lazy.status_code == 200
+    assert "assistant@example.com" in lazy.text        # delegate from the fixture
+    assert "Remove" in lazy.text
 
 
 def test_vacation_get_renders_current_state(client):
@@ -134,10 +154,48 @@ def test_signatures_preview(client):
     assert "Alice Anders" in r.text   # rendered for a real (active) sample user
 
 
-def test_signatures_apply(client):
-    r = client.post("/signatures/apply", data={"template": "{name}", "scope_type": "company", "scope_value": ""})
+def _poll_apply_done(client, body, tries=40):
+    """Run an apply (which now returns a polling progress panel) and poll to completion."""
+    import re
+
+    r = client.post("/signatures/apply", data=body)
     assert r.status_code == 200
-    assert "Applied to" in r.text
+    m = re.search(r"/signatures/apply/status\?job=([A-Za-z0-9_\-]+)", r.text)
+    assert m, f"expected a job-polling panel, got: {r.text[:200]}"
+    job = m.group(1)
+    for _ in range(tries):
+        s = client.get("/signatures/apply/status", params={"job": job})
+        assert s.status_code == 200
+        if "Applied to" in s.text:
+            return s
+    raise AssertionError("apply job never reported completion")
+
+
+def test_signatures_apply(client):
+    s = _poll_apply_done(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
+    assert "Applied to" in s.text
+
+
+def test_signatures_apply_empty_scope_is_friendly(client):
+    # An empty single-user selection must not bulk-apply — it returns a friendly message, no job.
+    r = client.post("/signatures/apply", data={"template": "{name}", "scope_type": "user", "scope_value": ""})
+    assert r.status_code == 200
+    assert "No active users match this scope." in r.text
+    assert "apply/status" not in r.text
+
+
+def test_signatures_apply_status_unknown_job(client):
+    r = client.get("/signatures/apply/status", params={"job": "nope"})
+    assert r.status_code == 200
+    assert "no longer available" in r.text
+
+
+def test_signatures_preview_user_scope(client):
+    r = client.post("/signatures/preview", data={"template": "{name} <{email}>", "scope_type": "user", "scope_value": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Applies to" in r.text
+    assert "Alice Anders" in r.text   # rendered for the single chosen user
+    assert "bob@example.com" not in r.text  # nobody else in scope
 
 
 def test_signatures_preview_group_scope(client):

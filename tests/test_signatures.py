@@ -30,11 +30,21 @@ def test_match_scope_ou_includes_children_excludes_suspended():
     assert [u.primary_email for u in match_scope(users, "department", "IT")] == ["c@e.com"]
 
 
+def test_match_scope_user_selects_single_active():
+    users = [_u("a@e.com"), _u("b@e.com"), _u("c@e.com", suspended=True)]
+    assert [u.primary_email for u in match_scope(users, "user", "a@e.com")] == ["a@e.com"]
+    assert match_scope(users, "user", "A@E.COM")[0].primary_email == "a@e.com"  # case-insensitive
+    assert match_scope(users, "user", "") == []        # empty selection never falls through to everyone
+    assert match_scope(users, "user", "c@e.com") == []  # suspended excluded
+
+
 def test_scope_options_lists_distinct():
     users = [
         _u("a@e.com", orgUnitPath="/Sales", organizations=[{"department": "Sales", "primary": True}]),
         _u("b@e.com", orgUnitPath="/IT"),
+        _u("z@e.com", suspended=True),
     ]
     opts = scope_options(users)
     assert "/Sales" in opts["ous"] and "/IT" in opts["ous"]
     assert opts["departments"] == ["Sales"]
+    assert opts["users"] == ["a@e.com", "b@e.com"]  # active only, sorted; suspended z@ excluded

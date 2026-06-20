@@ -17,7 +17,11 @@ dependencies = [
 [project.optional-dependencies]
 # The native window shell. Kept optional so the core + web can be developed/tested
 # without the GUI toolkit installed (e.g. in CI / headless).
-desktop = ["pywebview>=5.1"]
+desktop = [
+    "pywebview>=5.1",
+    # Touch ID unlock gate (optional; only meaningful on macOS).
+    "pyobjc-framework-LocalAuthentication>=10.0; sys_platform == 'darwin'",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -31,6 +35,12 @@ gamgui = "gamgui.app:main"
 pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+filterwarnings = [
+    # Python 3.9 GCs a finished asyncio subprocess transport after the TestClient loop closes
+    # (background signature-apply jobs) -> "Exception ignored in ... RuntimeError: Event loop is closed".
+    # Harmless teardown artifact; the real app's event loop is long-lived.
+    "ignore:Exception ignored in:pytest.PytestUnraisableExceptionWarning",
+]
 
 [build-system]
 requires = ["hatchling"]
