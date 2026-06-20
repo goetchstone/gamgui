@@ -25,6 +25,12 @@ def test_info_user():
     assert argv[-1] == "formatjson" and "fields" in argv
 
 
+def test_update_organization_sets_title_and_department():
+    argv = GAMCommands.update_organization("a@e.com", title="Design Lead", department="Old Saybrook")
+    assert argv == ["update", "user", "a@e.com", "organization",
+                    "title", "Design Lead", "department", "Old Saybrook", "primary"]
+
+
 def test_set_suspended_on_off():
     assert GAMCommands.set_suspended("a@e.com", True) == ["update", "user", "a@e.com", "suspended", "on"]
     assert GAMCommands.set_suspended("a@e.com", False) == ["update", "user", "a@e.com", "suspended", "off"]

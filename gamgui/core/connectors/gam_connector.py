@@ -187,6 +187,11 @@ class GAMConnector(Connector):
         argv = GAMCommands.remove_group_member(group, member)
         return await self._run_write("remove_group_member", member, argv, RiskLevel.LOW, target_extra=group)
 
+    # --- directory profile (title = role, department = store) --------------------------
+    async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:
+        argv = GAMCommands.update_organization(email, title=title, department=department)
+        return await self._run_write("set_organization", email, argv, RiskLevel.LOW)
+
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:
         """Build dry-run previews for (un)suspending a concrete set of users.

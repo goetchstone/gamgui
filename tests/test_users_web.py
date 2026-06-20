@@ -230,6 +230,19 @@ def test_suspended_user_detail_shows_unsuspend(client):
     assert "Unsuspend" in r.text
 
 
+def test_detail_has_role_store_editor(client):
+    r = client.get("/users/detail", params={"email": "alice@example.com"})
+    assert 'name="department"' in r.text and 'name="title"' in r.text  # editable role/store form
+    assert "Save role" in r.text
+
+
+def test_set_organization_saves(client):
+    r = client.post("/users/organization", data={"email": "alice@example.com", "title": "Design Lead", "department": "Old Saybrook"})
+    assert r.status_code == 200
+    assert "Saved" in r.text
+    assert "Old Saybrook" in r.text  # the new value is echoed back into the form
+
+
 def test_set_signature(client):
     r = client.post("/users/signature", data={"email": "alice@example.com", "signature": "Best,\nAlice", "html": "on"})
     assert r.status_code == 200

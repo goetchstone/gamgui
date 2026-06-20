@@ -1,0 +1,14 @@
+{% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<form hx-post="/users/organization" hx-target="this" hx-swap="outerHTML" class="space-y-3">
+  <input type="hidden" name="email" value="{{ email }}" />
+  <div class="grid grid-cols-2 gap-3">
+    <label class="block"><span class="text-sm text-brand-blueink">Title (role)</span>
+      <input name="title" value="{{ title or '' }}" placeholder="e.g. Design Lead" class="{{ fld }}" /></label>
+    <label class="block"><span class="text-sm text-brand-blueink">Department (store)</span>
+      <input name="department" value="{{ department or '' }}" placeholder="e.g. Old Saybrook" class="{{ fld }}" /></label>
+  </div>
+  <div class="flex items-center gap-3">
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Save role &amp; store</button>
+    {% if saved %}<span class="text-sm text-emerald-700">Saved ✓</span>{% endif %}
+  </div>
+</form>

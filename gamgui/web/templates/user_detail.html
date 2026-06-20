@@ -54,6 +54,15 @@
     </div>
   </div>
 
+  <!-- role & store (editable) -->
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Role &amp; store</h2>
+    <p class="text-xs text-brand-blueink/70 mt-1">Title is the role shown in signatures; Department holds the store.</p>
+    <div class="mt-3">
+      {% with title=user.title, department=user.department, saved=False %}{% include "_org_form.html" %}{% endwith %}
+    </div>
+  </div>
+
   <!-- signature -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <h2 class="eyebrow text-brand-gray">Gmail signature</h2>

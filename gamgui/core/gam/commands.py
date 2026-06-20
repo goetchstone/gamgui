@@ -117,6 +117,15 @@ class GAMCommands:
         return argv
 
     @staticmethod
+    def update_organization(email: str, title: str = "", department: str = "") -> List[str]:
+        """Set the primary organization's title + department (here, department holds the store).
+
+        GAM's ``organization`` replaces the primary org, so we always pass both fields together (the
+        editor pre-fills the current values) to avoid clearing one while changing the other.
+        """
+        return ["update", "user", email, "organization", "title", title, "department", department, "primary"]
+
+    @staticmethod
     def set_suspended(email: str, suspended: bool) -> List[str]:
         # `update user ... suspended on/off` is the canonical, version-stable form.
         return ["update", "user", email, "suspended", "on" if suspended else "off"]

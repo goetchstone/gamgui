@@ -220,6 +220,25 @@ async def remove_delegate(request: Request, email: str = Form(...), delegate: st
     return await _delegates_partial(request, conn, email)
 
 
+@router.post("/organization", response_class=HTMLResponse)
+async def set_organization(
+    request: Request, email: str = Form(...), title: str = Form(""), department: str = Form("")
+) -> HTMLResponse:
+    """Set a user's title (role) + department (store). Guarded write; invalidates the cache."""
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return _err(request, "Not connected.")
+    title, department = title.strip(), department.strip()
+    result = await conn.set_organization(email, title=title, department=department)
+    if not result.ok:
+        return _err(request, f"Couldn't update role/store: {result.detail}")
+    st.invalidate_users()  # title/department changed -> cached directory is stale
+    return TEMPLATES.TemplateResponse(
+        request, "_org_form.html", {"email": email, "title": title, "department": department, "saved": True}
+    )
+
+
 @router.get("/delegates", response_class=HTMLResponse)
 async def delegates_get(request: Request, email: str) -> HTMLResponse:
     """Lazy-loaded into the detail page so the page renders before this gam call returns."""
