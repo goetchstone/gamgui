@@ -1,9 +1,8 @@
 # GamGUI
 
-A free, local, open-source **macOS app for Google Workspace administration** (built on
-[GAM7](https://github.com/GAM-team/GAM)) — **design and bulk-apply Gmail email signatures**, manage
-users, groups, delegates, vacation responders, and reports, all without the command line and with
-your credentials kept in the macOS **Keychain**.
+A free, local, open-source **macOS GUI for [GAM7](https://github.com/GAM-team/GAM)** — administer
+Google Workspace (users, groups, signatures, delegates, vacation responders, reports, and more)
+without memorizing CLI commands, with your credentials kept in the macOS **Keychain**.
 
 > GAM exposes far more of Google Workspace than the Admin Console surfaces (Gmail
 > signatures/delegates/forwarding, advanced group settings, bulk operations, reporting). GamGUI
