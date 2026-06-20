@@ -136,6 +136,20 @@ class GAMCommands:
         # `update user ... suspended on/off` is the canonical, version-stable form.
         return ["update", "user", email, "suspended", "on" if suspended else "off"]
 
+    # --- calendar access ---------------------------------------------------------------
+    @staticmethod
+    def print_calendar_acls(email: str, calendar: str = "primary") -> List[str]:
+        return ["user", email, "print", "calendaracls", calendar, "formatjson"]
+
+    @staticmethod
+    def add_calendar_acl(email: str, target: str, role: str = "reader", calendar: str = "primary") -> List[str]:
+        # `target` is a scope: a bare email = a user; pass "group:<email>"/"domain"/"default" as-is.
+        return ["user", email, "add", "calendaracls", calendar, role, target]
+
+    @staticmethod
+    def delete_calendar_acl(email: str, scope: str, calendar: str = "primary") -> List[str]:
+        return ["user", email, "delete", "calendaracls", calendar, scope]
+
     # --- gmail: signature / delegate / forwarding / vacation --------------------------
     @staticmethod
     def set_signature(email: str, signature: str, html: bool = True) -> List[str]:

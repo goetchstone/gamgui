@@ -168,6 +168,65 @@ class GroupMember:
         )
 
 
+@dataclass
+class CalendarACL:
+    """One access rule on a calendar: who has access (scope) and at what role."""
+
+    scope_type: str = "user"   # user | group | domain | default
+    scope_value: str = ""      # email / domain; empty for whole-domain or default (public)
+    role: str = ""             # owner | writer | reader | freebusyreader | editor | ...
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, d: Dict[str, Any]) -> "CalendarACL":
+        scope = d.get("scope") if isinstance(d.get("scope"), dict) else {}
+        stype = str(scope.get("type") or "").strip()
+        svalue = str(scope.get("value") or "").strip()
+        if not stype:
+            # Fall back to the ACL rule id, e.g. "user:bob@x" / "group:g@x" / "domain:x" / "default".
+            rid = str(_get(d, "id", "Id", default="")).strip()
+            if rid:
+                stype, _, svalue = rid.partition(":")
+        return cls(
+            scope_type=(stype or "user").lower(),
+            scope_value=svalue,
+            role=str(_get(d, "role", "Role", default="")).strip(),
+            raw=d,
+        )
+
+    @property
+    def who(self) -> str:
+        if self.scope_type == "default":
+            return "Public (anyone)"
+        if self.scope_type == "domain":
+            return f"Everyone at {self.scope_value}" if self.scope_value else "Entire domain"
+        return self.scope_value or self.scope_type
+
+    @property
+    def role_label(self) -> str:
+        return {
+            "owner": "Owner",
+            "writer": "Make changes & manage sharing",
+            "editor": "Make changes & manage sharing",
+            "writerwithoutprivateaccess": "Make changes (no private events)",
+            "reader": "See all event details",
+            "freebusyreader": "See free/busy only",
+            "freebusy": "See free/busy only",
+            "none": "No access",
+        }.get(self.role.lower(), self.role or "—")
+
+    @property
+    def scope_token(self) -> str:
+        """The token GAM's ``delete calendaracls`` expects for this rule."""
+        if self.scope_type == "default":
+            return "default"
+        if self.scope_type == "domain":
+            return f"domain:{self.scope_value}" if self.scope_value else "domain"
+        if self.scope_type == "group":
+            return f"group:{self.scope_value}"
+        return self.scope_value  # user -> bare email
+
+
 def _as_bool(v: Any) -> bool:
     if isinstance(v, bool):
         return v

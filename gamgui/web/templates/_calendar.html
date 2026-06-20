@@ -1,0 +1,29 @@
+{% if acls %}
+<ul class="space-y-2">
+  {% for a in acls %}
+  <li class="flex items-center justify-between gap-3 text-sm border-b border-brand-gray/20 pb-2">
+    <span class="text-brand-black">{{ a.who }} <span class="text-brand-gray">— {{ a.role_label }}</span></span>
+    {% if a.role != "owner" %}
+    <button class="text-xs text-red-700 hover:underline shrink-0"
+            hx-post="/users/calendar/remove" hx-target="#calendar" hx-swap="innerHTML"
+            hx-vals='{"email": {{ email | tojson }}, "scope": {{ a.scope_token | tojson }} }'
+            hx-confirm="Remove access for {{ a.who }}?">Remove</button>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-sm text-brand-gray">Only the owner has access.</p>
+{% endif %}
+<form class="mt-3 flex flex-wrap gap-2" hx-post="/users/calendar/add" hx-target="#calendar" hx-swap="innerHTML">
+  <input type="hidden" name="email" value="{{ email }}" />
+  <input type="email" name="target" required placeholder="share with person@domain.com"
+         class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+  <select name="role" class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none">
+    <option value="reader">See all details</option>
+    <option value="freebusyreader">Free/busy only</option>
+    <option value="writer">Make changes</option>
+    <option value="owner">Make changes &amp; manage</option>
+  </select>
+  <button class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors" type="submit">Share</button>
+</form>

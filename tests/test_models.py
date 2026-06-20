@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gamgui.core.gam.models import GAMGroup, GAMUser, GroupMember, Vacation
+from gamgui.core.gam.models import CalendarACL, GAMGroup, GAMUser, GroupMember, Vacation
 
 
 def test_gam_user_nested_name_and_bool_coercion():
@@ -67,6 +67,18 @@ def test_vacation_from_show_text():
 def test_vacation_disabled_parse():
     v = Vacation.from_show_text("User: x, Vacation:\n  Enabled: False\n  Subject:\n")
     assert v.enabled is False
+
+
+def test_calendar_acl_parse_user_and_default():
+    user = CalendarACL.from_json({"id": "user:bob@e.com", "role": "writer",
+                                  "scope": {"type": "user", "value": "bob@e.com"}})
+    assert user.who == "bob@e.com" and user.role_label == "Make changes & manage sharing"
+    assert user.scope_token == "bob@e.com"
+
+    # Falls back to the rule id when there's no scope dict; default scope = public.
+    pub = CalendarACL.from_json({"id": "default", "role": "freebusyreader"})
+    assert pub.scope_type == "default" and pub.who == "Public (anyone)"
+    assert pub.role_label == "See free/busy only" and pub.scope_token == "default"
 
 
 def test_vacation_message_excludes_gam_init_banner():

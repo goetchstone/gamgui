@@ -31,6 +31,14 @@ def test_update_organization_sets_title_and_department():
                     "title", "Design Lead", "department", "Old Saybrook", "primary"]
 
 
+def test_calendar_acl_commands():
+    assert GAMCommands.print_calendar_acls("a@e.com") == ["user", "a@e.com", "print", "calendaracls", "primary", "formatjson"]
+    assert GAMCommands.add_calendar_acl("a@e.com", "bob@e.com", role="reader") == \
+        ["user", "a@e.com", "add", "calendaracls", "primary", "reader", "bob@e.com"]
+    assert GAMCommands.delete_calendar_acl("a@e.com", "bob@e.com") == \
+        ["user", "a@e.com", "delete", "calendaracls", "primary", "bob@e.com"]
+
+
 def test_set_suspended_on_off():
     assert GAMCommands.set_suspended("a@e.com", True) == ["update", "user", "a@e.com", "suspended", "on"]
     assert GAMCommands.set_suspended("a@e.com", False) == ["update", "user", "a@e.com", "suspended", "off"]

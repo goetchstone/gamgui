@@ -1,0 +1,3 @@
+{"primaryEmail": "alice@example.com", "calendarId": "alice@example.com", "id": "user:alice@example.com", "role": "owner", "scope": {"type": "user", "value": "alice@example.com"}}
+{"primaryEmail": "alice@example.com", "calendarId": "alice@example.com", "id": "user:assistant@example.com", "role": "reader", "scope": {"type": "user", "value": "assistant@example.com"}}
+{"primaryEmail": "alice@example.com", "calendarId": "alice@example.com", "id": "default", "role": "freebusyreader", "scope": {"type": "default", "value": ""}}

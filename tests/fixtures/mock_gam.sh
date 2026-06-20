@@ -104,6 +104,12 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]
   exit 0
 fi
 
+# `gam user <email> print calendaracls primary formatjson` -> NDJSON of calendar access rules.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls" ]; then
+  cat "$GAM_MOCK_FIXTURES/calendar_acls.json"
+  exit 0
+fi
+
 # `gam user <admin> check serviceaccount` -> simulate a fully-authorized service account.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
   cat <<'EOF'

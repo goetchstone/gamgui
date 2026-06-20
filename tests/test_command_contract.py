@@ -35,6 +35,7 @@ REQUIRED_TOKENS = [
     "vacation",
     "print groups",
     "update group",   # add/remove members
+    "calendaracls",   # calendar access view/add/remove
     "report users",   # usage report
     "serviceaccount", # check serviceaccount (setup verify)
     "formatjson",     # JSON output mode we parse

@@ -348,6 +348,50 @@ async def _delegates_partial(request: Request, conn, email: str) -> HTMLResponse
     return TEMPLATES.TemplateResponse(request, "_delegates.html", {"delegates": delegates, "email": email})
 
 
+# --- calendar access (who can see/edit this user's primary calendar) --------------------
+async def _calendar_partial(request: Request, conn, email: str) -> HTMLResponse:
+    try:
+        acls = await conn.list_calendar_acls(email)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    return TEMPLATES.TemplateResponse(request, "_calendar.html", {"acls": acls, "email": email})
+
+
+@router.get("/calendar", response_class=HTMLResponse)
+async def calendar_get(request: Request, email: str) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    return await _calendar_partial(request, conn, email)
+
+
+@router.post("/calendar/add", response_class=HTMLResponse)
+async def calendar_add(
+    request: Request, email: str = Form(...), target: str = Form(...), role: str = Form("reader")
+) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    target = target.strip()
+    if not target:
+        return _err(request, "Enter an email to share with.")
+    result = await conn.add_calendar_acl(email, target, role=role)
+    if not result.ok:
+        return _err(request, f"Couldn't share calendar: {result.detail}")
+    return await _calendar_partial(request, conn, email)
+
+
+@router.post("/calendar/remove", response_class=HTMLResponse)
+async def calendar_remove(request: Request, email: str = Form(...), scope: str = Form(...)) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    result = await conn.remove_calendar_acl(email, scope.strip())
+    if not result.ok:
+        return _err(request, f"Couldn't remove access: {result.detail}")
+    return await _calendar_partial(request, conn, email)
+
+
 # --- vacation / auto-responder (lazy-loaded into the detail page) ----------------------
 @router.get("/vacation", response_class=HTMLResponse)
 async def vacation_get(request: Request, email: str) -> HTMLResponse:

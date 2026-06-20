@@ -317,6 +317,34 @@ async def test_run_bulk_store_preserves_title_and_sets_department():
     assert st.invalidated  # cache invalidated so the new departments show
 
 
+def test_calendar_access_view(client):
+    r = client.get("/users/calendar", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "assistant@example.com" in r.text          # someone the calendar is shared with
+    assert "Public (anyone)" in r.text                 # the default/public freebusy rule
+    assert "See all event details" in r.text or "free/busy" in r.text.lower()
+    assert "Remove" in r.text and 'name="target"' in r.text  # remove buttons + share form
+
+
+def test_calendar_access_owner_not_removable(client):
+    r = client.get("/users/calendar", params={"email": "alice@example.com"})
+    # One remove button per shared party (assistant + the default rule) — never for the owner.
+    assert r.text.count('hx-post="/users/calendar/remove"') == 2
+
+
+def test_calendar_access_add_and_remove(client):
+    add = client.post("/users/calendar/add", data={"email": "alice@example.com", "target": "carol@example.com", "role": "reader"})
+    assert add.status_code == 200
+    assert "assistant@example.com" in add.text  # re-rendered ACL list after the change
+    rem = client.post("/users/calendar/remove", data={"email": "alice@example.com", "scope": "assistant@example.com"})
+    assert rem.status_code == 200
+
+
+def test_calendar_access_add_requires_target(client):
+    r = client.post("/users/calendar/add", data={"email": "alice@example.com", "target": "  ", "role": "reader"})
+    assert "Enter an email to share with." in r.text
+
+
 def test_set_signature(client):
     r = client.post("/users/signature", data={"email": "alice@example.com", "signature": "Best,\nAlice", "html": "on"})
     assert r.status_code == 200

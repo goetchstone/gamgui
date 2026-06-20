@@ -12,7 +12,7 @@ from typing import List, Optional, Sequence
 
 from ..audit import AuditLog
 from ..gam.commands import GAMCommands, build_user_query
-from ..gam.models import GAMGroup, GAMUser, GroupMember, Vacation
+from ..gam.models import CalendarACL, GAMGroup, GAMUser, GroupMember, Vacation
 from ..gam.parser import parse_one, parse_records
 from ..gam.runner import GAMRunner
 from .base import (
@@ -191,6 +191,19 @@ class GAMConnector(Connector):
     async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:
         argv = GAMCommands.update_organization(email, title=title, department=department)
         return await self._run_write("set_organization", email, argv, RiskLevel.LOW)
+
+    # --- calendar access ---------------------------------------------------------------
+    async def list_calendar_acls(self, email: str, calendar: str = "primary") -> List[CalendarACL]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_acls(email, calendar))
+        return [CalendarACL.from_json(r) for r in parse_records(out)]
+
+    async def add_calendar_acl(self, email: str, target: str, role: str = "reader", calendar: str = "primary") -> ChangeResult:
+        argv = GAMCommands.add_calendar_acl(email, target, role=role, calendar=calendar)
+        return await self._run_write("add_calendar_acl", email, argv, RiskLevel.LOW, target_extra=target)
+
+    async def remove_calendar_acl(self, email: str, scope: str, calendar: str = "primary") -> ChangeResult:
+        argv = GAMCommands.delete_calendar_acl(email, scope, calendar=calendar)
+        return await self._run_write("remove_calendar_acl", email, argv, RiskLevel.LOW, target_extra=scope)
 
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:

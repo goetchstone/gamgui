@@ -101,5 +101,14 @@
       <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
     </div>
   </div>
+
+  <!-- calendar access (lazy-loaded) -->
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Calendar access</h2>
+    <p class="text-xs text-brand-blueink/70 mt-1">Who can see or edit this person's primary calendar.</p>
+    <div id="calendar" class="mt-3" hx-get="/users/calendar?email={{ email | urlencode }}" hx-trigger="load">
+      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+    </div>
+  </div>
 </div>
 {% endblock %}
