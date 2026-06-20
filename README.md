@@ -158,19 +158,6 @@ Size icons ~2× their display size and set explicit `width`/`height` on each `<i
   jsDelivr CDN: `https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch>/path/logo.png`. CDN-fast, no card.
 - **Cloudflare R2 / Amazon S3** — or any public-object store — also work.
 
-## Connectors
-
-Google Workspace (via GAM7) is the built-in connector. Apple Business Manager and Mosyle are
-provided by the companion [`abapit`](https://github.com/) project, whose duck-typed clients are
-wrapped as async connectors in [`abapit_connector.py`](gamgui/core/connectors/abapit_connector.py).
-abapit is an **optional** dependency — install it editable to enable those connectors:
-
-```bash
-pip install -e /path/to/abapit
-```
-
-Without it, gamgui runs as a Google-Workspace-only tool (the ABM/Mosyle tests skip automatically).
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
