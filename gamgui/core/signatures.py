@@ -7,9 +7,13 @@ substitution (so the preview is exactly what each user gets); apply sets each us
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 from .gam.models import GAMUser
+
+# A ``[[ ... ]]`` block is kept only if every variable inside it resolves to a non-empty value.
+_OPTIONAL_RE = re.compile(r"\[\[(.*?)\]\]", re.DOTALL)
 
 # Template variable -> human description (shown in the editor's variable reference).
 # `{role}` is an alias for `{title}` since the org uses the job title as the role.
@@ -20,13 +24,19 @@ VARIABLES: Dict[str, str] = {
     "{email}": "Primary email",
     "{title}": "Job title",
     "{role}": "Job title (alias)",
+    "{phone}": "Work phone",
     "{department}": "Department",
     "{ou}": "Org unit path",
 }
 
 
 def render_signature(template: str, user: GAMUser) -> str:
-    """Substitute the variables in ``template`` with ``user``'s values."""
+    """Substitute the variables in ``template`` with ``user``'s values.
+
+    ``[[ ... ]]`` blocks are *optional*: a block is dropped entirely if any variable it references
+    is empty for this user. So ``[[ {title} ·]]`` vanishes cleanly for people with no title set,
+    letting one template roll out company-wide before every profile is filled in.
+    """
     values = {
         "{name}": user.full_name,
         "{first}": user.given_name,
@@ -34,10 +44,19 @@ def render_signature(template: str, user: GAMUser) -> str:
         "{email}": user.primary_email,
         "{title}": user.title or "",
         "{role}": user.title or "",
+        "{phone}": user.phone or "",
         "{department}": user.department or "",
         "{ou}": user.org_unit_path or "",
     }
-    out = template or ""
+
+    def _resolve_optional(match: "re.Match[str]") -> str:
+        inner = match.group(1)
+        for var, val in values.items():
+            if var in inner and not val:
+                return ""  # a referenced variable is empty -> drop the whole block
+        return inner
+
+    out = _OPTIONAL_RE.sub(_resolve_optional, template or "")
     for var, val in values.items():
         out = out.replace(var, val)
     return out

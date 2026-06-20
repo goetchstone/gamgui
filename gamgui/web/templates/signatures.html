@@ -48,6 +48,7 @@
         <span class="text-brand-gray">Variables:</span>
         {% for v, desc in variables.items() %}<code class="ml-1 rounded bg-paper border border-brand-gray/40 px-1.5 py-0.5" title="{{ desc }}">{{ v }}</code>{% endfor %}
       </div>
+      <p class="text-xs text-brand-gray">Wrap a part in <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[ … ]]</code> to drop it when a variable inside is empty — e.g. <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[{title} · ]]</code> disappears for users with no title.</p>
 
       <button type="button"
               class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"

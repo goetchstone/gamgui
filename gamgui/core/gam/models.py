@@ -42,6 +42,7 @@ class GAMUser:
     title: str = ""
     department: str = ""
     location: str = ""
+    phone: str = ""
     recovery_email: str = ""
     last_login_time: Optional[str] = None
     aliases: List[str] = field(default_factory=list)
@@ -59,6 +60,7 @@ class GAMUser:
             name = {}
         org = _primary(d.get("organizations"))      # job title / department live here
         loc = _primary(d.get("locations"))           # building / desk
+        phone = _primary(d.get("phones"))            # work phone number
         return cls(
             primary_email=_get(d, "primaryEmail", "email", "User", default=""),
             given_name=_get(name, "givenName") or _get(d, "givenName", "First Name", default=""),
@@ -71,6 +73,7 @@ class GAMUser:
             title=str(org.get("title") or _get(d, "Organization Title", default="") or ""),
             department=str(org.get("department") or _get(d, "Organization Department", default="") or ""),
             location=str(loc.get("buildingName") or loc.get("buildingId") or ""),
+            phone=str(phone.get("value") or ""),
             recovery_email=str(_get(d, "recoveryEmail", default="") or ""),
             last_login_time=_get(d, "lastLoginTime", "Last Login Time"),
             aliases=_as_list(_get(d, "aliases", "Aliases", default=[])),

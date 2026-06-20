@@ -26,7 +26,7 @@ USER_LIST_FIELDS = ("primaryEmail", "name", "suspended", "orgUnitPath", "organiz
 # Fields for the detail view: identity + role/automation signals + security flags.
 USER_DETAIL_FIELDS = (
     "primaryEmail", "name", "suspended", "orgUnitPath", "isAdmin", "isDelegatedAdmin",
-    "isEnrolledIn2Sv", "lastLoginTime", "aliases", "organizations", "locations", "recoveryEmail",
+    "isEnrolledIn2Sv", "lastLoginTime", "aliases", "organizations", "locations", "phones", "recoveryEmail",
 )
 # `gam print groups` likewise returns only email unless fields are requested.
 GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
@@ -35,7 +35,7 @@ GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
 CACHE_FIELDS = (
     "primaryEmail", "name", "suspended", "orgUnitPath", "organizations",
     "isAdmin", "isDelegatedAdmin", "isEnrolledIn2Sv", "lastLoginTime", "recoveryEmail",
-    "aliases", "locations",
+    "aliases", "locations", "phones",
 )
 
 

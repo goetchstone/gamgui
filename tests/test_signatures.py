@@ -18,6 +18,30 @@ def test_role_is_alias_for_title():
     assert render_signature("{title}={role}", u) == "Boss=Boss"
 
 
+def test_render_includes_phone():
+    u = _u("a@e.com", phones=[{"value": "860.388.0891", "type": "work", "primary": True}])
+    assert render_signature("Call {phone}", u) == "Call 860.388.0891"
+    # Missing phone renders empty, never the literal token.
+    assert render_signature("Call {phone}", _u("b@e.com")) == "Call "
+
+
+def test_optional_block_dropped_when_variable_empty():
+    titled = _u("a@e.com", name={"givenName": "Al", "familyName": "Ant"},
+                organizations=[{"title": "Director", "primary": True}])
+    untitled = _u("b@e.com", name={"givenName": "Bo", "familyName": "Bee"})
+    tmpl = "{name}[[ — {title}]] · Saybrook Home"
+    assert render_signature(tmpl, titled) == "Al Ant — Director · Saybrook Home"
+    assert render_signature(tmpl, untitled) == "Bo Bee · Saybrook Home"  # whole block dropped
+
+
+def test_optional_block_kept_only_if_all_its_vars_present():
+    # A block referencing two vars drops if EITHER is empty.
+    u = _u("a@e.com", name={"givenName": "Al", "familyName": "Ant"},
+           organizations=[{"title": "Director", "primary": True}])  # has title, no phone
+    assert render_signature("[[{title}/{phone}]]x", u) == "x"
+    assert render_signature("[[{title}]]x", u) == "Directorx"
+
+
 def test_match_scope_ou_includes_children_excludes_suspended():
     users = [
         _u("a@e.com", orgUnitPath="/Sales"),
