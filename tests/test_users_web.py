@@ -209,6 +209,8 @@ def test_signature_current_renders(client):
     r = client.get("/users/signature/current", params={"email": "alice@example.com"})
     assert r.status_code == 200
     assert "Best," in r.text  # current signature read from the mailbox
+    assert "<iframe" in r.text and "srcdoc=" in r.text  # rendered preview, not just source
+    assert "View HTML source" in r.text                  # raw HTML still available, collapsed
 
 
 def test_user_groups_view_add_remove(client):
