@@ -38,17 +38,6 @@ scripts/            # fetch_gam.sh (vendor GAM7), build_app.sh (PyInstaller .app
 - Mutations go through the destructive-op guard and the audit log.
 - Add or update tests for any change; keep `pytest` green.
 
-## Optional: ABM / Mosyle connectors
-
-Apple Business Manager and Mosyle support come from the companion **abapit** package and are
-optional. Install it editable to enable them:
-
-```bash
-pip install -e /path/to/abapit
-```
-
-Without it, GamGUI runs as a Google-Workspace-only tool and the ABM/Mosyle tests skip automatically.
-
 ## Before opening a PR
 
 ```bash

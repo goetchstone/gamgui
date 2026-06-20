@@ -4,7 +4,6 @@
 #
 # The native window uses pywebview, kept separate because it pulls heavy macOS bindings:
 #   pip install "pywebview>=5.1"
-# The ABM/Mosyle connectors are optional and require the companion 'abapit' package (see README).
 
 # --- runtime ---
 fastapi==0.128.8

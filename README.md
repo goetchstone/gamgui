@@ -25,9 +25,8 @@ other Macs.
   materialized into a locked-down temporary directory only for the duration of each `gam`
   invocation, then wiped. ([details](#security-model))
 - **Easy but powerful** — form/table UI for the common painful tasks, full GAM power underneath.
-- **Connector-ready** — Google Workspace is the first connector; the architecture is built so
-  Apple Business Manager, Mosyle MDM, and Sangoma PBXact can plug in later for cross-system
-  person lifecycle management.
+- **Connector-ready** — built around a connector protocol, so the Google Workspace connector is
+  cleanly isolated and other systems could be added later without touching the UI.
 
 ## Architecture
 
