@@ -1,0 +1,40 @@
+name: GAM release watch
+
+# Awareness, not auto-upgrade: weekly, check if GAM-team/GAM shipped a version newer than our pin and
+# open an issue so a human bumps it deliberately via the "Updating GAM" runbook.
+on:
+  schedule:
+    - cron: "0 14 * * 1" # Mondays 14:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare pinned vs latest GAM release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PIN=$(python3 -c "import re,pathlib;print(re.search(r'TAG=\"v([0-9.]+)\"',pathlib.Path('scripts/fetch_gam.sh').read_text()).group(1))")
+          LATEST=$(gh api repos/GAM-team/GAM/releases/latest --jq .tag_name | sed 's/^v//')
+          echo "pinned=$PIN latest=$LATEST"
+          [ "$PIN" = "$LATEST" ] && { echo "Up to date."; exit 0; }
+          TITLE="GAM update available: v$LATEST (pinned v$PIN)"
+          if gh issue list --state open --search "in:title GAM update available" | grep -q "v$LATEST"; then
+            echo "Issue for v$LATEST already open."; exit 0
+          fi
+          gh issue create --title "$TITLE" --body \
+          "GAM-team/GAM released **v$LATEST**; we pin **v$PIN**.
+
+          Follow the **Updating GAM** runbook (README):
+          1. \`make gam --tag v$LATEST\` (re-vendor binary + command reference)
+          2. bump \`EXPECTED_GAM_VERSION\` in \`gamgui/core/gam/commands.py\` and \`TAG\` in \`scripts/fetch_gam.sh\`
+          3. \`pytest -q\` — the command-contract test flags any renamed/removed command
+          4. skim \`gamgui/resources/gam7/GamUpdate.txt\` for breaking changes
+          5. run \`scripts/acceptance.sh\` against a tenant (read-only) before shipping
+
+          The \`gam-latest-preview\` CI job may already show whether v$LATEST breaks a command we use."

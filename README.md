@@ -102,6 +102,29 @@ re-prompts for the Keychain — and "Always Allow" never sticks. Two optional, *
 The app also caches the three secrets in-process for a sliding window (default 5 min) so a burst of
 actions doesn't re-prompt; tune with `GAMGUI_SECRET_CACHE_TTL` (seconds; `0` disables).
 
+### Staying current with GAM (and not breaking on updates)
+
+GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam/commands.py`, matched by
+`scripts/fetch_gam.sh`. It never auto-upgrades; you bump deliberately, and three guards keep that safe:
+
+- **Release-watch** (`.github/workflows/gam-watch.yml`, weekly) opens an issue when GAM ships a version
+  newer than the pin — awareness, not auto-upgrade.
+- **Compat check** (`gam-compat` CI job + `tests/test_command_contract.py`) asserts every GAM
+  sub-command our builders use still exists in the vendored command reference, so a renamed/removed
+  command fails CI rather than your tenant. A non-blocking `gam-latest-preview` job runs the same check
+  against the *newest* GAM as an early warning.
+- **Runtime self-check** — if the running `gam` differs from the tested version (e.g. a
+  `GAMGUI_GAM_BINARY` override), the setup screen shows a soft warning. It never blocks.
+
+**To bump GAM:**
+
+1. `make gam --tag vX.Y.Z` — re-vendor the binary, command reference, and checksum.
+2. Update `EXPECTED_GAM_VERSION` (`gamgui/core/gam/commands.py`) and `TAG` (`scripts/fetch_gam.sh`).
+3. `make test` — the command-contract test flags any sub-command that changed.
+4. Skim `gamgui/resources/gam7/GamUpdate.txt` for breaking changes.
+5. `.venv/bin/python scripts/acceptance.py` against a tenant — read-only; the true output-shape check.
+6. Commit.
+
 ### Tests & CI
 
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across

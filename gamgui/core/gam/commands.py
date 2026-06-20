@@ -17,6 +17,12 @@ from __future__ import annotations
 
 from typing import List, Optional, Sequence
 
+# The GAM7 version GamGUI is pinned to and tested against — the SINGLE SOURCE OF TRUTH.
+# `scripts/fetch_gam.sh` (TAG), the mock, and the version tests must all match this; that's enforced by
+# tests/test_command_contract.py so they can't drift. Bump deliberately via the "Updating GAM" runbook.
+# Compared (as a substring) against the running `gam version` for the fail-soft runtime self-check.
+EXPECTED_GAM_VERSION = "7.46.02"
+
 # Roles accepted by Google Directory for group membership.
 GROUP_ROLES = ("member", "manager", "owner")
 

@@ -1,5 +1,1 @@
-Pinned GAM7 version: v7.46.01
-
-The GAM7 binary is not committed to git (platform-specific, large). Run `make gam`
-(scripts/fetch_gam.sh) to vendor it here; that overwrites this file with the fetched tag and
-writes a SHA256 alongside.
+v7.46.02

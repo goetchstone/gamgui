@@ -23,6 +23,9 @@
       <span class="text-brand-blueink">GAM not vendored — run <code class="text-xs bg-brand-white border border-brand-gray/50 px-1.5 py-0.5 rounded">scripts/fetch_gam.sh</code></span>
     {% endif %}
   </div>
+  {% if gam_version_warning %}
+  <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ gam_version_warning }}</div>
+  {% endif %}
 
   <!-- domain + admin (included by every step) -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">

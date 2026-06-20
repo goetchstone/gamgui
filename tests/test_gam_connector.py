@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from gamgui.core.connectors.base import RiskLevel
+from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
 
 
 async def test_list_users(connector):
@@ -48,7 +49,7 @@ async def test_apply_runs_planned_changes(connector):
 async def test_connection_test_ok(connector):
     status = await connector.test()
     assert status.ok is True
-    assert "7.46.01" in status.version
+    assert EXPECTED_GAM_VERSION in status.version
 
 
 async def test_list_delegates(connector):

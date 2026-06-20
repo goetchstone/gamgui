@@ -31,6 +31,7 @@ async def setup_page(request: Request) -> HTMLResponse:
         "setup.html",
         {
             "gam_version": await svc.engine_version(),
+            "gam_version_warning": await svc.engine_version_warning(),
             "binary_present": st.runner.binary_exists(),
             "candidate_dirs": svc.candidate_dirs(),
         },

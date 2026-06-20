@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import FILENAMES, InMemoryBackend, SecretsVault
 from gamgui.core.setup import SetupService, _extract_auth_url, _parse_check
@@ -92,7 +93,23 @@ def test_extract_auth_url():
 
 
 async def test_engine_version(runner, vault):
-    assert "7.46.01" in await SetupService(vault, runner).engine_version()
+    assert EXPECTED_GAM_VERSION in await SetupService(vault, runner).engine_version()
+
+
+async def test_engine_version_warning_silent_when_matched(runner, vault):
+    # The mock reports EXPECTED_GAM_VERSION -> no warning.
+    assert await SetupService(vault, runner).engine_version_warning() == ""
+
+
+async def test_engine_version_warning_on_mismatch(runner, vault, monkeypatch):
+    svc = SetupService(vault, runner)
+
+    async def fake_version() -> str:
+        return "GAM 9.99.99 - mock"
+
+    monkeypatch.setattr(svc, "engine_version", fake_version)
+    warning = await svc.engine_version_warning()
+    assert "9.99.99" in warning and EXPECTED_GAM_VERSION in warning  # fail-soft: warns, never blocks
 
 
 async def test_verify_passes_with_mock(runner, vault, domain):

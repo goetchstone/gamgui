@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .gam.commands import GAMCommands
+from .gam.commands import EXPECTED_GAM_VERSION, GAMCommands
 from .gam.errors import GAMError
 from .gam.runner import GAMRunner
 from .secrets.ephemeral import app_runtime_dir
@@ -68,6 +68,20 @@ class SetupService:
             return (await self.runner.version()).splitlines()[0]
         except Exception:
             return ""
+
+    async def engine_version_warning(self) -> str:
+        """Fail-soft self-check: a soft warning if the running GAM differs from the tested version.
+
+        Empty when it matches, when GAM isn't vendored, or when the version can't be read — never
+        blocks. Catches a swapped binary or a ``GAMGUI_GAM_BINARY`` override silently in use.
+        """
+        version = await self.engine_version()
+        if not version or EXPECTED_GAM_VERSION in version:
+            return ""
+        return (
+            f"GamGUI was built and tested with GAM {EXPECTED_GAM_VERSION}, but you're running "
+            f"“{version}”. Most things will work; some commands may behave unexpectedly."
+        )
 
     # --- discovering / inspecting credential directories -------------------------------
     def managed_setup_dir(self) -> Path:

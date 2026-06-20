@@ -29,3 +29,48 @@ jobs:
       - name: Run tests
         # Uses the mock gam binary; needs no vendored GAM7 and no credentials.
         run: pytest -q
+
+  gam-compat:
+    name: gam-compat (pinned binary)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Vendor the pinned GAM7 binary + command reference
+        run: ./scripts/fetch_gam.sh
+      - name: Assert the vendored version matches the pin
+        run: |
+          python - <<'PY'
+          import pathlib
+          from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
+          v = pathlib.Path("gamgui/resources/gam7/VERSION").read_text()
+          assert EXPECTED_GAM_VERSION in v, f"vendored VERSION {v!r} != pin {EXPECTED_GAM_VERSION}"
+          print("vendored:", v.split(chr(10))[0])
+          PY
+      - name: Command-contract test against the REAL reference
+        run: pytest -q tests/test_command_contract.py
+
+  gam-latest-preview:
+    # Non-blocking early warning: would the NEWEST GAM rename/remove a command we use? Does not change the pin.
+    name: gam-compat (latest, non-blocking)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Vendor the LATEST GAM7 (preview only)
+        run: ./scripts/fetch_gam.sh --tag latest
+      - name: Command-token contract against latest (early warning)
+        run: pytest -q tests/test_command_contract.py -k tokens

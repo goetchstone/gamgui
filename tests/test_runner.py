@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import GAMCommands
+from gamgui.core.gam.commands import EXPECTED_GAM_VERSION, GAMCommands
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
 from gamgui.core.gam.runner import GAMRunner
 
 
 async def test_version(runner):
-    assert "7.46.01" in await runner.version()
+    assert EXPECTED_GAM_VERSION in await runner.version()
 
 
 async def test_run_authenticated_reads_users(runner, domain):
