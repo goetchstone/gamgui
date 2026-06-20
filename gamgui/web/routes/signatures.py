@@ -88,7 +88,7 @@ async def page(request: Request) -> HTMLResponse:
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, "signatures.html",
-            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "users": []}, "groups": [], "variables": sig.VARIABLES},
+            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "locations": [], "users": []}, "groups": [], "variables": sig.VARIABLES},
         )
     return TEMPLATES.TemplateResponse(
         request, "signatures.html",

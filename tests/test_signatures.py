@@ -54,6 +54,16 @@ def test_match_scope_ou_includes_children_excludes_suspended():
     assert [u.primary_email for u in match_scope(users, "department", "IT")] == ["c@e.com"]
 
 
+def test_render_and_scope_by_location():
+    glas = _u("a@e.com", locations=[{"buildingName": "Glastonbury", "type": "work", "primary": True}])
+    ches = _u("b@e.com", locations=[{"buildingName": "Cheshire", "type": "work", "primary": True}])
+    assert render_signature("Visit us in {location}", glas) == "Visit us in Glastonbury"
+    users = [glas, ches]
+    assert [u.primary_email for u in match_scope(users, "location", "Glastonbury")] == ["a@e.com"]
+    assert match_scope(users, "location", "Cheshire")[0].primary_email == "b@e.com"
+    assert "Glastonbury" in scope_options(users)["locations"]
+
+
 def test_match_scope_user_selects_single_active():
     users = [_u("a@e.com"), _u("b@e.com"), _u("c@e.com", suspended=True)]
     assert [u.primary_email for u in match_scope(users, "user", "a@e.com")] == ["a@e.com"]

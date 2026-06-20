@@ -29,6 +29,7 @@
             <option value="group">Group</option>
             <option value="ou">Org unit</option>
             <option value="department">Department</option>
+            <option value="location">Location</option>
           </select>
         </label>
         <label class="block">
@@ -70,10 +71,11 @@
   var SIG_DEPTS = {{ options.departments | tojson }};
   var SIG_GROUPS = {{ groups | tojson }};
   var SIG_USERS = {{ options.users | tojson }};
+  var SIG_LOCATIONS = {{ options.locations | tojson }};
   function sigPopulate() {
     var t = document.getElementById("scope_type").value;
     var sel = document.getElementById("scope_value");
-    var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "group" ? SIG_GROUPS : (t === "user" ? SIG_USERS : [])));
+    var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "location" ? SIG_LOCATIONS : (t === "group" ? SIG_GROUPS : (t === "user" ? SIG_USERS : []))));
     sel.innerHTML = list.map(function (v) { return '<option value="' + v + '">' + v + "</option>"; }).join("");
     sel.disabled = list.length === 0;
     sel.style.visibility = list.length ? "visible" : "hidden";

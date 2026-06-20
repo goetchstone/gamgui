@@ -30,14 +30,15 @@ def test_directory_completeness_buckets():
     now = datetime(2026, 6, 19, tzinfo=timezone.utc)
     users = [
         _u("full@e.com", organizations=[{"title": "Director", "department": "IT", "primary": True}],
-           phones=[{"value": "555-1212", "primary": True}]),
-        _u("bare@e.com"),  # no title, department, or phone
+           phones=[{"value": "555-1212", "primary": True}], locations=[{"buildingName": "Glastonbury", "primary": True}]),
+        _u("bare@e.com"),  # no title, department, phone, or location
         _u("gone@e.com", suspended=True),  # suspended -> excluded from active completeness buckets
     ]
     reports = {r.key: r for r in build_reports(users, now=now)}
     assert [u.primary_email for u in reports["no_title"].users] == ["bare@e.com"]
     assert [u.primary_email for u in reports["no_department"].users] == ["bare@e.com"]
     assert [u.primary_email for u in reports["no_phone"].users] == ["bare@e.com"]
+    assert [u.primary_email for u in reports["no_location"].users] == ["bare@e.com"]
 
 
 def test_never_logged_in_counts_as_inactive():

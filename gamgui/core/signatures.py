@@ -26,6 +26,7 @@ VARIABLES: Dict[str, str] = {
     "{role}": "Job title (alias)",
     "{phone}": "Work phone",
     "{department}": "Department",
+    "{location}": "Location / store",
     "{ou}": "Org unit path",
 }
 
@@ -46,6 +47,7 @@ def render_signature(template: str, user: GAMUser) -> str:
         "{role}": user.title or "",
         "{phone}": user.phone or "",
         "{department}": user.department or "",
+        "{location}": user.location or "",
         "{ou}": user.org_unit_path or "",
     }
 
@@ -76,6 +78,8 @@ def match_scope(users: List[GAMUser], scope_type: str, scope_value: str = "") ->
         return [u for u in active if u.org_unit_path == value or u.org_unit_path.startswith(prefix)]
     if scope_type == "department" and value:
         return [u for u in active if (u.department or "").strip().lower() == value.lower()]
+    if scope_type == "location" and value:
+        return [u for u in active if (u.location or "").strip().lower() == value.lower()]
     return active
 
 
@@ -83,5 +87,6 @@ def scope_options(users: List[GAMUser]) -> Dict[str, List[str]]:
     """The distinct OUs, departments, and active user emails present, for the scope dropdowns."""
     ous = sorted({u.org_unit_path for u in users if u.org_unit_path})
     departments = sorted({u.department for u in users if u.department})
+    locations = sorted({u.location for u in users if u.location})
     user_emails = sorted(u.primary_email for u in users if not u.suspended)
-    return {"ous": ous, "departments": departments, "users": user_emails}
+    return {"ous": ous, "departments": departments, "locations": locations, "users": user_emails}

@@ -91,7 +91,7 @@ def build_reports(users: List[GAMUser], now: Optional[datetime] = None, inactive
     cutoff = now - timedelta(days=inactive_days)
 
     no_2sv, admins, suspended, inactive, no_recovery = [], [], [], [], []
-    no_title, no_dept, no_phone = [], [], []
+    no_title, no_dept, no_phone, no_location = [], [], [], []
     for u in users:
         if u.suspended:
             suspended.append(u)
@@ -108,6 +108,8 @@ def build_reports(users: List[GAMUser], now: Optional[datetime] = None, inactive
             no_dept.append(u)
         if not (u.phone or "").strip():
             no_phone.append(u)
+        if not (u.location or "").strip():
+            no_location.append(u)
         last = _parse_dt(u.last_login_time)
         if last is None or last < cutoff:
             inactive.append(u)
@@ -122,4 +124,5 @@ def build_reports(users: List[GAMUser], now: Optional[datetime] = None, inactive
         Report("no_title", "No job title", "Active users with no title set — needed for role-based signatures.", no_title),
         Report("no_department", "No department", "Active users with no department set.", no_dept),
         Report("no_phone", "No phone", "Active users with no work phone set.", no_phone),
+        Report("no_location", "No location", "Active users with no location/store set.", no_location),
     ]
