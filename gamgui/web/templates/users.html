@@ -15,7 +15,10 @@
         <p class="eyebrow text-brand-blue">Directory</p>
         <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Users</h1>
       </div>
-      <span class="text-sm text-brand-gray">{{ domain }}</span>
+      <div class="flex items-center gap-4">
+        <a href="/users/bulk" class="text-sm font-medium text-brand-blueink hover:text-brand-black">Bulk: set store →</a>
+        <span class="text-sm text-brand-gray">{{ domain }}</span>
+      </div>
     </div>
 
     {% if error %}

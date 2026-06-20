@@ -243,6 +243,78 @@ def test_set_organization_saves(client):
     assert "Old Saybrook" in r.text  # the new value is echoed back into the form
 
 
+def test_bulk_store_page_renders(client):
+    r = client.get("/users/bulk")
+    assert r.status_code == 200
+    assert "Bulk: assign store" in r.text
+    assert 'name="store"' in r.text and 'name="emails"' in r.text
+
+
+def test_bulk_store_preview_by_emails(client):
+    r = client.post("/users/bulk/preview", data={"store": "Old Saybrook", "group": "", "emails": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Old Saybrook" in r.text
+    assert "alice@example.com" in r.text
+    assert "Apply to 1" in r.text
+
+
+def test_bulk_store_apply_requires_store_value(client):
+    r = client.post("/users/bulk/apply", data={"store": "   ", "group": "", "emails": "alice@example.com"})
+    assert "Enter a store/department value" in r.text
+
+
+def test_bulk_store_apply_runs_as_job(client):
+    import re
+
+    r = client.post("/users/bulk/apply", data={"store": "Old Saybrook", "group": "", "emails": "alice@example.com"})
+    assert r.status_code == 200
+    m = re.search(r"/users/bulk/status\?job=([A-Za-z0-9_\-]+)", r.text)
+    assert m, f"expected a bulk job-polling panel, got: {r.text[:200]}"
+    job = m.group(1)
+    last = ""
+    for _ in range(40):
+        last = client.get("/users/bulk/status", params={"job": job}).text
+        if "Set store on" in last:
+            break
+    assert "Set store on" in last  # job reported completion (count is verified in the unit test below)
+
+
+async def test_run_bulk_store_preserves_title_and_sets_department():
+    # Deterministic check of the core behavior (the TestClient can't drive the polled background
+    # task to completion): department is set to the store, each person's existing title is kept.
+    from gamgui.core.gam.models import GAMUser
+    from gamgui.web.jobs import BatchJob
+    from gamgui.web.routes.users import _run_bulk_store
+
+    calls = []
+
+    class _FakeResult:
+        ok = True
+
+    class _FakeConn:
+        async def set_organization(self, email, title="", department=""):
+            calls.append((email, title, department))
+            return _FakeResult()
+
+    class _FakeState:
+        invalidated = False
+
+        def invalidate_users(self):
+            self.invalidated = True
+
+    targets = [
+        GAMUser.from_json({"primaryEmail": "a@e.com", "organizations": [{"title": "Design Lead", "primary": True}]}),
+        GAMUser.from_json({"primaryEmail": "b@e.com"}),  # no title
+    ]
+    st = _FakeState()
+    job = BatchJob(id="t", total=len(targets))
+    await _run_bulk_store(job, st, _FakeConn(), targets, "Old Saybrook")
+
+    assert job.finished and job.applied == 2 and job.failed == []
+    assert calls == [("a@e.com", "Design Lead", "Old Saybrook"), ("b@e.com", "", "Old Saybrook")]
+    assert st.invalidated  # cache invalidated so the new departments show
+
+
 def test_set_signature(client):
     r = client.post("/users/signature", data={"email": "alice@example.com", "signature": "Best,\nAlice", "html": "on"})
     assert r.status_code == 200

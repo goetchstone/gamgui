@@ -10,6 +10,7 @@ whose ``ok`` flag is always checked before reporting success.
 
 from __future__ import annotations
 
+import asyncio
 import math
 
 from fastapi import APIRouter, Form, Request
@@ -17,6 +18,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard
 from ...core.gam.errors import GAMError
+from ..jobs import start_job
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/users")
@@ -237,6 +239,96 @@ async def set_organization(
     return TEMPLATES.TemplateResponse(
         request, "_org_form.html", {"email": email, "title": title, "department": department, "saved": True}
     )
+
+
+# --- bulk: assign a store (department) to many users, preserving each person's title ----
+async def _bulk_targets(st, group: str, emails_raw: str):
+    """Resolve target ACTIVE users from a group OR a pasted email list (matched against the cache)."""
+    users = await st.users()
+    if group:
+        members = await st.connector.list_group_members(group)
+        wanted = {m.email.lower() for m in members}
+    else:
+        wanted = {e.strip().lower() for e in emails_raw.replace(",", "\n").splitlines() if e.strip()}
+    return [u for u in users if u.primary_email.lower() in wanted and not u.suspended]
+
+
+async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
+    """Background task: set department=store per user, KEEPING each existing title."""
+    try:
+        for u in targets:
+            job.current = u.primary_email
+            try:
+                res = await conn.set_organization(u.primary_email, title=u.title or "", department=store)
+                ok = bool(getattr(res, "ok", False))
+            except Exception:
+                ok = False
+            if ok:
+                job.applied += 1
+            else:
+                job.failed.append(u.primary_email)
+            job.done += 1
+    except Exception as exc:
+        job.error = _friendly(exc)
+    finally:
+        job.current = ""
+        job.finished = True
+        st.invalidate_users()  # departments changed -> cached directory is stale
+
+
+@router.get("/bulk", response_class=HTMLResponse)
+async def bulk_page(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, "bulk_store.html", {"connected": False})
+    try:
+        groups = await st.connector.list_groups()
+    except Exception as exc:
+        return TEMPLATES.TemplateResponse(request, "bulk_store.html", {"connected": True, "error": _friendly(exc), "groups": []})
+    return TEMPLATES.TemplateResponse(request, "bulk_store.html", {"connected": True, "groups": [g.email for g in groups]})
+
+
+@router.post("/bulk/preview", response_class=HTMLResponse)
+async def bulk_preview(request: Request, store: str = Form(""), group: str = Form(""), emails: str = Form("")) -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return _err(request, "Not connected.")
+    try:
+        targets = await _bulk_targets(st, group.strip(), emails)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    return TEMPLATES.TemplateResponse(
+        request, "_bulk_preview.html", {"targets": targets[:200], "count": len(targets), "store": store.strip()}
+    )
+
+
+@router.post("/bulk/apply", response_class=HTMLResponse)
+async def bulk_apply(request: Request, store: str = Form(""), group: str = Form(""), emails: str = Form("")) -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return _err(request, "Not connected.")
+    store = store.strip()
+    if not store:
+        return _err(request, "Enter a store/department value first.")
+    try:
+        targets = await _bulk_targets(st, group.strip(), emails)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    if not targets:
+        return _err(request, "No matching active users to update.")
+    job = start_job(st.jobs, len(targets))
+    job.task = asyncio.create_task(_run_bulk_store(job, st, conn, targets, store))
+    return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": job})
+
+
+@router.get("/bulk/status", response_class=HTMLResponse)
+async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    j = st.jobs.get(job)
+    if j is None:
+        return _err(request, "That bulk job is no longer available — re-run it.")
+    return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": j})
 
 
 @router.get("/delegates", response_class=HTMLResponse)
