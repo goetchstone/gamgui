@@ -22,9 +22,9 @@ from ..gam.models import (
     UserCalendar,
     Vacation,
 )
+from ..calendar_index import IndexedCalendar
 from ..gam.parser import parse_one, parse_records
 from ..gam.runner import GAMRunner
-from ..usercache import UserCache
 from .base import (
     Capability,
     ChangePreview,
@@ -75,10 +75,6 @@ class GAMConnector(Connector):
         self.runner = runner
         self.domain = domain
         self.audit = audit or AuditLog()
-        # The domain-wide calendar scan (`all users print calendars`) is the slow path — it serves
-        # every user one by one (~a minute on a mid-size tenant). Cache the parsed rows so repeat
-        # name searches are instant; invalidated when we delete a calendar.
-        self._cal_scan = UserCache(ttl=600.0)
 
     # --- connection --------------------------------------------------------------------
     async def test(self) -> ConnectionStatus:
@@ -236,32 +232,44 @@ class GAMConnector(Connector):
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_user_calendars(email))
         return [UserCalendar.from_json(r) for r in parse_records(out)]
 
-    async def _all_calendar_records(self, force: bool = False) -> List[dict]:
-        async def fetch() -> List[dict]:
-            out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars())
-            return parse_records(out)
-        return await self._cal_scan.get(fetch, force=force)
+    async def scan_all_calendars(self) -> List[IndexedCalendar]:
+        """The full domain scan that backs the calendar index (slow; run in the background).
 
-    async def search_calendars(self, query: str, force: bool = False) -> List[dict]:
-        """Find calendars across the domain whose name contains ``query``; identify the owner.
-
-        Scans every user's calendar list (one ``all users print calendars`` call — slow, so cached),
-        filters by summary, dedupes by calendar id, and records the owner (the user whose row has
-        accessRole=owner). Pass ``force=True`` to bypass the cache and re-scan.
+        Walks every user's calendar list (one ``all users print calendars`` call) plus the room
+        calendars, keeping only the discoverable shared calendars: **secondary** calendars
+        (``…@group.calendar.google.com``) and **rooms**. For each secondary calendar it records the
+        owner (the user whose row has accessRole=owner) and a subscriber count (how many users carry
+        it). Each user's primary, holiday/system calendars are skipped — they aren't shared calendars
+        you'd search for, and excluding them keeps the index small on large tenants.
         """
-        q = query.strip().lower()
-        found: dict = {}
-        for row in await self._all_calendar_records(force=force):
-            cid = str(row.get("id") or "")
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars())
+        agg: dict = {}
+        for row in parse_records(out):
+            cid = str(row.get("id") or "").strip()
+            low = cid.lower()
+            if not cid or "#" in low or not low.endswith("@group.calendar.google.com"):
+                continue  # skip primaries (email ids), holiday/system, imports
             summary = str(row.get("summary") or "")
-            if not cid or (q and q not in summary.lower()):
-                continue
             role = str(row.get("accessRole") or row.get("accessrole") or "")
             who = str(row.get("primaryEmail") or row.get("User") or row.get("user") or "")
-            entry = found.setdefault(cid, {"id": cid, "summary": summary, "owner": "", "role": role})
-            if role == "owner" and who:
-                entry["owner"] = who
-        return list(found.values())
+            e = agg.setdefault(cid, {"summary": summary, "owner": "", "subs": 0})
+            if summary and not e["summary"]:
+                e["summary"] = summary
+            e["subs"] += 1
+            if role == "owner" and who and not e["owner"]:
+                e["owner"] = who
+        cals = [IndexedCalendar(id=cid, summary=v["summary"], owner=v["owner"],
+                                kind="secondary", subscribers=v["subs"]) for cid, v in agg.items()]
+        # Room / resource calendars (one fast admin call). Isolated: a tenant without the Resource
+        # Calendar API shouldn't waste the expensive user scan we just completed — index without rooms.
+        try:
+            for r in await self.list_resources(""):
+                if r.email:
+                    cals.append(IndexedCalendar(id=r.email, summary=r.name or r.email, owner="",
+                                                kind="room", subscribers=0))
+        except Exception:  # noqa: BLE001 — rooms are a bonus; keep the secondary-calendar index
+            pass
+        return cals
 
     async def list_calendar_acls_for(self, calendar_id: str) -> List[CalendarACL]:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_acls_cal(calendar_id))
@@ -290,10 +298,7 @@ class GAMConnector(Connector):
         unsubscribe. Verified against GAM7 source. Irreversible — no GAM-side undo.
         """
         argv = GAMCommands.remove_calendar(owner, calendar_id)
-        res = await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=owner)
-        if res.ok:
-            self._cal_scan.invalidate()  # the deleted calendar must drop out of name search
-        return res
+        return await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=owner)
 
     # --- lifecycle (offboarding) -------------------------------------------------------
     async def reset_password(self, email: str) -> ChangeResult:

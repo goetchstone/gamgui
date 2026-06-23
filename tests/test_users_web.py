@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gamgui.core.audit import AuditLog
+from gamgui.core.calendar_index import CalendarIndex, IndexedCalendar
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
@@ -22,7 +23,8 @@ def client(tmp_path, monkeypatch):
     vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
-    state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t")
+    state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t",
+                     calendar_index=CalendarIndex(tmp_path / "calendar_index.db"))
     c = TestClient(create_app(state))
     c.get("/?token=t")
     return c
@@ -363,18 +365,58 @@ def test_calendars_user_list(client):
     assert "Team Events" in r.text
 
 
+def _seed_index(client):
+    """Populate the persistent index as a rebuild would (background build doesn't run under TestClient)."""
+    client.app.state.gamgui.calendar_index.replace_all(DOMAIN, [
+        IndexedCalendar("c_house123@group.calendar.google.com", "House Call Calendar", "alice@example.com", "secondary", 2),
+        IndexedCalendar("c_ops999@group.calendar.google.com", "Operations", "carol@example.com", "secondary", 1),
+        IndexedCalendar("aspen@resource.calendar.google.com", "Aspen Conference Room", "", "room", 0),
+    ])
+
+
 def test_calendars_search_by_name_finds_secondary_and_owner(client):
+    _seed_index(client)
     r = client.get("/calendars/search", params={"q": "house"})
     assert r.status_code == 200
     assert "House Call Calendar" in r.text
-    assert "owned by alice@example.com" in r.text   # owner identified (accessRole=owner row)
+    assert "owned by alice@example.com" in r.text   # owner identified from the index
     assert "Operations" not in r.text                # filtered out by the name query
     assert "View access" in r.text                   # click-through to details
 
 
 def test_calendars_search_also_matches_rooms(client):
+    _seed_index(client)
     r = client.get("/calendars/search", params={"q": "aspen"})
     assert "Aspen Conference Room" in r.text
+
+
+def test_calendars_search_empty_index_prompts_build(client):
+    # Nothing indexed yet -> guide the user to build it, don't silently return nothing.
+    r = client.get("/calendars/search", params={"q": "house"})
+    assert r.status_code == 200
+    assert "House Call Calendar" not in r.text
+    assert "No calendar index yet" in r.text
+
+
+def test_calendars_search_ignores_other_domains_index(client):
+    # An index built for a DIFFERENT tenant must never be served (correctness + no cross-tenant leak).
+    client.app.state.gamgui.calendar_index.replace_all("other-tenant.com", [
+        IndexedCalendar("c_x@group.calendar.google.com", "Other Co Layoffs", "x@other-tenant.com", "secondary", 1)])
+    r = client.get("/calendars/search", params={"q": "layoffs"})
+    assert "Other Co Layoffs" not in r.text          # wrong domain -> not served
+    assert "No calendar index yet" in r.text          # prompts a rebuild for the active domain
+
+
+def test_calendars_page_shows_build_cta_when_empty(client):
+    r = client.get("/calendars")
+    assert "Build index" in r.text                   # the one-time build call-to-action
+
+
+def test_calendars_index_rebuild_starts_background_job(client):
+    r = client.post("/calendars/index/rebuild")
+    assert r.status_code == 200
+    assert "Scanning every user" in r.text           # progress partial
+    assert "/calendars/index/status" in r.text       # self-poll wired up
 
 
 def test_calendars_detail_shows_access_and_event_search(client):

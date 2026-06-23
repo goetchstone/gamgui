@@ -1,0 +1,11 @@
+<div class="flex flex-wrap items-center gap-2 text-xs">
+  {% if index and index.ready %}
+    <span class="text-brand-gray">Index: {{ index.count }} calendar{{ '' if index.count == 1 else 's' }}{% if index.age %} · updated {{ index.age }}{% endif %}</span>
+    <button hx-post="/calendars/index/rebuild" hx-target="#cal-index" hx-swap="innerHTML"
+            class="rounded border border-brand-gray/50 px-2 py-0.5 text-brand-blueink hover:bg-paper transition-colors">Rebuild</button>
+  {% else %}
+    <span class="text-amber-700">No calendar index yet — build it once to search shared calendars by name.</span>
+    <button hx-post="/calendars/index/rebuild" hx-target="#cal-index" hx-swap="innerHTML"
+            class="rounded bg-brand-blue px-2.5 py-1 font-medium text-brand-white hover:bg-brand-blueink transition-colors">Build index</button>
+  {% endif %}
+</div>

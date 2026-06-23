@@ -1,0 +1,19 @@
+{% if not job.finished %}
+<div class="flex items-center gap-2 text-xs text-brand-gray"
+     hx-get="/calendars/index/status?job={{ job.id }}" hx-trigger="load delay:1500ms"
+     hx-target="#cal-index" hx-swap="innerHTML">
+  <span class="spinner"></span> Scanning every user’s calendars… this can take a minute on a large domain. You can keep working.
+</div>
+{% elif job.error %}
+<div class="flex flex-wrap items-center gap-2 text-xs text-red-700">
+  <span>Index rebuild failed: {{ job.error }}</span>
+  <button hx-post="/calendars/index/rebuild" hx-target="#cal-index" hx-swap="innerHTML"
+          class="rounded border border-red-300 px-2 py-0.5 hover:bg-red-50 transition-colors">Retry</button>
+</div>
+{% else %}
+<div class="flex flex-wrap items-center gap-2 text-xs text-emerald-700">
+  <span>Indexed {{ job.applied }} calendar{{ '' if job.applied == 1 else 's' }} just now — search is instant.</span>
+  <button hx-post="/calendars/index/rebuild" hx-target="#cal-index" hx-swap="innerHTML"
+          class="rounded border border-brand-gray/50 px-2 py-0.5 text-brand-blueink hover:bg-paper transition-colors">Rebuild</button>
+</div>
+{% endif %}

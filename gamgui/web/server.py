@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from ..core.calendar_index import CalendarIndex, default_index_path
 from ..core.connectors.gam_connector import GAMConnector
 from ..core.gam.runner import GAMRunner
 from ..core.secrets.ephemeral import sweep_stale_configs
@@ -41,6 +42,8 @@ class AppState:
     token: str = ""
     user_cache: UserCache = field(default_factory=UserCache)
     jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
+    calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
+    cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
 
     async def users(self, force: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports)."""
@@ -69,6 +72,7 @@ class AppState:
             audit_domain=domain,
             connector=connector,
             token=token or secrets.token_urlsafe(24),
+            calendar_index=CalendarIndex(default_index_path()),
         )
 
 

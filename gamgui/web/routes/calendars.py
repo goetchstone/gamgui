@@ -8,10 +8,14 @@ specific event id (a recurring master removes the whole series).
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...core.gam.errors import GAMError
+from ..jobs import start_job
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/calendars")
@@ -88,9 +92,49 @@ def _err(request: Request, message: str) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
 
 
+def _humanize_age(seconds: float) -> str:
+    s = int(max(0, seconds))
+    if s < 90:
+        return "just now"
+    if s < 5400:
+        return f"{round(s / 60)} min ago"
+    if s < 172800:
+        return f"{round(s / 3600)} h ago"
+    return f"{round(s / 86400)} d ago"
+
+
+def _index_ready(request: Request) -> bool:
+    """The index has rows AND they belong to the currently-connected domain.
+
+    The index is one file; if the admin switched tenants, the stored domain won't match the active
+    one — treat that as "needs rebuild" so we never serve (or delete against) another tenant's data.
+    """
+    st = request.app.state.gamgui
+    idx = st.calendar_index
+    if idx is None:
+        return False
+    status = idx.status()
+    return status.count > 0 and status.domain == st.audit_domain
+
+
+def _index_ctx(request: Request) -> dict:
+    """Status of the persistent calendar index for the page/status partials."""
+    idx = request.app.state.gamgui.calendar_index
+    ready = _index_ready(request)
+    if idx is None or not ready:
+        return {"count": 0, "age": "", "ready": False}
+    status = idx.status()
+    age = _humanize_age(time.time() - status.updated_at) if status.updated_at else ""
+    return {"count": status.count, "age": age, "ready": True}
+
+
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "calendars.html", {"connected": _conn(request) is not None})
+    connected = _conn(request) is not None
+    ctx = {"connected": connected}
+    if connected:
+        ctx["index"] = _index_ctx(request)
+    return TEMPLATES.TemplateResponse(request, "calendars.html", ctx)
 
 
 @router.get("/resources", response_class=HTMLResponse)
@@ -111,29 +155,65 @@ async def resources(request: Request, q: str = "") -> HTMLResponse:
 
 @router.get("/search", response_class=HTMLResponse)
 async def search(request: Request, q: str = "") -> HTMLResponse:
-    conn = _conn(request)
-    if conn is None:
+    """Instant name search, served entirely from the local index (no live domain scan)."""
+    if _conn(request) is None:
         return _err(request, "Not connected.")
-    q = q.strip()
-    items, seen, notes = [], set(), []
-    # Two independent sources — a failure in one (e.g. no Calendar Resource API) must not hide the other.
-    try:  # Room/resource calendars (matched locally).
-        for r in await conn.list_resources(q):
-            if r.email and r.email not in seen:
-                seen.add(r.email)
-                items.append({"cal_id": r.email, "label": r.name or r.email, "meta": "room"})
-    except Exception as exc:
-        notes.append(f"Room calendars unavailable: {_friendly(exc)}")
-    if q:  # Secondary calendars across the domain — only scan when there's a query (avoid pulling all).
-        try:
-            for c in await conn.search_calendars(q):
-                if c["id"] not in seen:
-                    seen.add(c["id"])
-                    meta = f"owned by {c['owner']}" if c.get("owner") else (c.get("role") or "shared")
-                    items.append({"cal_id": c["id"], "label": c["summary"] or c["id"], "meta": meta})
-        except Exception as exc:
-            notes.append(f"Domain calendar search unavailable: {_friendly(exc)}")
-    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items, "notes": notes})
+    idx = request.app.state.gamgui.calendar_index
+    if idx is None or not _index_ready(request):  # missing, empty, or built for another domain
+        return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {
+            "items": [],
+            "notes": ["No calendar index yet — build it once (the button above) to search every "
+                      "shared calendar by name. After that, searches are instant."],
+        })
+    items = []
+    for c in idx.search(q.strip()):
+        meta = "room" if c.kind == "room" else (f"owned by {c.owner}" if c.owner else "shared")
+        if c.kind != "room" and c.subscribers:
+            meta += f" · {c.subscribers} subscriber{'' if c.subscribers == 1 else 's'}"
+        items.append({"cal_id": c.id, "label": c.summary or c.id, "meta": meta})
+    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items, "notes": []})
+
+
+async def _build_index(job, conn, idx, domain: str) -> None:
+    """Background: scan the whole domain once and atomically replace the index."""
+    try:
+        job.current = "Scanning every user's calendars…"
+        cals = await conn.scan_all_calendars()
+        await asyncio.to_thread(idx.replace_all, domain, cals)
+        job.applied = len(cals)
+        job.log.append(f"Indexed {len(cals)} calendars.")
+    except Exception as exc:  # noqa: BLE001 — surface any failure in the status partial
+        job.error = str(exc)
+    finally:
+        job.current = ""
+        job.finished = True
+
+
+@router.post("/index/rebuild", response_class=HTMLResponse)
+async def index_rebuild(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return _err(request, "Not connected.")
+    if st.calendar_index is None:
+        return _err(request, "Calendar index is unavailable.")
+    existing = st.jobs.get(st.cal_index_job_id)
+    if existing is not None and not existing.finished:  # don't start a second multi-minute scan
+        return TEMPLATES.TemplateResponse(request, "_calendar_index_job.html", {"job": existing})
+    job = start_job(st.jobs, 0)
+    st.cal_index_job_id = job.id
+    job.task = asyncio.create_task(_build_index(job, st.connector, st.calendar_index, st.audit_domain))
+    return TEMPLATES.TemplateResponse(request, "_calendar_index_job.html", {"job": job})
+
+
+@router.get("/index/status", response_class=HTMLResponse)
+async def index_status(request: Request, job: str = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    j = st.jobs.get(job) if job else None
+    if j is not None:
+        # Job partial keeps polling while running, then shows a final result (no more polling).
+        return TEMPLATES.TemplateResponse(request, "_calendar_index_job.html", {"job": j})
+    # Unknown/pruned job -> the resting status strip (count + age).
+    return TEMPLATES.TemplateResponse(request, "_calendar_index_status.html", {"index": _index_ctx(request)})
 
 
 @router.get("/user", response_class=HTMLResponse)
@@ -229,6 +309,10 @@ async def delete_cal(request: Request, cal: str = Form(...), confirm: str = Form
     if not result.ok:
         return _delete_view(request, cal=cal, label=label.strip(), owner=owner,
                             error=f"Couldn't delete the calendar: {result.detail}")
+    idx = request.app.state.gamgui.calendar_index
+    if idx is not None:
+        # Off the event loop — a sync SQLite write could block briefly if a rebuild is mid-write.
+        await asyncio.to_thread(idx.remove, cal)  # drop it from search immediately (no full rebuild)
     return _delete_view(request, cal=cal, label=label.strip(), owner=owner, deleted=True)
 
 
