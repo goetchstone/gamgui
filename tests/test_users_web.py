@@ -417,6 +417,15 @@ def test_lifecycle_offboard_preview_requires_both_emails(client):
     assert "Enter both" in r.text
 
 
+def test_lifecycle_autoreply_substitutes_employee_and_manager(client):
+    # The departing user's name (from the directory) + the manager fill the auto-reply.
+    r = client.post("/lifecycle/offboard/preview", data={
+        "user": "alice@example.com", "manager": "mgr@example.com",
+        "subject": "{employee} has left", "message": "Please contact {manager}.", "days": "30"})
+    assert "Alice Anders has left" in r.text          # name resolved from the cached directory
+    assert "Please contact mgr@example.com." in r.text
+
+
 def test_lifecycle_offboard_run_completes(client):
     import re
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from gamgui.core.lifecycle import build_offboard_steps
+from gamgui.core.lifecycle import DEFAULT_MESSAGE, DEFAULT_SUBJECT, build_offboard_steps
 
 
 def test_offboard_steps_order_and_due_date():
@@ -67,3 +67,27 @@ async def test_offboard_reminder_invites_notify_target():
     await steps[-1].action(_FakeConn())  # the reminder step
     assert captured["cal"] == "mgr@e.com" and captured["attendee"] == "it@e.com"
     assert "invites it@e.com" in steps[-1].summary
+
+
+async def test_offboard_autoreply_substitutes_employee_and_manager():
+    captured = {}
+
+    class _R:
+        ok = True
+        detail = ""
+
+    class _FakeConn:
+        async def set_vacation(self, email, subject, message):
+            captured.update(email=email, subject=subject, message=message)
+            return _R()
+
+    steps = build_offboard_steps("jane@e.com", "bob@e.com", DEFAULT_SUBJECT, DEFAULT_MESSAGE,
+                                 30, date(2026, 6, 23), employee_name="Jane Doe")
+    vac = next(s for s in steps if s.key == "vacation")
+    await vac.action(_FakeConn())
+
+    assert captured["email"] == "jane@e.com"
+    assert "Jane Doe" in captured["subject"] and "Jane Doe" in captured["message"]
+    assert "bob@e.com" in captured["message"]                                   # manager as contact
+    assert "{employee}" not in captured["message"] and "{manager}" not in captured["message"]
+    assert "Jane Doe" in vac.summary and "bob@e.com" in vac.summary             # preview shows it filled

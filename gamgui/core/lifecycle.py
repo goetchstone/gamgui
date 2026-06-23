@@ -11,8 +11,19 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Awaitable, Callable, List
 
-DEFAULT_SUBJECT = "No longer with the company"
-DEFAULT_MESSAGE = "Thank you for your message. This person is no longer with the company; please reach out to our main contact."
+DEFAULT_SUBJECT = "{employee} is no longer with the company"
+DEFAULT_MESSAGE = (
+    "Thank you for your message. {employee} is no longer with the company. "
+    "For assistance, please contact {manager}."
+)
+
+
+def fill_autoreply(text: str, employee: str, manager: str) -> str:
+    """Substitute {employee} (the departing person) and {manager}/{contact} (who to reach instead)."""
+    return ((text or "")
+            .replace("{employee}", employee)
+            .replace("{manager}", manager)
+            .replace("{contact}", manager))
 
 
 @dataclass
@@ -24,9 +35,13 @@ class OffboardStep:
 
 
 def build_offboard_steps(
-    user: str, manager: str, subject: str, message: str, days: int, today: date, notify: str = ""
+    user: str, manager: str, subject: str, message: str, days: int, today: date,
+    notify: str = "", employee_name: str = "",
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence)."""
+    employee = employee_name or user
+    subject = fill_autoreply(subject, employee, manager)
+    message = fill_autoreply(message, employee, manager)
     due = today + timedelta(days=days)
     reminder_summary = f"Offboarding {user}: confirm with IT whether to delete the account"
     reminder_desc = (
@@ -41,7 +56,7 @@ def build_offboard_steps(
                      f"Give {manager} delegate access to {user}'s mailbox",
                      lambda c: c.add_delegate(user, manager)),
         OffboardStep("vacation", "Set auto-responder",
-                     "Turn on the auto-reply on the mailbox",
+                     f"Auto-reply — “{subject}”: {message}",
                      lambda c: c.set_vacation(user, subject, message)),
         OffboardStep("drive", "Transfer Drive & Docs",
                      f"Transfer {user}'s Drive/Docs ownership to {manager}",

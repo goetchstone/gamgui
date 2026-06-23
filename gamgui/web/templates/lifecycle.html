@@ -26,7 +26,8 @@
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply subject</span>
       <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
-      <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea></label>
+      <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea>
+      <span class="text-xs text-brand-gray"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically.</span></label>
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="block"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
         <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
