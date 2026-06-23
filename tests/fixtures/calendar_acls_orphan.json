@@ -1,0 +1,2 @@
+{"calendarId": "c_orphan@group.calendar.google.com", "id": "user:bob@example.com", "role": "owner", "scope": {"type": "user", "value": "bob@example.com"}}
+{"calendarId": "c_orphan@group.calendar.google.com", "id": "domain:example.com", "role": "reader", "scope": {"type": "domain", "value": "example.com"}}

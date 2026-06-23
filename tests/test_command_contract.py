@@ -40,6 +40,7 @@ REQUIRED_TOKENS = [
     "print calendars",  # a user's calendars
     "print events",     # event search
     "delete events",    # event deletion
+    "remove calendars", # PERMANENT secondary-calendar delete (NOT `delete calendars` = unsubscribe)
     "datatransfer",     # offboarding data transfer
     "add event",        # offboarding manager reminder
     "delete user",      # offboarding final delete

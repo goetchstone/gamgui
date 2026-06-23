@@ -11,7 +11,7 @@
         <span class="text-brand-gray">— {{ it.cal_id }}{% if it.meta %} · {{ it.meta }}{% endif %}</span>
       </span>
       <button class="shrink-0 text-xs font-medium text-brand-blueink hover:underline"
-              hx-get="/calendars/detail?cal={{ it.cal_id | urlencode }}" hx-target="#cal-detail" hx-swap="innerHTML">View access &amp; events →</button>
+              hx-get="/calendars/detail?cal={{ it.cal_id | urlencode }}&label={{ it.label | urlencode }}" hx-target="#cal-detail" hx-swap="innerHTML">View access &amp; events →</button>
     </li>
     {% endfor %}
   </ul>

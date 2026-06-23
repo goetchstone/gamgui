@@ -173,6 +173,18 @@ class GAMCommands:
         # Standalone form: ACLs for ANY calendar id (room/secondary) via admin access.
         return ["calendars", calendar_id, "print", "calendaracls", "formatjson"]
 
+    @staticmethod
+    def remove_calendar(owner: str, calendar_id: str) -> List[str]:
+        # PERMANENTLY delete a secondary calendar, acting as an owner (Calendars.delete).
+        # GAM footgun: `remove calendars` deletes the calendar for everyone; `delete calendars`
+        # would only unsubscribe this user (CalendarList.delete). Must impersonate an owner.
+        return ["user", owner, "remove", "calendars", calendar_id]
+
+    @staticmethod
+    def unsubscribe_calendar(email: str, calendar_id: str) -> List[str]:
+        # Just remove the calendar from one user's list (CalendarList.delete) — the calendar lives on.
+        return ["user", email, "delete", "calendars", calendar_id]
+
     _EVENT_FIELDS = "id,summary,start,end,recurrence,recurringeventid,organizer,creator,status"
 
     @staticmethod

@@ -190,7 +190,8 @@ class CalendarACL:
         return cls(
             scope_type=(stype or "user").lower(),
             scope_value=svalue,
-            role=str(_get(d, "role", "Role", default="")).strip(),
+            # Normalize role so the (load-bearing) owner guard never breaks if GAM changes casing.
+            role=str(_get(d, "role", "Role", default="")).strip().lower(),
             raw=d,
         )
 

@@ -272,6 +272,15 @@ class GAMConnector(Connector):
         argv = GAMCommands.delete_event(calendar_id, event_id, doit=True)
         return await self._run_write("delete_event", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=event_id)
 
+    async def delete_calendar(self, owner: str, calendar_id: str) -> ChangeResult:
+        """PERMANENTLY delete a secondary calendar (for everyone) by impersonating an owner.
+
+        GAM verb is `remove calendars` (= Calendars.delete); `delete calendars` would only
+        unsubscribe. Verified against GAM7 source. Irreversible — no GAM-side undo.
+        """
+        argv = GAMCommands.remove_calendar(owner, calendar_id)
+        return await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=owner)
+
     # --- lifecycle (offboarding) -------------------------------------------------------
     async def reset_password(self, email: str) -> ChangeResult:
         res = await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)

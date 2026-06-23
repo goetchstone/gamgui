@@ -131,7 +131,10 @@ fi
 
 # `gam calendars <id> print calendaracls|events ...` -> NDJSON (standalone calendar form).
 if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls" ]; then
-  cat "$GAM_MOCK_FIXTURES/calendar_acls.json"
+  case "${2:-}" in
+    *orphan*) cat "$GAM_MOCK_FIXTURES/calendar_acls_orphan.json" ;;  # sole owner is a suspended user
+    *)        cat "$GAM_MOCK_FIXTURES/calendar_acls.json" ;;
+  esac
   exit 0
 fi
 if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events" ]; then

@@ -1,0 +1,25 @@
+{% if deleted %}
+<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+  Calendar deleted{% if label %}: “{{ label }}”{% endif %}.
+</div>
+{% else %}
+<div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm">
+  <p class="font-medium text-red-800">Permanently delete this calendar?</p>
+  {% if label %}<p class="mt-1 text-brand-black">{{ label }}</p>{% endif %}
+  <p class="text-brand-gray break-all">{{ cal }}</p>
+  <p class="mt-1 text-red-700">⚠ Deletes the calendar and <b>all of its events for everyone</b> it's shared with{% if acl_count %} ({{ acl_count }} access rule{{ '' if acl_count == 1 else 's' }}){% endif %}. This <b>cannot be undone</b>. Runs as owner <b>{{ owner }}</b>.</p>
+  {% if error %}<p class="mt-2 font-medium text-red-800">{{ error }}</p>{% endif %}
+  <form class="mt-3" hx-post="/calendars/delete" hx-target="#cal-delete-zone" hx-swap="innerHTML">
+    <input type="hidden" name="cal" value="{{ cal }}" />
+    <input type="hidden" name="label" value="{{ label }}" />
+    <label class="block text-brand-black">Type <b>DELETE</b> to confirm</label>
+    <div class="mt-1 flex flex-wrap gap-2">
+      <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-300"
+             type="text" name="confirm" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="DELETE" />
+      <button class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors" type="submit">Delete calendar</button>
+      <button type="button" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+              onclick="document.getElementById('cal-delete-zone').innerHTML=''">Cancel</button>
+    </div>
+  </form>
+</div>
+{% endif %}

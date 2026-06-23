@@ -412,6 +412,74 @@ def test_calendars_event_delete_applies(client):
     assert "Event deleted." in r.text
 
 
+SEC_CAL = "c_house123@group.calendar.google.com"      # secondary; owner alice (active) per fixtures
+ORPHAN_CAL = "c_orphan@group.calendar.google.com"     # secondary; sole owner bob (suspended)
+
+
+def test_calendars_detail_shows_delete_zone_for_secondary(client):
+    r = client.get("/calendars/detail", params={"cal": SEC_CAL, "label": "House Call Calendar"})
+    assert r.status_code == 200
+    assert "Danger zone" in r.text
+    assert "Delete this calendar" in r.text                 # delete button present (active owner found)
+    assert 'hx-post="/calendars/delete/preview"' in r.text
+
+
+def test_calendars_detail_no_delete_zone_for_primary(client):
+    # A primary calendar id IS a user's email — never deletable here.
+    r = client.get("/calendars/detail", params={"cal": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Danger zone" not in r.text
+    assert "Delete this calendar" not in r.text
+
+
+def test_calendars_detail_blocks_delete_when_owner_suspended(client):
+    # Ex-employee case: the calendar's only owner is suspended -> no danger zone, explain why.
+    r = client.get("/calendars/detail", params={"cal": ORPHAN_CAL})
+    assert r.status_code == 200
+    assert "Delete this calendar" not in r.text
+    assert "suspended or no longer exist" in r.text
+
+
+def test_calendars_delete_preview_shows_owner_and_confirm(client):
+    r = client.post("/calendars/delete/preview", data={"cal": SEC_CAL, "label": "House Call Calendar", "acl_count": 3})
+    assert r.status_code == 200
+    assert "Type" in r.text and "DELETE" in r.text
+    assert "cannot be undone" in r.text
+    assert "alice@example.com" in r.text                    # the active owner we'll act as
+
+
+def test_calendars_delete_requires_exact_case_confirm(client):
+    r = client.post("/calendars/delete", data={"cal": SEC_CAL, "confirm": "delete"})  # lowercase
+    assert r.status_code == 200
+    assert "Calendar deleted" not in r.text
+    assert "capitals" in r.text                             # re-prompts, does not delete
+
+
+def test_calendars_delete_applies_with_confirm(client):
+    r = client.post("/calendars/delete", data={"cal": SEC_CAL, "confirm": "DELETE", "label": "House Call Calendar"})
+    assert r.status_code == 200
+    assert "Calendar deleted" in r.text
+
+
+def test_calendars_delete_refuses_primary(client):
+    r = client.post("/calendars/delete", data={"cal": "alice@example.com", "confirm": "DELETE"})
+    assert "Only secondary calendars" in r.text
+    assert "Calendar deleted" not in r.text
+
+
+def test_calendars_delete_refuses_resource_and_holiday(client):
+    for cal in ("aspen@resource.calendar.google.com", "en.usa#holiday@group.v.calendar.google.com"):
+        r = client.post("/calendars/delete", data={"cal": cal, "confirm": "DELETE"})
+        assert "Only secondary calendars" in r.text, cal
+        assert "Calendar deleted" not in r.text, cal
+
+
+def test_calendars_delete_refuses_when_owner_suspended(client):
+    r = client.post("/calendars/delete", data={"cal": ORPHAN_CAL, "confirm": "DELETE"})
+    assert "Calendar deleted" not in r.text
+    assert "suspended or no longer exist" in r.text
+
+
 def test_lifecycle_page_renders(client):
     r = client.get("/lifecycle")
     assert r.status_code == 200
