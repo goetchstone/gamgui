@@ -12,6 +12,7 @@ from typing import List, Optional, Sequence
 
 from ..audit import AuditLog
 from ..gam.commands import GAMCommands, build_user_query
+from ..gam.errors import GAMErrorKind
 from ..gam.models import (
     CalendarACL,
     CalendarEvent,
@@ -315,8 +316,32 @@ class GAMConnector(Connector):
         return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, target_extra=new_owner)
 
     async def remove_from_all_calendars(self, email: str) -> ChangeResult:
+        # Best-effort sweep across every user. Expected, harmless per-entity outcomes: NOT_FOUND
+        # (that user never shared with the departing user) and PERMISSION_DENIED / cannotChangeOwnAcl
+        # (the departing user's OWN primary calendar — you can't delete your own owner ACL, and it's
+        # going away with the account anyway). Only a real auth/scope failure should fail this step.
         argv = GAMCommands.remove_all_calendar_acls(email)
-        return await self._run_write("remove_from_all_calendars", email, argv, RiskLevel.LOW)
+        return await self._run_write(
+            "remove_from_all_calendars", email, argv, RiskLevel.LOW,
+            tolerate_kinds=(GAMErrorKind.NOT_FOUND, GAMErrorKind.PERMISSION_DENIED),
+        )
+
+    async def incomplete_transfers_for(self, email: str) -> List[dict]:
+        """Data transfers FROM ``email`` that haven't reached 'completed' yet.
+
+        Deleting an account before its Drive/calendar transfer completes permanently loses the
+        un-transferred data, so the delete flow checks this first. Returns [] on any read error
+        (never blocks deletion on an inability to check — just can't warn)."""
+        try:
+            out = await self.runner.run_authenticated(self.domain, GAMCommands.print_datatransfers(email))
+        except Exception:
+            return []
+        pending = []
+        for r in parse_records(out):
+            status = str(r.get("overallTransferStatusCode") or r.get("status") or "")
+            if status and status.lower() != "completed":
+                pending.append({"application": str(r.get("application") or "data"), "status": status})
+        return pending
 
     async def add_calendar_event(
         self, calendar: str, summary: str, start: str, end: str, description: str = "", attendee: str = ""
@@ -372,15 +397,24 @@ class GAMConnector(Connector):
         argv: List[str],
         risk: RiskLevel,
         target_extra: Optional[str] = None,
+        tolerate_kinds: tuple = (),
     ) -> ChangeResult:
+        """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
+        a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)."""
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=argv)
         try:
             await self.runner.run_authenticated(self.domain, argv, serialize=True)
         except Exception as exc:
+            tolerated = bool(tolerate_kinds) and getattr(exc, "kind", None) in tolerate_kinds
             self.audit.record(
-                action, target=target, argv=argv, ok=False,
-                extra={"error": str(exc), "group": target_extra} if target_extra else {"error": str(exc)},
+                action, target=target, argv=argv, ok=tolerated,
+                extra={"error": str(exc), "tolerated": tolerated,
+                       **({"group": target_extra} if target_extra else {})},
             )
+            if tolerated:
+                return ChangeResult(preview=preview, ok=True,
+                                    detail="Completed (best-effort — per-entity 'not shared' / "
+                                           "own-calendar notices are expected and were skipped).")
             return ChangeResult(preview=preview, ok=False, detail=str(exc))
         self.audit.record(
             action, target=target, argv=argv, ok=True,

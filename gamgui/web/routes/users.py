@@ -400,7 +400,13 @@ async def delete_zone(request: Request, email: str) -> HTMLResponse:
 
 @router.post("/delete/confirm", response_class=HTMLResponse)
 async def delete_confirm(request: Request, email: str = Form(...)) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_delete_zone.html", {"email": email, "confirming": True})
+    # Warn (loudly) if a Drive/calendar transfer is still running — deleting now loses that data.
+    conn = _conn(request)
+    pending = await conn.incomplete_transfers_for(email.strip()) if conn else []
+    return TEMPLATES.TemplateResponse(
+        request, "_delete_zone.html",
+        {"email": email, "confirming": True, "pending_transfers": pending},
+    )
 
 
 @router.post("/delete/apply", response_class=HTMLResponse)

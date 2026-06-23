@@ -5,6 +5,14 @@
 {% elif confirming %}
 <form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" class="space-y-2">
   <input type="hidden" name="email" value="{{ email }}" />
+  {% if pending_transfers %}
+  <div class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">
+    ⚠ <strong>Data transfer still in progress</strong> for {{ email }}:
+    {% for t in pending_transfers %}{{ t.application }} ({{ t.status }}){{ ", " if not loop.last }}{% endfor %}.
+    Deleting now <strong>permanently loses</strong> whatever hasn't transferred yet. Wait until it shows
+    <em>completed</em> before deleting.
+  </div>
+  {% endif %}
   <p class="text-sm text-red-700"><strong>Permanently delete {{ email }}?</strong> Recoverable for ~20 days, then gone. Type the email to confirm:</p>
   <input name="confirm" autocomplete="off" placeholder="{{ email }}"
          class="w-full rounded-lg border border-red-300 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />

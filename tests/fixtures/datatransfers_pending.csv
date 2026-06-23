@@ -1,0 +1,3 @@
+id,oldOwnerUserEmail,newOwnerUserEmail,overallTransferStatusCode,application
+T1,xferpending@example.com,mgr@example.com,inProgress,Drive and Docs
+T2,xferpending@example.com,mgr@example.com,completed,Calendar

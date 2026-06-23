@@ -230,6 +230,14 @@ class GAMCommands:
         return ["create", "datatransfer", old_owner, service, new_owner]
 
     @staticmethod
+    def print_datatransfers(old_owner: str = "") -> List[str]:
+        # Transfers are async; the CSV carries `overallTransferStatusCode` (completed/inProgress/...).
+        argv = ["print", "datatransfers"]
+        if old_owner:
+            argv += ["olduser", old_owner]
+        return argv
+
+    @staticmethod
     def remove_all_calendar_acls(email: str) -> List[str]:
         # Remove the departing user from EVERY other user's primary calendar (GAM loops all users).
         return ["all", "users", "delete", "calendaracls", "primary", email]

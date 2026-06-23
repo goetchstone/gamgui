@@ -632,6 +632,20 @@ def test_delete_applies_with_matching_confirm(client):
     assert "Account deleted" in r.text and "20 days" in r.text
 
 
+def test_delete_confirm_warns_on_pending_transfer(client):
+    # A user with an in-flight Drive/calendar transfer must be flagged before deletion (data loss).
+    r = client.post("/users/delete/confirm", data={"email": "xferpending@example.com"})
+    assert "Data transfer still in progress" in r.text
+    assert "Drive and Docs" in r.text
+    assert "permanently loses" in r.text
+
+
+def test_delete_confirm_no_warning_when_transfers_done(client):
+    r = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
+    assert "Data transfer still in progress" not in r.text
+    assert "Permanently delete" in r.text   # the confirm form still renders
+
+
 def test_set_signature(client):
     r = client.post("/users/signature", data={"email": "alice@example.com", "signature": "Best,\nAlice", "html": "on"})
     assert r.status_code == 200

@@ -70,6 +70,8 @@ def test_calendar_delete_vs_unsubscribe_commands():
 def test_lifecycle_commands():
     assert GAMCommands.reset_password("a@e.com") == ["update", "user", "a@e.com", "password", "random", "changepassword", "off"]
     assert GAMCommands.create_datatransfer("a@e.com", "drive", "b@e.com") == ["create", "datatransfer", "a@e.com", "drive", "b@e.com"]
+    assert GAMCommands.print_datatransfers() == ["print", "datatransfers"]
+    assert GAMCommands.print_datatransfers("a@e.com") == ["print", "datatransfers", "olduser", "a@e.com"]
     assert GAMCommands.remove_all_calendar_acls("a@e.com") == ["all", "users", "delete", "calendaracls", "primary", "a@e.com"]
     assert GAMCommands.delete_user("a@e.com") == ["delete", "user", "a@e.com"]
     ev = GAMCommands.add_calendar_event("mgr@e.com", "Confirm delete", "2026-07-23", "2026-07-24", description="d", attendee="it@e.com")

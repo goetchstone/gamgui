@@ -155,6 +155,15 @@ EOF
   exit 0
 fi
 
+# `gam print datatransfers olduser <email>` -> CSV; a *pending* user has an in-flight transfer.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "datatransfers" ]; then
+  case "${4:-}" in
+    *pending*) cat "$GAM_MOCK_FIXTURES/datatransfers_pending.csv" ;;
+    *)         printf 'id,oldOwnerUserEmail,newOwnerUserEmail,overallTransferStatusCode,application\n' ;;
+  esac
+  exit 0
+fi
+
 # Anything else is treated as a mutation: optionally simulate a token refresh, then succeed.
 if [ -n "${GAM_MOCK_REFRESH:-}" ] && [ -n "${GAMCFGDIR:-}" ] && [ -f "$GAMCFGDIR/oauth2.txt" ]; then
   printf 'refreshed-token-payload\n' > "$GAMCFGDIR/oauth2.txt"
