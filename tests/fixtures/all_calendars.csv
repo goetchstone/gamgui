@@ -1,0 +1,5 @@
+primaryEmail,calendarId,JSON
+alice@example.com,alice@example.com,"{""accessRole"": ""owner"", ""id"": ""alice@example.com"", ""summary"": ""Alice Anders"", ""primary"": true}"
+alice@example.com,c_house123@group.calendar.google.com,"{""accessRole"": ""owner"", ""id"": ""c_house123@group.calendar.google.com"", ""summary"": ""House Call Calendar""}"
+bob@example.com,c_house123@group.calendar.google.com,"{""accessRole"": ""reader"", ""id"": ""c_house123@group.calendar.google.com"", ""summary"": ""House Call Calendar""}"
+carol@example.com,c_ops999@group.calendar.google.com,"{""accessRole"": ""owner"", ""id"": ""c_ops999@group.calendar.google.com"", ""summary"": ""Operations""}"

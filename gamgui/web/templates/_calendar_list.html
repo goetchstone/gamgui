@@ -1,3 +1,6 @@
+{% for note in notes or [] %}
+<p class="mb-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800">{{ note }}</p>
+{% endfor %}
 {% if items %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
   <ul class="divide-y divide-brand-gray/20">

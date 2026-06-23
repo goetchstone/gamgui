@@ -116,9 +116,10 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "resources" ]; then
   exit 0
 fi
 
-# `gam all users print calendars ...` -> NDJSON of every user's calendars (for name search).
+# `gam all users print calendars ...` -> real GAM shape: CSV with a `primaryEmail` sibling column
+# next to the per-row `JSON` blob (the owning user is NOT inside the JSON). Used for name search.
 if [ "${1:-}" = "all" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]; then
-  cat "$GAM_MOCK_FIXTURES/all_calendars.json"
+  cat "$GAM_MOCK_FIXTURES/all_calendars.csv"
   exit 0
 fi
 

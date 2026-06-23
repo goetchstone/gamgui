@@ -46,6 +46,23 @@ def test_csv_with_key_and_json_columns():
     assert recs == [{"primaryEmail": "x@e.com", "suspended": True}]
 
 
+def test_csv_sibling_column_not_in_json_is_preserved():
+    # `gam all users print calendars formatjson` emits `primaryEmail,calendarId,JSON` where the
+    # owning user lives ONLY in the sibling column, not inside the JSON blob. Dropping it broke
+    # calendar-owner detection, so the sibling must survive (JSON still wins on shared keys).
+    text = (
+        "primaryEmail,calendarId,JSON\n"
+        'achenard@e.com,c_house@group.calendar.google.com,'
+        '"{""accessRole"":""owner"",""id"":""c_house@group.calendar.google.com"",""summary"":""House Call Calendar""}"\n'
+    )
+    recs = parse_records(text)
+    assert len(recs) == 1
+    assert recs[0]["primaryEmail"] == "achenard@e.com"          # sibling preserved
+    assert recs[0]["id"] == "c_house@group.calendar.google.com"  # from JSON
+    assert recs[0]["summary"] == "House Call Calendar"
+    assert recs[0]["accessRole"] == "owner"
+
+
 def test_plain_csv():
     text = "primaryEmail,suspended\nx@e.com,False\ny@e.com,True\n"
     recs = parse_records(text)

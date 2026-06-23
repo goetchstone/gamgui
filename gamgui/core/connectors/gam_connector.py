@@ -216,8 +216,16 @@ class GAMConnector(Connector):
 
     # --- calendars / resources / events ------------------------------------------------
     async def list_resources(self, query: str = "") -> List[ResourceCalendar]:
-        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_resources(query))
-        return [ResourceCalendar.from_json(r) for r in parse_records(out)]
+        # GAM's resource `query` is a structured filter — freeform text like "House Call Calendar"
+        # fails with "Invalid Input: filter". Rooms are a small set, so fetch all and match locally.
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_resources())
+        items = [ResourceCalendar.from_json(r) for r in parse_records(out)]
+        q = query.strip().lower()
+        if q:
+            items = [r for r in items
+                     if q in (r.name or "").lower() or q in (r.email or "").lower()
+                     or q in (r.resource_id or "").lower()]
+        return items
 
     async def list_user_calendars(self, email: str) -> List[UserCalendar]:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_user_calendars(email))

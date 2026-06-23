@@ -58,23 +58,25 @@ async def search(request: Request, q: str = "") -> HTMLResponse:
     if conn is None:
         return _err(request, "Not connected.")
     q = q.strip()
-    items, seen = [], set()
-    try:
-        # Room/resource calendars (server-side name filter).
+    items, seen, notes = [], set(), []
+    # Two independent sources — a failure in one (e.g. no Calendar Resource API) must not hide the other.
+    try:  # Room/resource calendars (matched locally).
         for r in await conn.list_resources(q):
             if r.email and r.email not in seen:
                 seen.add(r.email)
                 items.append({"cal_id": r.email, "label": r.name or r.email, "meta": "room"})
-        # Secondary calendars across the domain — only scan when there's a query (avoid pulling all).
-        if q:
+    except Exception as exc:
+        notes.append(f"Room calendars unavailable: {_friendly(exc)}")
+    if q:  # Secondary calendars across the domain — only scan when there's a query (avoid pulling all).
+        try:
             for c in await conn.search_calendars(q):
                 if c["id"] not in seen:
                     seen.add(c["id"])
                     meta = f"owned by {c['owner']}" if c.get("owner") else (c.get("role") or "shared")
                     items.append({"cal_id": c["id"], "label": c["summary"] or c["id"], "meta": meta})
-    except Exception as exc:
-        return _err(request, _friendly(exc))
-    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items})
+        except Exception as exc:
+            notes.append(f"Domain calendar search unavailable: {_friendly(exc)}")
+    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items, "notes": notes})
 
 
 @router.get("/user", response_class=HTMLResponse)

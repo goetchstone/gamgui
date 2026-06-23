@@ -86,7 +86,16 @@ def _parse_csv(text: str) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
         for row in rows:
             parsed = _try_json(row.get("JSON") or "")
-            out.extend(_coerce_to_records(parsed) if parsed is not None else [])
+            if parsed is None:
+                continue
+            # Keep the plain sibling columns (e.g. `primaryEmail`, `calendarId`) alongside the JSON
+            # record. For multi-entity output (`all users print calendars`, `print resources`) those
+            # columns carry the owning user / key, which the JSON blob itself often omits. The JSON
+            # record wins on any key conflict.
+            siblings = {k: v for k, v in row.items()
+                        if k is not None and k != "JSON" and v not in (None, "")}
+            for rec in _coerce_to_records(parsed):
+                out.append({**siblings, **rec})
         return out
     # Plain CSV: rows are already dicts; drop the None key DictReader may add for ragged rows.
     return [{k: v for k, v in row.items() if k is not None} for row in rows]

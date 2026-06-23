@@ -1,4 +1,0 @@
-{"primaryEmail": "alice@example.com", "id": "alice@example.com", "summary": "Alice Anders", "accessRole": "owner", "primary": true}
-{"primaryEmail": "alice@example.com", "id": "c_house123@group.calendar.google.com", "summary": "House Call Calendar", "accessRole": "owner", "primary": false}
-{"primaryEmail": "bob@example.com", "id": "c_house123@group.calendar.google.com", "summary": "House Call Calendar", "accessRole": "reader", "primary": false}
-{"primaryEmail": "carol@example.com", "id": "c_ops999@group.calendar.google.com", "summary": "Operations", "accessRole": "owner", "primary": false}
