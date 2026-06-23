@@ -13,8 +13,9 @@ from typing import Awaitable, Callable, List
 
 DEFAULT_SUBJECT = "{employee} is no longer with the company"
 DEFAULT_MESSAGE = (
-    "Thank you for your message. {employee} is no longer with the company. "
-    "For assistance, please contact {manager}."
+    "Thank you for your email. {employee} is no longer with the company. "
+    "For assistance, please reach out to {manager}, who will be glad to help or direct your message "
+    "to the appropriate person. We appreciate your understanding."
 )
 
 
