@@ -42,13 +42,6 @@ class _BackgroundServer:
 
 
 def main() -> None:
-    # Optional Touch ID gate (fails open if unavailable; disable with GAMGUI_NO_BIOMETRICS=1).
-    from .core.biometrics import require_unlock
-
-    if not require_unlock("unlock GamGUI"):
-        print("[GamGUI] Touch ID cancelled — exiting. (Set GAMGUI_NO_BIOMETRICS=1 to disable.)")
-        return
-
     state = AppState.create()
     app = create_app(state)
     host, port = "127.0.0.1", _free_loopback_port()

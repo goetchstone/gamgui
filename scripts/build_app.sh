@@ -23,10 +23,6 @@ fi
 
 echo "==> Installing PyInstaller (and the native window) into the venv..."
 "$PY" -m pip install -q --upgrade pyinstaller "pywebview>=5.1"
-if [ "$(uname)" = "Darwin" ]; then
-  # Touch ID gate uses LocalAuthentication; pulled in only on macOS.
-  "$PY" -m pip install -q --upgrade "pyobjc-framework-LocalAuthentication>=10.0"
-fi
 
 echo "==> Building..."
 "$PY" -m PyInstaller --noconfirm --clean gamgui.spec
