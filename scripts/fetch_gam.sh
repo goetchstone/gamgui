@@ -37,7 +37,16 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "==> Querying $REPO release ($TAG) for a macos/$ARCH asset..."
-curl -fsSL "$API" -o "$TMP/release.json"
+# Authenticate when a token is available: unauthenticated api.github.com is capped at 60 req/hr per
+# IP, and shared CI runner IPs routinely blow past it -> HTTP 403 (curl exit 56). A token raises the
+# limit to 5000/hr. Also retry to ride out transient rate-limit/network blips.
+GH_API_AUTH=()
+_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+if [ -n "$_TOKEN" ]; then
+  GH_API_AUTH=(-H "Authorization: Bearer $_TOKEN")
+fi
+curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+  -H "Accept: application/vnd.github+json" "${GH_API_AUTH[@]}" "$API" -o "$TMP/release.json"
 
 # Parse the release JSON from the file (no stdin, so a heredoc script is safe here). Print one
 # line: "<tag> <asset-name> <download-url>". Prefer the highest macosNN build if several match.
@@ -62,7 +71,7 @@ read -r VERSION ASSET_NAME ASSET_URL <<<"$PICK"
 echo "==> Selected: $ASSET_NAME (release $VERSION)"
 
 echo "==> Downloading..."
-curl -fSL --progress-bar "$ASSET_URL" -o "$TMP/gam.tar.xz"
+curl -fSL --retry 5 --retry-all-errors --retry-delay 3 --progress-bar "$ASSET_URL" -o "$TMP/gam.tar.xz"
 
 SHA="$(shasum -a 256 "$TMP/gam.tar.xz" | awk '{print $1}')"
 echo "==> SHA-256: $SHA"

@@ -44,6 +44,8 @@ jobs:
           pip install -e ".[dev]"
       - name: Vendor the pinned GAM7 binary + command reference
         run: ./scripts/fetch_gam.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # authenticate api.github.com -> avoid the 60/hr 403
       - name: Assert the vendored version matches the pin
         run: |
           python - <<'PY'
@@ -72,5 +74,7 @@ jobs:
           pip install -e ".[dev]"
       - name: Vendor the LATEST GAM7 (preview only)
         run: ./scripts/fetch_gam.sh --tag latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # authenticate api.github.com -> avoid the 60/hr 403
       - name: Command-token contract against latest (early warning)
         run: pytest -q tests/test_command_contract.py -k tokens
