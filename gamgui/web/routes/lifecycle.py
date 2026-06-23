@@ -40,8 +40,8 @@ def _days(value: str) -> int:
         return 30
 
 
-async def _employee_name(st, email: str) -> str:
-    """The departing user's display name (for the auto-reply), falling back to the email."""
+async def _resolve_name(st, email: str) -> str:
+    """A user's directory display name, falling back to the email if not found."""
     try:
         for u in await st.users():
             if u.primary_email.lower() == email.lower():
@@ -51,16 +51,31 @@ async def _employee_name(st, email: str) -> str:
     return email
 
 
+# Kept for build_offboard_steps' employee_name (subject uses the name alone, not name+email).
+async def _employee_name(st, email: str) -> str:
+    return await _resolve_name(st, email)
+
+
+async def _manager_contact(st, email: str) -> str:
+    """The manager as a sender-facing contact: 'Jane Smith (jane@x.com)', or just the email."""
+    email = email.strip()
+    if not email:
+        return "[manager]"
+    name = await _resolve_name(st, email)
+    return f"{name} ({email})" if name and name.lower() != email.lower() else email
+
+
 async def _compose_autoreply(st, user: str, manager: str, subject: str, message: str):
     """The filled auto-reply (subject, body) exactly as senders will see it.
 
-    Resolves the departing user's display name; falls back to readable placeholders for fields not
-    entered yet so the live preview always reads sensibly.
+    Resolves both names from the directory — the departing user (subject uses the name) and the
+    manager (shown as 'Name (email)' so senders can actually reach them). Falls back to readable
+    placeholders for fields not entered yet so the live preview always reads sensibly.
     """
     user, manager = user.strip(), manager.strip()
-    employee = (await _employee_name(st, user)) if user else ""
+    employee = (await _resolve_name(st, user)) if user else ""
     employee = employee or user or "[departing user]"
-    contact = manager or "[manager]"
+    contact = await _manager_contact(st, manager)
     subject = lifecycle.fill_autoreply(subject or lifecycle.DEFAULT_SUBJECT, employee, contact)
     message = lifecycle.fill_autoreply(message or lifecycle.DEFAULT_MESSAGE, employee, contact)
     return subject, message
@@ -89,7 +104,8 @@ async def offboard_preview(
     days_i = _days(days)
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, days_i, date.today(),
-        notify=notify.strip(), employee_name=await _employee_name(st, user))
+        notify=notify.strip(), employee_name=await _employee_name(st, user),
+        manager_contact=await _manager_contact(st, manager))
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
@@ -148,7 +164,8 @@ async def offboard_run(
         return _err(request, "Enter both the departing user and the manager email.")
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, _days(days), date.today(),
-        notify=notify.strip(), employee_name=await _employee_name(st, user))
+        notify=notify.strip(), employee_name=await _employee_name(st, user),
+        manager_contact=await _manager_contact(st, manager))
     job = start_job(st.jobs, len(steps))
     job.task = asyncio.create_task(_run_offboard(job, conn, steps))
     st.invalidate_users()  # password/org/etc. changed

@@ -568,6 +568,21 @@ def test_lifecycle_autoreply_live_fills_in_names(client):
     assert "{employee}" not in r.text and "{manager}" not in r.text
 
 
+def test_lifecycle_autoreply_resolves_manager_name(client):
+    # The manager is shown as "Name (email)" — pulled from the directory — so senders can reach them.
+    r = client.post("/lifecycle/offboard/autoreply", data={
+        "user": "alice@example.com", "manager": "carol@example.com", "subject": "", "message": ""})
+    assert "Carol Clark (carol@example.com)" in r.text
+    assert "{manager}" not in r.text
+
+
+def test_lifecycle_autoreply_manager_falls_back_to_email(client):
+    # Manager not in the directory -> just the email, no crash.
+    r = client.post("/lifecycle/offboard/autoreply", data={
+        "user": "alice@example.com", "manager": "external@partner.com", "subject": "", "message": ""})
+    assert "external@partner.com" in r.text
+
+
 def test_lifecycle_autoreply_live_uses_placeholders_before_entry(client):
     # With nothing entered yet, the preview still reads sensibly (bracketed placeholders, no tokens).
     r = client.post("/lifecycle/offboard/autoreply", data={"user": "", "manager": ""})

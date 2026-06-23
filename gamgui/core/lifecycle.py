@@ -37,12 +37,17 @@ class OffboardStep:
 
 def build_offboard_steps(
     user: str, manager: str, subject: str, message: str, days: int, today: date,
-    notify: str = "", employee_name: str = "",
+    notify: str = "", employee_name: str = "", manager_contact: str = "",
 ) -> List[OffboardStep]:
-    """Turn the offboard parameters into the ordered step list (the user's exact sequence)."""
+    """Turn the offboard parameters into the ordered step list (the user's exact sequence).
+
+    ``employee_name`` / ``manager_contact`` are the directory-resolved display forms used only in the
+    auto-reply TEXT; the raw ``manager`` email is still what the delegate/transfer/reminder steps act on.
+    """
     employee = employee_name or user
-    subject = fill_autoreply(subject, employee, manager)
-    message = fill_autoreply(message, employee, manager)
+    contact = manager_contact or manager
+    subject = fill_autoreply(subject, employee, contact)
+    message = fill_autoreply(message, employee, contact)
     due = today + timedelta(days=days)
     reminder_summary = f"Offboarding {user}: confirm with IT whether to delete the account"
     reminder_desc = (
