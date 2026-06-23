@@ -243,6 +243,33 @@ class GAMConnector(Connector):
         argv = GAMCommands.delete_event(calendar_id, event_id, doit=True)
         return await self._run_write("delete_event", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=event_id)
 
+    # --- lifecycle (offboarding) -------------------------------------------------------
+    async def reset_password(self, email: str) -> ChangeResult:
+        res = await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
+        if res.ok:  # best-effort: end existing sessions too
+            try:
+                await self.runner.run_authenticated(self.domain, GAMCommands.signout_user(email), serialize=True)
+            except Exception:
+                pass
+        return res
+
+    async def transfer_data(self, old_owner: str, service: str, new_owner: str) -> ChangeResult:
+        argv = GAMCommands.create_datatransfer(old_owner, service, new_owner)
+        return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, target_extra=new_owner)
+
+    async def remove_from_all_calendars(self, email: str) -> ChangeResult:
+        argv = GAMCommands.remove_all_calendar_acls(email)
+        return await self._run_write("remove_from_all_calendars", email, argv, RiskLevel.LOW)
+
+    async def add_calendar_event(
+        self, calendar: str, summary: str, start: str, end: str, description: str = "", attendee: str = ""
+    ) -> ChangeResult:
+        argv = GAMCommands.add_calendar_event(calendar, summary, start, end, description=description, attendee=attendee)
+        return await self._run_write("add_calendar_event", calendar, argv, RiskLevel.LOW)
+
+    async def delete_user(self, email: str) -> ChangeResult:
+        return await self._run_write("delete_user", email, GAMCommands.delete_user(email), RiskLevel.DESTRUCTIVE)
+
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:
         """Build dry-run previews for (un)suspending a concrete set of users.

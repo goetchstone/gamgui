@@ -22,6 +22,7 @@ class BatchJob:
     current: str = ""
     finished: bool = False
     error: Optional[str] = None
+    log: List[str] = field(default_factory=list)  # per-step outcome lines (multi-step routines)
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
 

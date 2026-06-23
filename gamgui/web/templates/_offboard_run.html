@@ -1,0 +1,20 @@
+{% if job and not job.finished %}
+<div hx-get="/lifecycle/offboard/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
+     hx-target="this" hx-swap="outerHTML"
+     class="rounded-2xl border border-brand-blue/30 bg-brand-blue/5 p-5 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2">
+    <span class="spinner"></span>
+    <span>Offboarding… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · {{ job.current }}{% endif %}</span>
+  </div>
+  <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
+    <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
+  </div>
+  {% if job.log %}<ul class="mt-3 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% elif job %}
+<div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p class="font-medium">Offboarding complete — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}.</p>
+  {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+  <p class="mt-3 text-xs">The manager now has a calendar reminder. When they confirm it's safe, delete the account from the user's detail page.</p>
+</div>
+{% endif %}

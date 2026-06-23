@@ -1,0 +1,22 @@
+{% if deleted %}
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+  Account deleted. Recoverable for ~20 days (Admin Console, or <code>gam undelete user {{ email }}</code>).
+</div>
+{% elif confirming %}
+<form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" class="space-y-2">
+  <input type="hidden" name="email" value="{{ email }}" />
+  <p class="text-sm text-red-700"><strong>Permanently delete {{ email }}?</strong> Recoverable for ~20 days, then gone. Type the email to confirm:</p>
+  <input name="confirm" autocomplete="off" placeholder="{{ email }}"
+         class="w-full rounded-lg border border-red-300 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
+  {% if error %}<p class="text-xs text-red-700">{{ error }}</p>{% endif %}
+  <div class="flex gap-2">
+    <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Permanently delete</button>
+    <button type="button" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+            hx-get="/users/delete/zone?email={{ email | urlencode }}" hx-target="#delete-zone" hx-swap="innerHTML">Cancel</button>
+  </div>
+</form>
+{% else %}
+<button class="inline-flex items-center rounded-lg border border-red-300 px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors"
+        hx-post="/users/delete/confirm" hx-target="#delete-zone" hx-swap="innerHTML"
+        hx-vals='{"email": {{ email | tojson }} }'>Delete account…</button>
+{% endif %}

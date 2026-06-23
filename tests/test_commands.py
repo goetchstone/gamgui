@@ -55,6 +55,16 @@ def test_calendar_event_commands():
     assert "doit" not in GAMCommands.delete_event("room@x", "evt1", doit=False)
 
 
+def test_lifecycle_commands():
+    assert GAMCommands.reset_password("a@e.com") == ["update", "user", "a@e.com", "password", "random", "changepassword", "off"]
+    assert GAMCommands.create_datatransfer("a@e.com", "drive", "b@e.com") == ["create", "datatransfer", "a@e.com", "drive", "b@e.com"]
+    assert GAMCommands.remove_all_calendar_acls("a@e.com") == ["all", "users", "delete", "calendaracls", "primary", "a@e.com"]
+    assert GAMCommands.delete_user("a@e.com") == ["delete", "user", "a@e.com"]
+    ev = GAMCommands.add_calendar_event("mgr@e.com", "Confirm delete", "2026-07-23", "2026-07-24", description="d", attendee="it@e.com")
+    assert ev[:7] == ["user", "mgr@e.com", "add", "event", "primary", "summary", "Confirm delete"]
+    assert "start" in ev and "allday" in ev and "2026-07-23" in ev and "description" in ev and "attendee" in ev
+
+
 def test_set_suspended_on_off():
     assert GAMCommands.set_suspended("a@e.com", True) == ["update", "user", "a@e.com", "suspended", "on"]
     assert GAMCommands.set_suspended("a@e.com", False) == ["update", "user", "a@e.com", "suspended", "off"]

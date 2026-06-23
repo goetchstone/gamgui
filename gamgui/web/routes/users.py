@@ -392,6 +392,34 @@ async def calendar_remove(request: Request, email: str = Form(...), scope: str =
     return await _calendar_partial(request, conn, email)
 
 
+# --- delete account (irreversible — guarded, type-the-email confirm) ---------------------
+@router.get("/delete/zone", response_class=HTMLResponse)
+async def delete_zone(request: Request, email: str) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, "_delete_zone.html", {"email": email})
+
+
+@router.post("/delete/confirm", response_class=HTMLResponse)
+async def delete_confirm(request: Request, email: str = Form(...)) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, "_delete_zone.html", {"email": email, "confirming": True})
+
+
+@router.post("/delete/apply", response_class=HTMLResponse)
+async def delete_apply(request: Request, email: str = Form(...), confirm: str = Form("")) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    if confirm.strip().lower() != email.strip().lower():
+        return TEMPLATES.TemplateResponse(
+            request, "_delete_zone.html",
+            {"email": email, "confirming": True, "error": "Type the exact email address to confirm."},
+        )
+    result = await conn.delete_user(email)
+    if not result.ok:
+        return _err(request, f"Couldn't delete the account: {result.detail}")
+    request.app.state.gamgui.invalidate_users()
+    return TEMPLATES.TemplateResponse(request, "_delete_zone.html", {"email": email, "deleted": True})
+
+
 # --- vacation / auto-responder (lazy-loaded into the detail page) ----------------------
 @router.get("/vacation", response_class=HTMLResponse)
 async def vacation_get(request: Request, email: str) -> HTMLResponse:

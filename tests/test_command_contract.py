@@ -40,6 +40,9 @@ REQUIRED_TOKENS = [
     "print calendars",  # a user's calendars
     "print events",     # event search
     "delete events",    # event deletion
+    "datatransfer",     # offboarding data transfer
+    "add event",        # offboarding manager reminder
+    "delete user",      # offboarding final delete
     "report users",   # usage report
     "serviceaccount", # check serviceaccount (setup verify)
     "formatjson",     # JSON output mode we parse

@@ -197,6 +197,46 @@ class GAMCommands:
         argv += ["sendupdates", "none"]
         return argv
 
+    # --- lifecycle (offboarding) -------------------------------------------------------
+    @staticmethod
+    def reset_password(email: str) -> List[str]:
+        # Random password + no change-prompt: locks sign-in while the mailbox stays live.
+        return ["update", "user", email, "password", "random", "changepassword", "off"]
+
+    @staticmethod
+    def signout_user(email: str) -> List[str]:
+        return ["user", email, "signout"]
+
+    @staticmethod
+    def create_datatransfer(old_owner: str, service: str, new_owner: str) -> List[str]:
+        # service: "drive" (Drive & Docs) | "calendar".
+        return ["create", "datatransfer", old_owner, service, new_owner]
+
+    @staticmethod
+    def remove_all_calendar_acls(email: str) -> List[str]:
+        # Remove the departing user from EVERY other user's primary calendar (GAM loops all users).
+        return ["all", "users", "delete", "calendaracls", "primary", email]
+
+    @staticmethod
+    def add_calendar_event(
+        calendar: str, summary: str, start: str, end: str, description: str = "", attendee: str = ""
+    ) -> List[str]:
+        argv = ["user", calendar, "add", "event", "primary",
+                "summary", summary, "start", "allday", start, "end", "allday", end]
+        if description:
+            argv += ["description", description]
+        if attendee:
+            argv += ["attendee", attendee]
+        return argv
+
+    @staticmethod
+    def delete_user(email: str) -> List[str]:
+        return ["delete", "user", email]
+
+    @staticmethod
+    def undelete_user(email: str) -> List[str]:
+        return ["undelete", "user", email]
+
     # --- gmail: signature / delegate / forwarding / vacation --------------------------
     @staticmethod
     def set_signature(email: str, signature: str, html: bool = True) -> List[str]:

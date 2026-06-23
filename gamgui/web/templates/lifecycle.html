@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Lifecycle — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+{% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="space-y-6">
+  <div>
+    <p class="eyebrow text-brand-blue">Lifecycle</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Offboard a user</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Runs the full sequence in order: reset password → delegate → auto-responder → transfer Drive → transfer calendars → remove from everyone's calendars → drop a reminder on the manager. The account is <strong>not</strong> deleted — when the manager confirms it's safe, IT deletes it from the user's detail page.</p>
+  </div>
+
+  <form id="offboard-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block"><span class="text-sm text-brand-blueink">Departing user</span>
+        <input class="{{ fld }}" type="email" name="user" placeholder="leaver@domain.com" required /></label>
+      <label class="block"><span class="text-sm text-brand-blueink">Manager (delegate / data + reminder)</span>
+        <input class="{{ fld }}" type="email" name="manager" placeholder="manager@domain.com" required /></label>
+    </div>
+    <label class="block"><span class="text-sm text-brand-blueink">Auto-reply subject</span>
+      <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
+    <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
+      <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea></label>
+    <label class="block w-40"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
+      <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
+    <button type="button"
+            class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+            hx-post="/lifecycle/offboard/preview" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML">Preview steps</button>
+  </form>
+
+  <div id="offboard-result"></div>
+</div>
+{% endif %}
+{% endblock %}

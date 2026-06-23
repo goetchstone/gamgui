@@ -398,6 +398,60 @@ def test_calendars_event_delete_applies(client):
     assert "Event deleted." in r.text
 
 
+def test_lifecycle_page_renders(client):
+    r = client.get("/lifecycle")
+    assert r.status_code == 200
+    assert "Offboard a user" in r.text and 'name="manager"' in r.text
+
+
+def test_lifecycle_offboard_preview_lists_steps(client):
+    r = client.post("/lifecycle/offboard/preview",
+                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
+    assert r.status_code == 200
+    assert "7 steps" in r.text
+    assert "Reset password" in r.text and "Transfer Drive" in r.text and "Run offboarding" in r.text
+
+
+def test_lifecycle_offboard_preview_requires_both_emails(client):
+    r = client.post("/lifecycle/offboard/preview", data={"user": "leaver@example.com", "manager": "  "})
+    assert "Enter both" in r.text
+
+
+def test_lifecycle_offboard_run_completes(client):
+    import re
+
+    r = client.post("/lifecycle/offboard/run",
+                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
+    assert r.status_code == 200
+    m = re.search(r"/lifecycle/offboard/status\?job=([A-Za-z0-9_\-]+)", r.text)
+    assert m, f"expected a polling panel, got: {r.text[:200]}"
+    job = m.group(1)
+    last = ""
+    for _ in range(40):
+        last = client.get("/lifecycle/offboard/status", params={"job": job}).text
+        if "Offboarding complete" in last:
+            break
+    assert "Offboarding complete" in last  # the routine ran to completion
+
+
+def test_delete_zone_shows_button_then_typed_confirm(client):
+    r = client.get("/users/delete/zone", params={"email": "alice@example.com"})
+    assert "Delete account" in r.text
+    c = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
+    assert "Permanently delete" in c.text and 'name="confirm"' in c.text
+
+
+def test_delete_requires_exact_email_match(client):
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirm": "wrong@example.com"})
+    assert "Type the exact email" in r.text
+
+
+def test_delete_applies_with_matching_confirm(client):
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirm": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Account deleted" in r.text and "20 days" in r.text
+
+
 def test_set_signature(client):
     r = client.post("/users/signature", data={"email": "alice@example.com", "signature": "Best,\nAlice", "html": "on"})
     assert r.status_code == 200
