@@ -52,7 +52,7 @@ async def page(request: Request) -> HTMLResponse:
 @router.post("/offboard/preview", response_class=HTMLResponse)
 async def offboard_preview(
     request: Request, user: str = Form(...), manager: str = Form(...),
-    subject: str = Form(""), message: str = Form(""), days: str = Form("30"),
+    subject: str = Form(""), message: str = Form(""), days: str = Form("30"), notify: str = Form(""),
 ) -> HTMLResponse:
     if _conn(request) is None:
         return _err(request, "Not connected.")
@@ -60,7 +60,7 @@ async def offboard_preview(
     if not user or not manager:
         return _err(request, "Enter both the departing user and the manager email.")
     days_i = _days(days)
-    steps = lifecycle.build_offboard_steps(user, manager, subject, message, days_i, date.today())
+    steps = lifecycle.build_offboard_steps(user, manager, subject, message, days_i, date.today(), notify=notify.strip())
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
         {"steps": steps, "user": user, "manager": manager, "days": days_i},
@@ -92,7 +92,7 @@ async def _run_offboard(job, conn, steps) -> None:
 @router.post("/offboard/run", response_class=HTMLResponse)
 async def offboard_run(
     request: Request, user: str = Form(...), manager: str = Form(...),
-    subject: str = Form(""), message: str = Form(""), days: str = Form("30"),
+    subject: str = Form(""), message: str = Form(""), days: str = Form("30"), notify: str = Form(""),
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
@@ -101,7 +101,7 @@ async def offboard_run(
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return _err(request, "Enter both the departing user and the manager email.")
-    steps = lifecycle.build_offboard_steps(user, manager, subject, message, _days(days), date.today())
+    steps = lifecycle.build_offboard_steps(user, manager, subject, message, _days(days), date.today(), notify=notify.strip())
     job = start_job(st.jobs, len(steps))
     job.task = asyncio.create_task(_run_offboard(job, conn, steps))
     st.invalidate_users()  # password/org/etc. changed

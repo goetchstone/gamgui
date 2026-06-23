@@ -27,8 +27,12 @@
       <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
       <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea></label>
-    <label class="block w-40"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
-      <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
+        <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
+      <label class="block"><span class="text-sm text-brand-blueink">Also invite to the reminder (IT/HR) — optional</span>
+        <input class="{{ fld }}" type="email" name="notify" placeholder="it@domain.com" /></label>
+    </div>
     <button type="button"
             class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
             hx-post="/lifecycle/offboard/preview" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML">Preview steps</button>

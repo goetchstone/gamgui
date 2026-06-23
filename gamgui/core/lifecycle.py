@@ -24,7 +24,7 @@ class OffboardStep:
 
 
 def build_offboard_steps(
-    user: str, manager: str, subject: str, message: str, days: int, today: date
+    user: str, manager: str, subject: str, message: str, days: int, today: date, notify: str = ""
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence)."""
     due = today + timedelta(days=days)
@@ -53,8 +53,10 @@ def build_offboard_steps(
                      f"Remove {user} from other users' calendars",
                      lambda c: c.remove_from_all_calendars(user)),
         OffboardStep("reminder", f"{days}-day reminder for {manager}",
-                     f"Add a calendar reminder on {manager} for {due.isoformat()} to confirm deletion",
+                     f"Add a calendar reminder on {manager}"
+                     + (f" (also invites {notify})" if notify else "")
+                     + f" for {due.isoformat()} to confirm deletion",
                      lambda c: c.add_calendar_event(
                          manager, reminder_summary, due.isoformat(),
-                         (due + timedelta(days=1)).isoformat(), description=reminder_desc)),
+                         (due + timedelta(days=1)).isoformat(), description=reminder_desc, attendee=notify)),
     ]

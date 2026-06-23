@@ -49,3 +49,21 @@ async def test_offboard_steps_call_the_right_connector_methods():
     ]
     transfers = [c for c in calls if c[0] == "transfer_data"]
     assert transfers[0][2] == "drive" and transfers[1][2] == "calendar"  # drive then calendar
+
+
+async def test_offboard_reminder_invites_notify_target():
+    captured = {}
+
+    class _R:
+        ok = True
+        detail = ""
+
+    class _FakeConn:
+        async def add_calendar_event(self, cal, summary, start, end, description="", attendee=""):
+            captured.update(cal=cal, attendee=attendee)
+            return _R()
+
+    steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "s", "m", 30, date(2026, 6, 23), notify="it@e.com")
+    await steps[-1].action(_FakeConn())  # the reminder step
+    assert captured["cal"] == "mgr@e.com" and captured["attendee"] == "it@e.com"
+    assert "invites it@e.com" in steps[-1].summary
