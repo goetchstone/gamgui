@@ -8,15 +8,41 @@ without memorizing CLI commands, with your credentials kept in the macOS **Keych
 > signatures/delegates/forwarding, advanced group settings, bulk operations, reporting). GamGUI
 > puts a safe, native front end on top of it.
 
+<!--
+Screenshots: drop PNGs into docs/screenshots/ (see that folder's README for the recommended shots),
+then uncomment these to show them here:
+![Users](docs/screenshots/users.png)
+![Signature designer](docs/screenshots/signatures.png)
+![Calendars](docs/screenshots/calendars.png)
+![Offboarding](docs/screenshots/lifecycle.png)
+-->
+
 ## Status
 
-Actively developed and used against live Google Workspace tenants. Working today: first-run setup
-wizard, user list/search/detail, **Gmail signatures** (a scoped designer with a live preview + bulk
-apply), mailbox delegates, vacation responders, group membership (incl. a drag-and-drop board),
-guarded suspend, directory profile editing (title/department/location) with a bulk "assign store"
-tool, and a reports screen (2SV gaps, inactive accounts, admins, missing recovery, and
-directory-completeness). You build and run it yourself; it is not yet notarized for distribution to
-other Macs.
+Actively developed and used against live Google Workspace tenants. Working today:
+
+- **Setup wizard** — first-run GAM project / OAuth / domain-wide-delegation flow.
+- **Users** — fast list/search/detail (cached + paginated), profile editing
+  (title/department/location) with a bulk "assign store" tool, mailbox **delegates**, **vacation
+  responders**, and a guarded **suspend**.
+- **Gmail signatures** — a scoped designer with variables, a live preview, and bulk apply.
+- **Groups** — membership management, including a drag-and-drop board.
+- **Calendars** — find any shared calendar by name (instant, from a local index that scales to large
+  tenants), see who has access, search a calendar's events, and remove a stray event or an entire
+  orphaned secondary calendar.
+- **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
+  transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
+  live preview of the generated auto-reply.
+- **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, and directory completeness.
+
+You build and run it yourself; it is not yet notarized for distribution to other Macs.
+
+> **Destructive actions are guarded — but verify before trusting them on production.** Suspend,
+> account delete, calendar/event delete, data transfer, the offboarding routine, and bulk operations
+> all run behind a *preview → typed confirmation → audit-logged* path. A few of the newer ones
+> haven't yet been exercised against a live tenant, so run them once on a **throwaway test
+> user/event** before relying on them. Account deletion is reversible only within Google's ~20-day
+> window.
 
 ## Design goals
 
@@ -68,7 +94,7 @@ make run       # launch the app (native window; prints a browser URL if pywebvie
 flexible one, use `pip install -r requirements.txt`.
 
 The GAM7 binary is **not committed** (platform-specific, large) — `make gam` / `scripts/fetch_gam.sh`
-fetches the pinned version (`v7.46.01`) from the official releases and records its checksum.
+fetches the pinned version (`v7.46.02`) from the official releases and records its checksum.
 
 ### Build a standalone `.app` (macOS)
 
