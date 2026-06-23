@@ -116,6 +116,12 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "resources" ]; then
   exit 0
 fi
 
+# `gam all users print calendars ...` -> NDJSON of every user's calendars (for name search).
+if [ "${1:-}" = "all" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]; then
+  cat "$GAM_MOCK_FIXTURES/all_calendars.json"
+  exit 0
+fi
+
 # `gam user <email> print calendars ...` -> NDJSON of a user's calendars.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]; then
   cat "$GAM_MOCK_FIXTURES/user_calendars.json"

@@ -348,7 +348,7 @@ def test_calendar_access_add_requires_target(client):
 def test_calendars_page_renders(client):
     r = client.get("/calendars")
     assert r.status_code == 200
-    assert "Calendars" in r.text and "Room / resource calendars" in r.text
+    assert "Calendars" in r.text and "Find a calendar by name" in r.text
 
 
 def test_calendars_resources_search(client):
@@ -361,6 +361,20 @@ def test_calendars_user_list(client):
     r = client.get("/calendars/user", params={"email": "alice@example.com"})
     assert r.status_code == 200
     assert "Team Events" in r.text
+
+
+def test_calendars_search_by_name_finds_secondary_and_owner(client):
+    r = client.get("/calendars/search", params={"q": "house"})
+    assert r.status_code == 200
+    assert "House Call Calendar" in r.text
+    assert "owned by alice@example.com" in r.text   # owner identified (accessRole=owner row)
+    assert "Operations" not in r.text                # filtered out by the name query
+    assert "View access" in r.text                   # click-through to details
+
+
+def test_calendars_search_also_matches_rooms(client):
+    r = client.get("/calendars/search", params={"q": "aspen"})
+    assert "Aspen Conference Room" in r.text
 
 
 def test_calendars_detail_shows_access_and_event_search(client):

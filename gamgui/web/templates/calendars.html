@@ -18,12 +18,11 @@
 
   <div class="grid gap-5 lg:grid-cols-2">
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-      <h2 class="eyebrow text-brand-gray">Room / resource calendars</h2>
-      <input class="{{ fld }} mt-2" type="search" name="q" placeholder="Search rooms…"
-             hx-get="/calendars/resources" hx-target="#cal-results" hx-swap="innerHTML"
-             hx-trigger="keyup changed delay:300ms, search" hx-include="this" />
-      <button class="mt-2 text-sm text-brand-blueink hover:underline"
-              hx-get="/calendars/resources" hx-target="#cal-results" hx-swap="innerHTML">List all rooms</button>
+      <h2 class="eyebrow text-brand-gray">Find a calendar by name</h2>
+      <input class="{{ fld }} mt-2" type="search" name="q" placeholder="e.g. House Call Calendar"
+             hx-get="/calendars/search" hx-target="#cal-results" hx-swap="innerHTML"
+             hx-trigger="keyup changed delay:400ms, search" hx-include="this" />
+      <p class="mt-2 text-xs text-brand-gray">Searches room calendars and shared/secondary calendars across the domain, and shows who owns each. <button class="text-brand-blueink hover:underline" hx-get="/calendars/resources" hx-target="#cal-results" hx-swap="innerHTML">List all rooms</button></p>
     </div>
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
       <h2 class="eyebrow text-brand-gray">A user's calendars</h2>

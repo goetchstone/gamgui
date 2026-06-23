@@ -223,6 +223,27 @@ class GAMConnector(Connector):
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_user_calendars(email))
         return [UserCalendar.from_json(r) for r in parse_records(out)]
 
+    async def search_calendars(self, query: str) -> List[dict]:
+        """Find calendars across the domain whose name contains ``query``; identify the owner.
+
+        Scans every user's calendar list (one ``all users print calendars`` call), filters by summary,
+        dedupes by calendar id, and records the owner (the user whose row has accessRole=owner).
+        """
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars())
+        q = query.strip().lower()
+        found: dict = {}
+        for row in parse_records(out):
+            cid = str(row.get("id") or "")
+            summary = str(row.get("summary") or "")
+            if not cid or (q and q not in summary.lower()):
+                continue
+            role = str(row.get("accessRole") or row.get("accessrole") or "")
+            who = str(row.get("primaryEmail") or row.get("User") or row.get("user") or "")
+            entry = found.setdefault(cid, {"id": cid, "summary": summary, "owner": "", "role": role})
+            if role == "owner" and who:
+                entry["owner"] = who
+        return list(found.values())
+
     async def list_calendar_acls_for(self, calendar_id: str) -> List[CalendarACL]:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_acls_cal(calendar_id))
         return [CalendarACL.from_json(r) for r in parse_records(out)]

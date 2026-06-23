@@ -43,6 +43,7 @@ def test_calendar_event_commands():
     assert GAMCommands.print_resources("aspen")[:4] == ["print", "resources", "fields", "id,name,email,resourcetype,buildingid"]
     assert GAMCommands.print_resources("aspen")[-3:] == ["query", "aspen", "formatjson"]
     assert GAMCommands.print_user_calendars("a@e.com")[:4] == ["user", "a@e.com", "print", "calendars"]
+    assert GAMCommands.print_all_calendars()[:4] == ["all", "users", "print", "calendars"]
     assert GAMCommands.print_calendar_acls_cal("room@x") == ["calendars", "room@x", "print", "calendaracls", "formatjson"]
 
     ev = GAMCommands.print_events("room@x", query="standup", after="2026-01-01")

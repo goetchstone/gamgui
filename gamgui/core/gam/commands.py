@@ -164,6 +164,11 @@ class GAMCommands:
         return ["user", email, "print", "calendars", "fields", "id,summary,accessrole,primary", "formatjson"]
 
     @staticmethod
+    def print_all_calendars() -> List[str]:
+        # Every user's calendar list (incl. secondary calendars) — filtered by name in Python.
+        return ["all", "users", "print", "calendars", "fields", "id,summary,accessrole,primary", "formatjson"]
+
+    @staticmethod
     def print_calendar_acls_cal(calendar_id: str) -> List[str]:
         # Standalone form: ACLs for ANY calendar id (room/secondary) via admin access.
         return ["calendars", calendar_id, "print", "calendaracls", "formatjson"]

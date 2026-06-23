@@ -52,6 +52,31 @@ async def resources(request: Request, q: str = "") -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items})
 
 
+@router.get("/search", response_class=HTMLResponse)
+async def search(request: Request, q: str = "") -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, "Not connected.")
+    q = q.strip()
+    items, seen = [], set()
+    try:
+        # Room/resource calendars (server-side name filter).
+        for r in await conn.list_resources(q):
+            if r.email and r.email not in seen:
+                seen.add(r.email)
+                items.append({"cal_id": r.email, "label": r.name or r.email, "meta": "room"})
+        # Secondary calendars across the domain — only scan when there's a query (avoid pulling all).
+        if q:
+            for c in await conn.search_calendars(q):
+                if c["id"] not in seen:
+                    seen.add(c["id"])
+                    meta = f"owned by {c['owner']}" if c.get("owner") else (c.get("role") or "shared")
+                    items.append({"cal_id": c["id"], "label": c["summary"] or c["id"], "meta": meta})
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items})
+
+
 @router.get("/user", response_class=HTMLResponse)
 async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
     conn = _conn(request)
