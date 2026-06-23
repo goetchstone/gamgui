@@ -28,10 +28,14 @@ echo "==> Building..."
 "$PY" -m PyInstaller --noconfirm --clean gamgui.spec
 
 APP="dist/GamGUI.app"
-# Optional: sign with a STABLE self-signed identity so macOS "Always Allow" sticks across rebuilds
-# and the Keychain stops prompting. Create a free "Code Signing" cert in Keychain Access once, then:
-#   export CODESIGN_IDENTITY="GamGUI Local"   # the cert's name
-# Leave it unset to keep PyInstaller's ad-hoc signature (builds for anyone, but macOS re-prompts).
+# Sign with a STABLE self-signed identity so macOS "Always Allow" sticks across rebuilds and the
+# Keychain stops re-prompting. Create a free "Code Signing" cert (Keychain Access, or the CLI in the
+# README) named "GamGUI Local" once; builds then pick it up automatically. Override with
+# CODESIGN_IDENTITY=… ; leave it with no such cert to keep PyInstaller's ad-hoc signature.
+if [ -z "${CODESIGN_IDENTITY:-}" ] && [ "$(uname)" = "Darwin" ] \
+   && security find-identity -p codesigning 2>/dev/null | grep -q "GamGUI Local"; then
+  CODESIGN_IDENTITY="GamGUI Local"  # auto-use the local signing cert if it exists
+fi
 if [ -n "${CODESIGN_IDENTITY:-}" ] && [ "$(uname)" = "Darwin" ]; then
   echo "==> Codesigning with stable identity: $CODESIGN_IDENTITY"
   GAM_BIN="$(find "$APP" -type f -name gam -path '*resources/gam7/*' 2>/dev/null | head -1)"

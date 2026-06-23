@@ -83,19 +83,28 @@ binary); running it yourself needs no signing.
 
 By default the app is **ad-hoc signed**, so macOS treats each rebuild as a new identity and
 re-prompts for the Keychain on every launch — and "Always Allow" never sticks. The fix (no Apple
-Developer account needed — that's only for shipping the app to *other* people's Macs) is to build
-with a **stable self-signed certificate**. Once macOS sees a consistent signing identity, your
-one-time **Always Allow** persists across launches *and* rebuilds:
+Developer account needed — that's only for shipping the app to *other* people's Macs) is a **stable
+self-signed code-signing cert** named `GamGUI Local`. Once it exists in your login keychain,
+`scripts/build_app.sh` signs with it **automatically**, so your one-time **Always Allow** persists
+across launches *and* rebuilds.
 
-  1. Keychain Access → *Certificate Assistant → Create a Certificate…*
-  2. Name it e.g. `GamGUI Local`, Identity Type **Self-Signed Root**, Certificate Type **Code
-     Signing**; create it (login keychain).
-  3. Build signed with it:
-     ```bash
-     CODESIGN_IDENTITY="GamGUI Local" make app
-     ```
-  The first launch still asks once per credential; click **Always Allow** on each and you won't be
-  prompted again.
+Create it once, either way:
+
+- **GUI:** Keychain Access → *Certificate Assistant → Create a Certificate…* → name it `GamGUI
+  Local`, Identity Type **Self-Signed Root**, Certificate Type **Code Signing**.
+- **CLI:**
+  ```bash
+  D=$(mktemp -d)
+  printf '[req]\ndistinguished_name=dn\nx509_extensions=v3\nprompt=no\n[dn]\nCN=GamGUI Local\n[v3]\nbasicConstraints=critical,CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n' > "$D/c.cnf"
+  openssl req -x509 -newkey rsa:2048 -keyout "$D/k.pem" -out "$D/c.pem" -days 3650 -nodes -config "$D/c.cnf"
+  openssl pkcs12 -export -inkey "$D/k.pem" -in "$D/c.pem" -out "$D/id.p12" -passout pass:gamgui-local -name "GamGUI Local"
+  security import "$D/id.p12" -P gamgui-local -T /usr/bin/codesign && rm -rf "$D"
+  ```
+
+Then rebuild (`make app`). The first launch still asks once **per credential** — click **Always
+Allow** on each — and you won't be prompted again, even after future rebuilds. (Override the cert
+name with `CODESIGN_IDENTITY=…`. The cert is local and not trusted for distribution by design — it
+only quiets your own Keychain.)
 
 The app also caches the three secrets in-process for a sliding window (default 5 min) so a burst of
 actions doesn't re-prompt; tune with `GAMGUI_SECRET_CACHE_TTL` (seconds; `0` disables).
