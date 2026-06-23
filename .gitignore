@@ -21,5 +21,8 @@ client_secrets.json
 *.local
 .gamgui/
 
+# Local editor / agent tooling state (don't rely on a personal global gitignore)
+.claude/
+
 # macOS
 .DS_Store
