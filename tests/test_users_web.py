@@ -550,6 +550,38 @@ def test_lifecycle_autoreply_substitutes_employee_and_manager(client):
     assert "Please contact mgr@example.com." in r.text
 
 
+def test_lifecycle_page_has_live_autoreply_preview(client):
+    r = client.get("/lifecycle")
+    assert 'id="autoreply-preview"' in r.text
+    assert "/lifecycle/offboard/autoreply" in r.text          # wired to refresh as you type
+
+
+def test_lifecycle_autoreply_live_fills_in_names(client):
+    # As soon as user + manager are entered, the generated message is shown — no raw tokens.
+    r = client.post("/lifecycle/offboard/autoreply",
+                    data={"user": "alice@example.com", "manager": "mgr@example.com",
+                          "subject": "", "message": ""})
+    assert r.status_code == 200
+    assert "Auto-reply senders will receive" in r.text
+    assert "Alice Anders is no longer with the company" in r.text   # default subject, name resolved
+    assert "mgr@example.com" in r.text                              # contact filled in
+    assert "{employee}" not in r.text and "{manager}" not in r.text
+
+
+def test_lifecycle_autoreply_live_uses_placeholders_before_entry(client):
+    # With nothing entered yet, the preview still reads sensibly (bracketed placeholders, no tokens).
+    r = client.post("/lifecycle/offboard/autoreply", data={"user": "", "manager": ""})
+    assert "[departing user]" in r.text and "[manager]" in r.text
+    assert "{employee}" not in r.text and "{manager}" not in r.text
+
+
+def test_lifecycle_preview_shows_autoreply_block(client):
+    r = client.post("/lifecycle/offboard/preview", data={
+        "user": "alice@example.com", "manager": "mgr@example.com", "days": "30"})
+    assert "Auto-reply senders will receive" in r.text          # prominent block in the step preview
+    assert "Alice Anders is no longer with the company" in r.text
+
+
 def test_lifecycle_offboard_run_completes(client):
     import re
 

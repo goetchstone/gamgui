@@ -5,6 +5,7 @@
     <li><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-gray">— {{ s.summary }}</span></li>
     {% endfor %}
   </ol>
+  <div class="mt-4">{% with subject=ar_subject, message=ar_message %}{% include "_offboard_autoreply.html" %}{% endwith %}</div>
   <p class="mt-3 text-xs text-brand-blueink/70">The account is left active (mailbox live); deletion happens later from the user's detail page once the manager's {{ days }}-day reminder fires and they confirm with IT.</p>
   <button class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
           hx-post="/lifecycle/offboard/run" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML"

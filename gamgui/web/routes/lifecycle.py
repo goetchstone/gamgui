@@ -51,6 +51,21 @@ async def _employee_name(st, email: str) -> str:
     return email
 
 
+async def _compose_autoreply(st, user: str, manager: str, subject: str, message: str):
+    """The filled auto-reply (subject, body) exactly as senders will see it.
+
+    Resolves the departing user's display name; falls back to readable placeholders for fields not
+    entered yet so the live preview always reads sensibly.
+    """
+    user, manager = user.strip(), manager.strip()
+    employee = (await _employee_name(st, user)) if user else ""
+    employee = employee or user or "[departing user]"
+    contact = manager or "[manager]"
+    subject = lifecycle.fill_autoreply(subject or lifecycle.DEFAULT_SUBJECT, employee, contact)
+    message = lifecycle.fill_autoreply(message or lifecycle.DEFAULT_MESSAGE, employee, contact)
+    return subject, message
+
+
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(
@@ -75,10 +90,26 @@ async def offboard_preview(
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, days_i, date.today(),
         notify=notify.strip(), employee_name=await _employee_name(st, user))
+    ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
-        {"steps": steps, "user": user, "manager": manager, "days": days_i},
+        {"steps": steps, "user": user, "manager": manager, "days": days_i,
+         "ar_subject": ar_subject, "ar_message": ar_message},
     )
+
+
+@router.post("/offboard/autoreply", response_class=HTMLResponse)
+async def offboard_autoreply(
+    request: Request, user: str = Form(""), manager: str = Form(""),
+    subject: str = Form(""), message: str = Form(""),
+) -> HTMLResponse:
+    """Live preview of the generated auto-reply as the user/manager/text are entered."""
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return HTMLResponse("")
+    ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
+    return TEMPLATES.TemplateResponse(
+        request, "_offboard_autoreply.html", {"subject": ar_subject, "message": ar_message})
 
 
 async def _run_offboard(job, conn, steps) -> None:

@@ -27,7 +27,12 @@
       <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
       <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea>
-      <span class="text-xs text-brand-gray"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically.</span></label>
+      <span class="text-xs text-brand-gray"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically — see below.</span></label>
+
+    <!-- Live preview: fills in as soon as the departing user + manager are entered. -->
+    <div id="autoreply-preview" class="mt-1"
+         hx-post="/lifecycle/offboard/autoreply" hx-include="#offboard-form" hx-target="this" hx-swap="innerHTML"
+         hx-trigger="load, keyup changed delay:400ms from:#offboard-form, change from:#offboard-form"></div>
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="block"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
         <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
