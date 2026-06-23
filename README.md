@@ -42,7 +42,8 @@ You build and run it yourself; it is not yet notarized for distribution to other
 > all run behind a *preview → typed confirmation → audit-logged* path. A few of the newer ones
 > haven't yet been exercised against a live tenant, so run them once on a **throwaway test
 > user/event** before relying on them. Account deletion is reversible only within Google's ~20-day
-> window.
+> window. GamGUI is provided **as-is under the MIT License, with no warranty — use at your own
+> risk**; you are responsible for what you run against your own tenant.
 
 ## Design goals
 
