@@ -154,6 +154,24 @@
         if (a.target === "_blank" || href.charAt(0) === "#" || href.indexOf("://") >= 0) return;
         show();  // full-page nav — cleared automatically when the new page loads
       }, true);
+
+      // Calendar name-search scans EVERY user's calendar list (slow, ~a minute the first time, then
+      // cached). The generic "Working…" pill isn't reassuring enough, so drop a specific heads-up
+      // straight into the results area the moment the search fires.
+      document.body.addEventListener("htmx:beforeRequest", function (e) {
+        try {
+          var d = e.detail || {};
+          var p = (d.pathInfo && d.pathInfo.requestPath) || (d.requestConfig && d.requestConfig.path) || "";
+          if (p.indexOf("/calendars/search") < 0) return;
+          var q = (d.elt && d.elt.value) || "";
+          var tgt = document.getElementById("cal-results");
+          if (tgt && (""+q).trim()) {
+            tgt.innerHTML = '<p class="text-sm text-brand-gray"><span class="spinner"></span> '
+              + 'Searching every user’s calendars for “'
+              + (""+q).replace(/[&<>"]/g, "") + '” — up to a minute the first time, then instant.</p>';
+          }
+        } catch (err) {}
+      });
     })();
   </script>
 </body>

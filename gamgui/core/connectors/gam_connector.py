@@ -24,6 +24,7 @@ from ..gam.models import (
 )
 from ..gam.parser import parse_one, parse_records
 from ..gam.runner import GAMRunner
+from ..usercache import UserCache
 from .base import (
     Capability,
     ChangePreview,
@@ -74,6 +75,10 @@ class GAMConnector(Connector):
         self.runner = runner
         self.domain = domain
         self.audit = audit or AuditLog()
+        # The domain-wide calendar scan (`all users print calendars`) is the slow path — it serves
+        # every user one by one (~a minute on a mid-size tenant). Cache the parsed rows so repeat
+        # name searches are instant; invalidated when we delete a calendar.
+        self._cal_scan = UserCache(ttl=600.0)
 
     # --- connection --------------------------------------------------------------------
     async def test(self) -> ConnectionStatus:
@@ -231,16 +236,22 @@ class GAMConnector(Connector):
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_user_calendars(email))
         return [UserCalendar.from_json(r) for r in parse_records(out)]
 
-    async def search_calendars(self, query: str) -> List[dict]:
+    async def _all_calendar_records(self, force: bool = False) -> List[dict]:
+        async def fetch() -> List[dict]:
+            out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars())
+            return parse_records(out)
+        return await self._cal_scan.get(fetch, force=force)
+
+    async def search_calendars(self, query: str, force: bool = False) -> List[dict]:
         """Find calendars across the domain whose name contains ``query``; identify the owner.
 
-        Scans every user's calendar list (one ``all users print calendars`` call), filters by summary,
-        dedupes by calendar id, and records the owner (the user whose row has accessRole=owner).
+        Scans every user's calendar list (one ``all users print calendars`` call — slow, so cached),
+        filters by summary, dedupes by calendar id, and records the owner (the user whose row has
+        accessRole=owner). Pass ``force=True`` to bypass the cache and re-scan.
         """
-        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars())
         q = query.strip().lower()
         found: dict = {}
-        for row in parse_records(out):
+        for row in await self._all_calendar_records(force=force):
             cid = str(row.get("id") or "")
             summary = str(row.get("summary") or "")
             if not cid or (q and q not in summary.lower()):
@@ -279,7 +290,10 @@ class GAMConnector(Connector):
         unsubscribe. Verified against GAM7 source. Irreversible — no GAM-side undo.
         """
         argv = GAMCommands.remove_calendar(owner, calendar_id)
-        return await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=owner)
+        res = await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=owner)
+        if res.ok:
+            self._cal_scan.invalidate()  # the deleted calendar must drop out of name search
+        return res
 
     # --- lifecycle (offboarding) -------------------------------------------------------
     async def reset_password(self, email: str) -> ChangeResult:
