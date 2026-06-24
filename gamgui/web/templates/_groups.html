@@ -1,6 +1,6 @@
 <div class="space-y-3">
   {% if member_of %}
-  <ul class="flex flex-wrap gap-2">
+  <ul class="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
     {% for g in member_of %}
     <li class="inline-flex items-center gap-1.5 rounded-full bg-paper border border-brand-gray/40 pl-3 pr-1.5 py-1 text-sm">
       <span class="text-brand-black">{{ g }}</span>

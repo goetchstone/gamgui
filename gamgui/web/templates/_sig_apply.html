@@ -22,6 +22,6 @@
 {% set _failed = job.failed if job else failed %}
 <div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not _failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
   Applied to {{ _applied }} of {{ _total }} user{{ "s" if _total != 1 }}.
-  {% if _failed %}<br>Failed: {{ _failed | join(", ") }}{% endif %}
+  {% if _failed %}<div class="mt-1 max-h-24 overflow-y-auto text-xs">Failed ({{ _failed | length }}): {{ _failed | join(", ") }}</div>{% endif %}
 </div>
 {% endif %}

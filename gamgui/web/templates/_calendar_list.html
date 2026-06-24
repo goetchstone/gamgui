@@ -3,7 +3,7 @@
 {% endfor %}
 {% if items %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
-  <ul class="divide-y divide-brand-gray/20">
+  <ul class="max-h-72 divide-y divide-brand-gray/20 overflow-y-auto">
     {% for it in items %}
     <li class="flex items-center justify-between gap-3 py-2 text-sm">
       <span class="min-w-0 truncate">

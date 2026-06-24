@@ -9,11 +9,11 @@
   </div>
 {% else %}
 {% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
-<div class="space-y-6">
+<div class="space-y-4">
   <div>
     <p class="eyebrow text-brand-blue">Lifecycle</p>
-    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Offboard a user</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Runs the full sequence in order: reset password → delegate → auto-responder → transfer Drive → transfer calendars → remove from everyone's calendars → drop a reminder on the manager. The account is <strong>not</strong> deleted — when the manager confirms it's safe, IT deletes it from the user's detail page.</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Offboard a user</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Runs the sequence in order: reset password → delegate → auto-reply → transfer Drive &amp; calendars → clear calendar shares → manager reminder. The account is <strong>not</strong> deleted — IT does that later from the user's detail page.</p>
   </div>
 
   <form id="offboard-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
@@ -44,7 +44,7 @@
             hx-post="/lifecycle/offboard/preview" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML">Preview steps</button>
   </form>
 
-  <div id="offboard-result"></div>
+  <div id="offboard-result" class="max-h-[22rem] overflow-y-auto"></div>
 </div>
 {% endif %}
 {% endblock %}

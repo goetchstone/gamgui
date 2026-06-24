@@ -2,23 +2,23 @@
   <table class="w-full text-sm">
     <thead>
       <tr class="text-left text-brand-gray border-b border-brand-gray/30">
-        <th class="font-medium px-5 py-3 eyebrow">Name</th>
-        <th class="font-medium px-5 py-3 eyebrow">Email</th>
-        <th class="font-medium px-5 py-3 eyebrow">Title</th>
-        <th class="font-medium px-5 py-3 eyebrow">Org unit</th>
-        <th class="font-medium px-5 py-3 eyebrow text-right">Status</th>
+        <th class="font-medium px-5 py-2 eyebrow">Name</th>
+        <th class="font-medium px-5 py-2 eyebrow">Email</th>
+        <th class="font-medium px-5 py-2 eyebrow">Title</th>
+        <th class="font-medium px-5 py-2 eyebrow">Org unit</th>
+        <th class="font-medium px-5 py-2 eyebrow text-right">Status</th>
       </tr>
     </thead>
     <tbody>
       {% for u in users %}
         <tr class="border-b border-brand-gray/15 hover:bg-paper/70 transition-colors">
-          <td class="px-5 py-3">
+          <td class="px-5 py-2">
             <a class="font-medium text-brand-black hover:text-brand-blueink" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
           </td>
-          <td class="px-5 py-3 text-brand-blueink/80">{{ u.primary_email }}</td>
-          <td class="px-5 py-3 text-brand-blueink/70">{{ u.title or "—" }}</td>
-          <td class="px-5 py-3 text-brand-blueink/70">{{ u.org_unit_path }}</td>
-          <td class="px-5 py-3 text-right">
+          <td class="px-5 py-2 text-brand-blueink/80">{{ u.primary_email }}</td>
+          <td class="px-5 py-2 text-brand-blueink/70">{{ u.title or "—" }}</td>
+          <td class="px-5 py-2 text-brand-blueink/70">{{ u.org_unit_path }}</td>
+          <td class="px-5 py-2 text-right">
             {% if u.suspended %}
               <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
             {% else %}

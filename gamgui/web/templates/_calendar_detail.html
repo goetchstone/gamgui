@@ -7,7 +7,7 @@
   <div>
     <h3 class="eyebrow text-brand-gray">Who has access</h3>
     {% if acls %}
-    <ul class="mt-2 space-y-1 text-sm">
+    <ul class="mt-2 max-h-44 space-y-1 overflow-y-auto text-sm">
       {% for a in acls %}
       <li class="border-b border-brand-gray/20 pb-1"><span class="text-brand-black">{{ a.who }}</span> <span class="text-brand-gray">— {{ a.role_label }}</span></li>
       {% endfor %}

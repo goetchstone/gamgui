@@ -16,8 +16,9 @@ def _mk(n, suspended_every=0):
 
 
 def test_pagination_slices():
-    ctx = _table_context(_mk(120), "", "all", 2)
-    assert ctx["pages"] == 3 and ctx["page"] == 2 and ctx["total"] == 120
+    total = PAGE_SIZE * 12          # exercise several pages regardless of the configured page size
+    ctx = _table_context(_mk(total), "", "all", 2)
+    assert ctx["pages"] == 12 and ctx["page"] == 2 and ctx["total"] == total
     assert len(ctx["users"]) == PAGE_SIZE
     assert ctx["users"][0].primary_email == f"u{PAGE_SIZE}@e.com"
 

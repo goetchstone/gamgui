@@ -23,7 +23,7 @@ from ..server import TEMPLATES
 
 router = APIRouter(prefix="/users")
 
-PAGE_SIZE = 50
+PAGE_SIZE = 10   # rows per page — sized so a page fits the fixed 13" window (Prev/Next pager)
 
 
 def _conn(request: Request):

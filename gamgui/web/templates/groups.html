@@ -8,10 +8,10 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-<div class="space-y-6">
+<div class="space-y-4">
   <div>
     <p class="eyebrow text-brand-blue">Membership</p>
-    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Groups</h1>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Groups</h1>
     <p class="text-brand-blueink/80 mt-1 text-sm">Pick a group, then <strong>drag people in</strong> from the right to add — drag a member onto the people list (or hit ×) to remove.</p>
   </div>
   {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
@@ -24,7 +24,7 @@
         <option value="">Select a group…</option>
         {% for g in groups %}<option value="{{ g.email }}">{{ g.name or g.email }} ({{ g.email }})</option>{% endfor %}
       </select>
-      <div id="members" class="mt-4 min-h-[8rem] rounded-xl border-2 border-dashed border-brand-gray/40 p-3"
+      <div id="members" class="mt-4 max-h-80 min-h-[8rem] overflow-y-auto rounded-xl border-2 border-dashed border-brand-gray/40 p-3"
            ondragover="gqAllow(event)" ondrop="gqDropAdd(event)">
         <p class="text-sm text-brand-gray">Pick a group, then drag people in.</p>
       </div>
@@ -34,7 +34,7 @@
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" ondragover="gqAllow(event)" ondrop="gqDropRemove(event)">
       <input type="search" id="people-filter" placeholder="Filter people…" oninput="gqFilter()"
              class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none" />
-      <div id="people" class="mt-3 max-h-96 overflow-auto space-y-1">
+      <div id="people" class="mt-3 max-h-80 overflow-auto space-y-1">
         {% for u in users %}
         <div class="ucard flex items-center justify-between rounded-lg border border-brand-gray/30 px-3 py-1.5 text-sm cursor-grab hover:bg-paper"
              draggable="true" ondragstart="gqDrag(event, {{ u.primary_email | tojson }}, 'add')"

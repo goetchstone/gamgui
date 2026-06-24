@@ -2,7 +2,7 @@
 <p class="text-sm text-brand-gray">Enter a title to search for, or a date range.</p>
 {% elif events %}
 {% if capped %}<p class="text-xs text-amber-700 mb-2">Showing the first {{ events|length }} matches — narrow your search to see the rest.</p>{% endif %}
-<ul class="space-y-2">
+<ul class="max-h-72 space-y-2 overflow-y-auto">
   {% for e in events %}
   <li class="flex items-center justify-between gap-3 text-sm border-b border-brand-gray/20 pb-2">
     <span class="min-w-0">
