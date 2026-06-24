@@ -136,7 +136,7 @@ async def pick(request: Request, kind: str = "users", q: str = "") -> HTMLRespon
                                       {"items": pairs[:PICK_LIMIT], "more": len(pairs) > PICK_LIMIT})
 
 
-PAGE_SIZE = 8           # commands per page — sized so a page fits a 13" window without scrolling
+PAGE_SIZE = 6           # commands per page — sized so a page (2-line rows) fits a 13" window
 
 
 def _paginated(request: Request, items, q="", page=1) -> HTMLResponse:

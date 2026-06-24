@@ -49,6 +49,7 @@ class CatalogCommand:
     buildable: bool = False
     uncertain: bool = False      # risk inferred from an unknown verb
     area: str = ""               # top-level grouping (set at load time from the category)
+    description: str = ""        # one-line "what it does" (vendored if verified, else a gloss at load)
     slots: List[CommandSlot] = field(default_factory=list)
     # Curated-only; never serialized. Maps a {slot_key: value} dict to an argv list via GAMCommands.
     build: Optional[Callable[[Dict[str, str]], List[str]]] = field(default=None, repr=False)
@@ -61,7 +62,7 @@ class CatalogCommand:
         return {
             "id": self.id, "category": self.category, "subcategory": self.subcategory,
             "name": self.name, "raw_syntax": self.raw_syntax, "verb": self.verb,
-            "risk": int(self.risk), "uncertain": self.uncertain,
+            "risk": int(self.risk), "uncertain": self.uncertain, "description": self.description,
         }
 
     @classmethod
@@ -71,7 +72,7 @@ class CatalogCommand:
             subcategory=str(d.get("subcategory", "")), name=str(d.get("name", "")),
             raw_syntax=str(d.get("raw_syntax", "")), verb=str(d.get("verb", "")),
             risk=RiskLevel(int(d.get("risk", 1))), uncertain=bool(d.get("uncertain", False)),
-            buildable=False,
+            description=str(d.get("description", "")), buildable=False,
         )
 
 

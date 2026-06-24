@@ -6,6 +6,7 @@
     <h3 class="font-serif text-lg text-brand-black">{{ cmd.name }}</h3>
     <span class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide {{ {'read':'bg-emerald-50 text-emerald-700','change':'bg-brand-blue/10 text-brand-blueink','destructive':'bg-red-100 text-red-700'}[cmd.risk_label] }}">{{ cmd.risk_label }}</span>
   </div>
+  {% if cmd.description %}<p class="text-sm text-brand-blueink/90">{{ cmd.description }}</p>{% endif %}
   <code class="block text-xs text-brand-gray break-all">{{ cmd.raw_syntax }}</code>
   {% for slot in cmd.slots %}
   <label class="block text-sm">
@@ -54,6 +55,7 @@
 {% else %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm copy-wrap">
   <h3 class="font-serif text-lg text-brand-black">{{ cmd.name }}</h3>
+  {% if cmd.description %}<p class="mt-1 text-sm text-brand-blueink/90">{{ cmd.description }}</p>{% endif %}
   <p class="mt-1 text-xs text-brand-gray">Browse-only — copy the syntax and run it in GAM directly.</p>
   <code class="mt-2 block text-xs text-brand-black break-all">{{ cmd.raw_syntax }}</code>
   <button class="mt-2 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors" onclick="copyEl(this)">Copy</button>

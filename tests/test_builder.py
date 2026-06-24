@@ -49,6 +49,17 @@ def test_builder_page_and_catalog_search(client):
 
 # --- generic read builder: every read-only command is runnable ------------------------
 
+def test_every_command_has_a_description():
+    # Each row explains itself: curated text where authored, else a grammar-derived gloss.
+    cat = load_catalog()
+    assert all(c.description for c in cat.commands)
+    by = {c.id: c for c in cat.commands}
+    assert by["build.delete_user"].description.startswith("Permanently delete")   # curated
+    # the verified noun glossary feeds the gloss for parsed commands
+    ve = next(c for c in cat.commands if c.id.startswith("raw.") and c.raw_syntax.startswith("gam print vaultexports"))
+    assert "Vault" in ve.description
+
+
 def test_every_read_command_is_buildable():
     # The whole read surface is runnable; mutations stay curated-only.
     cat = load_catalog()
