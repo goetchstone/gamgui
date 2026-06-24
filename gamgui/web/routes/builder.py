@@ -100,7 +100,17 @@ async def page(request: Request) -> HTMLResponse:
     })
 
 
-PAGE_SIZE = 50
+PAGE_SIZE = 50          # flat lists (search / buildable landing)
+SECTION_PAGE = 25       # a single category/subcategory leaf in the tree
+
+
+def _paginated(request: Request, items, q="", page=1) -> HTMLResponse:
+    total, page = len(items), max(1, page)
+    start = (page - 1) * PAGE_SIZE
+    return TEMPLATES.TemplateResponse(request, "_catalog_list.html", {
+        "items": items[start:start + PAGE_SIZE], "q": q, "page": page, "total": total,
+        "has_prev": page > 1, "has_next": start + PAGE_SIZE < total,
+    })
 
 
 @router.get("/catalog", response_class=HTMLResponse)
@@ -108,20 +118,30 @@ async def catalog_list(request: Request, area: str = "", q: str = "", buildable:
                        page: int = 1) -> HTMLResponse:
     cat = _catalog(request)
     q = q.strip()
-    if q:
-        items = cat.search(q)
-    elif area:
-        items = cat.in_area(area)
-    else:
-        items = cat.all_sorted()
-    if buildable in ("1", "true", "on"):
+    only_buildable = buildable in ("1", "true", "on")
+    # Browsing a whole area → a collapsible category/subcategory tree (leaves lazy-load + paginate).
+    if area and not q:
+        tree = [{"category": ct, "count": n, "subs": cat.subcategories_in(area, ct)}
+                for ct, n in cat.categories_in_area(area)]
+        return TEMPLATES.TemplateResponse(request, "_catalog_tree.html", {"area": area, "tree": tree})
+    # Flat list: search results, or the buildable landing.
+    items = cat.search(q) if q else cat.all_sorted()
+    if only_buildable:
         items = [c for c in items if c.buildable]
-    total = len(items)
-    page = max(1, page)
-    start = (page - 1) * PAGE_SIZE
-    return TEMPLATES.TemplateResponse(request, "_catalog_list.html", {
-        "items": items[start:start + PAGE_SIZE], "q": q, "page": page, "total": total,
-        "has_prev": page > 1, "has_next": start + PAGE_SIZE < total,
+    return _paginated(request, items, q=q, page=page)
+
+
+@router.get("/catalog/section", response_class=HTMLResponse)
+async def section_commands(request: Request, area: str = "", category: str = "",
+                           subcategory: str = "", page: int = 1) -> HTMLResponse:
+    cat = _catalog(request)
+    items = cat.in_section(area, category, subcategory)
+    total, page = len(items), max(1, page)
+    start = (page - 1) * SECTION_PAGE
+    return TEMPLATES.TemplateResponse(request, "_section_commands.html", {
+        "items": items[start:start + SECTION_PAGE], "area": area, "category": category,
+        "subcategory": subcategory, "page": page, "total": total,
+        "has_prev": page > 1, "has_next": start + SECTION_PAGE < total,
     })
 
 

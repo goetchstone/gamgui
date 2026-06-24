@@ -48,15 +48,15 @@
     <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
       <h2 class="eyebrow text-brand-gray">Drag into a slot</h2>
       <input id="ppl-filter" class="{{ fld }} my-2" placeholder="filter…" onkeyup="bFilter()" />
-      <div id="ppl" class="max-h-72 overflow-auto pr-1 text-xs space-y-1">
+      <div id="ppl" class="max-h-[32rem] divide-y divide-brand-gray/10 overflow-y-auto overscroll-contain text-xs">
         {% for u in users %}
-        <div class="ucard cursor-grab rounded border border-brand-gray/40 px-2 py-1 hover:bg-paper" draggable="true"
-             data-s="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}"
+        <div class="ucard cursor-grab truncate px-1.5 py-1 hover:bg-paper" draggable="true"
+             data-s="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}" title="{{ u.primary_email }}"
              ondragstart="bDrag(event,'user',{{ u.primary_email | tojson }})">{{ u.primary_email }}</div>
         {% endfor %}
         {% for g in groups %}
-        <div class="ucard cursor-grab rounded border border-brand-blue/30 bg-brand-blue/5 px-2 py-1 hover:bg-brand-blue/10" draggable="true"
-             data-s="{{ (g.name ~ ' ' ~ g.email) | lower }}"
+        <div class="ucard cursor-grab truncate px-1.5 py-1 text-brand-blueink hover:bg-brand-blue/10" draggable="true"
+             data-s="{{ (g.name ~ ' ' ~ g.email) | lower }}" title="{{ g.email }}"
              ondragstart="bDrag(event,'group',{{ g.email | tojson }})">⛂ {{ g.email }}</div>
         {% endfor %}
       </div>

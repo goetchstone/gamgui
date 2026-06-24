@@ -57,11 +57,22 @@ def test_builder_page_groups_into_areas(client):
     assert "Users &amp; Identity" in r.text and "Calendars" in r.text   # area dropdown, not 53 cats
 
 
-def test_catalog_pagination(client):
-    r1 = client.get("/builder/catalog", params={"area": "Users & Identity", "page": 1})
-    assert "Page 1" in r1.text and "Next" in r1.text and "Prev" in r1.text
-    r2 = client.get("/builder/catalog", params={"area": "Users & Identity", "page": 2})
-    assert "Page 2" in r2.text
+def test_area_browse_is_a_caret_tree(client):
+    # Browsing an area (buildable off) returns collapsible category folders that lazy-load sections.
+    r = client.get("/builder/catalog", params={"area": "Users & Identity"})
+    assert "<details" in r.text and "<summary" in r.text
+    assert "Users" in r.text and "Aliases" in r.text
+    assert "/builder/catalog/section?area=Users" in r.text   # leaves lazy-load
+
+
+def test_section_leaf_paginates(client):
+    # The biggest leaf (Users / Drive, 57 commands) pages at 25 with Prev/Next.
+    r1 = client.get("/builder/catalog/section",
+                    params={"area": "Users & Identity", "category": "Users", "subcategory": "Drive"})
+    assert "Next" in r1.text and "1 · 57" in r1.text
+    r2 = client.get("/builder/catalog/section",
+                    params={"area": "Users & Identity", "category": "Users", "subcategory": "Drive", "page": 3})
+    assert "3 · 57" in r2.text and "Prev" in r2.text          # reached the last page (51–57)
 
 
 def test_read_command_export_to_drive(client):

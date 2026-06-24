@@ -89,6 +89,25 @@ class Catalog:
     def in_area(self, area: str) -> List[CatalogCommand]:
         return _by_section([c for c in self.commands if c.area == area])
 
+    def categories_in_area(self, area: str) -> List[tuple]:
+        counts: Dict[str, int] = {}
+        for c in self.commands:
+            if c.area == area:
+                counts[c.category] = counts.get(c.category, 0) + 1
+        return sorted(counts.items(), key=lambda kv: kv[0].lower())
+
+    def subcategories_in(self, area: str, category: str) -> List[tuple]:
+        counts: Dict[str, int] = {}
+        for c in self.commands:
+            if c.area == area and c.category == category:
+                counts[c.subcategory] = counts.get(c.subcategory, 0) + 1
+        return sorted(counts.items(), key=lambda kv: kv[0].lower())
+
+    def in_section(self, area: str, category: str, subcategory: str) -> List[CatalogCommand]:
+        items = [c for c in self.commands
+                 if c.area == area and c.category == category and c.subcategory == subcategory]
+        return sorted(items, key=lambda c: (not c.buildable, c.name.lower()))  # buildable first
+
     def search(self, q: str) -> List[CatalogCommand]:
         ql = (q or "").strip().lower()
         if not ql:
