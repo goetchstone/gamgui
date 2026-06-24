@@ -1,5 +1,6 @@
 {% if items %}
-<ul class="text-sm">
+<div class="flex h-full flex-col">
+<ul class="flex-1 text-sm">
   {% for c in items %}
   {% set section = c.category ~ (' · ' ~ c.subcategory if c.subcategory else '') %}
   {% set prev = items[loop.index0 - 1] %}
@@ -10,13 +11,14 @@
   {% include "_command_row.html" %}
   {% endfor %}
 </ul>
-<nav class="mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs">
+<nav class="mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs shrink-0">
   <button class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
           hx-get="/builder/catalog" hx-include="#cat-controls" hx-vals='{"page": {{ page - 1 }}}' hx-target="#catalog" hx-swap="innerHTML" {{ 'disabled' if not has_prev }}>‹ Prev</button>
   <span class="text-brand-gray">Page {{ page }} of {{ pages }} · {{ total }} command{{ '' if total == 1 else 's' }}</span>
   <button class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
           hx-get="/builder/catalog" hx-include="#cat-controls" hx-vals='{"page": {{ page + 1 }}}' hx-target="#catalog" hx-swap="innerHTML" {{ 'disabled' if not has_next }}>Next ›</button>
 </nav>
+</div>
 {% else %}
 <p class="py-6 text-center text-sm text-brand-gray">{% if q %}No commands match “{{ q }}”.{% else %}No commands here.{% endif %}</p>
 {% endif %}

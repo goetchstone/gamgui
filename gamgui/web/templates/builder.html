@@ -9,14 +9,16 @@
   </div>
 {% else %}
 {% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
-<div class="space-y-2.5">
-  <div class="flex items-baseline gap-3">
+<!-- Fixed-height workspace: fills the window and never grows. Results scroll inside their own
+     panel instead of pushing the page down, so the window stays a constant size. -->
+<div class="flex flex-col gap-2.5 h-[calc(100vh-9rem)] min-h-[26rem]">
+  <div class="flex items-baseline gap-3 shrink-0">
     <h1 class="font-serif text-xl text-brand-black tracking-tight">Command builder</h1>
     <p class="text-xs text-brand-gray">Browse every GAM command; build &amp; run the buildable ones, or queue a sequence.</p>
   </div>
 
   <!-- Search-first faceted controls: search · area · buildable-only (one row, one request) -->
-  <form id="cat-controls" class="flex items-center gap-2">
+  <form id="cat-controls" class="flex items-center gap-2 shrink-0">
     <input class="{{ fld }} min-w-0 flex-1" type="search" name="q" placeholder="Search 1,000+ commands…"
            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
            hx-trigger="keyup changed delay:300ms, search" />
@@ -32,28 +34,28 @@
     </label>
   </form>
 
-  <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-    <!-- LEFT: the paginated catalog (one page at a time — no scroll box) -->
-    <section>
-      <div id="catalog" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
+  <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)] min-h-0 flex-1">
+    <!-- LEFT: the paginated catalog (one page at a time, fills its column) -->
+    <section class="min-h-0">
+      <div id="catalog" class="h-full overflow-y-auto rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
            hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
         <p class="text-sm text-brand-gray">Loading…</p>
       </div>
     </section>
 
-    <!-- RIGHT: the builder -->
-    <section class="space-y-4">
-      <div id="cmd-form">
+    <!-- RIGHT: the form stays put; the result scrolls in its own panel below it -->
+    <section class="flex min-h-0 flex-col">
+      <div id="cmd-form" class="shrink-0">
         <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-gray">
           Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Click a User field to choose someone.
         </div>
       </div>
-      <div id="builder-result"></div>
+      <div id="builder-result" class="mt-3 min-h-0 flex-1 overflow-y-auto"></div>
     </section>
   </div>
 
-  <!-- Sequence: a compact drawer so it never pushes the workspace off-screen -->
-  <div id="sequence">{% include "_sequence.html" %}</div>
+  <!-- Sequence: a compact drawer pinned at the bottom of the fixed workspace -->
+  <div id="sequence" class="shrink-0">{% include "_sequence.html" %}</div>
 </div>
 
 <script>
