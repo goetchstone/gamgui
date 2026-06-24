@@ -33,18 +33,26 @@
     </label>
   </form>
 
-  <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem]">
-    <!-- Commands + the selected command's form/preview -->
-    <section class="space-y-4">
-      <div id="catalog" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
+  <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)_11rem]">
+    <!-- LEFT: browse the catalog (scrolls on its own so the builder stays put) -->
+    <section>
+      <div id="catalog" class="max-h-[36rem] overflow-y-auto overscroll-contain rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
            hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
         <p class="text-sm text-brand-gray">Loading…</p>
       </div>
-      <div id="cmd-form"></div>
+    </section>
+
+    <!-- MIDDLE: the builder -->
+    <section class="space-y-4">
+      <div id="cmd-form">
+        <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-gray">
+          Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — it opens here. Then drag a user or group from the right into a slot.
+        </div>
+      </div>
       <div id="builder-result"></div>
     </section>
 
-    <!-- People + groups (drag sources) -->
+    <!-- RIGHT: people + groups (drag sources) -->
     <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
       <h2 class="eyebrow text-brand-gray">Drag into a slot</h2>
       <input id="ppl-filter" class="{{ fld }} my-2" placeholder="filter…" onkeyup="bFilter()" />
