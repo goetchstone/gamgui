@@ -119,13 +119,14 @@ async def catalog_list(request: Request, area: str = "", q: str = "", buildable:
     cat = _catalog(request)
     q = q.strip()
     only_buildable = buildable in ("1", "true", "on")
-    # Browsing a whole area → a collapsible category/subcategory tree (leaves lazy-load + paginate).
-    if area and not q:
+    # Browsing the FULL set of an area → a collapsible category/subcategory tree (leaves lazy-load).
+    # "Buildable only" always yields a flat list, so the toggle does something with an area selected.
+    if area and not q and not only_buildable:
         tree = [{"category": ct, "count": n, "subs": cat.subcategories_in(area, ct)}
                 for ct, n in cat.categories_in_area(area)]
         return TEMPLATES.TemplateResponse(request, "_catalog_tree.html", {"area": area, "tree": tree})
-    # Flat list: search results, or the buildable landing.
-    items = cat.search(q) if q else cat.all_sorted()
+    # Flat list: search results, the buildable landing/filter, or an area filtered to buildables.
+    items = cat.search(q) if q else (cat.in_area(area) if area else cat.all_sorted())
     if only_buildable:
         items = [c for c in items if c.buildable]
     return _paginated(request, items, q=q, page=page)

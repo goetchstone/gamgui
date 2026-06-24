@@ -13,7 +13,7 @@
   <div>
     <p class="eyebrow text-brand-blue">Builder</p>
     <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Command builder</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Browse every GAM command by category. For the buildable ones, drag a person or group into a slot, preview the exact <code>gam …</code>, run it through the guard — and chain steps into a sequence.</p>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Browse every GAM command by area. For the buildable ones, fill the slots (type a user/group — they autocomplete), preview the exact <code>gam …</code>, run it through the guard, or queue a few into a sequence.</p>
   </div>
 
   <!-- Filter row: search · category · buildable-only (all feed one request) -->
@@ -33,43 +33,24 @@
     </label>
   </form>
 
-  <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)_11rem]">
+  <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
     <!-- LEFT: browse the catalog (scrolls on its own so the builder stays put) -->
     <section>
-      <div id="catalog" class="max-h-[36rem] overflow-y-auto overscroll-contain rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
+      <div id="catalog" class="max-h-[32rem] overflow-y-auto overscroll-contain rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
            hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
         <p class="text-sm text-brand-gray">Loading…</p>
       </div>
     </section>
 
-    <!-- MIDDLE: the builder -->
+    <!-- RIGHT: the builder -->
     <section class="space-y-4">
       <div id="cmd-form">
         <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-gray">
-          Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — it opens here. Then drag a user or group from the right into a slot.
+          Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Type a user or group into a slot (they autocomplete).
         </div>
       </div>
       <div id="builder-result"></div>
     </section>
-
-    <!-- RIGHT: people + groups (drag sources) -->
-    <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
-      <h2 class="eyebrow text-brand-gray">Click into a slot</h2>
-      <p class="mt-1 text-[11px] text-brand-gray">Click a slot in the form, then click a name (or drag).</p>
-      <input id="ppl-filter" class="{{ fld }} my-2" placeholder="filter…" onkeyup="bFilter()" />
-      <div id="ppl" class="max-h-72 divide-y divide-brand-gray/10 overflow-y-auto overscroll-contain text-xs">
-        {% for u in users %}
-        <div class="ucard cursor-pointer truncate px-1.5 py-1 hover:bg-paper" draggable="true"
-             data-s="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}" data-val="{{ u.primary_email }}" title="{{ u.primary_email }}"
-             onclick="bPick(this.dataset.val)" ondragstart="bDrag(event, this.dataset.val)">{{ u.primary_email }}</div>
-        {% endfor %}
-        {% for g in groups %}
-        <div class="ucard cursor-pointer truncate px-1.5 py-1 text-brand-blueink hover:bg-brand-blue/10" draggable="true"
-             data-s="{{ (g.name ~ ' ' ~ g.email) | lower }}" data-val="{{ g.email }}" title="{{ g.email }}"
-             onclick="bPick(this.dataset.val)" ondragstart="bDrag(event, this.dataset.val)">⛂ {{ g.email }}</div>
-        {% endfor %}
-      </div>
-    </aside>
   </div>
 
   <!-- Sequence -->
@@ -80,27 +61,8 @@
   </div>
 </div>
 
-<script>
-  // Fill a slot by CLICK (works in WKWebView, which often drops HTML5 drag events) — drag is a bonus.
-  var bSlot = null;
-  function bFill(el, val){ if (el) { el.value = val; el.style.borderColor = "#69829E"; bSlot = el; } }
-  function bFocus(el){ bSlot = el; }
-  function bPick(val){
-    var el = (bSlot && !bSlot.disabled && document.contains(bSlot)) ? bSlot : null;
-    if (!el) {  // no active slot — fill the first empty drop-slot in the open form
-      var slots = document.querySelectorAll("#cmd-form .bslot");
-      for (var i = 0; i < slots.length; i++) { if (!slots[i].value) { el = slots[i]; break; } }
-      if (!el && slots.length) el = slots[0];
-    }
-    bFill(el, val);
-  }
-  function bDrag(ev, val){ ev.dataTransfer.setData("text/plain", val); ev.dataTransfer.effectAllowed = "copy"; }
-  function bAllow(ev){ ev.preventDefault(); }
-  function bDrop(ev, inp){ ev.preventDefault(); var v = ev.dataTransfer.getData("text/plain"); if (v) bFill(inp, v); }
-  function bFilter(){
-    var q = (document.getElementById("ppl-filter").value || "").toLowerCase();
-    document.querySelectorAll("#ppl .ucard").forEach(function(c){ c.style.display = c.getAttribute("data-s").indexOf(q) >= 0 ? "" : "none"; });
-  }
-</script>
+<!-- Autocomplete sources for the slot inputs (works natively, incl. WKWebView). -->
+<datalist id="dl-users">{% for u in users %}<option value="{{ u.primary_email }}"></option>{% endfor %}</datalist>
+<datalist id="dl-groups">{% for g in groups %}<option value="{{ g.email }}"></option>{% endfor %}</datalist>
 {% endif %}
 {% endblock %}
