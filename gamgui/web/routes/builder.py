@@ -79,6 +79,21 @@ def _gam_str(argv) -> str:
     return "gam " + " ".join(argv)
 
 
+def _render_read(request: Request, out: str, gam: str) -> HTMLResponse:
+    """Render a read command's output as a table when it looks tabular (CSV/JSON), else verbatim.
+
+    Generic read commands span `print` (CSV/JSON → table) and `info`/`show` (human text → table
+    would be garbage), so pick the renderer from the shape rather than forcing every read into a
+    grid."""
+    text = (out or "").strip()
+    first = text.splitlines()[0] if text else ""
+    looks_tabular = text[:1] in "[{" or "," in first
+    records = parse_records(out) if looks_tabular else []
+    if records:
+        return TEMPLATES.TemplateResponse(request, "_records_table.html", {"records": records, "gam": gam})
+    return TEMPLATES.TemplateResponse(request, "_read_output.html", {"output": out, "gam": gam})
+
+
 # --- pages -----------------------------------------------------------------------------
 
 @router.get("", response_class=HTMLResponse)
@@ -197,8 +212,7 @@ async def run(request: Request, cid: str = Form(...)) -> HTMLResponse:
             return TEMPLATES.TemplateResponse(request, "_export_result.html",
                                               {"gam": _gam_str(argv), "output": out,
                                                "owner": owner or "the admin account"})
-        return TEMPLATES.TemplateResponse(request, "_records_table.html",
-                                          {"records": parse_records(out), "gam": _gam_str(argv)})
+        return _render_read(request, out, _gam_str(argv))
     # A mutation that needs confirmation must come back through the preview (the "Confirm & run"
     # button sends confirmed=1) — a bare POST never silently runs a destructive command.
     decision = guard_mod.evaluate([preview])

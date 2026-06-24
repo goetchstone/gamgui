@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from gamgui.core.audit import AuditLog
 from gamgui.core.catalog import load_catalog
+from gamgui.core.connectors.base import RiskLevel
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
@@ -44,6 +45,76 @@ def test_builder_page_and_catalog_search(client):
     assert r.status_code == 200 and "Command builder" in r.text and "Users" in r.text
     r = client.get("/builder/catalog", params={"q": "signature"})
     assert "Set Gmail signature" in r.text and "Build" in r.text
+
+
+# --- generic read builder: every read-only command is runnable ------------------------
+
+def test_every_read_command_is_buildable():
+    # The whole read surface is runnable; mutations stay curated-only.
+    cat = load_catalog()
+    reads = [c for c in cat.commands if c.risk == RiskLevel.READ_ONLY and not c.uncertain]
+    assert reads and all(c.buildable for c in reads)
+    assert len([c for c in reads if c.id.startswith("raw.")]) > 400   # the bulk of the catalog
+
+
+def test_only_read_commands_became_generically_buildable():
+    # The safety boundary: the generic builder may ONLY make read-only commands runnable. A
+    # mis-classified LOW/DESTRUCTIVE shallow line must never gain a run path.
+    cat = load_catalog()
+    for c in cat.commands:
+        if c.buildable and c.id.startswith("raw."):
+            assert c.risk == RiskLevel.READ_ONLY and not c.uncertain, c.raw_syntax
+
+
+def test_generic_read_argv_is_injection_safe():
+    # A poisoned slot value lands as ONE argv element, exactly like the curated builders.
+    cat = load_catalog()
+    cmd = next(c for c in cat.commands
+               if c.id.startswith("raw.") and c.raw_syntax.startswith("gam <UserTypeEntity> print"))
+    argv = cmd.build({s.key: "a@x.com; rm -rf /" for s in cmd.slots})
+    assert argv[:2] == ["user", "a@x.com; rm -rf /"] and argv[2] == "print"   # value not split
+
+
+def test_generic_read_drops_optional_flags_keeps_required():
+    cat = load_catalog()
+    pg = next(c for c in cat.commands if c.id.startswith("raw.") and c.raw_syntax.startswith("gam print groups"))
+    assert pg.build({}) == ["print", "groups"]            # `[todrive …]` dropped, runs bare
+
+
+def test_generic_read_runs_end_to_end(client):
+    # Build + run a generic (non-curated) read through the real run path → rendered output.
+    cat = load_catalog()
+    pg = next(c for c in cat.commands if c.id.startswith("raw.") and c.raw_syntax.startswith("gam print groups"))
+    r = client.post("/builder/run", data={"cid": pg.id})
+    assert r.status_code == 200 and "gam print groups" in r.text
+
+
+def test_generic_read_never_emits_grammar_junk():
+    # No built read command may contain raw grammar punctuation — a value is the only free part, and
+    # literal tokens come from the grammar. Worst case is an incomplete (but valid-token) command.
+    cat = load_catalog()
+    JUNK = set("()<>|*[]")
+    for c in cat.commands:
+        if not (c.buildable and c.id.startswith("raw.")):
+            continue
+        argv = c.build({s.key: "VALUE" for s in c.slots})
+        for tok in argv:
+            assert tok == "VALUE" or not (set(tok) & JUNK), (c.raw_syntax, argv)
+
+
+def test_generic_read_keeps_hyphenated_noun():
+    # `gam print course-participants` — the hyphenated subcommand must survive (not be dropped).
+    cat = load_catalog()
+    cp = next(c for c in cat.commands if c.id.startswith("raw.") and "course-participants" in c.raw_syntax)
+    assert cp.build({}) == ["print", "course-participants"]
+
+
+def test_generic_read_leading_useritem_gets_user_keyword():
+    # `gam <UserItem> show meetconferences` runs as `gam user <x> show meetconferences`.
+    cat = load_catalog()
+    cmd = next(c for c in cat.commands
+               if c.id.startswith("raw.") and c.raw_syntax.startswith("gam <UserItem> show meetconferences"))
+    assert cmd.build({s.key: "joe@x.com" for s in cmd.slots})[:3] == ["user", "joe@x.com", "show"]
 
 
 def test_catalog_buildable_only_filter(client):

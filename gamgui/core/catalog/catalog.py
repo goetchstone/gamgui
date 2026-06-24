@@ -17,6 +17,7 @@ from ..gam.commands import GAMCommands
 from ..connectors.base import RiskLevel
 from .models import Catalog, CatalogCommand, CommandSlot, SlotKind
 from .parser import parse_grammar
+from .readbuilder import make_build, parse_read_template
 
 GROUP_ROLES = ["member", "manager", "owner"]
 TRANSFER_SERVICES = ["drive", "calendar"]
@@ -175,9 +176,28 @@ def _load_shallow() -> Tuple[List[CatalogCommand], str]:
     return [], ""
 
 
+def _make_reads_buildable(commands: List[CatalogCommand]) -> None:
+    """Attach a generic, injection-safe builder to every read-only command not already curated.
+
+    Read-only commands can't mutate, so making the whole read surface runnable carries no write risk
+    — and argv is still assembled token-by-token (never shell). Gated strictly to READ_ONLY +
+    confident risk so a mis-classified verb can never become runnable here."""
+    for c in commands:
+        if c.buildable or c.risk != RiskLevel.READ_ONLY or c.uncertain:
+            continue
+        try:
+            slots, template = parse_read_template(c.raw_syntax)
+        except Exception:  # noqa: BLE001 — leave an un-parseable line browse-only
+            continue
+        c.slots = slots
+        c.build = make_build(template)
+        c.buildable = True
+
+
 def load_catalog() -> Catalog:
     shallow, version = _load_shallow()
     commands = _curated() + shallow
+    _make_reads_buildable(commands)
     for c in commands:
         c.area = _area_of(c.category)
     return Catalog(commands=commands, version=version)
