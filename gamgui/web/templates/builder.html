@@ -61,8 +61,46 @@
   </div>
 </div>
 
-<!-- Autocomplete sources for the slot inputs (works natively, incl. WKWebView). -->
-<datalist id="dl-users">{% for u in users %}<option value="{{ u.primary_email }}"></option>{% endfor %}</datalist>
-<datalist id="dl-groups">{% for g in groups %}<option value="{{ g.email }}"></option>{% endfor %}</datalist>
+<script>
+  // Server-backed type-ahead for the User/Group slot pickers. A real, visible dropdown that renders
+  // in WKWebView (plain DOM, no <datalist>) and scales — /builder/pick returns only the top matches
+  // from the cached directory. Document-level delegation so it works on HTMX-injected forms.
+  (function () {
+    var timer;
+    function menuOf(inp) { var w = inp.closest(".upick-wrap"); return w ? w.querySelector(".upick-menu") : null; }
+    function closeAll() { document.querySelectorAll(".upick-menu").forEach(function (m) { m.classList.add("hidden"); }); }
+    function search(inp) {
+      var menu = menuOf(inp);
+      if (!menu) return;
+      var kind = inp.getAttribute("data-kind") || "users";
+      fetch("/builder/pick?kind=" + encodeURIComponent(kind) + "&q=" + encodeURIComponent(inp.value.trim()))
+        .then(function (r) { return r.text(); })
+        .then(function (html) { menu.innerHTML = html; menu.classList.remove("hidden"); })
+        .catch(function () {});
+    }
+    document.addEventListener("input", function (e) {
+      if (!e.target.classList || !e.target.classList.contains("upick")) return;
+      clearTimeout(timer);
+      timer = setTimeout(function () { search(e.target); }, 180);
+    });
+    document.addEventListener("focusin", function (e) {
+      if (e.target.classList && e.target.classList.contains("upick")) search(e.target);
+    });
+    // mousedown (not click) so the pick registers before the input's blur hides the menu.
+    document.addEventListener("mousedown", function (e) {
+      var opt = e.target.closest ? e.target.closest(".upick-opt") : null;
+      if (opt) {
+        e.preventDefault();
+        var inp = opt.closest(".upick-wrap").querySelector(".upick");
+        inp.value = opt.getAttribute("data-val");
+        closeAll();
+        return;
+      }
+      var onInput = e.target.classList && e.target.classList.contains("upick");
+      var inMenu = e.target.closest && e.target.closest(".upick-menu");
+      if (!onInput && !inMenu) closeAll();
+    });
+  })();
+</script>
 {% endif %}
 {% endblock %}

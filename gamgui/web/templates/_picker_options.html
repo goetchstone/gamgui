@@ -1,0 +1,10 @@
+{% if items %}
+{% for email, name in items %}
+<button type="button" class="upick-opt block w-full cursor-pointer truncate px-3 py-1.5 text-left hover:bg-paper" data-val="{{ email }}">
+  <span class="text-brand-black">{{ email }}</span>{% if name %} <span class="text-brand-gray">· {{ name }}</span>{% endif %}
+</button>
+{% endfor %}
+{% if more %}<p class="px-3 py-1 text-[11px] text-brand-gray">Showing the first {{ items | length }} — keep typing to narrow.</p>{% endif %}
+{% else %}
+<p class="px-3 py-1.5 text-brand-gray">No matches.</p>
+{% endif %}

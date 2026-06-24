@@ -102,17 +102,38 @@ async def page(request: Request) -> HTMLResponse:
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "builder.html", {"connected": False})
     cat = _catalog(request)
-    try:
-        users = await st.users()
-        groups = await st.connector.list_groups()
-    except Exception as exc:  # noqa: BLE001
-        users, groups = [], []
     counts = cat.area_counts()
     areas = [(a, counts[a]) for a in AREA_ORDER if counts.get(a)]
+    # User/group lists aren't fetched here — the slot pickers query /builder/pick on demand so the
+    # page loads instantly and the picker scales to large domains (only the cached top matches render).
     return TEMPLATES.TemplateResponse(request, "builder.html", {
-        "connected": True, "areas": areas, "users": users, "groups": groups,
-        "sequence": st.builder_sequence,
+        "connected": True, "areas": areas, "sequence": st.builder_sequence,
     })
+
+
+PICK_LIMIT = 25   # most matches a slot picker shows at once — keeps large domains snappy
+
+
+@router.get("/pick", response_class=HTMLResponse)
+async def pick(request: Request, kind: str = "users", q: str = "") -> HTMLResponse:
+    """Type-ahead for a User/Group slot: search the cached directory, return at most PICK_LIMIT hits.
+
+    Scales to large domains — the match runs against the in-memory user cache (shared with the Users
+    list) and only the top matches are ever rendered, never the whole directory."""
+    st = _st(request)
+    ql = q.strip().lower()
+    pairs = []
+    try:
+        if kind == "groups" and st.connector is not None:
+            pairs = [(g.email, getattr(g, "name", "")) for g in await st.connector.list_groups()]
+        else:
+            pairs = [(u.primary_email, getattr(u, "full_name", "")) for u in await st.users()]
+    except Exception:  # noqa: BLE001 — a directory hiccup just yields no suggestions
+        pairs = []
+    if ql:
+        pairs = [(e, n) for e, n in pairs if ql in (e or "").lower() or ql in (n or "").lower()]
+    return TEMPLATES.TemplateResponse(request, "_picker_options.html",
+                                      {"items": pairs[:PICK_LIMIT], "more": len(pairs) > PICK_LIMIT})
 
 
 PAGE_SIZE = 50          # flat lists (search / buildable landing)

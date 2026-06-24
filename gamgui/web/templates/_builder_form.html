@@ -14,11 +14,17 @@
     <select name="{{ slot.key }}" class="{{ fld }} mt-1">
       {% for ch in slot.choices %}<option value="{{ ch }}" {{ 'selected' if ch == slot.default }}>{{ ch }}</option>{% endfor %}
     </select>
+    {% elif slot.is_drop %}
+    <span class="upick-wrap relative mt-1 block">
+      <input name="{{ slot.key }}" value="{{ slot.default }}" autocomplete="off"
+             placeholder="{{ slot.placeholder or ('group@domain' if slot.kind.value == 'group' else 'user@domain') }}"
+             class="upick {{ fld }} border-dashed border-brand-blue/50"
+             data-kind="{{ 'groups' if slot.kind.value == 'group' else 'users' }}" />
+      <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
+    </span>
+    <span class="text-[11px] text-brand-gray">click and type a {{ 'group' if slot.kind.value == 'group' else 'user' }} — pick from the list</span>
     {% else %}
-    <input name="{{ slot.key }}" value="{{ slot.default }}" placeholder="{{ slot.placeholder }}" autocomplete="off"
-           class="{{ fld }} mt-1 {% if slot.is_drop %}border-dashed border-brand-blue/50{% endif %}"
-           {% if slot.is_drop %}list="{{ 'dl-groups' if slot.kind.value == 'group' else 'dl-users' }}"{% endif %} />
-    {% if slot.is_drop %}<span class="text-[11px] text-brand-gray">start typing a {{ 'group' if slot.kind.value == 'group' else 'user' }} — it autocompletes</span>{% endif %}
+    <input name="{{ slot.key }}" value="{{ slot.default }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1" />
     {% endif %}
   </label>
   {% endfor %}
@@ -27,8 +33,11 @@
     <summary class="cursor-pointer text-brand-blueink">Export to a Google Sheet instead of a table</summary>
     <label class="mt-2 flex items-center gap-1.5"><input type="checkbox" name="td_export" value="1" /> Create a Sheet</label>
     <div class="mt-2 grid gap-2 sm:grid-cols-2">
-      <input name="td_user" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
-             list="dl-users" class="{{ fld }} border-dashed border-brand-blue/50" />
+      <span class="upick-wrap relative block">
+        <input name="td_user" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
+               class="upick {{ fld }} border-dashed border-brand-blue/50" data-kind="users" />
+        <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
+      </span>
       <input name="td_title" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />
     </div>
   </details>

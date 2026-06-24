@@ -123,6 +123,20 @@ def test_catalog_buildable_only_filter(client):
     assert "Build" in r.text and "Copy" not in r.text
 
 
+def test_user_picker_searches_directory(client):
+    # The slot picker returns matches from the cached directory, capped — scales to large domains.
+    r = client.get("/builder/pick", params={"kind": "users", "q": "al"})
+    assert r.status_code == 200 and "alice@example.com" in r.text
+    assert "No matches" in client.get("/builder/pick", params={"kind": "users", "q": "zzznope"}).text
+    assert "sales@example.com" in client.get("/builder/pick", params={"kind": "groups"}).text
+
+
+def test_builder_form_renders_picker_not_datalist(client):
+    # User slots use the server-backed picker widget, not a <datalist>.
+    r = client.get("/builder/command/build.add_delegate")
+    assert 'class="upick' in r.text and 'data-kind="users"' in r.text and "datalist" not in r.text
+
+
 def test_builder_page_groups_into_areas(client):
     r = client.get("/builder")
     assert "Users &amp; Identity" in r.text and "Calendars" in r.text   # area dropdown, not 53 cats
