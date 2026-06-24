@@ -16,9 +16,9 @@
     </select>
     {% else %}
     <input name="{{ slot.key }}" value="{{ slot.default }}" placeholder="{{ slot.placeholder }}" autocomplete="off"
-           class="{{ fld }} mt-1 {% if slot.is_drop %}border-dashed border-brand-blue/50{% endif %}"
-           {% if slot.is_drop %}ondragover="bAllow(event)" ondrop="bDrop(event,this)"{% endif %} />
-    {% if slot.is_drop %}<span class="text-[11px] text-brand-gray">drag a {{ 'group' if slot.kind.value == 'group' else 'user' }} here, or type</span>{% endif %}
+           class="{{ fld }} mt-1 {% if slot.is_drop %}bslot border-dashed border-brand-blue/50{% endif %}"
+           {% if slot.is_drop %}onfocus="bFocus(this)" ondragover="bAllow(event)" ondrop="bDrop(event,this)"{% endif %} />
+    {% if slot.is_drop %}<span class="text-[11px] text-brand-gray">click here, then click a {{ 'group' if slot.kind.value == 'group' else 'user' }} on the right (or drag / type)</span>{% endif %}
     {% endif %}
   </label>
   {% endfor %}
@@ -28,7 +28,7 @@
     <label class="mt-2 flex items-center gap-1.5"><input type="checkbox" name="td_export" value="1" /> Create a Sheet</label>
     <div class="mt-2 grid gap-2 sm:grid-cols-2">
       <input name="td_user" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
-             class="{{ fld }} border-dashed border-brand-blue/50" ondragover="bAllow(event)" ondrop="bDrop(event,this)" />
+             class="{{ fld }} bslot border-dashed border-brand-blue/50" onfocus="bFocus(this)" ondragover="bAllow(event)" ondrop="bDrop(event,this)" />
       <input name="td_title" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />
     </div>
   </details>

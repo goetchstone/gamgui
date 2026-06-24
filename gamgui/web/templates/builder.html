@@ -54,18 +54,19 @@
 
     <!-- RIGHT: people + groups (drag sources) -->
     <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
-      <h2 class="eyebrow text-brand-gray">Drag into a slot</h2>
+      <h2 class="eyebrow text-brand-gray">Click into a slot</h2>
+      <p class="mt-1 text-[11px] text-brand-gray">Click a slot in the form, then click a name (or drag).</p>
       <input id="ppl-filter" class="{{ fld }} my-2" placeholder="filter…" onkeyup="bFilter()" />
       <div id="ppl" class="max-h-[32rem] divide-y divide-brand-gray/10 overflow-y-auto overscroll-contain text-xs">
         {% for u in users %}
-        <div class="ucard cursor-grab truncate px-1.5 py-1 hover:bg-paper" draggable="true"
+        <div class="ucard cursor-pointer truncate px-1.5 py-1 hover:bg-paper" draggable="true"
              data-s="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}" title="{{ u.primary_email }}"
-             ondragstart="bDrag(event,'user',{{ u.primary_email | tojson }})">{{ u.primary_email }}</div>
+             onclick="bPick({{ u.primary_email | tojson }})" ondragstart="bDrag(event,'user',{{ u.primary_email | tojson }})">{{ u.primary_email }}</div>
         {% endfor %}
         {% for g in groups %}
-        <div class="ucard cursor-grab truncate px-1.5 py-1 text-brand-blueink hover:bg-brand-blue/10" draggable="true"
+        <div class="ucard cursor-pointer truncate px-1.5 py-1 text-brand-blueink hover:bg-brand-blue/10" draggable="true"
              data-s="{{ (g.name ~ ' ' ~ g.email) | lower }}" title="{{ g.email }}"
-             ondragstart="bDrag(event,'group',{{ g.email | tojson }})">⛂ {{ g.email }}</div>
+             onclick="bPick({{ g.email | tojson }})" ondragstart="bDrag(event,'group',{{ g.email | tojson }})">⛂ {{ g.email }}</div>
         {% endfor %}
       </div>
     </aside>
@@ -79,15 +80,25 @@
 </div>
 
 <script>
-  function bDrag(ev, kind, val){ ev.dataTransfer.setData("text/plain", JSON.stringify({kind:kind, val:val})); ev.dataTransfer.effectAllowed="copy"; }
-  function bAllow(ev){ ev.preventDefault(); }
-  function bDrop(ev, inp){
-    ev.preventDefault();
-    try { var p = JSON.parse(ev.dataTransfer.getData("text/plain")); if (p && p.val) { inp.value = p.val; inp.classList.add("ring-2","ring-brand-blue/40"); } } catch(e){}
+  // Fill a slot by CLICK (works in WKWebView, which often drops HTML5 drag events) — drag is a bonus.
+  var bSlot = null;
+  function bFill(el, val){ if (el) { el.value = val; el.style.borderColor = "#69829E"; bSlot = el; } }
+  function bFocus(el){ bSlot = el; }
+  function bPick(val){
+    var el = (bSlot && !bSlot.disabled && document.contains(bSlot)) ? bSlot : null;
+    if (!el) {  // no active slot — fill the first empty drop-slot in the open form
+      var slots = document.querySelectorAll("#cmd-form .bslot");
+      for (var i = 0; i < slots.length; i++) { if (!slots[i].value) { el = slots[i]; break; } }
+      if (!el && slots.length) el = slots[0];
+    }
+    bFill(el, val);
   }
+  function bDrag(ev, kind, val){ ev.dataTransfer.setData("text/plain", val); ev.dataTransfer.effectAllowed = "copy"; }
+  function bAllow(ev){ ev.preventDefault(); }
+  function bDrop(ev, inp){ ev.preventDefault(); var v = ev.dataTransfer.getData("text/plain"); if (v) bFill(inp, v); }
   function bFilter(){
-    var q = (document.getElementById("ppl-filter").value||"").toLowerCase();
-    document.querySelectorAll("#ppl .ucard").forEach(function(c){ c.style.display = c.getAttribute("data-s").indexOf(q)>=0 ? "" : "none"; });
+    var q = (document.getElementById("ppl-filter").value || "").toLowerCase();
+    document.querySelectorAll("#ppl .ucard").forEach(function(c){ c.style.display = c.getAttribute("data-s").indexOf(q) >= 0 ? "" : "none"; });
   }
 </script>
 {% endif %}
