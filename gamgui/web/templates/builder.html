@@ -21,10 +21,10 @@
     <input class="{{ fld }} max-w-xs" type="search" name="q" placeholder="Search all commands…"
            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
            hx-trigger="keyup changed delay:300ms, search" />
-    <select class="{{ fld }} max-w-[12rem]" name="category"
+    <select class="{{ fld }} max-w-[14rem]" name="area"
             hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML">
-      <option value="">All categories</option>
-      {% for name, n in categories %}<option value="{{ name }}">{{ name }} ({{ n }})</option>{% endfor %}
+      <option value="">All areas</option>
+      {% for name, n in areas %}<option value="{{ name }}">{{ name }} ({{ n }})</option>{% endfor %}
     </select>
     <label class="flex items-center gap-1.5 text-sm text-brand-blueink">
       <input type="checkbox" name="buildable" value="1" checked

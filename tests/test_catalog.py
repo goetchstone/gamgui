@@ -39,5 +39,17 @@ def test_load_catalog_has_buildable_and_browse():
     assert len(cat.buildable()) >= 10
     assert cat.by_id("build.set_signature") is not None
     assert cat.by_id("build.delete_user").risk == RiskLevel.DESTRUCTIVE
-    users = cat.in_category("Users")
-    assert users and users[0].buildable          # buildable commands sort first within a category
+
+
+def test_areas_group_the_categories():
+    cat = load_catalog()
+    counts = cat.area_counts()
+    assert len(counts) <= 14                     # the ~53 grammar categories collapse to a short set
+    assert counts.get("Users & Identity", 0) > 100   # Users + aliases + schemas + …
+    assert "Calendars" in counts and "Devices" in counts
+    # every command lands in some area (no unmapped strays beyond the explicit "Other")
+    assert all(c.area for c in cat.commands)
+    items = cat.in_area("Users & Identity")
+    assert items and any(c.buildable for c in items)   # the area includes the curated buildables
+    # grouped by category for section headers (Administrators sorts before Users)
+    assert [c.category for c in items] == sorted(c.category for c in items)

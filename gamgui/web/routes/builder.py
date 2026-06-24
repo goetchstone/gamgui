@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard as guard_mod
 from ...core.catalog import load_catalog
+from ...core.catalog.catalog import AREA_ORDER
 from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
@@ -91,28 +92,37 @@ async def page(request: Request) -> HTMLResponse:
         groups = await st.connector.list_groups()
     except Exception as exc:  # noqa: BLE001
         users, groups = [], []
+    counts = cat.area_counts()
+    areas = [(a, counts[a]) for a in AREA_ORDER if counts.get(a)]
     return TEMPLATES.TemplateResponse(request, "builder.html", {
-        "connected": True, "categories": cat.categories(), "users": users, "groups": groups,
+        "connected": True, "areas": areas, "users": users, "groups": groups,
         "sequence": st.builder_sequence,
     })
 
 
+PAGE_SIZE = 50
+
+
 @router.get("/catalog", response_class=HTMLResponse)
-async def catalog_list(request: Request, category: str = "", q: str = "", buildable: str = "") -> HTMLResponse:
+async def catalog_list(request: Request, area: str = "", q: str = "", buildable: str = "",
+                       page: int = 1) -> HTMLResponse:
     cat = _catalog(request)
     q = q.strip()
     if q:
         items = cat.search(q)
-    elif category:
-        items = cat.in_category(category)
+    elif area:
+        items = cat.in_area(area)
     else:
-        items = cat.commands
-    only_buildable = buildable in ("1", "true", "on")
-    if only_buildable:
+        items = cat.all_sorted()
+    if buildable in ("1", "true", "on"):
         items = [c for c in items if c.buildable]
-    capped = len(items) > 200
-    return TEMPLATES.TemplateResponse(request, "_catalog_list.html",
-                                      {"items": items[:200], "q": q, "capped": capped})
+    total = len(items)
+    page = max(1, page)
+    start = (page - 1) * PAGE_SIZE
+    return TEMPLATES.TemplateResponse(request, "_catalog_list.html", {
+        "items": items[start:start + PAGE_SIZE], "q": q, "page": page, "total": total,
+        "has_prev": page > 1, "has_next": start + PAGE_SIZE < total,
+    })
 
 
 @router.get("/command/{cid}", response_class=HTMLResponse)

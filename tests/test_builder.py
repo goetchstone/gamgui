@@ -52,6 +52,18 @@ def test_catalog_buildable_only_filter(client):
     assert "Build" in r.text and "Copy" not in r.text
 
 
+def test_builder_page_groups_into_areas(client):
+    r = client.get("/builder")
+    assert "Users &amp; Identity" in r.text and "Calendars" in r.text   # area dropdown, not 53 cats
+
+
+def test_catalog_pagination(client):
+    r1 = client.get("/builder/catalog", params={"area": "Users & Identity", "page": 1})
+    assert "Page 1" in r1.text and "Next" in r1.text and "Prev" in r1.text
+    r2 = client.get("/builder/catalog", params={"area": "Users & Identity", "page": 2})
+    assert "Page 2" in r2.text
+
+
 def test_read_command_export_to_drive(client):
     r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
                                           "td_export": "1", "td_user": "boss@example.com", "td_title": "Delegates"})

@@ -48,6 +48,7 @@ class CatalogCommand:
     capability: Optional[Capability] = None
     buildable: bool = False
     uncertain: bool = False      # risk inferred from an unknown verb
+    area: str = ""               # top-level grouping (set at load time from the category)
     slots: List[CommandSlot] = field(default_factory=list)
     # Curated-only; never serialized. Maps a {slot_key: value} dict to an argv list via GAMCommands.
     build: Optional[Callable[[Dict[str, str]], List[str]]] = field(default=None, repr=False)
@@ -79,29 +80,32 @@ class Catalog:
     commands: List[CatalogCommand]
     version: str = ""
 
-    def categories(self) -> List[tuple]:
-        """[(category, count)] sorted, with the most-populated areas readable first."""
+    def area_counts(self) -> Dict[str, int]:
         counts: Dict[str, int] = {}
         for c in self.commands:
-            counts[c.category] = counts.get(c.category, 0) + 1
-        return sorted(counts.items(), key=lambda kv: kv[0].lower())
+            counts[c.area] = counts.get(c.area, 0) + 1
+        return counts
 
-    def in_category(self, category: str, q: str = "") -> List[CatalogCommand]:
-        ql = (q or "").strip().lower()
-        items = [c for c in self.commands if c.category == category]
-        if ql:
-            items = [c for c in items if ql in c.name.lower() or ql in c.raw_syntax.lower()]
-        return sorted(items, key=lambda c: (not c.buildable, c.name.lower()))  # buildable first
+    def in_area(self, area: str) -> List[CatalogCommand]:
+        return _by_section([c for c in self.commands if c.area == area])
 
-    def search(self, q: str, limit: int = 80) -> List[CatalogCommand]:
+    def search(self, q: str) -> List[CatalogCommand]:
         ql = (q or "").strip().lower()
         if not ql:
             return []
-        items = [c for c in self.commands if ql in c.name.lower() or ql in c.raw_syntax.lower()]
-        return sorted(items, key=lambda c: (not c.buildable, c.name.lower()))[:limit]
+        return _by_section([c for c in self.commands if ql in c.name.lower() or ql in c.raw_syntax.lower()])
 
     def by_id(self, cid: str) -> Optional[CatalogCommand]:
         return next((c for c in self.commands if c.id == cid), None)
 
     def buildable(self) -> List[CatalogCommand]:
-        return [c for c in self.commands if c.buildable]
+        return _by_section([c for c in self.commands if c.buildable])
+
+    def all_sorted(self) -> List[CatalogCommand]:
+        return _by_section(self.commands)
+
+
+def _by_section(items: List[CatalogCommand]) -> List[CatalogCommand]:
+    """Sort so commands sharing a category/subcategory are contiguous (for section headers),
+    buildable first within each section."""
+    return sorted(items, key=lambda c: (c.category.lower(), c.subcategory.lower(), not c.buildable, c.name.lower()))

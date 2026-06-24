@@ -1,11 +1,15 @@
 {% if items %}
-<ul class="divide-y divide-brand-gray/15 text-sm">
+<ul class="text-sm">
   {% for c in items %}
-  <li class="copy-wrap flex items-center gap-2 py-1.5" title="{{ c.raw_syntax }}">
+  {% set section = c.category ~ (' · ' ~ c.subcategory if c.subcategory else '') %}
+  {% set prev = items[loop.index0 - 1] %}
+  {% set prev_section = (prev.category ~ (' · ' ~ prev.subcategory if prev.subcategory else '')) if not loop.first else '' %}
+  {% if loop.first or section != prev_section %}
+  <li class="sticky top-0 z-10 bg-brand-white px-1 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-brand-gray">{{ section }}</li>
+  {% endif %}
+  <li class="copy-wrap flex items-center gap-2 border-t border-brand-gray/10 py-1.5" title="{{ c.raw_syntax }}">
     <span class="inline-block h-2 w-2 shrink-0 rounded-full {{ {'read':'bg-emerald-500','change':'bg-brand-blue','destructive':'bg-red-500'}[c.risk_label] }}"></span>
-    <span class="min-w-0 flex-1 truncate">
-      <span class="text-brand-black">{{ c.name }}</span>{% if c.subcategory %} <span class="text-xs text-brand-gray">· {{ c.subcategory }}</span>{% endif %}
-    </span>
+    <span class="min-w-0 flex-1 truncate text-brand-black">{{ c.name }}</span>
     <input type="hidden" value="{{ c.raw_syntax }}" />
     {% if c.buildable %}
     <button class="shrink-0 rounded bg-brand-blue px-2 py-0.5 text-xs font-medium text-brand-white hover:bg-brand-blueink transition-colors"
@@ -16,7 +20,15 @@
   </li>
   {% endfor %}
 </ul>
-{% if capped %}<p class="mt-2 text-xs text-brand-gray">Showing the first 200 — search or pick a category to narrow.</p>{% endif %}
+{% if has_prev or has_next %}
+<div class="mt-3 flex items-center justify-between text-xs">
+  <button class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
+          hx-get="/builder/catalog" hx-include="#cat-controls" hx-vals='{"page": {{ page - 1 }}}' hx-target="#catalog" hx-swap="innerHTML" {{ 'disabled' if not has_prev }}>← Prev</button>
+  <span class="text-brand-gray">Page {{ page }} · {{ total }} commands</span>
+  <button class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
+          hx-get="/builder/catalog" hx-include="#cat-controls" hx-vals='{"page": {{ page + 1 }}}' hx-target="#catalog" hx-swap="innerHTML" {{ 'disabled' if not has_next }}>Next →</button>
+</div>
+{% endif %}
 {% else %}
 <p class="text-sm text-brand-gray">{% if q %}No commands match “{{ q }}”.{% else %}No commands here.{% endif %}</p>
 {% endif %}

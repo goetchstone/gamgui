@@ -22,6 +22,38 @@ GROUP_ROLES = ["member", "manager", "owner"]
 TRANSFER_SERVICES = ["drive", "calendar"]
 FORWARD_ACTIONS = list(GAMCommands.FORWARD_ACTIONS)
 
+# Group the ~53 grammar categories into a short, browsable set of areas (display order below).
+# Anything unmapped falls through to "Other".
+AREA_ORDER = [
+    "Users & Identity", "Groups", "Org & Domains", "Calendars", "Drive", "Devices", "Classroom",
+    "Security & Access", "Compliance & Audit", "Reporting", "Billing & Licensing", "Messaging",
+    "GAM & Meta", "Other",
+]
+_AREA = {
+    "Users & Identity": ["Users", "Aliases", "Schemas", "Administrators", "Customer", "Contacts"],
+    "Groups": ["Groups", "Cloud Identity Groups"],
+    "Org & Domains": ["Organizational Units", "Domain", "Domains"],
+    "Calendars": ["Calendars", "Resource Calendars"],
+    "Drive": ["Shared Drives"],
+    "Devices": ["ChromeOS Devices", "Mobile Devices", "Cloud Identity Devices", "Printers"],
+    "Classroom": ["Classroom", "Classroom User Profiles"],
+    "Security & Access": ["Authorization", "Context Aware Access", "Inbound SSO", "Verifications"],
+    "Compliance & Audit": ["Vault/Takeout", "Alert Center", "Email Audit Monitor",
+                           "Classification Labels", "Cloud Identity Policies"],
+    "Reporting": ["Reports", "Analytics Admin"],
+    "Billing & Licensing": ["Licenses", "Reseller", "Cloud Channel"],
+    "Messaging": ["Chat Bot", "Send Email"],
+    "GAM & Meta": ["Meta Commands", "Bulk Processing", "Check connection to Google", "Addresses",
+                   "Comment", "Version and Help", "Web Resourses and Sites"],
+}
+_CATEGORY_TO_AREA = {cat: area for area, cats in _AREA.items() for cat in cats}
+
+
+def _area_of(category: str) -> str:
+    if category in _CATEGORY_TO_AREA:
+        return _CATEGORY_TO_AREA[category]
+    return "Devices" if category.startswith("Chrome") else "Other"
+
 
 def _resource(name: str) -> Path:
     meipass = getattr(sys, "_MEIPASS", None)
@@ -145,4 +177,7 @@ def _load_shallow() -> Tuple[List[CatalogCommand], str]:
 
 def load_catalog() -> Catalog:
     shallow, version = _load_shallow()
-    return Catalog(commands=_curated() + shallow, version=version)
+    commands = _curated() + shallow
+    for c in commands:
+        c.area = _area_of(c.category)
+    return Catalog(commands=commands, version=version)
