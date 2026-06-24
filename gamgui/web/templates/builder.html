@@ -9,24 +9,23 @@
   </div>
 {% else %}
 {% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
-<div class="space-y-5">
-  <div>
-    <p class="eyebrow text-brand-blue">Builder</p>
-    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Command builder</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Browse every GAM command by area. For the buildable ones, fill the slots (type a user/group — they autocomplete), preview the exact <code>gam …</code>, run it through the guard, or queue a few into a sequence.</p>
+<div class="space-y-2.5">
+  <div class="flex items-baseline gap-3">
+    <h1 class="font-serif text-xl text-brand-black tracking-tight">Command builder</h1>
+    <p class="text-xs text-brand-gray">Browse every GAM command; build &amp; run the buildable ones, or queue a sequence.</p>
   </div>
 
-  <!-- Filter row: search · category · buildable-only (all feed one request) -->
-  <form id="cat-controls" class="flex flex-wrap items-center gap-2">
-    <input class="{{ fld }} max-w-xs" type="search" name="q" placeholder="Search all commands…"
+  <!-- Search-first faceted controls: search · area · buildable-only (one row, one request) -->
+  <form id="cat-controls" class="flex items-center gap-2">
+    <input class="{{ fld }} min-w-0 flex-1" type="search" name="q" placeholder="Search 1,000+ commands…"
            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
            hx-trigger="keyup changed delay:300ms, search" />
-    <select class="{{ fld }} max-w-[14rem]" name="area"
+    <select class="w-52 shrink-0 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" name="area"
             hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML">
       <option value="">All areas</option>
       {% for name, n in areas %}<option value="{{ name }}">{{ name }} ({{ n }})</option>{% endfor %}
     </select>
-    <label class="flex items-center gap-1.5 text-sm text-brand-blueink">
+    <label class="flex items-center gap-1.5 whitespace-nowrap text-sm text-brand-blueink">
       <input type="checkbox" name="buildable" value="1" checked
              hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML" />
       Buildable only
@@ -34,9 +33,9 @@
   </form>
 
   <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-    <!-- LEFT: browse the catalog (scrolls on its own so the builder stays put) -->
+    <!-- LEFT: the paginated catalog (one page at a time — no scroll box) -->
     <section>
-      <div id="catalog" class="max-h-[32rem] overflow-y-auto overscroll-contain rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
+      <div id="catalog" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
            hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
         <p class="text-sm text-brand-gray">Loading…</p>
       </div>
@@ -46,19 +45,15 @@
     <section class="space-y-4">
       <div id="cmd-form">
         <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-gray">
-          Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Type a user or group into a slot (they autocomplete).
+          Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Click a User field to choose someone.
         </div>
       </div>
       <div id="builder-result"></div>
     </section>
   </div>
 
-  <!-- Sequence -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Sequence</h2>
-    <p class="text-xs text-brand-gray">Queue several commands here to run them together, in order, as one audited job — e.g. a custom offboarding.</p>
-    <div id="sequence" class="mt-2">{% include "_sequence.html" %}</div>
-  </div>
+  <!-- Sequence: a compact drawer so it never pushes the workspace off-screen -->
+  <div id="sequence">{% include "_sequence.html" %}</div>
 </div>
 
 <script>
@@ -100,6 +95,40 @@
       var inMenu = e.target.closest && e.target.closest(".upick-menu");
       if (!onInput && !inMenu) closeAll();
     });
+  })();
+
+  // Paginate result tables client-side (10 rows/page, Prev/Next) instead of a scroll box.
+  (function () {
+    function btn(label) {
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = label;
+      b.className = "rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30";
+      return b;
+    }
+    function paginate(root) {
+      (root || document).querySelectorAll("table.js-paged:not([data-paged])").forEach(function (tbl) {
+        tbl.setAttribute("data-paged", "1");
+        var per = 10, rows = Array.prototype.slice.call(tbl.tBodies[0].rows);
+        if (rows.length <= per) return;
+        var pages = Math.ceil(rows.length / per), cur = 1;
+        var prev = btn("‹ Prev"), next = btn("Next ›"), lbl = document.createElement("span");
+        lbl.className = "text-brand-gray";
+        var foot = document.createElement("div");
+        foot.className = "mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs";
+        foot.appendChild(prev); foot.appendChild(lbl); foot.appendChild(next);
+        tbl.parentNode.appendChild(foot);
+        function render() {
+          rows.forEach(function (r, i) { r.style.display = (i >= (cur - 1) * per && i < cur * per) ? "" : "none"; });
+          lbl.textContent = "Page " + cur + " of " + pages;
+          prev.disabled = cur <= 1; next.disabled = cur >= pages;
+        }
+        prev.onclick = function () { if (cur > 1) { cur--; render(); } };
+        next.onclick = function () { if (cur < pages) { cur++; render(); } };
+        render();
+      });
+    }
+    document.addEventListener("htmx:afterSwap", function (e) { paginate(e.target); });
+    paginate(document);
   })();
 </script>
 {% endif %}

@@ -136,50 +136,31 @@ async def pick(request: Request, kind: str = "users", q: str = "") -> HTMLRespon
                                       {"items": pairs[:PICK_LIMIT], "more": len(pairs) > PICK_LIMIT})
 
 
-PAGE_SIZE = 50          # flat lists (search / buildable landing)
-SECTION_PAGE = 25       # a single category/subcategory leaf in the tree
+PAGE_SIZE = 8           # commands per page — sized so a page fits a 13" window without scrolling
 
 
 def _paginated(request: Request, items, q="", page=1) -> HTMLResponse:
-    total, page = len(items), max(1, page)
+    total = len(items)
+    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = min(max(1, page), pages)
     start = (page - 1) * PAGE_SIZE
     return TEMPLATES.TemplateResponse(request, "_catalog_list.html", {
-        "items": items[start:start + PAGE_SIZE], "q": q, "page": page, "total": total,
-        "has_prev": page > 1, "has_next": start + PAGE_SIZE < total,
+        "items": items[start:start + PAGE_SIZE], "q": q, "page": page, "total": total, "pages": pages,
+        "has_prev": page > 1, "has_next": page < pages,
     })
 
 
 @router.get("/catalog", response_class=HTMLResponse)
 async def catalog_list(request: Request, area: str = "", q: str = "", buildable: str = "",
                        page: int = 1) -> HTMLResponse:
+    """One flat, paginated list — search results, an area, or the buildable landing. No scroll box:
+    each page is sized to fit, navigated with Prev/Next (the modern faceted-list pattern)."""
     cat = _catalog(request)
     q = q.strip()
-    only_buildable = buildable in ("1", "true", "on")
-    # Browsing the FULL set of an area → a collapsible category/subcategory tree (leaves lazy-load).
-    # "Buildable only" always yields a flat list, so the toggle does something with an area selected.
-    if area and not q and not only_buildable:
-        tree = [{"category": ct, "count": n, "subs": cat.subcategories_in(area, ct)}
-                for ct, n in cat.categories_in_area(area)]
-        return TEMPLATES.TemplateResponse(request, "_catalog_tree.html", {"area": area, "tree": tree})
-    # Flat list: search results, the buildable landing/filter, or an area filtered to buildables.
     items = cat.search(q) if q else (cat.in_area(area) if area else cat.all_sorted())
-    if only_buildable:
+    if buildable in ("1", "true", "on"):
         items = [c for c in items if c.buildable]
     return _paginated(request, items, q=q, page=page)
-
-
-@router.get("/catalog/section", response_class=HTMLResponse)
-async def section_commands(request: Request, area: str = "", category: str = "",
-                           subcategory: str = "", page: int = 1) -> HTMLResponse:
-    cat = _catalog(request)
-    items = cat.in_section(area, category, subcategory)
-    total, page = len(items), max(1, page)
-    start = (page - 1) * SECTION_PAGE
-    return TEMPLATES.TemplateResponse(request, "_section_commands.html", {
-        "items": items[start:start + SECTION_PAGE], "area": area, "category": category,
-        "subcategory": subcategory, "page": page, "total": total,
-        "has_prev": page > 1, "has_next": start + SECTION_PAGE < total,
-    })
 
 
 @router.get("/command/{cid}", response_class=HTMLResponse)

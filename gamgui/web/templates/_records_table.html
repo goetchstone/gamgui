@@ -2,8 +2,8 @@
 {% set cols = records[0].keys() | list %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
   <p class="mb-2 text-xs text-brand-gray">{{ records | length }} row{{ '' if records | length == 1 else 's' }} · <code>{{ gam }}</code></p>
-  <div class="max-h-96 overflow-auto">
-    <table class="w-full text-xs">
+  <div class="overflow-x-auto">
+    <table class="js-paged w-full text-xs">
       <thead><tr class="text-left text-brand-gray">{% for k in cols %}<th class="px-2 py-1">{{ k }}</th>{% endfor %}</tr></thead>
       <tbody>
         {% for r in records[:100] %}

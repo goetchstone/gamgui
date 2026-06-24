@@ -1,26 +1,35 @@
-{% if sequence %}
-<ol class="space-y-1.5 text-sm">
-  {% for s in sequence %}
-  <li class="flex items-center gap-2 rounded border border-brand-gray/30 px-2 py-1.5">
-    <span class="w-5 text-xs text-brand-gray">{{ loop.index }}.</span>
-    <span class="rounded px-1.5 py-0.5 text-[10px] uppercase {{ {0:'bg-emerald-50 text-emerald-700',1:'bg-brand-blue/10 text-brand-blueink',2:'bg-red-100 text-red-700'}[s.risk] }}">{{ {0:'read',1:'change',2:'destructive'}[s.risk] }}</span>
-    <span class="min-w-0 flex-1 truncate"><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-gray">→ {{ s.target }}</span></span>
-    <button class="text-xs text-brand-gray hover:text-brand-black disabled:opacity-30" title="move up"
-            hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 - 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.first }}>↑</button>
-    <button class="text-xs text-brand-gray hover:text-brand-black disabled:opacity-30" title="move down"
-            hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 + 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.last }}>↓</button>
-    <button class="text-xs text-red-600 hover:text-red-800" title="remove"
-            hx-post="/builder/sequence/remove" hx-vals='{"index": {{ loop.index0 }}}' hx-target="#sequence" hx-swap="innerHTML">✕</button>
-  </li>
-  {% endfor %}
-</ol>
-<div class="mt-3 flex items-center gap-2">
-  <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
-          hx-post="/builder/sequence/preview" hx-target="#sequence-action" hx-swap="innerHTML">Preview &amp; run ({{ sequence | length }})</button>
-  <button class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
-          hx-post="/builder/sequence/clear" hx-target="#sequence" hx-swap="innerHTML">Clear</button>
-</div>
-<div id="sequence-action" class="mt-3"></div>
-{% else %}
-<p class="text-sm text-brand-gray">No steps yet. Build a command above and click <em>Add to sequence</em> to chain them.</p>
-{% endif %}
+<details class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm" {{ 'open' if sequence }}>
+  <summary class="flex cursor-pointer items-center gap-2 p-3 text-sm">
+    <span class="eyebrow text-brand-gray">Sequence</span>
+    <span class="rounded-full bg-brand-blue/10 px-2 py-0.5 text-xs font-medium text-brand-blueink">{{ sequence | length }}</span>
+    <span class="text-xs text-brand-gray">queued — run together as one audited job</span>
+  </summary>
+  <div class="border-t border-brand-gray/15 p-3">
+  {% if sequence %}
+    <ol class="space-y-1.5 text-sm">
+      {% for s in sequence %}
+      <li class="flex items-center gap-2 rounded border border-brand-gray/30 px-2 py-1">
+        <span class="w-5 text-xs text-brand-gray">{{ loop.index }}.</span>
+        <span class="rounded px-1.5 py-0.5 text-[10px] uppercase {{ {0:'bg-emerald-50 text-emerald-700',1:'bg-brand-blue/10 text-brand-blueink',2:'bg-red-100 text-red-700'}[s.risk] }}">{{ {0:'read',1:'change',2:'destructive'}[s.risk] }}</span>
+        <span class="min-w-0 flex-1 truncate"><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-gray">→ {{ s.target }}</span></span>
+        <button class="text-xs text-brand-gray hover:text-brand-black disabled:opacity-30" title="move up"
+                hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 - 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.first }}>↑</button>
+        <button class="text-xs text-brand-gray hover:text-brand-black disabled:opacity-30" title="move down"
+                hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 + 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.last }}>↓</button>
+        <button class="text-xs text-red-600 hover:text-red-800" title="remove"
+                hx-post="/builder/sequence/remove" hx-vals='{"index": {{ loop.index0 }}}' hx-target="#sequence" hx-swap="innerHTML">✕</button>
+      </li>
+      {% endfor %}
+    </ol>
+    <div class="mt-3 flex items-center gap-2">
+      <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+              hx-post="/builder/sequence/preview" hx-target="#sequence-action" hx-swap="innerHTML">Preview &amp; run ({{ sequence | length }})</button>
+      <button class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+              hx-post="/builder/sequence/clear" hx-target="#sequence" hx-swap="innerHTML">Clear</button>
+    </div>
+    <div id="sequence-action" class="mt-3"></div>
+  {% else %}
+    <p class="text-sm text-brand-gray">No steps yet. Build a command and click <em>+ Queue in sequence</em> to chain them.</p>
+  {% endif %}
+  </div>
+</details>
