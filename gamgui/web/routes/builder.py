@@ -107,7 +107,7 @@ async def page(request: Request) -> HTMLResponse:
     # User/group lists aren't fetched here — the slot pickers query /builder/pick on demand so the
     # page loads instantly and the picker scales to large domains (only the cached top matches render).
     return TEMPLATES.TemplateResponse(request, "builder.html", {
-        "connected": True, "areas": areas, "sequence": st.builder_sequence,
+        "connected": True, "areas": areas, "sequence": st.builder_sequence, "row_actions": ROW_ACTIONS,
     })
 
 
@@ -163,12 +163,28 @@ async def catalog_list(request: Request, area: str = "", q: str = "", buildable:
     return _paginated(request, items, q=q, page=page)
 
 
+# Quick actions offered when you click a person in a result table — each is a curated buildable
+# command keyed on the "email" slot, so the clicked address pre-fills the form.
+ROW_ACTIONS = [
+    {"cid": "build.print_delegates", "label": "Delegates", "risk": "read"},
+    {"cid": "build.print_forwarding", "label": "Forwarding", "risk": "read"},
+    {"cid": "build.set_vacation", "label": "Set vacation", "risk": "change"},
+    {"cid": "build.set_signature", "label": "Set signature", "risk": "change"},
+    {"cid": "build.set_organization", "label": "Title / dept", "risk": "change"},
+    {"cid": "build.reset_password", "label": "Reset password", "risk": "change"},
+    {"cid": "build.suspend_user", "label": "Suspend", "risk": "destructive"},
+    {"cid": "build.delete_user", "label": "Delete account", "risk": "destructive"},
+]
+
+
 @router.get("/command/{cid}", response_class=HTMLResponse)
 async def command_form(request: Request, cid: str) -> HTMLResponse:
     cmd = _catalog(request).by_id(cid)
     if cmd is None:
         return _err(request, "Unknown command.")
-    return TEMPLATES.TemplateResponse(request, "_builder_form.html", {"cmd": cmd})
+    # Pre-fill any slot whose key is passed as a query param (e.g. ?email=alice@x.com from a row click).
+    prefill = {k: v for k, v in request.query_params.items() if k != "cid"}
+    return TEMPLATES.TemplateResponse(request, "_builder_form.html", {"cmd": cmd, "prefill": prefill})
 
 
 # --- single-command preview + run ------------------------------------------------------

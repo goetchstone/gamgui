@@ -1,4 +1,5 @@
 {% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set prefill = prefill | default({}) %}
 {% if cmd.buildable %}
 <form id="builder-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
   <input type="hidden" name="cid" value="{{ cmd.id }}" />
@@ -11,13 +12,14 @@
   {% for slot in cmd.slots %}
   <label class="block text-sm">
     <span class="text-brand-blueink">{{ slot.label }}{% if not slot.required %} <span class="text-brand-gray">(optional)</span>{% endif %}</span>
+    {% set val = prefill.get(slot.key) or slot.default %}
     {% if slot.kind.value == 'choice' %}
     <select name="{{ slot.key }}" class="{{ fld }} mt-1">
-      {% for ch in slot.choices %}<option value="{{ ch }}" {{ 'selected' if ch == slot.default }}>{{ ch }}</option>{% endfor %}
+      {% for ch in slot.choices %}<option value="{{ ch }}" {{ 'selected' if ch == val }}>{{ ch }}</option>{% endfor %}
     </select>
     {% elif slot.is_drop %}
     <span class="upick-wrap relative mt-1 block">
-      <input name="{{ slot.key }}" value="{{ slot.default }}" autocomplete="off"
+      <input name="{{ slot.key }}" value="{{ val }}" autocomplete="off"
              placeholder="{{ slot.placeholder or ('group@domain' if slot.kind.value == 'group' else 'user@domain') }}"
              class="upick {{ fld }} border-dashed border-brand-blue/50"
              data-kind="{{ 'groups' if slot.kind.value == 'group' else 'users' }}" />
@@ -25,7 +27,7 @@
     </span>
     <span class="text-[11px] text-brand-gray">click and type a {{ 'group' if slot.kind.value == 'group' else 'user' }} — pick from the list</span>
     {% else %}
-    <input name="{{ slot.key }}" value="{{ slot.default }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1" />
+    <input name="{{ slot.key }}" value="{{ val }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1" />
     {% endif %}
   </label>
   {% endfor %}

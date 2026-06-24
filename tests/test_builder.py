@@ -175,6 +175,20 @@ def test_read_command_export_to_drive(client):
     assert "todrive tduser boss@example.com tdtitle Delegates" in r.text
 
 
+def test_row_action_prefills_the_form(client):
+    # Clicking a person in a result opens the chosen command pre-filled with that email.
+    r = client.get("/builder/command/build.suspend_user", params={"email": "alice@example.com"})
+    assert r.status_code == 200 and 'value="alice@example.com"' in r.text
+
+
+def test_result_emails_are_actionable(client):
+    # A read result makes email cells clickable, and the page ships the quick-actions menu.
+    page = client.get("/builder").text
+    assert 'id="row-actions"' in page and ">Suspend<" in page
+    res = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    assert 'class="cell-act' in res.text and "assistant@example.com" in res.text
+
+
 def test_buildable_form_has_slots(client):
     r = client.get("/builder/command/build.set_signature")
     assert r.status_code == 200

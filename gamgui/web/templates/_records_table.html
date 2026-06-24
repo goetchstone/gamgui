@@ -7,7 +7,8 @@
       <thead><tr class="text-left text-brand-gray">{% for k in cols %}<th class="px-2 py-1">{{ k }}</th>{% endfor %}</tr></thead>
       <tbody>
         {% for r in records[:100] %}
-        <tr class="border-t border-brand-gray/15">{% for k in cols %}<td class="px-2 py-1 align-top break-all">{{ r.get(k, "") }}</td>{% endfor %}</tr>
+        <tr class="border-t border-brand-gray/15">{% for k in cols %}{% set v = r.get(k, "") | string %}
+          <td class="px-2 py-1 align-top break-all">{% if '@' in v and '.' in v and ' ' not in v %}<button type="button" class="cell-act text-brand-blueink underline decoration-dotted decoration-brand-gray/50 underline-offset-2 hover:text-brand-black" data-email="{{ v }}" title="Act on {{ v }}">{{ v }}</button>{% else %}{{ v }}{% endif %}</td>{% endfor %}</tr>
         {% endfor %}
       </tbody>
     </table>

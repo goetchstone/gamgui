@@ -58,6 +58,14 @@
   <div id="sequence" class="shrink-0">{% include "_sequence.html" %}</div>
 </div>
 
+<!-- Quick actions for a person clicked in a result table → opens that command pre-filled. -->
+<div id="row-actions" class="hidden fixed z-40 w-52 rounded-lg border border-brand-gray/40 bg-brand-white py-1 text-sm shadow-xl">
+  <p id="row-actions-email" class="truncate px-3 pb-1 pt-0.5 text-[11px] text-brand-gray"></p>
+  {% for a in row_actions %}
+  <button type="button" class="ra-item block w-full px-3 py-1.5 text-left hover:bg-paper {{ 'text-red-700 hover:bg-red-50' if a.risk == 'destructive' }}" data-cid="{{ a.cid }}">{{ a.label }}</button>
+  {% endfor %}
+</div>
+
 <script>
   // Server-backed type-ahead for the User/Group slot pickers. A real, visible dropdown that renders
   // in WKWebView (plain DOM, no <datalist>) and scales — /builder/pick returns only the top matches
@@ -131,6 +139,36 @@
     }
     document.addEventListener("htmx:afterSwap", function (e) { paginate(e.target); });
     paginate(document);
+  })();
+
+  // Act on a person clicked in a result table: open the chosen command pre-filled with that email.
+  (function () {
+    var menu = document.getElementById("row-actions");
+    var current = "";
+    function hide() { if (menu) menu.classList.add("hidden"); }
+    document.addEventListener("click", function (e) {
+      var cell = e.target.closest ? e.target.closest(".cell-act") : null;
+      if (cell) {
+        current = cell.getAttribute("data-email");
+        document.getElementById("row-actions-email").textContent = current;
+        var r = cell.getBoundingClientRect();
+        menu.style.left = Math.min(r.left, window.innerWidth - 220) + "px";
+        menu.style.top = Math.min(r.bottom + 4, window.innerHeight - 320) + "px";
+        menu.classList.remove("hidden");
+        e.preventDefault(); e.stopPropagation();
+        return;
+      }
+      var item = e.target.closest ? e.target.closest(".ra-item") : null;
+      if (item && current) {
+        htmx.ajax("GET", "/builder/command/" + item.getAttribute("data-cid") + "?email=" + encodeURIComponent(current),
+                  { target: "#cmd-form", swap: "innerHTML" });
+        hide();
+        var f = document.getElementById("cmd-form");
+        if (f) f.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        return;
+      }
+      if (!e.target.closest("#row-actions")) hide();
+    });
   })();
 </script>
 {% endif %}
