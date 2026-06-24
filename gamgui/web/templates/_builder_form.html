@@ -37,7 +37,9 @@
     <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
             hx-post="/builder/preview" hx-include="#builder-form" hx-target="#builder-result" hx-swap="innerHTML">Preview</button>
     <button type="button" class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
-            hx-post="/builder/sequence/add" hx-include="#builder-form" hx-target="#sequence" hx-swap="innerHTML">Add to sequence</button>
+            hx-post="/builder/sequence/add" hx-include="#builder-form" hx-target="#sequence" hx-swap="innerHTML"
+            title="Queue this command to run together with others, in order — shown in Sequence below"
+            onclick="setTimeout(function(){var s=document.getElementById('sequence');if(s)s.scrollIntoView({behavior:'smooth',block:'nearest'});},200)">+ Queue in sequence</button>
   </div>
 </form>
 {% else %}
