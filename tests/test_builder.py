@@ -182,11 +182,19 @@ def test_row_action_prefills_the_form(client):
 
 
 def test_result_emails_are_actionable(client):
-    # A read result makes email cells clickable, and the page ships the quick-actions menu.
+    # A read result makes email cells clickable, and the page ships the quick-actions menu
+    # with both user and group actions.
     page = client.get("/builder").text
     assert 'id="row-actions"' in page and ">Suspend<" in page
+    assert "As a user" in page and "As a group" in page and "Add a member" in page
     res = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
     assert 'class="cell-act' in res.text and "assistant@example.com" in res.text
+
+
+def test_row_action_prefills_group_slot(client):
+    # Clicking an address as a group pre-fills the group slot (different slot key than the user case).
+    r = client.get("/builder/command/build.add_group_member", params={"group": "sales@example.com"})
+    assert r.status_code == 200 and 'value="sales@example.com"' in r.text
 
 
 def test_buildable_form_has_slots(client):

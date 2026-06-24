@@ -163,17 +163,20 @@ async def catalog_list(request: Request, area: str = "", q: str = "", buildable:
     return _paginated(request, items, q=q, page=page)
 
 
-# Quick actions offered when you click a person in a result table — each is a curated buildable
-# command keyed on the "email" slot, so the clicked address pre-fills the form.
+# Quick actions offered when you click an address in a result table. Each is a curated buildable
+# command; `param` is the slot the clicked address pre-fills, `group` splits the menu (a result
+# address may be a user or a group, so we offer both and let you pick the right one).
 ROW_ACTIONS = [
-    {"cid": "build.print_delegates", "label": "Delegates", "risk": "read"},
-    {"cid": "build.print_forwarding", "label": "Forwarding", "risk": "read"},
-    {"cid": "build.set_vacation", "label": "Set vacation", "risk": "change"},
-    {"cid": "build.set_signature", "label": "Set signature", "risk": "change"},
-    {"cid": "build.set_organization", "label": "Title / dept", "risk": "change"},
-    {"cid": "build.reset_password", "label": "Reset password", "risk": "change"},
-    {"cid": "build.suspend_user", "label": "Suspend", "risk": "destructive"},
-    {"cid": "build.delete_user", "label": "Delete account", "risk": "destructive"},
+    {"cid": "build.print_delegates", "label": "Delegates", "risk": "read", "param": "email", "group": "user"},
+    {"cid": "build.print_forwarding", "label": "Forwarding", "risk": "read", "param": "email", "group": "user"},
+    {"cid": "build.set_vacation", "label": "Set vacation", "risk": "change", "param": "email", "group": "user"},
+    {"cid": "build.set_signature", "label": "Set signature", "risk": "change", "param": "email", "group": "user"},
+    {"cid": "build.set_organization", "label": "Title / dept", "risk": "change", "param": "email", "group": "user"},
+    {"cid": "build.reset_password", "label": "Reset password", "risk": "change", "param": "email", "group": "user"},
+    {"cid": "build.suspend_user", "label": "Suspend", "risk": "destructive", "param": "email", "group": "user"},
+    {"cid": "build.delete_user", "label": "Delete account", "risk": "destructive", "param": "email", "group": "user"},
+    {"cid": "build.add_group_member", "label": "Add a member", "risk": "change", "param": "group", "group": "group"},
+    {"cid": "build.remove_group_member", "label": "Remove a member", "risk": "change", "param": "group", "group": "group"},
 ]
 
 

@@ -58,11 +58,16 @@
   <div id="sequence" class="shrink-0">{% include "_sequence.html" %}</div>
 </div>
 
-<!-- Quick actions for a person clicked in a result table → opens that command pre-filled. -->
-<div id="row-actions" class="hidden fixed z-40 w-52 rounded-lg border border-brand-gray/40 bg-brand-white py-1 text-sm shadow-xl">
-  <p id="row-actions-email" class="truncate px-3 pb-1 pt-0.5 text-[11px] text-brand-gray"></p>
-  {% for a in row_actions %}
-  <button type="button" class="ra-item block w-full px-3 py-1.5 text-left hover:bg-paper {{ 'text-red-700 hover:bg-red-50' if a.risk == 'destructive' }}" data-cid="{{ a.cid }}">{{ a.label }}</button>
+<!-- Quick actions for an address clicked in a result table → opens that command pre-filled. -->
+<div id="row-actions" class="hidden fixed z-40 max-h-80 w-52 overflow-y-auto rounded-lg border border-brand-gray/40 bg-brand-white py-1 text-sm shadow-xl">
+  <p id="row-actions-email" class="truncate px-3 pb-1 pt-0.5 text-[11px] font-medium text-brand-black"></p>
+  <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-brand-gray">As a user</p>
+  {% for a in row_actions if a.group == 'user' %}
+  <button type="button" class="ra-item block w-full px-3 py-1.5 text-left hover:bg-paper {{ 'text-red-700 hover:bg-red-50' if a.risk == 'destructive' }}" data-cid="{{ a.cid }}" data-param="{{ a.param }}">{{ a.label }}</button>
+  {% endfor %}
+  <p class="border-t border-brand-gray/15 px-3 pt-1.5 text-[10px] uppercase tracking-wide text-brand-gray">As a group</p>
+  {% for a in row_actions if a.group == 'group' %}
+  <button type="button" class="ra-item block w-full px-3 py-1.5 text-left hover:bg-paper" data-cid="{{ a.cid }}" data-param="{{ a.param }}">{{ a.label }}</button>
   {% endfor %}
 </div>
 
@@ -160,7 +165,8 @@
       }
       var item = e.target.closest ? e.target.closest(".ra-item") : null;
       if (item && current) {
-        htmx.ajax("GET", "/builder/command/" + item.getAttribute("data-cid") + "?email=" + encodeURIComponent(current),
+        var param = item.getAttribute("data-param") || "email";
+        htmx.ajax("GET", "/builder/command/" + item.getAttribute("data-cid") + "?" + param + "=" + encodeURIComponent(current),
                   { target: "#cmd-form", swap: "innerHTML" });
         hide();
         var f = document.getElementById("cmd-form");
