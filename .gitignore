@@ -13,6 +13,8 @@ dist/
 gamgui/resources/gam7/*
 !gamgui/resources/gam7/.gitkeep
 !gamgui/resources/gam7/VERSION
+# …but the derived command catalog IS committed (small, powers the Builder + contract test)
+!gamgui/resources/gam7/command_catalog.json
 
 # Secrets / local runtime state must never be committed
 *.oauth2service.json
@@ -21,8 +23,10 @@ client_secrets.json
 *.local
 .gamgui/
 
-# Local editor / agent tooling state (don't rely on a personal global gitignore)
-.claude/
+# Local editor / agent tooling state: settings stay local; shared skills/agents are tracked.
+.claude/*
+!.claude/skills/
+!.claude/agents/
 
 # macOS
 .DS_Store

@@ -33,6 +33,8 @@ REQUIRED_TOKENS = [
     "signature",
     "delegate",
     "vacation",
+    "forwardingaddress",  # gmail forwarding (Builder)
+    "alias",              # user aliases (Builder)
     "print groups",
     "update group",   # add/remove members
     "calendaracls",   # calendar access view/add/remove
@@ -62,6 +64,26 @@ def test_required_command_tokens_present():
         f"{missing}. A GAM upgrade likely renamed/removed a sub-command — update commands.py + this "
         "list together, and re-run the live acceptance pass."
     )
+
+
+@pytest.mark.skipif(
+    not GAM_COMMANDS_REF.exists(),
+    reason="vendored GAM command reference not present (clean-room; runs in the gam-compat CI job)",
+)
+def test_catalog_matches_grammar():
+    # The committed command catalog (Builder data) must be regenerated when GAM is bumped:
+    # its version + command count must equal a fresh parse of the vendored grammar.
+    import json
+
+    from gamgui.core.catalog.parser import parse_grammar
+
+    cat_json = ROOT / "gamgui" / "resources" / "gam7" / "command_catalog.json"
+    if not cat_json.exists():
+        pytest.skip("command_catalog.json not generated")
+    data = json.loads(cat_json.read_text())
+    fresh = parse_grammar(GAM_COMMANDS_REF.read_text(errors="replace"))
+    assert data["version"] == EXPECTED_GAM_VERSION, "regenerate command_catalog.json (scripts/build_command_catalog.py)"
+    assert len(data["commands"]) == len(fresh), "command_catalog.json is stale — regenerate it after the GAM bump"
 
 
 def test_pinned_version_consistent():

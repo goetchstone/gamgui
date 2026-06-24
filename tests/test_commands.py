@@ -89,6 +89,20 @@ def test_set_signature_html_flag():
     assert GAMCommands.set_signature("a@e.com", "Hi", html=False) == ["user", "a@e.com", "signature", "Hi"]
 
 
+def test_forwarding_commands():
+    assert GAMCommands.add_forwarding_address("a@e.com", "f@e.com") == ["user", "a@e.com", "add", "forwardingaddress", "f@e.com"]
+    assert GAMCommands.print_forwarding_addresses("a@e.com") == ["user", "a@e.com", "print", "forwardingaddresses"]
+    assert GAMCommands.set_forward("a@e.com", "f@e.com", "archive") == ["user", "a@e.com", "forward", "on", "archive", "f@e.com"]
+    assert GAMCommands.forward_off("a@e.com") == ["user", "a@e.com", "forward", "off"]
+    with pytest.raises(ValueError):
+        GAMCommands.set_forward("a@e.com", "f@e.com", "bogus")
+
+
+def test_alias_commands():
+    assert GAMCommands.create_user_alias("nick@e.com", "real@e.com") == ["create", "alias", "nick@e.com", "user", "real@e.com"]
+    assert GAMCommands.delete_alias("nick@e.com") == ["delete", "alias", "nick@e.com"]
+
+
 def test_show_signature_and_groups_member():
     assert GAMCommands.show_signature("a@e.com") == ["user", "a@e.com", "show", "signature"]
     assert GAMCommands.print_groups_member("a@e.com") == ["print", "groups", "member", "a@e.com"]

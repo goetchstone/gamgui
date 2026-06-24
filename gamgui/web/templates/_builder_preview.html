@@ -1,0 +1,13 @@
+{% set rc = {'read':'text-emerald-700','change':'text-brand-blueink','destructive':'text-red-700'}[cmd.risk_label] %}
+<div class="rounded-2xl border {{ 'border-red-300 bg-red-50' if decision.requires_confirmation else 'border-brand-gray/40 bg-brand-white' }} p-4 shadow-sm space-y-2">
+  <p class="eyebrow text-brand-gray">Will run</p>
+  <pre class="overflow-auto rounded bg-paper p-2 text-xs text-brand-black">{{ gam }}</pre>
+  <p class="text-sm font-medium {{ rc }}">{{ decision.summary }}</p>
+  {% for w in decision.warnings %}<p class="text-xs text-red-700">{{ w }}</p>{% endfor %}
+  <button type="button"
+          class="rounded-lg px-3.5 py-2 text-sm font-medium text-white {{ 'bg-red-700 hover:bg-red-800' if decision.requires_confirmation else 'bg-brand-blue hover:bg-brand-blueink' }} transition-colors"
+          hx-post="/builder/run" hx-include="#builder-form" hx-vals='{"confirmed": "1"}'
+          hx-target="#builder-result" hx-swap="innerHTML">
+    {{ 'Confirm & run' if decision.requires_confirmation else 'Run' }}
+  </button>
+</div>

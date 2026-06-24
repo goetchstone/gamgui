@@ -1,0 +1,39 @@
+{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% if cmd.buildable %}
+<form id="builder-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
+  <input type="hidden" name="cid" value="{{ cmd.id }}" />
+  <div class="flex items-center gap-2">
+    <h3 class="font-serif text-lg text-brand-black">{{ cmd.name }}</h3>
+    <span class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide {{ {'read':'bg-emerald-50 text-emerald-700','change':'bg-brand-blue/10 text-brand-blueink','destructive':'bg-red-100 text-red-700'}[cmd.risk_label] }}">{{ cmd.risk_label }}</span>
+  </div>
+  <code class="block text-xs text-brand-gray break-all">{{ cmd.raw_syntax }}</code>
+  {% for slot in cmd.slots %}
+  <label class="block text-sm">
+    <span class="text-brand-blueink">{{ slot.label }}{% if not slot.required %} <span class="text-brand-gray">(optional)</span>{% endif %}</span>
+    {% if slot.kind.value == 'choice' %}
+    <select name="{{ slot.key }}" class="{{ fld }} mt-1">
+      {% for ch in slot.choices %}<option value="{{ ch }}" {{ 'selected' if ch == slot.default }}>{{ ch }}</option>{% endfor %}
+    </select>
+    {% else %}
+    <input name="{{ slot.key }}" value="{{ slot.default }}" placeholder="{{ slot.placeholder }}" autocomplete="off"
+           class="{{ fld }} mt-1 {% if slot.is_drop %}border-dashed border-brand-blue/50{% endif %}"
+           {% if slot.is_drop %}ondragover="bAllow(event)" ondrop="bDrop(event,this)"{% endif %} />
+    {% if slot.is_drop %}<span class="text-[11px] text-brand-gray">drag a {{ 'group' if slot.kind.value == 'group' else 'user' }} here, or type</span>{% endif %}
+    {% endif %}
+  </label>
+  {% endfor %}
+  <div class="flex gap-2 pt-1">
+    <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+            hx-post="/builder/preview" hx-include="#builder-form" hx-target="#builder-result" hx-swap="innerHTML">Preview</button>
+    <button type="button" class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+            hx-post="/builder/sequence/add" hx-include="#builder-form" hx-target="#sequence" hx-swap="innerHTML">Add to sequence</button>
+  </div>
+</form>
+{% else %}
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm copy-wrap">
+  <h3 class="font-serif text-lg text-brand-black">{{ cmd.name }}</h3>
+  <p class="mt-1 text-xs text-brand-gray">Browse-only — copy the syntax and run it in GAM directly.</p>
+  <code class="mt-2 block text-xs text-brand-black break-all">{{ cmd.raw_syntax }}</code>
+  <button class="mt-2 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors" onclick="copyEl(this)">Copy</button>
+</div>
+{% endif %}

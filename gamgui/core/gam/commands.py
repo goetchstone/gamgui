@@ -317,6 +317,42 @@ class GAMCommands:
     def vacation_off(email: str) -> List[str]:
         return ["user", email, "vacation", "off"]
 
+    # --- gmail: forwarding ------------------------------------------------------------
+    FORWARD_ACTIONS = ("keep", "archive", "markread", "trash", "delete")
+
+    @staticmethod
+    def add_forwarding_address(email: str, address: str) -> List[str]:
+        return ["user", email, "add", "forwardingaddress", address]
+
+    @staticmethod
+    def delete_forwarding_address(email: str, address: str) -> List[str]:
+        return ["user", email, "delete", "forwardingaddress", address]
+
+    @staticmethod
+    def print_forwarding_addresses(email: str) -> List[str]:
+        return ["user", email, "print", "forwardingaddresses"]
+
+    @staticmethod
+    def set_forward(email: str, address: str, action: str = "keep") -> List[str]:
+        # Forward to an already-added/verified forwarding address; `action` is what to do with the
+        # original copy (keep | archive | markread | trash | delete).
+        if action not in GAMCommands.FORWARD_ACTIONS:
+            raise ValueError(f"invalid forward action: {action!r}")
+        return ["user", email, "forward", "on", action, address]
+
+    @staticmethod
+    def forward_off(email: str) -> List[str]:
+        return ["user", email, "forward", "off"]
+
+    # --- aliases ----------------------------------------------------------------------
+    @staticmethod
+    def create_user_alias(alias: str, email: str) -> List[str]:
+        return ["create", "alias", alias, "user", email]
+
+    @staticmethod
+    def delete_alias(alias: str) -> List[str]:
+        return ["delete", "alias", alias]
+
     @staticmethod
     def show_vacation(email: str) -> List[str]:
         # `show vacation` does NOT support formatjson — returns parseable text.

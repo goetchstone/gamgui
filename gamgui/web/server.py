@@ -44,6 +44,8 @@ class AppState:
     jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
+    catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
+    builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
 
     async def users(self, force: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports)."""
@@ -137,6 +139,7 @@ def create_app(state: AppState) -> FastAPI:
         )
 
     # Imported here (not at module top) to avoid a cycle: routes import TEMPLATES from this module.
+    from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
     from .routes.groups import router as groups_router
     from .routes.lifecycle import router as lifecycle_router
@@ -152,4 +155,5 @@ def create_app(state: AppState) -> FastAPI:
     app.include_router(signatures_router)
     app.include_router(calendars_router)
     app.include_router(lifecycle_router)
+    app.include_router(builder_router)
     return app

@@ -1,0 +1,15 @@
+{% set destructive = decision.max_risk == 2 %}
+<div class="rounded-2xl border {{ 'border-red-300 bg-red-50' if decision.requires_confirmation else 'border-brand-gray/40 bg-brand-white' }} p-4 shadow-sm space-y-2">
+  <p class="text-sm font-medium {{ 'text-red-700' if destructive else 'text-brand-blueink' }}">{{ decision.summary }} across {{ sequence | length }} step{{ '' if sequence | length == 1 else 's' }}.</p>
+  {% for w in decision.warnings %}<p class="text-xs text-red-700">{{ w }}</p>{% endfor %}
+  {% if error %}<p class="text-xs font-medium text-red-700">{{ error }}</p>{% endif %}
+  <form hx-post="/builder/sequence/run" hx-target="#sequence-action" hx-swap="innerHTML" class="flex items-center gap-2">
+    {% if decision.requires_typed_confirmation %}
+    <input name="confirm" autocomplete="off" placeholder="type: confirm"
+           class="rounded-lg border border-red-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none" />
+    {% elif decision.requires_confirmation %}
+    <input type="hidden" name="confirmed" value="1" />
+    {% endif %}
+    <button type="submit" class="rounded-lg px-3.5 py-2 text-sm font-medium text-white {{ 'bg-red-700 hover:bg-red-800' if decision.requires_confirmation else 'bg-brand-blue hover:bg-brand-blueink' }} transition-colors">{{ 'Confirm & run' if decision.requires_confirmation else 'Run sequence' }}</button>
+  </form>
+</div>

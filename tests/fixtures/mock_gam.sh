@@ -98,6 +98,12 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
   exit 0
 fi
 
+# `gam user <email> print forwardingaddresses` -> plain CSV (forwardingEmail + verification).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forwardingaddresses" ]; then
+  printf 'User,forwardingEmail,verificationStatus\n%s,fwd@example.com,accepted\n' "${2:-}"
+  exit 0
+fi
+
 # `gam user <email> print delegates` (no formatjson) -> plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
   printf 'User,delegateAddress,delegationStatus\n%s,assistant@example.com,accepted\n%s,backup@example.com,accepted\n' "${2:-}" "${2:-}"

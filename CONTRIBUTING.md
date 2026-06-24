@@ -38,6 +38,31 @@ scripts/            # fetch_gam.sh (vendor GAM7), build_app.sh (PyInstaller .app
 - Mutations go through the destructive-op guard and the audit log.
 - Add or update tests for any change; keep `pytest` green.
 
+## Coding standards
+
+Write like the surrounding code — a reviewer shouldn't be able to tell which lines were generated.
+
+- **KISS.** The smallest change that does the job. No speculative abstraction, no config knobs nobody
+  asked for, no dead code. Delete more than you add when you can.
+- **Comments explain *why*, not *what*** — one line above a non-obvious block, skip the obvious. No
+  banner art, no restating the code in prose, no "Step 1/Step 2" narration.
+- **Names carry the meaning** so comments stay sparse. Match the existing naming and file layout.
+- **No AI tells:** no "Note that…"/"It's worth noting", no "robust/seamless/leverage", no emoji in
+  code, no comments that hedge or apologize. Terse and factual.
+- **Reuse before adding** — look for an existing helper (`guard.evaluate`, `_run_write`,
+  `parse_records`, the `BatchJob` runner, the catalog) before writing one.
+- **Errors surface, never crash** — map a failure to a friendly message and return an error partial,
+  never a 500 or a silent success.
+
+## Adding a Builder command
+
+The Builder (`/builder`) runs only *curated* commands. Full recipe + safety invariants in
+[`docs/builder-commands.md`](docs/builder-commands.md). In short: verify the syntax against the
+vendored `GamCommands.txt`; add the arg-list builder to `core/gam/commands.py` (+ an arg-shape test
++ a contract token); add a `CatalogCommand` with typed slots and an authoritative `RiskLevel` to
+`core/catalog/catalog.py`; add a web test. Never assemble argv from raw grammar tokens, and never let
+a browse-only command run.
+
 ## Before opening a PR
 
 ```bash

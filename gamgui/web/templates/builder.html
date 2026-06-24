@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Builder — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="space-y-5">
+  <div>
+    <p class="eyebrow text-brand-blue">Builder</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Command builder</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Browse every GAM command by category. For the buildable ones, drag a person or group into a slot, preview the exact <code>gam …</code>, run it through the guard — and chain steps into a sequence.</p>
+  </div>
+
+  <div class="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)_15rem]">
+    <!-- Categories -->
+    <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
+      <input class="{{ fld }} mb-2" type="search" placeholder="Search all commands…"
+             hx-get="/builder/catalog" hx-target="#catalog" hx-swap="innerHTML"
+             hx-trigger="keyup changed delay:300ms, search" name="q" />
+      <div class="max-h-[28rem] overflow-auto pr-1 text-sm">
+        {% for name, n in categories %}
+        <button class="flex w-full items-center justify-between rounded px-2 py-1 text-left text-brand-blueink hover:bg-paper"
+                hx-get="/builder/catalog?category={{ name | urlencode }}" hx-target="#catalog" hx-swap="innerHTML">
+          <span class="truncate">{{ name }}</span><span class="ml-2 text-xs text-brand-gray">{{ n }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </aside>
+
+    <!-- Commands + the selected command's form/preview -->
+    <section class="space-y-4">
+      <div id="catalog" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
+        <p class="text-sm text-brand-gray">Pick a category or search to list commands.</p>
+      </div>
+      <div id="cmd-form"></div>
+      <div id="builder-result"></div>
+    </section>
+
+    <!-- People + groups (drag sources) -->
+    <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
+      <h2 class="eyebrow text-brand-gray">Drag into a slot</h2>
+      <input id="ppl-filter" class="{{ fld }} my-2" placeholder="filter…" onkeyup="bFilter()" />
+      <div id="ppl" class="max-h-[24rem] overflow-auto pr-1 text-xs space-y-1">
+        {% for u in users %}
+        <div class="ucard cursor-grab rounded border border-brand-gray/40 px-2 py-1 hover:bg-paper" draggable="true"
+             data-s="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}"
+             ondragstart="bDrag(event,'user',{{ u.primary_email | tojson }})">{{ u.primary_email }}</div>
+        {% endfor %}
+        {% for g in groups %}
+        <div class="ucard cursor-grab rounded border border-brand-blue/30 bg-brand-blue/5 px-2 py-1 hover:bg-brand-blue/10" draggable="true"
+             data-s="{{ (g.name ~ ' ' ~ g.email) | lower }}"
+             ondragstart="bDrag(event,'group',{{ g.email | tojson }})">⛂ {{ g.email }}</div>
+        {% endfor %}
+      </div>
+    </aside>
+  </div>
+
+  <!-- Sequence -->
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Sequence</h2>
+    <div id="sequence" class="mt-2">{% include "_sequence.html" %}</div>
+  </div>
+</div>
+
+<script>
+  function bDrag(ev, kind, val){ ev.dataTransfer.setData("text/plain", JSON.stringify({kind:kind, val:val})); ev.dataTransfer.effectAllowed="copy"; }
+  function bAllow(ev){ ev.preventDefault(); }
+  function bDrop(ev, inp){
+    ev.preventDefault();
+    try { var p = JSON.parse(ev.dataTransfer.getData("text/plain")); if (p && p.val) { inp.value = p.val; inp.classList.add("ring-2","ring-brand-blue/40"); } } catch(e){}
+  }
+  function bFilter(){
+    var q = (document.getElementById("ppl-filter").value||"").toLowerCase();
+    document.querySelectorAll("#ppl .ucard").forEach(function(c){ c.style.display = c.getAttribute("data-s").indexOf(q)>=0 ? "" : "none"; });
+  }
+</script>
+{% endif %}
+{% endblock %}
