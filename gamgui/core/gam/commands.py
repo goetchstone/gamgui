@@ -354,6 +354,17 @@ class GAMCommands:
         return ["delete", "alias", alias]
 
     @staticmethod
+    def todrive_args(user: str = "", title: str = "") -> List[str]:
+        # Append to a `print …` command to export its CSV to a Google Sheet. `user` = whose Drive
+        # owns the sheet (blank = the admin/oauth account's Drive); `title` names it.
+        argv = ["todrive"]
+        if user:
+            argv += ["tduser", user]
+        if title:
+            argv += ["tdtitle", title]
+        return argv
+
+    @staticmethod
     def show_vacation(email: str) -> List[str]:
         # `show vacation` does NOT support formatjson — returns parseable text.
         return ["user", email, "show", "vacation"]

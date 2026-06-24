@@ -1,27 +1,22 @@
 {% if items %}
 <ul class="divide-y divide-brand-gray/15 text-sm">
   {% for c in items %}
-  <li class="copy-wrap py-2 flex items-start justify-between gap-3">
-    <div class="min-w-0">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-brand-black font-medium">{{ c.name }}</span>
-        <span class="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide {{ {'read':'bg-emerald-50 text-emerald-700','change':'bg-brand-blue/10 text-brand-blueink','destructive':'bg-red-100 text-red-700'}[c.risk_label] }}">{{ c.risk_label }}{% if c.uncertain %}?{% endif %}</span>
-        {% if c.buildable %}<span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-800">buildable</span>{% endif %}
-        {% if c.subcategory %}<span class="text-[10px] text-brand-gray">{{ c.subcategory }}</span>{% endif %}
-      </div>
-      <code class="text-xs text-brand-gray break-all">{{ c.raw_syntax }}</code>
-    </div>
-    <div class="shrink-0">
-      {% if c.buildable %}
-      <button class="rounded-lg bg-brand-blue px-2.5 py-1 text-xs font-medium text-brand-white hover:bg-brand-blueink transition-colors"
-              hx-get="/builder/command/{{ c.id }}" hx-target="#cmd-form" hx-swap="innerHTML">Build</button>
-      {% else %}
-      <button class="rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors" onclick="copyEl(this)">Copy</button>
-      {% endif %}
-    </div>
+  <li class="copy-wrap flex items-center gap-2 py-1.5" title="{{ c.raw_syntax }}">
+    <span class="inline-block h-2 w-2 shrink-0 rounded-full {{ {'read':'bg-emerald-500','change':'bg-brand-blue','destructive':'bg-red-500'}[c.risk_label] }}"></span>
+    <span class="min-w-0 flex-1 truncate">
+      <span class="text-brand-black">{{ c.name }}</span>{% if c.subcategory %} <span class="text-xs text-brand-gray">· {{ c.subcategory }}</span>{% endif %}
+    </span>
+    <input type="hidden" value="{{ c.raw_syntax }}" />
+    {% if c.buildable %}
+    <button class="shrink-0 rounded bg-brand-blue px-2 py-0.5 text-xs font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+            hx-get="/builder/command/{{ c.id }}" hx-target="#cmd-form" hx-swap="innerHTML">Build</button>
+    {% else %}
+    <button class="shrink-0 rounded border border-brand-gray/40 px-2 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors" onclick="copyEl(this)">Copy</button>
+    {% endif %}
   </li>
   {% endfor %}
 </ul>
+{% if capped %}<p class="mt-2 text-xs text-brand-gray">Showing the first 200 — search or pick a category to narrow.</p>{% endif %}
 {% else %}
 <p class="text-sm text-brand-gray">{% if q %}No commands match “{{ q }}”.{% else %}No commands here.{% endif %}</p>
 {% endif %}

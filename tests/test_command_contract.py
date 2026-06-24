@@ -35,6 +35,8 @@ REQUIRED_TOKENS = [
     "vacation",
     "forwardingaddress",  # gmail forwarding (Builder)
     "alias",              # user aliases (Builder)
+    "todrive",            # export a print command's CSV to a Google Sheet
+    "tduser",             # …in a specific user's Drive
     "print groups",
     "update group",   # add/remove members
     "calendaracls",   # calendar access view/add/remove

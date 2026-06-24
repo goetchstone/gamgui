@@ -43,7 +43,20 @@ def test_builder_page_and_catalog_search(client):
     r = client.get("/builder")
     assert r.status_code == 200 and "Command builder" in r.text and "Users" in r.text
     r = client.get("/builder/catalog", params={"q": "signature"})
-    assert "Set Gmail signature" in r.text and "buildable" in r.text
+    assert "Set Gmail signature" in r.text and "Build" in r.text
+
+
+def test_catalog_buildable_only_filter(client):
+    # The default landing lists only runnable commands — every row is a Build, none a Copy.
+    r = client.get("/builder/catalog", params={"buildable": "1"})
+    assert "Build" in r.text and "Copy" not in r.text
+
+
+def test_read_command_export_to_drive(client):
+    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
+                                          "td_export": "1", "td_user": "boss@example.com", "td_title": "Delegates"})
+    assert "Exported to a Google Sheet" in r.text and "boss@example.com" in r.text
+    assert "todrive tduser boss@example.com tdtitle Delegates" in r.text
 
 
 def test_buildable_form_has_slots(client):

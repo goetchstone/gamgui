@@ -16,26 +16,29 @@
     <p class="text-brand-blueink/80 mt-1 text-sm">Browse every GAM command by category. For the buildable ones, drag a person or group into a slot, preview the exact <code>gam …</code>, run it through the guard — and chain steps into a sequence.</p>
   </div>
 
-  <div class="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)_15rem]">
-    <!-- Categories -->
-    <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
-      <input class="{{ fld }} mb-2" type="search" placeholder="Search all commands…"
-             hx-get="/builder/catalog" hx-target="#catalog" hx-swap="innerHTML"
-             hx-trigger="keyup changed delay:300ms, search" name="q" />
-      <div class="max-h-[28rem] overflow-auto pr-1 text-sm">
-        {% for name, n in categories %}
-        <button class="flex w-full items-center justify-between rounded px-2 py-1 text-left text-brand-blueink hover:bg-paper"
-                hx-get="/builder/catalog?category={{ name | urlencode }}" hx-target="#catalog" hx-swap="innerHTML">
-          <span class="truncate">{{ name }}</span><span class="ml-2 text-xs text-brand-gray">{{ n }}</span>
-        </button>
-        {% endfor %}
-      </div>
-    </aside>
+  <!-- Filter row: search · category · buildable-only (all feed one request) -->
+  <form id="cat-controls" class="flex flex-wrap items-center gap-2">
+    <input class="{{ fld }} max-w-xs" type="search" name="q" placeholder="Search all commands…"
+           hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:300ms, search" />
+    <select class="{{ fld }} max-w-[12rem]" name="category"
+            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML">
+      <option value="">All categories</option>
+      {% for name, n in categories %}<option value="{{ name }}">{{ name }} ({{ n }})</option>{% endfor %}
+    </select>
+    <label class="flex items-center gap-1.5 text-sm text-brand-blueink">
+      <input type="checkbox" name="buildable" value="1" checked
+             hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML" />
+      Buildable only
+    </label>
+  </form>
 
+  <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem]">
     <!-- Commands + the selected command's form/preview -->
     <section class="space-y-4">
-      <div id="catalog" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm">
-        <p class="text-sm text-brand-gray">Pick a category or search to list commands.</p>
+      <div id="catalog" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
+           hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
+        <p class="text-sm text-brand-gray">Loading…</p>
       </div>
       <div id="cmd-form"></div>
       <div id="builder-result"></div>
@@ -45,7 +48,7 @@
     <aside class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
       <h2 class="eyebrow text-brand-gray">Drag into a slot</h2>
       <input id="ppl-filter" class="{{ fld }} my-2" placeholder="filter…" onkeyup="bFilter()" />
-      <div id="ppl" class="max-h-[24rem] overflow-auto pr-1 text-xs space-y-1">
+      <div id="ppl" class="max-h-72 overflow-auto pr-1 text-xs space-y-1">
         {% for u in users %}
         <div class="ucard cursor-grab rounded border border-brand-gray/40 px-2 py-1 hover:bg-paper" draggable="true"
              data-s="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}"

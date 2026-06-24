@@ -22,6 +22,17 @@
     {% endif %}
   </label>
   {% endfor %}
+  {% if cmd.risk_label == 'read' %}
+  <details class="text-sm">
+    <summary class="cursor-pointer text-brand-blueink">Export to a Google Sheet instead of a table</summary>
+    <label class="mt-2 flex items-center gap-1.5"><input type="checkbox" name="td_export" value="1" /> Create a Sheet</label>
+    <div class="mt-2 grid gap-2 sm:grid-cols-2">
+      <input name="td_user" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
+             class="{{ fld }} border-dashed border-brand-blue/50" ondragover="bAllow(event)" ondrop="bDrop(event,this)" />
+      <input name="td_title" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />
+    </div>
+  </details>
+  {% endif %}
   <div class="flex gap-2 pt-1">
     <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
             hx-post="/builder/preview" hx-include="#builder-form" hx-target="#builder-result" hx-swap="innerHTML">Preview</button>

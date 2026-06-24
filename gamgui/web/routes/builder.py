@@ -17,6 +17,7 @@ from ...core import guard as guard_mod
 from ...core.catalog import load_catalog
 from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
+from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ...core.gam.parser import parse_records
 from ..jobs import start_job
@@ -97,12 +98,21 @@ async def page(request: Request) -> HTMLResponse:
 
 
 @router.get("/catalog", response_class=HTMLResponse)
-async def catalog_list(request: Request, category: str = "", q: str = "") -> HTMLResponse:
+async def catalog_list(request: Request, category: str = "", q: str = "", buildable: str = "") -> HTMLResponse:
     cat = _catalog(request)
     q = q.strip()
-    items = cat.search(q) if q else cat.in_category(category)
+    if q:
+        items = cat.search(q)
+    elif category:
+        items = cat.in_category(category)
+    else:
+        items = cat.commands
+    only_buildable = buildable in ("1", "true", "on")
+    if only_buildable:
+        items = [c for c in items if c.buildable]
+    capped = len(items) > 200
     return TEMPLATES.TemplateResponse(request, "_catalog_list.html",
-                                      {"items": items, "category": category, "q": q})
+                                      {"items": items[:200], "q": q, "capped": capped})
 
 
 @router.get("/command/{cid}", response_class=HTMLResponse)
@@ -143,10 +153,19 @@ async def run(request: Request, cid: str = Form(...)) -> HTMLResponse:
         return _err(request, error)
     preview = _preview_of(cmd, argv, target)
     if cmd.risk == RiskLevel.READ_ONLY:
+        form = await request.form()
+        export = bool(form.get("td_export"))
+        if export:  # send the result to a Google Sheet instead of the in-app table
+            owner = (form.get("td_user") or "").strip()
+            argv = argv + GAMCommands.todrive_args(owner, (form.get("td_title") or "").strip())
         try:
             out = await conn.runner.run_authenticated(conn.domain, argv)
         except Exception as exc:  # noqa: BLE001
             return _err(request, _friendly(exc))
+        if export:
+            return TEMPLATES.TemplateResponse(request, "_export_result.html",
+                                              {"gam": _gam_str(argv), "output": out,
+                                               "owner": owner or "the admin account"})
         return TEMPLATES.TemplateResponse(request, "_records_table.html",
                                           {"records": parse_records(out), "gam": _gam_str(argv)})
     # A mutation that needs confirmation must come back through the preview (the "Confirm & run"

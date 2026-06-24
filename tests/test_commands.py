@@ -103,6 +103,12 @@ def test_alias_commands():
     assert GAMCommands.delete_alias("nick@e.com") == ["delete", "alias", "nick@e.com"]
 
 
+def test_todrive_args():
+    assert GAMCommands.todrive_args() == ["todrive"]
+    assert GAMCommands.todrive_args("u@e.com", "Report") == ["todrive", "tduser", "u@e.com", "tdtitle", "Report"]
+    assert GAMCommands.todrive_args(title="Just a title") == ["todrive", "tdtitle", "Just a title"]
+
+
 def test_show_signature_and_groups_member():
     assert GAMCommands.show_signature("a@e.com") == ["user", "a@e.com", "show", "signature"]
     assert GAMCommands.print_groups_member("a@e.com") == ["print", "groups", "member", "a@e.com"]
