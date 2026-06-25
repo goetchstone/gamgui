@@ -3,12 +3,13 @@
 {% block content %}
 {% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% set btn = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}
-<div class="space-y-6">
+{% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
+<div class="space-y-4">
   <a href="/users" class="text-sm text-brand-blueink/70 hover:text-brand-black">← Users</a>
 
   <div class="flex items-center gap-4">
     <div>
-      <h1 class="font-serif text-3xl text-brand-black tracking-tight">{{ user.full_name }}</h1>
+      <h1 class="font-serif text-2xl text-brand-black tracking-tight">{{ user.full_name }}</h1>
       <p class="text-brand-blueink/80">{{ user.primary_email }}</p>
       {% if user.title %}<p class="text-sm text-brand-gray">{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}</p>{% endif %}
     </div>
@@ -26,28 +27,95 @@
     </div>
   </div>
 
-  <div class="grid gap-5 sm:grid-cols-2">
-    <!-- info -->
-    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-      <h2 class="eyebrow text-brand-gray">Account</h2>
-      <dl class="mt-3 text-sm space-y-2">
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Name</dt><dd class="text-brand-black text-right">{{ user.full_name or "—" }}</dd></div>
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Email</dt><dd class="text-brand-black text-right">{{ user.primary_email }}</dd></div>
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
-        {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
-        {% if user.location %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Location</dt><dd class="text-brand-black text-right">{{ user.location }}</dd></div>{% endif %}
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Admin</dt><dd class="text-brand-black">{{ "Super" if user.is_admin else ("Delegated" if user.is_delegated_admin else "No") }}</dd></div>
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">2-step</dt><dd class="text-brand-black">{{ "Enrolled" if user.enrolled_2sv else "Not enrolled" }}</dd></div>
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Last login</dt><dd class="text-brand-black">{{ user.last_login_time or "—" }}</dd></div>
-        {% if user.recovery_email %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Recovery</dt><dd class="text-brand-black text-right">{{ user.recovery_email }}</dd></div>{% endif %}
-        <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Aliases</dt><dd class="text-brand-black text-right">{{ user.aliases | join(", ") or "—" }}</dd></div>
-      </dl>
-    </div>
+  <!-- Tabs keep this content-heavy page within the window — one section group at a time. -->
+  <nav class="flex gap-1 border-b border-brand-gray/30 text-sm">
+    <button type="button" class="ud-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="overview">Overview</button>
+    <button type="button" class="ud-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="mail">Mail</button>
+    <button type="button" class="ud-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="sharing">Sharing</button>
+    <button type="button" class="ud-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="danger">Account</button>
+  </nav>
 
-    <!-- danger / suspend -->
-    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-      <h2 class="eyebrow text-brand-gray">Access</h2>
+  <!-- OVERVIEW: identity + role/store -->
+  <div class="ud-panel max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 space-y-4" data-tab="overview">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="{{ card }}">
+        <h2 class="eyebrow text-brand-gray">Account</h2>
+        <dl class="mt-3 text-sm space-y-2">
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Name</dt><dd class="text-brand-black text-right">{{ user.full_name or "—" }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Email</dt><dd class="text-brand-black text-right">{{ user.primary_email }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
+          {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
+          {% if user.location %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Location</dt><dd class="text-brand-black text-right">{{ user.location }}</dd></div>{% endif %}
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Admin</dt><dd class="text-brand-black">{{ "Super" if user.is_admin else ("Delegated" if user.is_delegated_admin else "No") }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">2-step</dt><dd class="text-brand-black">{{ "Enrolled" if user.enrolled_2sv else "Not enrolled" }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Last login</dt><dd class="text-brand-black">{{ user.last_login_time or "—" }}</dd></div>
+          {% if user.recovery_email %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Recovery</dt><dd class="text-brand-black text-right">{{ user.recovery_email }}</dd></div>{% endif %}
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Aliases</dt><dd class="text-brand-black text-right">{{ user.aliases | join(", ") or "—" }}</dd></div>
+        </dl>
+      </div>
+      <div class="{{ card }}">
+        <h2 class="eyebrow text-brand-gray">Role &amp; store</h2>
+        <p class="text-xs text-brand-blueink/70 mt-1">Title is the role shown in signatures; Department holds the store.</p>
+        <div class="mt-3">
+          {% with title=user.title, department=user.department, saved=False %}{% include "_org_form.html" %}{% endwith %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIL: signature | delegates + vacation -->
+  <div class="ud-panel max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" data-tab="mail">
+    <div class="{{ card }}">
+      <h2 class="eyebrow text-brand-gray">Gmail signature</h2>
+      <div id="sig-current" class="mt-3 max-h-40 overflow-y-auto" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"><p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p></div>
+      <form class="mt-1 space-y-3" hx-post="/users/signature" hx-target="#sig-result" hx-swap="innerHTML">
+        <input type="hidden" name="email" value="{{ email }}" />
+        <textarea name="signature" rows="3" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 text-sm text-brand-blueink"><input type="checkbox" name="html" value="on" checked /> HTML</label>
+          <button class="{{ btn }}" type="submit">Save signature</button>
+        </div>
+      </form>
+      <div id="sig-result" class="mt-2"></div>
+    </div>
+    <div class="space-y-4">
+      <div class="{{ card }}">
+        <h2 class="eyebrow text-brand-gray">Mailbox delegates</h2>
+        <div id="delegates" class="mt-3" hx-get="/users/delegates?email={{ email | urlencode }}" hx-trigger="load">
+          <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+        </div>
+      </div>
+      <div class="{{ card }}">
+        <h2 class="eyebrow text-brand-gray">Vacation responder</h2>
+        <div id="vacation" class="mt-3" hx-get="/users/vacation?email={{ email | urlencode }}" hx-trigger="load">
+          <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHARING: groups | calendar access -->
+  <div class="ud-panel max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" data-tab="sharing">
+    <div class="{{ card }}">
+      <h2 class="eyebrow text-brand-gray">Groups</h2>
+      <div id="user-groups" class="mt-3" hx-get="/users/groups?email={{ email | urlencode }}" hx-trigger="load">
+        <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+      </div>
+    </div>
+    <div class="{{ card }}">
+      <h2 class="eyebrow text-brand-gray">Calendar access</h2>
+      <p class="text-xs text-brand-blueink/70 mt-1">Who can see or edit this person's primary calendar.</p>
+      <div id="calendar" class="mt-3" hx-get="/users/calendar?email={{ email | urlencode }}" hx-trigger="load">
+        <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT / DANGER: suspend + delete -->
+  <div class="ud-panel max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden space-y-4" data-tab="danger">
+    <div class="{{ card }}">
+      <h2 class="eyebrow text-brand-gray">Suspend &amp; delete</h2>
       <div id="suspend-zone" class="mt-3">
         {% include "_suspend_zone.html" %}
       </div>
@@ -56,62 +124,25 @@
       </div>
     </div>
   </div>
-
-  <!-- role & store (editable) -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Role &amp; store</h2>
-    <p class="text-xs text-brand-blueink/70 mt-1">Title is the role shown in signatures; Department holds the store.</p>
-    <div class="mt-3">
-      {% with title=user.title, department=user.department, saved=False %}{% include "_org_form.html" %}{% endwith %}
-    </div>
-  </div>
-
-  <!-- signature -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Gmail signature</h2>
-    <div id="sig-current" class="mt-3" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"><p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p></div>
-    <form class="mt-1 space-y-3" hx-post="/users/signature" hx-target="#sig-result" hx-swap="innerHTML">
-      <input type="hidden" name="email" value="{{ email }}" />
-      <textarea name="signature" rows="4" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
-      <div class="flex items-center justify-between">
-        <label class="flex items-center gap-2 text-sm text-brand-blueink"><input type="checkbox" name="html" value="on" checked /> HTML</label>
-        <button class="{{ btn }}" type="submit">Save signature</button>
-      </div>
-    </form>
-    <div id="sig-result" class="mt-2"></div>
-  </div>
-
-  <!-- delegates -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Mailbox delegates</h2>
-    <div id="delegates" class="mt-3" hx-get="/users/delegates?email={{ email | urlencode }}" hx-trigger="load">
-      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
-    </div>
-  </div>
-
-  <!-- vacation responder (lazy-loaded) -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Vacation responder</h2>
-    <div id="vacation" class="mt-3" hx-get="/users/vacation?email={{ email | urlencode }}" hx-trigger="load">
-      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
-    </div>
-  </div>
-
-  <!-- group memberships (lazy-loaded) -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Groups</h2>
-    <div id="user-groups" class="mt-3" hx-get="/users/groups?email={{ email | urlencode }}" hx-trigger="load">
-      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
-    </div>
-  </div>
-
-  <!-- calendar access (lazy-loaded) -->
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Calendar access</h2>
-    <p class="text-xs text-brand-blueink/70 mt-1">Who can see or edit this person's primary calendar.</p>
-    <div id="calendar" class="mt-3" hx-get="/users/calendar?email={{ email | urlencode }}" hx-trigger="load">
-      <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
-    </div>
-  </div>
 </div>
+
+<script>
+  // Simple tabs: show one section group at a time so this content-heavy page fits the window.
+  (function () {
+    var tabs = document.querySelectorAll(".ud-tab");
+    var panels = document.querySelectorAll(".ud-panel");
+    function show(name) {
+      panels.forEach(function (p) { p.classList.toggle("hidden", p.getAttribute("data-tab") !== name); });
+      tabs.forEach(function (t) {
+        var on = t.getAttribute("data-tab") === name;
+        t.classList.toggle("text-brand-black", on);
+        t.classList.toggle("border-brand-blue", on);
+        t.classList.toggle("text-brand-gray", !on);
+        t.classList.toggle("border-transparent", !on);
+      });
+    }
+    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.getAttribute("data-tab")); }); });
+    show("overview");
+  })();
+</script>
 {% endblock %}
