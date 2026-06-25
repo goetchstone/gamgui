@@ -130,6 +130,16 @@ def test_search_messages_runs_and_surfaces_return_path(client):
     assert "gam user alice@example.com print messages" in r.text
 
 
+def test_read_error_surfaces_gam_details(client):
+    # A failing read shows the friendly remediation AND the raw GAM stderr — no more
+    # "see details below" with nothing below it.
+    r = client.post("/builder/run", data={
+        "cid": "build.search_messages", "email": "alice@example.com", "query": "FAILME", "detail": "Headers"})
+    assert r.status_code == 200
+    assert "See details below" in r.text                      # the UNKNOWN-kind remediation
+    assert "a representative GAM failure detail" in r.text     # …and the actual stderr is now shown
+
+
 def test_generic_read_never_emits_grammar_junk():
     # No built read command may contain raw grammar punctuation — a value is the only free part, and
     # literal tokens come from the grammar. Worst case is an incomplete (but valid-token) command.

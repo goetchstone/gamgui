@@ -47,8 +47,16 @@ def _friendly(exc: Exception) -> str:
     return exc.remediation if isinstance(exc, GAMError) else "Something went wrong talking to GAM."
 
 
-def _err(request: Request, message: str) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
+def _details(exc: Exception) -> str:
+    """The raw error text to show under the friendly message — so 'see details below' has details."""
+    if isinstance(exc, GAMError):
+        return (exc.stderr or "").strip() or exc.message
+    return str(exc)
+
+
+def _err(request: Request, message: str, details: str = "") -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, "_action_result.html",
+                                      {"ok": False, "message": message, "details": details})
 
 
 # --- slot assembly ---------------------------------------------------------------------
@@ -238,7 +246,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
         try:
             out = await conn.runner.run_authenticated(conn.domain, argv)
         except Exception as exc:  # noqa: BLE001
-            return _err(request, _friendly(exc))
+            return _err(request, _friendly(exc), _details(exc))
         if export:
             return TEMPLATES.TemplateResponse(request, "_export_result.html",
                                               {"gam": _gam_str(argv), "output": out,

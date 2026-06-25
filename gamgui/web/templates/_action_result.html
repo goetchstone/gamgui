@@ -1,5 +1,8 @@
 {% if ok %}
 <div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{{ message }}</div>
 {% else %}
-<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ message }}</div>
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+  <div>{{ message }}</div>
+  {% if details %}<pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2.5 py-1.5 font-mono text-xs leading-snug text-amber-900">{{ details }}</pre>{% endif %}
+</div>
 {% endif %}
