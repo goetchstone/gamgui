@@ -8,6 +8,7 @@ on:
 jobs:
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
+    timeout-minutes: 15   # a hung test fails the job fast instead of burning the 6h default
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +34,7 @@ jobs:
   gam-compat:
     name: gam-compat (pinned binary)
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,6 +65,7 @@ jobs:
     name: gam-compat (latest, non-blocking)
     runs-on: macos-latest
     continue-on-error: true
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

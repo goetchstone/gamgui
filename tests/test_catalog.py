@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import pytest
+
 from gamgui.core.catalog import load_catalog
 from gamgui.core.catalog.catalog import _resource
 from gamgui.core.catalog.parser import parse_grammar
 from gamgui.core.connectors.base import RiskLevel
+
+# The raw grammar (GamCommands.txt) ships with the GAM binary and is NOT committed — only the
+# generated command_catalog.json is. Tests that parse the raw grammar skip in clean-room/CI.
+_GRAMMAR = _resource("GamCommands.txt")
+_needs_grammar = pytest.mark.skipif(not _GRAMMAR.exists(), reason="GamCommands.txt not vendored")
 
 
 def _risk(line: str) -> RiskLevel:
     return parse_grammar(line)[0].risk
 
 
+@_needs_grammar
 def test_parse_grammar_categorizes_and_counts():
     cmds = parse_grammar(_resource("GamCommands.txt").read_text(errors="replace"))
     assert len(cmds) > 900                                  # ~1,040 command lines

@@ -23,6 +23,7 @@ desktop = [
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    "pytest-timeout>=2.3",
     "httpx>=0.27",
 ]
 
@@ -33,6 +34,9 @@ gamgui = "gamgui.app:main"
 pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# A hung test (e.g. an asyncio subprocess deadlock seen intermittently on CI) fails with a
+# traceback after 60s instead of hanging the whole job.
+timeout = 60
 filterwarnings = [
     # Python 3.9 GCs a finished asyncio subprocess transport after the TestClient loop closes
     # (background signature-apply jobs) -> "Exception ignored in ... RuntimeError: Event loop is closed".
