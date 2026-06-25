@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -127,9 +128,9 @@ async def user_detail(request: Request, email: str) -> HTMLResponse:
 @router.post("/signature", response_class=HTMLResponse)
 async def set_signature(
     request: Request,
-    email: str = Form(...),
-    signature: str = Form(""),
-    html: str = Form("off"),
+    email: Annotated[str, Form()],
+    signature: Annotated[str, Form()] = "",
+    html: Annotated[str, Form()] = "off",
 ) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
@@ -176,7 +177,7 @@ async def _groups_partial(request: Request, conn, email: str) -> HTMLResponse:
 
 
 @router.post("/groups/add", response_class=HTMLResponse)
-async def groups_add(request: Request, email: str = Form(...), group: str = Form(...)) -> HTMLResponse:
+async def groups_add(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -187,7 +188,7 @@ async def groups_add(request: Request, email: str = Form(...), group: str = Form
 
 
 @router.post("/groups/remove", response_class=HTMLResponse)
-async def groups_remove(request: Request, email: str = Form(...), group: str = Form(...)) -> HTMLResponse:
+async def groups_remove(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -198,7 +199,7 @@ async def groups_remove(request: Request, email: str = Form(...), group: str = F
 
 
 @router.post("/delegate/add", response_class=HTMLResponse)
-async def add_delegate(request: Request, email: str = Form(...), delegate: str = Form(...)) -> HTMLResponse:
+async def add_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -212,7 +213,7 @@ async def add_delegate(request: Request, email: str = Form(...), delegate: str =
 
 
 @router.post("/delegate/remove", response_class=HTMLResponse)
-async def remove_delegate(request: Request, email: str = Form(...), delegate: str = Form(...)) -> HTMLResponse:
+async def remove_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -224,7 +225,7 @@ async def remove_delegate(request: Request, email: str = Form(...), delegate: st
 
 @router.post("/organization", response_class=HTMLResponse)
 async def set_organization(
-    request: Request, email: str = Form(...), title: str = Form(""), department: str = Form("")
+    request: Request, email: Annotated[str, Form()], title: Annotated[str, Form()] = "", department: Annotated[str, Form()] = ""
 ) -> HTMLResponse:
     """Set a user's title (role) + department (store). Guarded write; invalidates the cache."""
     st = request.app.state.gamgui
@@ -289,7 +290,7 @@ async def bulk_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/bulk/preview", response_class=HTMLResponse)
-async def bulk_preview(request: Request, store: str = Form(""), group: str = Form(""), emails: str = Form("")) -> HTMLResponse:
+async def bulk_preview(request: Request, store: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "", emails: Annotated[str, Form()] = "") -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
         return _err(request, "Not connected.")
@@ -303,7 +304,7 @@ async def bulk_preview(request: Request, store: str = Form(""), group: str = For
 
 
 @router.post("/bulk/apply", response_class=HTMLResponse)
-async def bulk_apply(request: Request, store: str = Form(""), group: str = Form(""), emails: str = Form("")) -> HTMLResponse:
+async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "", emails: Annotated[str, Form()] = "") -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
@@ -367,7 +368,7 @@ async def calendar_get(request: Request, email: str) -> HTMLResponse:
 
 @router.post("/calendar/add", response_class=HTMLResponse)
 async def calendar_add(
-    request: Request, email: str = Form(...), target: str = Form(...), role: str = Form("reader")
+    request: Request, email: Annotated[str, Form()], target: Annotated[str, Form()], role: Annotated[str, Form()] = "reader"
 ) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
@@ -382,7 +383,7 @@ async def calendar_add(
 
 
 @router.post("/calendar/remove", response_class=HTMLResponse)
-async def calendar_remove(request: Request, email: str = Form(...), scope: str = Form(...)) -> HTMLResponse:
+async def calendar_remove(request: Request, email: Annotated[str, Form()], scope: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -399,7 +400,7 @@ async def delete_zone(request: Request, email: str) -> HTMLResponse:
 
 
 @router.post("/delete/confirm", response_class=HTMLResponse)
-async def delete_confirm(request: Request, email: str = Form(...)) -> HTMLResponse:
+async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     # Warn (loudly) if a Drive/calendar transfer is still running — deleting now loses that data.
     conn = _conn(request)
     pending = await conn.incomplete_transfers_for(email.strip()) if conn else []
@@ -410,7 +411,7 @@ async def delete_confirm(request: Request, email: str = Form(...)) -> HTMLRespon
 
 
 @router.post("/delete/apply", response_class=HTMLResponse)
-async def delete_apply(request: Request, email: str = Form(...), confirm: str = Form("")) -> HTMLResponse:
+async def delete_apply(request: Request, email: Annotated[str, Form()], confirm: Annotated[str, Form()] = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -446,13 +447,13 @@ async def _vacation_partial(request: Request, conn, email: str) -> HTMLResponse:
 @router.post("/vacation/set", response_class=HTMLResponse)
 async def vacation_set(
     request: Request,
-    email: str = Form(...),
-    subject: str = Form(""),
-    message: str = Form(""),
-    contactsonly: str = Form("off"),
-    domainonly: str = Form("off"),
-    start: str = Form(""),
-    end: str = Form(""),
+    email: Annotated[str, Form()],
+    subject: Annotated[str, Form()] = "",
+    message: Annotated[str, Form()] = "",
+    contactsonly: Annotated[str, Form()] = "off",
+    domainonly: Annotated[str, Form()] = "off",
+    start: Annotated[str, Form()] = "",
+    end: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
@@ -468,7 +469,7 @@ async def vacation_set(
 
 
 @router.post("/vacation/off", response_class=HTMLResponse)
-async def vacation_off(request: Request, email: str = Form(...)) -> HTMLResponse:
+async def vacation_off(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -486,7 +487,7 @@ async def suspend_zone(request: Request, email: str, suspended: str = "false") -
 
 
 @router.post("/suspend/preview", response_class=HTMLResponse)
-async def suspend_preview(request: Request, email: str = Form(...)) -> HTMLResponse:
+async def suspend_preview(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -498,7 +499,7 @@ async def suspend_preview(request: Request, email: str = Form(...)) -> HTMLRespo
 
 
 @router.post("/suspend/apply", response_class=HTMLResponse)
-async def suspend_apply(request: Request, email: str = Form(...), suspend: str = Form("on")) -> HTMLResponse:
+async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend: Annotated[str, Form()] = "on") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")

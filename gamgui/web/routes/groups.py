@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
@@ -54,7 +56,10 @@ async def members(request: Request, group: str = "") -> HTMLResponse:
 
 @router.post("/members", response_class=HTMLResponse)
 async def members_mutate(
-    request: Request, group: str = Form(...), email: str = Form(...), op: str = Form("add")
+    request: Request,
+    group: Annotated[str, Form()],
+    email: Annotated[str, Form()],
+    op: Annotated[str, Form()] = "add",
 ) -> HTMLResponse:
     conn = request.app.state.gamgui.connector
     if conn is None:

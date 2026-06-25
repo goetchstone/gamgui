@@ -9,6 +9,7 @@ audited BatchJob. Browse-only commands are inert (read/copy syntax only).
 from __future__ import annotations
 
 import asyncio
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -195,7 +196,7 @@ async def command_form(request: Request, cid: str) -> HTMLResponse:
 # --- single-command preview + run ------------------------------------------------------
 
 @router.post("/preview", response_class=HTMLResponse)
-async def preview(request: Request, cid: str = Form(...)) -> HTMLResponse:
+async def preview(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     cmd = _catalog(request).by_id(cid)
     if cmd is None or not cmd.buildable:
         return _err(request, "That command can't be built — copy its syntax and run it in GAM directly.")
@@ -209,7 +210,7 @@ async def preview(request: Request, cid: str = Form(...)) -> HTMLResponse:
 
 
 @router.post("/run", response_class=HTMLResponse)
-async def run(request: Request, cid: str = Form(...)) -> HTMLResponse:
+async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     st = _st(request)
     conn = st.connector
     if conn is None:
@@ -252,7 +253,7 @@ async def run(request: Request, cid: str = Form(...)) -> HTMLResponse:
 # --- sequence --------------------------------------------------------------------------
 
 @router.post("/sequence/add", response_class=HTMLResponse)
-async def seq_add(request: Request, cid: str = Form(...)) -> HTMLResponse:
+async def seq_add(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     st = _st(request)
     cmd = _catalog(request).by_id(cid)
     if cmd is None or not cmd.buildable:
@@ -270,7 +271,7 @@ async def seq_add(request: Request, cid: str = Form(...)) -> HTMLResponse:
 
 
 @router.post("/sequence/remove", response_class=HTMLResponse)
-async def seq_remove(request: Request, index: int = Form(...)) -> HTMLResponse:
+async def seq_remove(request: Request, index: Annotated[int, Form()]) -> HTMLResponse:
     st = _st(request)
     if 0 <= index < len(st.builder_sequence):
         st.builder_sequence.pop(index)
@@ -278,7 +279,7 @@ async def seq_remove(request: Request, index: int = Form(...)) -> HTMLResponse:
 
 
 @router.post("/sequence/move", response_class=HTMLResponse)
-async def seq_move(request: Request, index: int = Form(...), to: int = Form(...)) -> HTMLResponse:
+async def seq_move(request: Request, index: Annotated[int, Form()], to: Annotated[int, Form()]) -> HTMLResponse:
     st = _st(request)
     seq = st.builder_sequence
     if 0 <= index < len(seq) and 0 <= to < len(seq):
@@ -326,7 +327,7 @@ async def _run_sequence(job, conn, previews) -> None:
 
 
 @router.post("/sequence/run", response_class=HTMLResponse)
-async def seq_run(request: Request, confirm: str = Form(""), confirmed: str = Form("")) -> HTMLResponse:
+async def seq_run(request: Request, confirm: Annotated[str, Form()] = "", confirmed: Annotated[str, Form()] = "") -> HTMLResponse:
     st = _st(request)
     conn = st.connector
     if conn is None:

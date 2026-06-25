@@ -8,6 +8,8 @@ welcome email. Task/email creation goes through the guarded, audited connector w
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
@@ -50,7 +52,7 @@ async def page(request: Request) -> HTMLResponse:
 
 
 @router.post("/role", response_class=HTMLResponse)
-async def save_role(request: Request, name: str = Form(...), steps: str = Form("")) -> HTMLResponse:
+async def save_role(request: Request, name: Annotated[str, Form()], steps: Annotated[str, Form()] = "") -> HTMLResponse:
     store = _store(request)
     try:
         store.set_role(name, steps.splitlines())
@@ -60,14 +62,14 @@ async def save_role(request: Request, name: str = Form(...), steps: str = Form("
 
 
 @router.post("/role/delete", response_class=HTMLResponse)
-async def delete_role(request: Request, name: str = Form(...)) -> HTMLResponse:
+async def delete_role(request: Request, name: Annotated[str, Form()]) -> HTMLResponse:
     store = _store(request)
     store.delete_role(name)
     return TEMPLATES.TemplateResponse(request, "_onboard_roles.html", {"roles": store.roles()})
 
 
 @router.post("/welcome", response_class=HTMLResponse)
-async def save_welcome(request: Request, subject: str = Form(""), body: str = Form("")) -> HTMLResponse:
+async def save_welcome(request: Request, subject: Annotated[str, Form()] = "", body: Annotated[str, Form()] = "") -> HTMLResponse:
     store = _store(request)
     store.set_welcome(subject, body)
     return TEMPLATES.TemplateResponse(request, "_onboard_welcome.html",
@@ -75,8 +77,9 @@ async def save_welcome(request: Request, subject: str = Form(""), body: str = Fo
 
 
 @router.post("/preview", response_class=HTMLResponse)
-async def preview(request: Request, role: str = Form(...), name: str = Form(""), email: str = Form(""),
-                  manager: str = Form(""), assignee: str = Form(""), send_welcome: str = Form("")) -> HTMLResponse:
+async def preview(request: Request, role: Annotated[str, Form()], name: Annotated[str, Form()] = "",
+                  email: Annotated[str, Form()] = "", manager: Annotated[str, Form()] = "",
+                  assignee: Annotated[str, Form()] = "", send_welcome: Annotated[str, Form()] = "") -> HTMLResponse:
     store = _store(request)
     steps = store.steps_for(role)
     if not steps:
@@ -90,8 +93,9 @@ async def preview(request: Request, role: str = Form(...), name: str = Form(""),
 
 
 @router.post("/run", response_class=HTMLResponse)
-async def run(request: Request, role: str = Form(...), name: str = Form(""), email: str = Form(""),
-              manager: str = Form(""), assignee: str = Form(""), send_welcome: str = Form("")) -> HTMLResponse:
+async def run(request: Request, role: Annotated[str, Form()], name: Annotated[str, Form()] = "",
+              email: Annotated[str, Form()] = "", manager: Annotated[str, Form()] = "",
+              assignee: Annotated[str, Form()] = "", send_welcome: Annotated[str, Form()] = "") -> HTMLResponse:
     st = _st(request)
     conn = st.connector
     if conn is None:

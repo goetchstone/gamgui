@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -92,8 +93,10 @@ async def page(request: Request) -> HTMLResponse:
 
 @router.post("/offboard/preview", response_class=HTMLResponse)
 async def offboard_preview(
-    request: Request, user: str = Form(...), manager: str = Form(...),
-    subject: str = Form(""), message: str = Form(""), days: str = Form("30"), notify: str = Form(""),
+    request: Request,
+    user: Annotated[str, Form()], manager: Annotated[str, Form()],
+    subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
+    days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
@@ -116,8 +119,8 @@ async def offboard_preview(
 
 @router.post("/offboard/autoreply", response_class=HTMLResponse)
 async def offboard_autoreply(
-    request: Request, user: str = Form(""), manager: str = Form(""),
-    subject: str = Form(""), message: str = Form(""),
+    request: Request, user: Annotated[str, Form()] = "", manager: Annotated[str, Form()] = "",
+    subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     """Live preview of the generated auto-reply as the user/manager/text are entered."""
     st = request.app.state.gamgui
@@ -152,8 +155,10 @@ async def _run_offboard(job, conn, steps) -> None:
 
 @router.post("/offboard/run", response_class=HTMLResponse)
 async def offboard_run(
-    request: Request, user: str = Form(...), manager: str = Form(...),
-    subject: str = Form(""), message: str = Form(""), days: str = Form("30"), notify: str = Form(""),
+    request: Request,
+    user: Annotated[str, Form()], manager: Annotated[str, Form()],
+    subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
+    days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector

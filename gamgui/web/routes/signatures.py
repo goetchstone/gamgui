@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -98,7 +98,10 @@ async def page(request: Request) -> HTMLResponse:
 
 @router.post("/preview", response_class=HTMLResponse)
 async def preview(
-    request: Request, template: str = Form(""), scope_type: str = Form("company"), scope_value: str = Form("")
+    request: Request,
+    template: Annotated[str, Form()] = "",
+    scope_type: Annotated[str, Form()] = "company",
+    scope_value: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
@@ -117,7 +120,10 @@ async def preview(
 
 @router.post("/apply", response_class=HTMLResponse)
 async def apply(
-    request: Request, template: str = Form(""), scope_type: str = Form("company"), scope_value: str = Form("")
+    request: Request,
+    template: Annotated[str, Form()] = "",
+    scope_type: Annotated[str, Form()] = "company",
+    scope_value: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:

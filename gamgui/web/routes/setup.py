@@ -7,6 +7,8 @@ verify the Google Workspace connector is activated on the app state.
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
@@ -41,9 +43,9 @@ async def setup_page(request: Request) -> HTMLResponse:
 @router.post("/import", response_class=HTMLResponse)
 async def do_import(
     request: Request,
-    domain: str = Form(""),
-    admin: str = Form(""),
-    config_dir: str = Form(""),
+    domain: Annotated[str, Form()] = "",
+    admin: Annotated[str, Form()] = "",
+    config_dir: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     domain, admin, config_dir = domain.strip(), admin.strip(), config_dir.strip()
     if not domain or not admin or not config_dir:
@@ -66,7 +68,11 @@ async def do_import(
 
 
 @router.post("/fresh", response_class=HTMLResponse)
-async def fresh(request: Request, domain: str = Form(""), admin: str = Form("")) -> HTMLResponse:
+async def fresh(
+    request: Request,
+    domain: Annotated[str, Form()] = "",
+    admin: Annotated[str, Form()] = "",
+) -> HTMLResponse:
     svc = _service(request)
     info = svc.setup_commands(admin.strip() or "admin@yourdomain.com")
     return TEMPLATES.TemplateResponse(
@@ -76,7 +82,11 @@ async def fresh(request: Request, domain: str = Form(""), admin: str = Form(""))
 
 
 @router.post("/verify", response_class=HTMLResponse)
-async def verify(request: Request, domain: str = Form(""), admin: str = Form("")) -> HTMLResponse:
+async def verify(
+    request: Request,
+    domain: Annotated[str, Form()] = "",
+    admin: Annotated[str, Form()] = "",
+) -> HTMLResponse:
     domain, admin = domain.strip(), admin.strip()
     if not domain or not admin:
         return TEMPLATES.TemplateResponse(

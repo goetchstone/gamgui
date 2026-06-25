@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -273,8 +274,9 @@ def _delete_view(request: Request, *, cal: str, label: str, owner: str, acl_coun
 
 
 @router.post("/delete/preview", response_class=HTMLResponse)
-async def delete_preview(request: Request, cal: str = Form(...), label: str = Form(""),
-                         acl_count: int = Form(0)) -> HTMLResponse:
+async def delete_preview(request: Request, cal: Annotated[str, Form()],
+                         label: Annotated[str, Form()] = "",
+                         acl_count: Annotated[int, Form()] = 0) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -289,8 +291,9 @@ async def delete_preview(request: Request, cal: str = Form(...), label: str = Fo
 
 
 @router.post("/delete", response_class=HTMLResponse)
-async def delete_cal(request: Request, cal: str = Form(...), confirm: str = Form(""),
-                     label: str = Form("")) -> HTMLResponse:
+async def delete_cal(request: Request, cal: Annotated[str, Form()],
+                     confirm: Annotated[str, Form()] = "",
+                     label: Annotated[str, Form()] = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -332,7 +335,7 @@ async def events(request: Request, cal: str, q: str = "", after: str = "", befor
 
 
 @router.post("/event/preview", response_class=HTMLResponse)
-async def event_preview(request: Request, cal: str = Form(...), event_id: str = Form(...)) -> HTMLResponse:
+async def event_preview(request: Request, cal: Annotated[str, Form()], event_id: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
@@ -346,7 +349,7 @@ async def event_preview(request: Request, cal: str = Form(...), event_id: str = 
 
 
 @router.post("/event/delete", response_class=HTMLResponse)
-async def event_delete(request: Request, cal: str = Form(...), event_id: str = Form(...)) -> HTMLResponse:
+async def event_delete(request: Request, cal: Annotated[str, Form()], event_id: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, "Not connected.")
