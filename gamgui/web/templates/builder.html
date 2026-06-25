@@ -11,7 +11,7 @@
 {% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <!-- Fixed-height workspace: fills the window and never grows. Results scroll inside their own
      panel instead of pushing the page down, so the window stays a constant size. -->
-<div class="flex flex-col gap-2.5 h-[calc(100vh-9rem)] min-h-[26rem]">
+<div class="flex flex-col gap-2.5 h-[calc(100vh-14.5rem)] min-h-[26rem]">
   <div class="flex items-baseline gap-3 shrink-0">
     <h1 class="font-serif text-xl text-brand-black tracking-tight">Command builder</h1>
     <p class="text-xs text-brand-gray">Browse every GAM command; build &amp; run the buildable ones, or queue a sequence.</p>
@@ -55,7 +55,7 @@
   </div>
 
   <!-- Sequence: a compact drawer pinned at the bottom of the fixed workspace -->
-  <div id="sequence" class="shrink-0">{% include "_sequence.html" %}</div>
+  <div id="sequence" class="shrink-0 mt-1">{% include "_sequence.html" %}</div>
 </div>
 
 <!-- Quick actions for an address clicked in a result table → opens that command pre-filled. -->
