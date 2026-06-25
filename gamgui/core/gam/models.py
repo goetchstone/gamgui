@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 _EMAIL_KEY = "email"
+_SUBJECT_PREFIX = "Subject:"
 
 
 def _get(d: Dict[str, Any], *keys: str, default: Any = None) -> Any:
@@ -103,7 +104,7 @@ class Vacation:
             if in_message:
                 # Stop the message at the next field — or at GAM's config-init banner, in case any
                 # slipped past the runner's filter (defense in depth so it never lands in the reply).
-                if s.startswith(("Enabled:", "Subject:", "Contacts Only:", "Domain Only:", "Created:", "Config File:")):
+                if s.startswith(("Enabled:", _SUBJECT_PREFIX, "Contacts Only:", "Domain Only:", "Created:", "Config File:")):
                     in_message = False
                 else:
                     msg_lines.append(s)
@@ -114,8 +115,8 @@ class Vacation:
                 contacts = "true" in s.lower()
             elif s.startswith("Domain Only:"):
                 domain = "true" in s.lower()
-            elif s.startswith("Subject:"):
-                subject = s[len("Subject:"):].strip()
+            elif s.startswith(_SUBJECT_PREFIX):
+                subject = s[len(_SUBJECT_PREFIX):].strip()
             elif s.startswith("Message:"):
                 in_message = True
         return cls(

@@ -22,6 +22,7 @@ from ..server import TEMPLATES
 router = APIRouter(prefix="/calendars")
 
 EVENT_CAP = 200
+_NOT_CONNECTED = "Not connected."
 _CALENDAR_LIST_TEMPLATE = "_calendar_list.html"
 _CALENDAR_INDEX_JOB_TEMPLATE = "_calendar_index_job.html"
 # Strict allowlist: only true secondary calendars can be deleted. Primary calendars are a user's
@@ -144,7 +145,7 @@ async def page(request: Request) -> HTMLResponse:
 async def resources(request: Request, q: str = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     try:
         rs = await conn.list_resources(q.strip())
     except Exception as exc:
@@ -160,7 +161,7 @@ async def resources(request: Request, q: str = "") -> HTMLResponse:
 async def search(request: Request, q: str = "") -> HTMLResponse:
     """Instant name search, served entirely from the local index (no live domain scan)."""
     if _conn(request) is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     idx = request.app.state.gamgui.calendar_index
     if idx is None or not _index_ready(request):  # missing, empty, or built for another domain
         return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {
@@ -197,7 +198,7 @@ async def _build_index(job, conn, idx, domain: str) -> None:
 async def index_rebuild(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     if st.calendar_index is None:
         return _err(request, "Calendar index is unavailable.")
     existing = st.jobs.get(st.cal_index_job_id)
@@ -224,7 +225,7 @@ async def index_status(request: Request, job: str = "") -> HTMLResponse:
 async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     email = email.strip()
     if not email:
         return _err(request, "Enter a user's email.")
@@ -244,7 +245,7 @@ async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
 async def detail(request: Request, cal: str, label: str = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     try:
         acls = await conn.list_calendar_acls_for(cal)
     except Exception as exc:
@@ -282,7 +283,7 @@ async def delete_preview(request: Request, cal: Annotated[str, Form()],
                          acl_count: Annotated[int, Form()] = 0) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     cal = cal.strip()
     try:
         owner, refusal = await _resolve_delete_owner(request, conn, cal)
@@ -299,7 +300,7 @@ async def delete_cal(request: Request, cal: Annotated[str, Form()],
                      label: Annotated[str, Form()] = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     cal = cal.strip()
     # Re-resolve owner + re-validate the id server-side — never act on a client-supplied identity.
     try:
@@ -326,7 +327,7 @@ async def delete_cal(request: Request, cal: Annotated[str, Form()],
 async def events(request: Request, cal: str, q: str = "", after: str = "", before: str = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     q, after, before = q.strip(), after.strip(), before.strip()
     if not (q or after or before):  # never an unbounded all-events scan
         return TEMPLATES.TemplateResponse(request, "_event_results.html", {"cal": cal, "events": [], "need_filter": True})
@@ -341,7 +342,7 @@ async def events(request: Request, cal: str, q: str = "", after: str = "", befor
 async def event_preview(request: Request, cal: Annotated[str, Form()], event_id: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     try:
         ev = await conn.get_event(cal, event_id)
     except Exception as exc:
@@ -355,7 +356,7 @@ async def event_preview(request: Request, cal: Annotated[str, Form()], event_id:
 async def event_delete(request: Request, cal: Annotated[str, Form()], event_id: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.delete_event(cal, event_id)
     if not result.ok:
         return _err(request, f"Couldn't delete the event: {result.detail}")

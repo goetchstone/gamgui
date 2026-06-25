@@ -24,6 +24,8 @@ _ROLE_MEMBER = "member"
 GROUP_ROLES = [_ROLE_MEMBER, "manager", "owner"]
 _SERVICE_DRIVE = "drive"
 TRANSFER_SERVICES = [_SERVICE_DRIVE, "calendar"]
+_SUBCAT_DELEGATES = "Gmail - Delegates"
+_SUBCAT_FORWARDING = "Gmail - Forwarding"
 FORWARD_ACTIONS = list(GAMCommands.FORWARD_ACTIONS)
 
 # Group the ~53 grammar categories into a short, browsable set of areas (display order below).
@@ -86,12 +88,12 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.set_signature(s["email"], s.get("signature", ""), html=True),
              "gam user <email> signature <html>",
              "Replace a user's Gmail signature with the HTML you provide."),
-        _cmd("build.add_delegate", "Users", "Gmail - Delegates", "Add mailbox delegate", RiskLevel.LOW,
+        _cmd("build.add_delegate", "Users", _SUBCAT_DELEGATES, "Add mailbox delegate", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("delegate", "Delegate", SlotKind.EMAIL)],
              lambda s: GAMCommands.add_delegate(s["email"], s.get("delegate", "")),
              "gam user <email> add delegate <delegate>",
              "Let another person read and send mail from this user's mailbox."),
-        _cmd("build.remove_delegate", "Users", "Gmail - Delegates", "Remove mailbox delegate", RiskLevel.LOW,
+        _cmd("build.remove_delegate", "Users", _SUBCAT_DELEGATES, "Remove mailbox delegate", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("delegate", "Delegate", SlotKind.EMAIL)],
              lambda s: GAMCommands.remove_delegate(s["email"], s.get("delegate", "")),
              "gam user <email> delete delegate <delegate>",
@@ -107,28 +109,28 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.vacation_off(s["email"]),
              "gam user <email> vacation off",
              "Switch off the user's vacation auto-responder."),
-        _cmd("build.print_delegates", "Users", "Gmail - Delegates", "List mailbox delegates", RiskLevel.READ_ONLY,
+        _cmd("build.print_delegates", "Users", _SUBCAT_DELEGATES, "List mailbox delegates", RiskLevel.READ_ONLY,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.print_delegates(s["email"]),
              "gam user <email> print delegates",
              "Show everyone who has delegate access to this user's mailbox."),
-        _cmd("build.add_forwarding_address", "Users", "Gmail - Forwarding", "Add a forwarding address", RiskLevel.LOW,
+        _cmd("build.add_forwarding_address", "Users", _SUBCAT_FORWARDING, "Add a forwarding address", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("address", "Forward to", SlotKind.EMAIL)],
              lambda s: GAMCommands.add_forwarding_address(s["email"], s.get("address", "")),
              "gam user <email> add forwardingaddress <address>",
              "Register an address the user is allowed to forward mail to (does not enable forwarding)."),
-        _cmd("build.set_forward", "Users", "Gmail - Forwarding", "Turn on forwarding", RiskLevel.LOW,
+        _cmd("build.set_forward", "Users", _SUBCAT_FORWARDING, "Turn on forwarding", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("address", "Forward to", SlotKind.EMAIL),
               _slot("action", "Keep original as", SlotKind.CHOICE, choices=FORWARD_ACTIONS, default="keep")],
              lambda s: GAMCommands.set_forward(s["email"], s.get("address", ""), s.get("action") or "keep"),
              "gam user <email> forward on <action> <address>",
              "Auto-forward the user's incoming mail to an address, choosing what to do with the original."),
-        _cmd("build.forward_off", "Users", "Gmail - Forwarding", "Turn off forwarding", RiskLevel.LOW,
+        _cmd("build.forward_off", "Users", _SUBCAT_FORWARDING, "Turn off forwarding", RiskLevel.LOW,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.forward_off(s["email"]),
              "gam user <email> forward off",
              "Stop auto-forwarding the user's incoming mail."),
-        _cmd("build.print_forwarding", "Users", "Gmail - Forwarding", "List forwarding addresses", RiskLevel.READ_ONLY,
+        _cmd("build.print_forwarding", "Users", _SUBCAT_FORWARDING, "List forwarding addresses", RiskLevel.READ_ONLY,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.print_forwarding_addresses(s["email"]),
              "gam user <email> print forwardingaddresses",
