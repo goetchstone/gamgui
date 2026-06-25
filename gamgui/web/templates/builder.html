@@ -72,7 +72,7 @@
 </div>
 
 <script>
-  window.GG_DOMAIN = "{{ domain }}";   // your primary domain — powers the result "External only" filter
+  globalThis.GG_DOMAIN = "{{ domain }}";   // your primary domain — powers the result "External only" filter
 
   // Server-backed type-ahead for the User/Group slot pickers. A real, visible dropdown that renders
   // in WKWebView (plain DOM, no <datalist>) and scales — /builder/pick returns only the top matches
@@ -117,8 +117,8 @@
   // Result tables: grep/awk-in-the-GUI. A live row filter + an "External only" toggle (anything
   // outside your own domain — the sharing-audit lens) drive a 10-row pager over the MATCHING rows.
   (function () {
-    var DOMAIN = (window.GG_DOMAIN || "").toLowerCase();
-    var EMAIL = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
+    var DOMAIN = (globalThis.GG_DOMAIN || "").toLowerCase();
+    var EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
     function btn(label) {
       var b = document.createElement("button");
       b.type = "button"; b.textContent = label;
@@ -127,14 +127,14 @@
     }
     function isExternal(text) {
       var t = text.toLowerCase();
-      if (t.indexOf("anyone") >= 0) return true;           // public / anyone-with-link
+      if (t.includes("anyone")) return true;           // public / anyone-with-link
       var emails = t.match(EMAIL);
       if (!emails) return false;
       return DOMAIN ? emails.some(function (e) { return !e.endsWith("@" + DOMAIN); }) : false;
     }
     function setup(root) {
       (root || document).querySelectorAll("table.js-paged:not([data-rt])").forEach(function (tbl) {
-        tbl.setAttribute("data-rt", "1");
+        tbl.dataset.rt = "1";
         var per = 10, cur = 1, rows = Array.prototype.slice.call(tbl.tBodies[0].rows);
         var tools = tbl.closest("div.rounded-2xl").querySelector(".rt-tools");
         var filterEl = tools && tools.querySelector(".rt-filter");
@@ -151,7 +151,7 @@
           var ext = extEl && extEl.checked;
           return rows.filter(function (r) {
             var txt = r.textContent;
-            if (q && txt.toLowerCase().indexOf(q) < 0) return false;
+            if (q && !txt.toLowerCase().includes(q)) return false;
             if (ext && !isExternal(txt)) return false;
             return true;
           });
@@ -161,9 +161,12 @@
           if (cur > pages) cur = pages;
           rows.forEach(function (r) { r.style.display = "none"; });
           m.slice((cur - 1) * per, cur * per).forEach(function (r) { r.style.display = ""; });
-          if (countEl) countEl.textContent = m.length === rows.length
-            ? (rows.length + " row" + (rows.length === 1 ? "" : "s"))
-            : (m.length + " of " + rows.length);
+          if (countEl) {
+            var plural = rows.length === 1 ? "" : "s";
+            countEl.textContent = m.length === rows.length
+              ? (rows.length + " row" + plural)
+              : (m.length + " of " + rows.length);
+          }
           lbl.textContent = "Page " + cur + " of " + pages;
           lbl.style.visibility = pages > 1 ? "" : "hidden";
           prev.disabled = cur <= 1; next.disabled = cur >= pages;

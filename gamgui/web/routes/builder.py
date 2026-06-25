@@ -162,7 +162,12 @@ async def catalog_list(request: Request, area: str = "", q: str = "", buildable:
     each page is sized to fit, navigated with Prev/Next (the modern faceted-list pattern)."""
     cat = _catalog(request)
     q = q.strip()
-    items = cat.search(q) if q else (cat.in_area(area) if area else cat.all_sorted())
+    if q:
+        items = cat.search(q)
+    elif area:
+        items = cat.in_area(area)
+    else:
+        items = cat.all_sorted()
     if buildable in ("1", "true", "on"):
         items = [c for c in items if c.buildable]
     return _paginated(request, items, q=q, page=page)

@@ -113,8 +113,8 @@
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
-      try { document.execCommand("copy"); } catch (e) {}
-      document.body.removeChild(ta);
+      try { document.execCommand("copy"); } catch (e) { /* execCommand unsupported; the async clipboard path already handled it */ }
+      ta.remove();
     }
 
     // Global activity indicators: a top bar + a "Working…" pill, shown during HTMX requests and
@@ -143,17 +143,17 @@
         try {
           var d = evt.detail || {};
           var p = (d.pathInfo && d.pathInfo.requestPath) || (d.requestConfig && d.requestConfig.path) || "";
-          return p.indexOf("/apply/status") >= 0;
+          return p.includes("/apply/status");
         } catch (e) { return false; }
       }
-      document.body.addEventListener("htmx:beforeRequest", function (e) { if (isPoll(e)) return; pending++; show(); });
-      document.body.addEventListener("htmx:afterRequest", function (e) { if (isPoll(e)) return; pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
-      document.body.addEventListener("htmx:responseError", function (e) { if (isPoll(e)) return; pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
+      document.body.addEventListener("htmx:beforeRequest", function (e) { if (isPoll(e)) { return; } pending++; show(); });
+      document.body.addEventListener("htmx:afterRequest", function (e) { if (isPoll(e)) { return; } pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
+      document.body.addEventListener("htmx:responseError", function (e) { if (isPoll(e)) { return; } pending = Math.max(0, pending - 1); if (pending === 0) hide(); });
       document.addEventListener("click", function (e) {
         var a = e.target.closest && e.target.closest("a[href]");
         if (!a) return;
         var href = a.getAttribute("href") || "";
-        if (a.target === "_blank" || href.charAt(0) === "#" || href.indexOf("://") >= 0) return;
+        if (a.target === "_blank" || href.charAt(0) === "#" || href.includes("://")) return;
         show();  // full-page nav — cleared automatically when the new page loads
       }, true);
     })();
