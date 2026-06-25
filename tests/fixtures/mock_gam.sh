@@ -98,6 +98,15 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
   exit 0
 fi
 
+# `gam user <email> print messages ...` -> formatjson NDJSON; one row carries an Amazon SES
+# Return-Path header so the mailbox-search flow has an envelope-sender to surface.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ]; then
+  printf '%s\n' \
+    '{"id":"msg_1001","Subject":"Your receipt","From":"billing@vendor.example","Date":"Mon, 23 Jun 2026 14:29:10 +0000","Return-Path":"<0101019ef4e29302-4b960d36-aba1-4a59-9f22-123f07e3fce8-000000@us-west-2.amazonses.com>"}' \
+    '{"id":"msg_1002","Subject":"Weekly digest","From":"news@vendor.example","Date":"Tue, 24 Jun 2026 09:00:00 +0000","Return-Path":"<bounce@vendor.example>"}'
+  exit 0
+fi
+
 # `gam user <email> print forwardingaddresses` -> plain CSV (forwardingEmail + verification).
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forwardingaddresses" ]; then
   printf 'User,forwardingEmail,verificationStatus\n%s,fwd@example.com,accepted\n' "${2:-}"

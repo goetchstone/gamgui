@@ -364,6 +364,32 @@ class GAMCommands:
     def forward_off(email: str) -> List[str]:
         return ["user", email, "forward", "off"]
 
+    # --- message search (read-only) ---------------------------------------------------
+    MESSAGE_DETAIL = ("Headers", "Headers + body", "Summary")
+    MESSAGE_CAP = 50   # bound an empty/broad query so it can't dump a whole mailbox into the table
+
+    @staticmethod
+    def search_messages(email: str, query: str = "", detail: str = "Headers") -> List[str]:
+        """Find messages in one mailbox by Gmail search and show their headers (read-only).
+
+        ``query`` is a Gmail search string (e.g. ``rfc822msgid:<id>``, ``from:… after:2026/06/23
+        before:2026/06/24``) and is passed as a *single* argv element — never shell-spliced. ``headers
+        all`` surfaces ``Return-Path``/``Received`` so an envelope/bounce address (e.g. an Amazon SES
+        sender) is visible. Spam/Trash are included (bounces often land there) and results are capped.
+        """
+        argv = ["user", email, "print", "messages"]
+        if query:
+            argv += ["query", query]
+        argv += ["includespamtrash", "max_to_print", str(GAMCommands.MESSAGE_CAP)]
+        if detail == "Summary":
+            argv += ["showlabels", "showdate", "showsize", "showsnippet"]
+        elif detail == "Headers + body":
+            argv += ["headers", "all", "showbody", "showlabels", "showdate"]
+        else:  # "Headers" (default)
+            argv += ["headers", "all", "showlabels", "showdate"]
+        argv.append("formatjson")
+        return argv
+
     # --- aliases ----------------------------------------------------------------------
     @staticmethod
     def create_user_alias(alias: str, email: str) -> List[str]:

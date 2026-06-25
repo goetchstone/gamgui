@@ -100,6 +100,36 @@ def test_generic_read_runs_end_to_end(client):
     assert r.status_code == 200 and "gam print groups" in r.text
 
 
+# --- curated "Search a mailbox" (find an email, show Return-Path/headers) --------------
+
+def test_search_messages_query_is_one_argv_element_and_capped():
+    cmd = load_catalog().by_id("build.search_messages")
+    assert cmd is not None and cmd.buildable and cmd.risk == RiskLevel.READ_ONLY
+    poison = "rfc822msgid:x; rm -rf /"
+    argv = cmd.build({"email": "alice@example.com", "query": poison, "detail": "Headers"})
+    assert argv[:4] == ["user", "alice@example.com", "print", "messages"]
+    assert argv.count(poison) == 1                 # the whole Gmail query rides as ONE element
+    assert "headers" in argv and "all" in argv     # full headers surface Return-Path/Received
+    assert "max_to_print" in argv and "50" in argv  # bounded so it can't dump a whole mailbox
+    assert argv[-1] == "formatjson"
+
+
+def test_search_messages_detail_modes():
+    cmd = load_catalog().by_id("build.search_messages")
+    assert "showbody" in cmd.build({"email": "u@x.com", "detail": "Headers + body"})
+    summary = cmd.build({"email": "u@x.com", "detail": "Summary"})
+    assert "showbody" not in summary and "showsnippet" in summary
+
+
+def test_search_messages_runs_and_surfaces_return_path(client):
+    r = client.post("/builder/run", data={
+        "cid": "build.search_messages", "email": "alice@example.com",
+        "query": "after:2026/06/23 before:2026/06/24", "detail": "Headers"})
+    assert r.status_code == 200
+    assert "amazonses.com" in r.text   # the SES Return-Path is visible in the result table
+    assert "gam user alice@example.com print messages" in r.text
+
+
 def test_generic_read_never_emits_grammar_junk():
     # No built read command may contain raw grammar punctuation — a value is the only free part, and
     # literal tokens come from the grammar. Worst case is an incomplete (but valid-token) command.

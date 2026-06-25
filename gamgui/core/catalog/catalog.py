@@ -26,7 +26,9 @@ _SERVICE_DRIVE = "drive"
 TRANSFER_SERVICES = [_SERVICE_DRIVE, "calendar"]
 _SUBCAT_DELEGATES = "Gmail - Delegates"
 _SUBCAT_FORWARDING = "Gmail - Forwarding"
+_SUBCAT_MESSAGES = "Gmail - Messages"
 FORWARD_ACTIONS = list(GAMCommands.FORWARD_ACTIONS)
+MESSAGE_DETAIL = list(GAMCommands.MESSAGE_DETAIL)
 
 # Group the ~53 grammar categories into a short, browsable set of areas (display order below).
 # Anything unmapped falls through to "Other".
@@ -130,6 +132,16 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.forward_off(s["email"]),
              "gam user <email> forward off",
              "Stop auto-forwarding the user's incoming mail."),
+        _cmd("build.search_messages", "Users", _SUBCAT_MESSAGES, "Search a mailbox", RiskLevel.READ_ONLY,
+             [_slot("email", "User", U),
+              _slot("query", "Gmail search", SlotKind.TEXT,
+                    placeholder="rfc822msgid:<id>  ·  from:… after:2026/06/23 before:2026/06/24"),
+              _slot("detail", "Show", SlotKind.CHOICE, choices=MESSAGE_DETAIL, default="Headers")],
+             lambda s: GAMCommands.search_messages(s["email"], s.get("query", ""), s.get("detail") or "Headers"),
+             "gam user <email> print messages query <q> headers all",
+             "Find messages in a mailbox by Gmail search (Message-ID, sender, subject, date) and show "
+             "their full headers — incl. Return-Path / Received, so an envelope or bounce sender is visible. "
+             "Capped at 50 results; Spam & Trash included."),
         _cmd("build.print_forwarding", "Users", _SUBCAT_FORWARDING, "List forwarding addresses", RiskLevel.READ_ONLY,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.print_forwarding_addresses(s["email"]),

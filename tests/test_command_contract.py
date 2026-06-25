@@ -34,6 +34,7 @@ REQUIRED_TOKENS = [
     "delegate",
     "vacation",
     "forwardingaddress",  # gmail forwarding (Builder)
+    "print messages",     # mailbox search (Builder: find a message, dump headers)
     "alias",              # user aliases (Builder)
     "todrive",            # export a print command's CSV to a Google Sheet
     "tduser",             # …in a specific user's Drive
