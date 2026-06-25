@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ user.full_name }} — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
 {% block content %}
 {% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% set btn = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}

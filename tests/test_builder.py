@@ -43,6 +43,12 @@ def test_slot_value_is_a_single_argv_element():
 def test_builder_page_and_catalog_search(client):
     r = client.get("/builder")
     assert r.status_code == 200 and "Command builder" in r.text and "Users" in r.text
+
+
+def test_dense_pages_use_full_window_width(client):
+    # Dense screens drop the centered 1024px cap so the catalog/results use the whole window.
+    assert "max-w-none" in client.get("/builder").text
+    assert "max-w-none" in client.get("/users").text
     r = client.get("/builder/catalog", params={"q": "signature"})
     assert "Set Gmail signature" in r.text and "Build" in r.text
 
