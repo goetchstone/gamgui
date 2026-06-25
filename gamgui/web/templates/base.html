@@ -87,6 +87,19 @@
     </footer>
   </div>
   <script>
+    // Insert a hint chip's snippet into the text field in the same label (space-separated, cursor at end).
+    function ggHint(btn) {
+      var label = btn.closest("label");
+      var inp = label && label.querySelector("input[name]");
+      if (!inp) return;
+      var snip = btn.getAttribute("data-ins") || "";
+      var cur = (inp.value || "").replace(/\s+$/, "");
+      inp.value = cur ? cur + " " + snip : snip;
+      inp.focus();
+      var n = inp.value.length;
+      try { inp.setSelectionRange(n, n); } catch (e) { /* not a text input that supports selection */ }
+    }
+
     // Copy the text of the code/input inside the clicked button's .copy-wrap.
     function copyEl(btn) {
       var wrap = btn.closest(".copy-wrap") || btn.parentElement;

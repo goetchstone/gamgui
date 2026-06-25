@@ -135,7 +135,12 @@ def _curated() -> List[CatalogCommand]:
         _cmd("build.search_messages", "Users", _SUBCAT_MESSAGES, "Search a mailbox", RiskLevel.READ_ONLY,
              [_slot("email", "User", U),
               _slot("query", "Gmail search", SlotKind.TEXT,
-                    placeholder="rfc822msgid:<id>  ·  from:… after:2026/06/23 before:2026/06/24"),
+                    placeholder="rfc822msgid:<id>  ·  from:… after:2026/06/23 before:2026/06/24",
+                    hints=["rfc822msgid:", "from:", "to:", "subject:", "after:2026/06/23",
+                           "before:2026/06/25", "newer_than:7d", "older_than:30d",
+                           "has:attachment", "is:unread", "in:anywhere", "label:"],
+                    hint_note="Click a chip to insert it. Dates are YYYY/MM/DD; combine terms freely "
+                              "(any Gmail search operator works). rfc822msgid: matches the Message-ID."),
               _slot("detail", "Show", SlotKind.CHOICE, choices=MESSAGE_DETAIL, default="Headers")],
              lambda s: GAMCommands.search_messages(s["email"], s.get("query", ""), s.get("detail") or "Headers"),
              "gam user <email> print messages query <q> headers all",

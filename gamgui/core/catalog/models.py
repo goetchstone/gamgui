@@ -30,6 +30,8 @@ class CommandSlot:
     choices: Optional[List[str]] = None   # for CHOICE
     default: str = ""
     placeholder: str = ""
+    hints: List[str] = field(default_factory=list)   # click-to-insert snippets for a TEXT field
+    hint_note: str = ""                              # one-line note shown under the hint chips
 
     @property
     def is_drop(self) -> bool:

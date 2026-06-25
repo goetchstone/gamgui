@@ -28,6 +28,15 @@
     <span class="text-[11px] text-brand-gray">click and type a {{ 'group' if slot.kind.value == 'group' else 'user' }} — pick from the list</span>
     {% else %}
     <input name="{{ slot.key }}" value="{{ val }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1" />
+    {% if slot.hints %}
+    <span class="mt-1.5 flex flex-wrap gap-1">
+      {% for h in slot.hints %}
+      <button type="button" data-ins="{{ h }}" onclick="ggHint(this)"
+              class="rounded-full border border-brand-gray/40 bg-paper px-2 py-0.5 font-mono text-[11px] text-brand-blueink hover:border-brand-blue/50 hover:bg-brand-blue/10 transition-colors">{{ h }}</button>
+      {% endfor %}
+    </span>
+    {% if slot.hint_note %}<span class="mt-1 block text-[11px] text-brand-gray">{{ slot.hint_note }}</span>{% endif %}
+    {% endif %}
     {% endif %}
   </label>
   {% endfor %}
