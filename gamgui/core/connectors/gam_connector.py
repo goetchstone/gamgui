@@ -315,6 +315,33 @@ class GAMConnector(Connector):
         argv = GAMCommands.create_datatransfer(old_owner, service, new_owner)
         return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, target_extra=new_owner)
 
+    async def create_onboarding_runbook(self, assignee: str, title: str, steps: List[str]) -> dict:
+        """Create a Google Tasks list on ``assignee`` with one task per step; return a summary.
+
+        Additive/low-risk, serialized + audited. The tasklist id comes back via ``returnidonly``;
+        each step then becomes a task on it. A step that fails is reported, not fatal."""
+        out = await self.runner.run_authenticated(
+            self.domain, GAMCommands.create_tasklist(assignee, title), serialize=True)
+        lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
+        tasklist_id = lines[-1] if lines else ""
+        created, failed = 0, []
+        if tasklist_id:
+            for step in steps:
+                try:
+                    await self.runner.run_authenticated(
+                        self.domain, GAMCommands.create_task(assignee, tasklist_id, step), serialize=True)
+                    created += 1
+                except Exception:  # noqa: BLE001 — report per-step, keep going
+                    failed.append(step)
+        self.audit.record("onboard_runbook", target=assignee,
+                          argv=GAMCommands.create_tasklist(assignee, title), ok=bool(tasklist_id),
+                          extra={"title": title, "tasks": created, "failed": failed})
+        return {"tasklist_id": tasklist_id, "created": created, "failed": failed, "total": len(steps)}
+
+    async def send_welcome_email(self, to: str, subject: str, body: str) -> ChangeResult:
+        return await self._run_write(
+            "send_welcome_email", to, GAMCommands.send_email(to, subject, body), RiskLevel.LOW)
+
     async def remove_from_all_calendars(self, email: str) -> ChangeResult:
         # Best-effort sweep across every user. Expected, harmless per-entity outcomes: NOT_FOUND
         # (that user never shared with the departing user) and PERMISSION_DENIED / cannotChangeOwnAcl

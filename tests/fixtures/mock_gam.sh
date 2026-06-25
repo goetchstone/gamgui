@@ -170,6 +170,12 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "datatransfers" ]; then
   exit 0
 fi
 
+# `gam user <assignee> create tasklist title <t> returnidonly` -> echo a fake tasklist id.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "create" ] && [ "${4:-}" = "tasklist" ]; then
+  echo "MockTasklist_abc123"
+  exit 0
+fi
+
 # Anything else is treated as a mutation: optionally simulate a token refresh, then succeed.
 if [ -n "${GAM_MOCK_REFRESH:-}" ] && [ -n "${GAMCFGDIR:-}" ] && [ -f "$GAMCFGDIR/oauth2.txt" ]; then
   printf 'refreshed-token-payload\n' > "$GAMCFGDIR/oauth2.txt"

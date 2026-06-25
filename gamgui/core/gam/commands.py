@@ -262,6 +262,26 @@ class GAMCommands:
     def undelete_user(email: str) -> List[str]:
         return ["undelete", "user", email]
 
+    # --- onboarding runbook: a Google Tasks checklist on the assignee + a welcome email ---
+    @staticmethod
+    def create_tasklist(assignee: str, title: str) -> List[str]:
+        # `returnidonly` so we get just the new tasklist id back to attach tasks to.
+        return ["user", assignee, "create", "tasklist", "title", title, "returnidonly"]
+
+    @staticmethod
+    def create_task(assignee: str, tasklist_id: str, title: str, notes: str = "") -> List[str]:
+        argv = ["user", assignee, "create", "task", tasklist_id, "title", title]
+        if notes:
+            argv += ["notes", notes]
+        return argv
+
+    @staticmethod
+    def send_email(to: str, subject: str, body: str, html: bool = True) -> List[str]:
+        argv = ["sendemail", "to", to, "subject", subject, "message", body]
+        if html:
+            argv += ["html"]
+        return argv
+
     # --- gmail: signature / delegate / forwarding / vacation --------------------------
     @staticmethod
     def set_signature(email: str, signature: str, html: bool = True) -> List[str]:

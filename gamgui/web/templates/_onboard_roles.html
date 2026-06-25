@@ -1,0 +1,20 @@
+{% if roles %}
+<ul class="space-y-2 text-sm">
+  {% for r in roles %}
+  <li class="rounded border border-brand-gray/30 p-2">
+    <div class="flex items-center justify-between gap-2">
+      <span class="font-medium text-brand-black">{{ r.name }}</span>
+      <span class="flex gap-3">
+        <button type="button" class="text-xs text-brand-blueink hover:underline" onclick="obEdit(this)"
+                data-name="{{ r.name }}" data-steps="{{ r.steps | join('\n') }}">Edit</button>
+        <button class="text-xs text-red-600 hover:underline"
+                hx-post="/onboard/role/delete" hx-vals='{"name": {{ r.name | tojson }}}' hx-target="#onboard-roles" hx-swap="innerHTML">Delete</button>
+      </span>
+    </div>
+    <ul class="mt-1 list-disc pl-5 text-xs text-brand-gray">{% for s in r.steps %}<li>{{ s }}</li>{% endfor %}</ul>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-sm text-brand-gray">No roles yet — add one on the right.</p>
+{% endif %}

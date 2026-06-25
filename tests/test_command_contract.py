@@ -48,6 +48,9 @@ REQUIRED_TOKENS = [
     "datatransfer",     # offboarding data transfer
     "add event",        # offboarding manager reminder
     "delete user",      # offboarding final delete
+    "create tasklist",  # onboarding runbook -> Google Tasks list
+    "create task",      # onboarding runbook -> a task on the list
+    "sendemail",        # onboarding welcome email
     "report users",   # usage report
     "serviceaccount", # check serviceaccount (setup verify)
     "formatjson",     # JSON output mode we parse

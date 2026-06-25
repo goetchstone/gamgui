@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Onboard — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
+<div class="space-y-4">
+  <div>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Onboard a new hire</h1>
+    <p class="text-brand-blueink/80 text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send a welcome email. Roles &amp; the email are yours to edit.</p>
+  </div>
+
+  <nav class="flex gap-1 border-b border-brand-gray/30 text-sm">
+    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="generate">Generate</button>
+    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="roles">Role templates</button>
+    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="welcome">Welcome email</button>
+  </nav>
+
+  <!-- GENERATE -->
+  <div class="ob-panel max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="generate">
+    {% if roles %}
+    <form id="onboard-form" class="{{ card }} grid gap-3 sm:grid-cols-2">
+      <label class="block text-sm"><span class="text-brand-blueink">New hire name</span>
+        <input class="{{ fld }} mt-1" name="name" placeholder="Jordan Lee" /></label>
+      <label class="block text-sm"><span class="text-brand-blueink">New hire email</span>
+        <input class="{{ fld }} mt-1" type="email" name="email" placeholder="jordan@domain.com" /></label>
+      <label class="block text-sm"><span class="text-brand-blueink">Role</span>
+        <select class="{{ fld }} mt-1" name="role">{% for r in roles %}<option value="{{ r.name }}">{{ r.name }} ({{ r.steps | length }} steps)</option>{% endfor %}</select></label>
+      <label class="block text-sm"><span class="text-brand-blueink">Manager</span>
+        <input class="{{ fld }} mt-1" type="email" name="manager" placeholder="manager@domain.com" /></label>
+      <label class="block text-sm sm:col-span-2"><span class="text-brand-blueink">Assignee — whose Google Tasks gets the checklist <span class="text-brand-gray">(blank = the new hire)</span></span>
+        <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@domain.com" /></label>
+      <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="send_welcome" value="1" /> Also send the welcome email to the new hire</label>
+      <div class="flex gap-2 pt-1 sm:col-span-2">
+        <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+                hx-post="/onboard/preview" hx-include="#onboard-form" hx-target="#onboard-result" hx-swap="innerHTML">Preview</button>
+      </div>
+    </form>
+    <div id="onboard-result" class="mt-4"></div>
+    {% else %}
+    <div class="{{ card }} text-sm text-brand-gray">No roles yet — add one under <strong class="text-brand-blueink">Role templates</strong> first.</div>
+    {% endif %}
+  </div>
+
+  <!-- ROLE TEMPLATES (editable) -->
+  <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-2 items-start" data-tab="roles">
+    <div class="{{ card }}">
+      <h2 class="eyebrow text-brand-gray">Roles</h2>
+      <div id="onboard-roles" class="mt-3">{% include "_onboard_roles.html" %}</div>
+    </div>
+    <form class="{{ card }} space-y-2" hx-post="/onboard/role" hx-target="#onboard-roles" hx-swap="innerHTML">
+      <h2 class="eyebrow text-brand-gray">Add / edit a role</h2>
+      <p class="text-xs text-brand-gray">Saving an existing role name replaces its steps. One step per line.</p>
+      <input class="{{ fld }}" name="name" placeholder="Role name (e.g. Salesperson)" required />
+      <textarea class="{{ fld }} font-mono text-[12.5px]" name="steps" rows="7" placeholder="Set up Brite&#10;Create Wesley Hall login&#10;Set up POS login"></textarea>
+      <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save role</button>
+    </form>
+  </div>
+
+  <!-- WELCOME EMAIL (editable template) -->
+  <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="welcome">
+    <div id="onboard-welcome">{% include "_onboard_welcome.html" %}</div>
+  </div>
+</div>
+
+<script>
+  // Edit a role: copy its name + steps into the add/edit form.
+  function obEdit(btn) {
+    var f = document.querySelector('form[hx-post="/onboard/role"]');
+    if (!f) return;
+    f.querySelector('[name=name]').value = btn.getAttribute("data-name");
+    f.querySelector('[name=steps]').value = btn.getAttribute("data-steps");
+    f.querySelector('[name=name]').focus();
+  }
+
+  (function () {
+    var tabs = document.querySelectorAll(".ob-tab");
+    var panels = document.querySelectorAll(".ob-panel");
+    function show(name) {
+      panels.forEach(function (p) { p.classList.toggle("hidden", p.getAttribute("data-tab") !== name); });
+      tabs.forEach(function (t) {
+        var on = t.getAttribute("data-tab") === name;
+        t.classList.toggle("text-brand-black", on);
+        t.classList.toggle("border-brand-blue", on);
+        t.classList.toggle("text-brand-gray", !on);
+        t.classList.toggle("border-transparent", !on);
+      });
+    }
+    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.getAttribute("data-tab")); }); });
+    show("generate");
+  })();
+</script>
+{% endif %}
+{% endblock %}

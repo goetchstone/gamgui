@@ -46,6 +46,7 @@ class AppState:
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
+    runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
 
     async def users(self, force: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports)."""
@@ -143,6 +144,7 @@ def create_app(state: AppState) -> FastAPI:
     from .routes.calendars import router as calendars_router
     from .routes.groups import router as groups_router
     from .routes.lifecycle import router as lifecycle_router
+    from .routes.onboarding import router as onboarding_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
     from .routes.signatures import router as signatures_router
@@ -155,5 +157,6 @@ def create_app(state: AppState) -> FastAPI:
     app.include_router(signatures_router)
     app.include_router(calendars_router)
     app.include_router(lifecycle_router)
+    app.include_router(onboarding_router)
     app.include_router(builder_router)
     return app

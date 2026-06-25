@@ -1,0 +1,17 @@
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
+  <h3 class="font-serif text-lg text-brand-black">Runbook for {{ name or email or "new hire" }} — {{ role }}</h3>
+  <p class="text-sm text-brand-blueink/80">{{ steps | length }} task{{ '' if steps | length == 1 else 's' }} →
+    {% if assignee %}<strong>{{ assignee }}</strong>'s Google Tasks{% else %}<span class="text-red-700">enter an assignee or the new hire's email</span>{% endif %}</p>
+  <ul class="list-disc pl-5 text-sm text-brand-black">{% for s in steps %}<li>{{ s }}</li>{% endfor %}</ul>
+  {% if send_welcome %}
+  <div class="rounded-lg border border-brand-gray/30 bg-paper p-3">
+    <p class="text-xs text-brand-gray">Welcome email to {{ email or "(no email entered)" }}:</p>
+    <p class="mt-1 text-sm font-medium text-brand-black">{{ subject }}</p>
+    <pre class="mt-1 whitespace-pre-wrap break-words text-xs text-brand-blueink/90">{{ body }}</pre>
+  </div>
+  {% endif %}
+  <form hx-post="/onboard/run" hx-include="#onboard-form" hx-target="#onboard-result" hx-swap="innerHTML">
+    <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">
+      Create the task list{% if send_welcome %} &amp; send the email{% endif %}</button>
+  </form>
+</div>

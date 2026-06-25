@@ -1,0 +1,13 @@
+<form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-2"
+      hx-post="/onboard/welcome" hx-target="#onboard-welcome" hx-swap="innerHTML">
+  <div class="flex items-center gap-2">
+    <h2 class="eyebrow text-brand-gray">Welcome email template</h2>
+    {% if saved %}<span class="text-xs text-emerald-700">Saved ✓</span>{% endif %}
+  </div>
+  <p class="text-xs text-brand-gray">Variables: {% for v in vars %}<code>{{ "{" ~ v ~ "}" }}</code> {% endfor %}— filled in per new hire.</p>
+  <input class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+         name="subject" value="{{ welcome.subject }}" placeholder="Subject" />
+  <textarea class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm font-mono text-[12.5px] text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+            name="body" rows="8">{{ welcome.body }}</textarea>
+  <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save template</button>
+</form>

@@ -1,0 +1,9 @@
+<div class="rounded-2xl border p-4 text-sm shadow-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-900' if result.tasklist_id else 'border-amber-300 bg-amber-50 text-amber-900' }}">
+  {% if result.tasklist_id %}
+    Created <strong>{{ result.created }}</strong> of {{ result.total }} task{{ '' if result.total == 1 else 's' }} in <strong>{{ assignee }}</strong>'s Google Tasks — “{{ title }}”.
+    {% if result.failed %}<br><span class="text-amber-800">Couldn't add: {{ result.failed | join(", ") }}</span>{% endif %}
+  {% else %}
+    Couldn't create the task list — no tasklist id came back. Check the assignee email and that the Tasks API scope is granted in Domain-Wide Delegation.
+  {% endif %}
+  {% if email_sent is not none %}<br>Welcome email to {{ email }}: {{ "sent ✓" if email_sent else "failed to send" }}.{% endif %}
+</div>
