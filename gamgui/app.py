@@ -41,6 +41,17 @@ class _BackgroundServer:
         self._thread.join(timeout=5)
 
 
+def _fit_size(screen_w: int, screen_h: int) -> "tuple[int, int]":
+    """A window size that uses most of the display but always fits it — including 13" Macs.
+
+    Leaves room for the menu bar/dock, caps the size on large external monitors so it never opens
+    absurdly wide, respects the 900×600 minimum, and never exceeds the screen.
+    """
+    w = max(900, min(screen_w - 40, 1600))
+    h = max(600, min(screen_h - 90, 1000))
+    return min(w, screen_w), min(h, screen_h)
+
+
 def main() -> None:
     state = AppState.create()
     app = create_app(state)
@@ -63,9 +74,24 @@ def main() -> None:
             server.stop()
         return
 
-    webview.create_window("GamGUI", url, width=1100, height=760, min_size=(900, 600))
+    window = webview.create_window("GamGUI", url, width=1100, height=760, min_size=(900, 600))
+
+    def _fit_to_screen() -> None:
+        # Once the GUI loop knows the display, grow the window to fit it (so the full-width screens
+        # have room) and center it. Best-effort — falls back silently to the default 1100×760.
+        try:
+            screens = list(getattr(webview, "screens", None) or [])
+            if not screens:
+                return
+            sw, sh = int(screens[0].width), int(screens[0].height)
+            w, h = _fit_size(sw, sh)
+            window.resize(w, h)
+            window.move(max(0, (sw - w) // 2), max(20, (sh - h) // 3))
+        except Exception:
+            pass
+
     try:
-        webview.start()
+        webview.start(_fit_to_screen)
     finally:
         server.stop()
 
