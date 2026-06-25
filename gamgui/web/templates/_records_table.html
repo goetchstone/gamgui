@@ -1,7 +1,13 @@
 {% if records %}
 {% set cols = records[0].keys() | list %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
-  <p class="mb-2 text-xs text-brand-gray">{{ records | length }} row{{ '' if records | length == 1 else 's' }} · <code>{{ gam }}</code></p>
+  <!-- Slice the result like grep/awk: live row filter + "external only" (anything outside your domain). -->
+  <div class="rt-tools mb-2 flex flex-wrap items-center gap-2 text-xs">
+    <input class="rt-filter w-44 rounded border border-brand-gray/50 px-2 py-1 text-xs focus:border-brand-blue focus:outline-none" type="search" placeholder="Filter rows…" />
+    <label class="flex items-center gap-1 text-brand-blueink"><input type="checkbox" class="rt-external" /> External only</label>
+    <span class="rt-count text-brand-gray"></span>
+    <code class="ml-auto truncate text-brand-gray/80">{{ gam }}</code>
+  </div>
   <div class="overflow-x-auto">
     <table class="js-paged w-full text-xs">
       <thead><tr class="text-left text-brand-gray">{% for k in cols %}<th class="px-2 py-1">{{ k }}</th>{% endfor %}</tr></thead>

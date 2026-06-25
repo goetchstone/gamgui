@@ -72,6 +72,8 @@
 </div>
 
 <script>
+  window.GG_DOMAIN = "{{ domain }}";   // your primary domain — powers the result "External only" filter
+
   // Server-backed type-ahead for the User/Group slot pickers. A real, visible dropdown that renders
   // in WKWebView (plain DOM, no <datalist>) and scales — /builder/pick returns only the top matches
   // from the cached directory. Document-level delegation so it works on HTMX-injected forms.
@@ -112,38 +114,71 @@
     });
   })();
 
-  // Paginate result tables client-side (10 rows/page, Prev/Next) instead of a scroll box.
+  // Result tables: grep/awk-in-the-GUI. A live row filter + an "External only" toggle (anything
+  // outside your own domain — the sharing-audit lens) drive a 10-row pager over the MATCHING rows.
   (function () {
+    var DOMAIN = (window.GG_DOMAIN || "").toLowerCase();
+    var EMAIL = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/g;
     function btn(label) {
       var b = document.createElement("button");
       b.type = "button"; b.textContent = label;
       b.className = "rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30";
       return b;
     }
-    function paginate(root) {
-      (root || document).querySelectorAll("table.js-paged:not([data-paged])").forEach(function (tbl) {
-        tbl.setAttribute("data-paged", "1");
-        var per = 10, rows = Array.prototype.slice.call(tbl.tBodies[0].rows);
-        if (rows.length <= per) return;
-        var pages = Math.ceil(rows.length / per), cur = 1;
+    function isExternal(text) {
+      var t = text.toLowerCase();
+      if (t.indexOf("anyone") >= 0) return true;           // public / anyone-with-link
+      var emails = t.match(EMAIL);
+      if (!emails) return false;
+      return DOMAIN ? emails.some(function (e) { return !e.endsWith("@" + DOMAIN); }) : false;
+    }
+    function setup(root) {
+      (root || document).querySelectorAll("table.js-paged:not([data-rt])").forEach(function (tbl) {
+        tbl.setAttribute("data-rt", "1");
+        var per = 10, cur = 1, rows = Array.prototype.slice.call(tbl.tBodies[0].rows);
+        var tools = tbl.closest("div.rounded-2xl").querySelector(".rt-tools");
+        var filterEl = tools && tools.querySelector(".rt-filter");
+        var extEl = tools && tools.querySelector(".rt-external");
+        var countEl = tools && tools.querySelector(".rt-count");
         var prev = btn("‹ Prev"), next = btn("Next ›"), lbl = document.createElement("span");
         lbl.className = "text-brand-gray";
         var foot = document.createElement("div");
         foot.className = "mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs";
         foot.appendChild(prev); foot.appendChild(lbl); foot.appendChild(next);
         tbl.parentNode.appendChild(foot);
+        function matched() {
+          var q = (filterEl && filterEl.value || "").toLowerCase().trim();
+          var ext = extEl && extEl.checked;
+          return rows.filter(function (r) {
+            var txt = r.textContent;
+            if (q && txt.toLowerCase().indexOf(q) < 0) return false;
+            if (ext && !isExternal(txt)) return false;
+            return true;
+          });
+        }
         function render() {
-          rows.forEach(function (r, i) { r.style.display = (i >= (cur - 1) * per && i < cur * per) ? "" : "none"; });
+          var m = matched(), pages = Math.max(1, Math.ceil(m.length / per));
+          if (cur > pages) cur = pages;
+          rows.forEach(function (r) { r.style.display = "none"; });
+          m.slice((cur - 1) * per, cur * per).forEach(function (r) { r.style.display = ""; });
+          if (countEl) countEl.textContent = m.length === rows.length
+            ? (rows.length + " row" + (rows.length === 1 ? "" : "s"))
+            : (m.length + " of " + rows.length);
           lbl.textContent = "Page " + cur + " of " + pages;
+          lbl.style.visibility = pages > 1 ? "" : "hidden";
           prev.disabled = cur <= 1; next.disabled = cur >= pages;
+          foot.style.display = pages > 1 ? "" : "none";
         }
         prev.onclick = function () { if (cur > 1) { cur--; render(); } };
-        next.onclick = function () { if (cur < pages) { cur++; render(); } };
+        next.onclick = function () { if (cur < pages()) { cur++; render(); } };
+        if (filterEl) filterEl.addEventListener("input", function () { cur = 1; render(); });
+        if (extEl) extEl.addEventListener("change", function () { cur = 1; render(); });
+        function pages() { return Math.max(1, Math.ceil(matched().length / per)); }
         render();
       });
     }
-    document.addEventListener("htmx:afterSwap", function (e) { paginate(e.target); });
-    paginate(document);
+    document.addEventListener("htmx:afterSwap", function (e) { setup(e.target); });
+    setup(document);
   })();
 
   // Act on a person clicked in a result table: open the chosen command pre-filled with that email.

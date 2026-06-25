@@ -106,8 +106,10 @@ async def page(request: Request) -> HTMLResponse:
     areas = [(a, counts[a]) for a in AREA_ORDER if counts.get(a)]
     # User/group lists aren't fetched here — the slot pickers query /builder/pick on demand so the
     # page loads instantly and the picker scales to large domains (only the cached top matches render).
+    domain = getattr(st.connector, "domain", "") or st.audit_domain or ""
     return TEMPLATES.TemplateResponse(request, "builder.html", {
         "connected": True, "areas": areas, "sequence": st.builder_sequence, "row_actions": ROW_ACTIONS,
+        "domain": domain,
     })
 
 
