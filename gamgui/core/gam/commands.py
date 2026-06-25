@@ -377,6 +377,9 @@ class GAMCommands:
         all`` surfaces ``Return-Path``/``Received`` so an envelope/bounce address (e.g. an Amazon SES
         sender) is visible. Spam/Trash are included (bounces often land there) and results are capped.
         """
+        # NB: `print messages` has NO `formatjson` mode (unlike `print users` et al.) — it emits CSV.
+        # Appending formatjson makes GAM reject the command ("format json is invalid"). We let it
+        # return CSV and parse that (parse_records handles CSV).
         argv = ["user", email, "print", "messages"]
         if query:
             argv += ["query", query]
@@ -387,7 +390,6 @@ class GAMCommands:
             argv += ["headers", "all", "showbody", "showlabels", "showdate"]
         else:  # "Headers" (default)
             argv += ["headers", "all", "showlabels", "showdate"]
-        argv.append("formatjson")
         return argv
 
     # --- aliases ----------------------------------------------------------------------

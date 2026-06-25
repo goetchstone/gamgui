@@ -111,7 +111,7 @@ def test_search_messages_query_is_one_argv_element_and_capped():
     assert argv.count(poison) == 1                 # the whole Gmail query rides as ONE element
     assert "headers" in argv and "all" in argv     # full headers surface Return-Path/Received
     assert "max_to_print" in argv and "50" in argv  # bounded so it can't dump a whole mailbox
-    assert argv[-1] == "formatjson"
+    assert "formatjson" not in argv                # `print messages` has no JSON mode — CSV only
 
 
 def test_search_messages_detail_modes():
