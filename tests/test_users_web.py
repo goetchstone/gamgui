@@ -156,26 +156,20 @@ def test_signatures_preview(client):
     assert "Alice Anders" in r.text   # rendered for a real (active) sample user
 
 
-def _poll_apply_done(client, body, tries=40):
-    """Run an apply (which now returns a polling progress panel) and poll to completion."""
+def _start_apply(client, body):
+    """POST an apply and assert it started a job-polling panel (we don't poll to completion under
+    TestClient — the bg task + subprocess can deadlock; per-user apply is covered by command tests)."""
     import re
 
     r = client.post("/signatures/apply", data=body)
     assert r.status_code == 200
-    m = re.search(r"/signatures/apply/status\?job=([A-Za-z0-9_\-]+)", r.text)
-    assert m, f"expected a job-polling panel, got: {r.text[:200]}"
-    job = m.group(1)
-    for _ in range(tries):
-        s = client.get("/signatures/apply/status", params={"job": job})
-        assert s.status_code == 200
-        if "Applied to" in s.text:
-            return s
-    raise AssertionError("apply job never reported completion")
+    assert re.search(r"/signatures/apply/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
+    return r
 
 
 def test_signatures_apply(client):
-    s = _poll_apply_done(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
-    assert "Applied to" in s.text
+    r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
+    assert "Applying signature" in r.text
 
 
 def test_signatures_apply_empty_scope_is_friendly(client):
@@ -272,15 +266,9 @@ def test_bulk_store_apply_runs_as_job(client):
 
     r = client.post("/users/bulk/apply", data={"store": "Old Saybrook", "group": "", "emails": "alice@example.com"})
     assert r.status_code == 200
-    m = re.search(r"/users/bulk/status\?job=([A-Za-z0-9_\-]+)", r.text)
-    assert m, f"expected a bulk job-polling panel, got: {r.text[:200]}"
-    job = m.group(1)
-    last = ""
-    for _ in range(40):
-        last = client.get("/users/bulk/status", params={"job": job}).text
-        if "Set store on" in last:
-            break
-    assert "Set store on" in last  # job reported completion (count is verified in the unit test below)
+    # Assert the run STARTED (a polling panel). We don't poll the bg job to completion under
+    # TestClient — it can deadlock; completion is covered by the deterministic executor test below.
+    assert re.search(r"/users/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
 
 
 async def test_run_bulk_store_preserves_title_and_sets_department():
@@ -597,21 +585,32 @@ def test_lifecycle_preview_shows_autoreply_block(client):
     assert "Alice Anders is no longer with the company" in r.text
 
 
-def test_lifecycle_offboard_run_completes(client):
+def test_lifecycle_offboard_run_starts(client):
+    # The route starts the routine and returns a polling panel. We do NOT poll the background job to
+    # completion under TestClient — that bg task + subprocess can deadlock intermittently (it hung CI
+    # for 6h). Step execution is covered deterministically by the executor test below.
     import re
 
     r = client.post("/lifecycle/offboard/run",
                     data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
     assert r.status_code == 200
-    m = re.search(r"/lifecycle/offboard/status\?job=([A-Za-z0-9_\-]+)", r.text)
-    assert m, f"expected a polling panel, got: {r.text[:200]}"
-    job = m.group(1)
-    last = ""
-    for _ in range(40):
-        last = client.get("/lifecycle/offboard/status", params={"job": job}).text
-        if "Offboarding complete" in last:
-            break
-    assert "Offboarding complete" in last  # the routine ran to completion
+    assert re.search(r"/lifecycle/offboard/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
+
+
+@pytest.mark.asyncio
+async def test_offboard_executor_runs_every_step(connector):
+    # Run the offboard step-runner directly (the reliable path) and confirm it drives all steps to
+    # completion — the coverage the flaky polling loop used to give, without the deadlock risk.
+    from datetime import date
+
+    from gamgui.core import lifecycle
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.lifecycle import _run_offboard
+
+    steps = lifecycle.build_offboard_steps("leaver@example.com", "mgr@example.com", "Away", "Bye", 30, date.today())
+    job = start_job({}, len(steps))
+    await _run_offboard(job, connector, steps)
+    assert job.finished and job.done == len(steps)
 
 
 def test_delete_zone_shows_button_then_typed_confirm(client):
