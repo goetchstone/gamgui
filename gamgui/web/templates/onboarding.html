@@ -74,8 +74,8 @@
   function obEdit(btn) {
     var f = document.querySelector('form[hx-post="/onboard/role"]');
     if (!f) return;
-    f.querySelector('[name=name]').value = btn.getAttribute("data-name");
-    f.querySelector('[name=steps]').value = btn.getAttribute("data-steps");
+    f.querySelector('[name=name]').value = btn.dataset.name;
+    f.querySelector('[name=steps]').value = btn.dataset.steps;
     f.querySelector('[name=name]').focus();
   }
 
@@ -83,16 +83,16 @@
     var tabs = document.querySelectorAll(".ob-tab");
     var panels = document.querySelectorAll(".ob-panel");
     function show(name) {
-      panels.forEach(function (p) { p.classList.toggle("hidden", p.getAttribute("data-tab") !== name); });
+      panels.forEach(function (p) { p.classList.toggle("hidden", p.dataset.tab !== name); });
       tabs.forEach(function (t) {
-        var on = t.getAttribute("data-tab") === name;
+        var on = t.dataset.tab === name;
         t.classList.toggle("text-brand-black", on);
         t.classList.toggle("border-brand-blue", on);
         t.classList.toggle("text-brand-gray", !on);
         t.classList.toggle("border-transparent", !on);
       });
     }
-    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.getAttribute("data-tab")); }); });
+    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.tab); }); });
     show("generate");
   })();
 </script>

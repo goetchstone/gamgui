@@ -132,16 +132,16 @@
     var tabs = document.querySelectorAll(".ud-tab");
     var panels = document.querySelectorAll(".ud-panel");
     function show(name) {
-      panels.forEach(function (p) { p.classList.toggle("hidden", p.getAttribute("data-tab") !== name); });
+      panels.forEach(function (p) { p.classList.toggle("hidden", p.dataset.tab !== name); });
       tabs.forEach(function (t) {
-        var on = t.getAttribute("data-tab") === name;
+        var on = t.dataset.tab === name;
         t.classList.toggle("text-brand-black", on);
         t.classList.toggle("border-brand-blue", on);
         t.classList.toggle("text-brand-gray", !on);
         t.classList.toggle("border-transparent", !on);
       });
     }
-    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.getAttribute("data-tab")); }); });
+    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.tab); }); });
     show("overview");
   })();
 </script>

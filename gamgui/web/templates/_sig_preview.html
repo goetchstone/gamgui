@@ -3,7 +3,7 @@
 {% else %}
 <p class="text-sm text-brand-blueink">Applies to <strong>{{ count }}</strong> user{{ "s" if count != 1 }}{% if sample %} · previewing as {{ sample.full_name }}{% endif %}</p>
 {% if sample %}
-  <iframe sandbox class="mt-3 w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ rendered }}"></iframe>
+  <iframe sandbox title="Signature preview" class="mt-3 w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ rendered }}"></iframe>
   {% if count %}
   <button class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
           hx-post="/signatures/apply" hx-include="#sig-form" hx-target="#sig-preview" hx-swap="innerHTML"

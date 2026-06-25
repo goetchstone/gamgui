@@ -66,7 +66,7 @@
   function gqFilter() {
     var q = (document.getElementById("people-filter").value || "").toLowerCase();
     document.querySelectorAll("#people .ucard").forEach(function (c) {
-      c.style.display = c.getAttribute("data-search").indexOf(q) >= 0 ? "" : "none";
+      c.style.display = c.dataset.search.indexOf(q) >= 0 ? "" : "none";
     });
   }
 </script>

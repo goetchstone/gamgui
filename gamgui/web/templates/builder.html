@@ -84,7 +84,7 @@
     function search(inp) {
       var menu = menuOf(inp);
       if (!menu) return;
-      var kind = inp.getAttribute("data-kind") || "users";
+      var kind = inp.dataset.kind || "users";
       fetch("/builder/pick?kind=" + encodeURIComponent(kind) + "&q=" + encodeURIComponent(inp.value.trim()))
         .then(function (r) { return r.text(); })
         .then(function (html) { menu.innerHTML = html; menu.classList.remove("hidden"); })
@@ -104,7 +104,7 @@
       if (opt) {
         e.preventDefault();
         var inp = opt.closest(".upick-wrap").querySelector(".upick");
-        inp.value = opt.getAttribute("data-val");
+        inp.value = opt.dataset.val;
         closeAll();
         return;
       }
@@ -189,7 +189,7 @@
     document.addEventListener("click", function (e) {
       var cell = e.target.closest ? e.target.closest(".cell-act") : null;
       if (cell) {
-        current = cell.getAttribute("data-email");
+        current = cell.dataset.email;
         document.getElementById("row-actions-email").textContent = current;
         var r = cell.getBoundingClientRect();
         menu.style.left = Math.min(r.left, window.innerWidth - 220) + "px";
@@ -200,8 +200,8 @@
       }
       var item = e.target.closest ? e.target.closest(".ra-item") : null;
       if (item && current) {
-        var param = item.getAttribute("data-param") || "email";
-        htmx.ajax("GET", "/builder/command/" + item.getAttribute("data-cid") + "?" + param + "=" + encodeURIComponent(current),
+        var param = item.dataset.param || "email";
+        htmx.ajax("GET", "/builder/command/" + item.dataset.cid + "?" + param + "=" + encodeURIComponent(current),
                   { target: "#cmd-form", swap: "innerHTML" });
         hide();
         var f = document.getElementById("cmd-form");

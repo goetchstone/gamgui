@@ -1,7 +1,7 @@
 {% if signature %}
 <div class="mb-3 space-y-2">
   <p class="text-xs text-brand-gray">Current signature — rendered</p>
-  <iframe sandbox class="w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ signature }}"></iframe>
+  <iframe sandbox title="Current Gmail signature" class="w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ signature }}"></iframe>
   <details>
     <summary class="text-xs text-brand-gray cursor-pointer hover:text-brand-black">View HTML source</summary>
     <pre class="mt-1 overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 p-3 text-[12.5px] text-ink whitespace-pre-wrap">{{ signature }}</pre>
