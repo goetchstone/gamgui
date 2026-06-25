@@ -156,7 +156,7 @@ class SecretsVault:
         raw = self.backend.get_password(_INDEX_SERVICE, _INDEX_KEY)
         try:
             return sorted(json.loads(raw)) if raw else []
-        except (json.JSONDecodeError, ValueError):
+        except ValueError:  # json.JSONDecodeError is a subclass of ValueError
             return []
 
     def _register_domain(self, domain: str) -> None:

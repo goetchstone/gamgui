@@ -22,6 +22,8 @@ from ..server import TEMPLATES
 router = APIRouter(prefix="/calendars")
 
 EVENT_CAP = 200
+_CALENDAR_LIST_TEMPLATE = "_calendar_list.html"
+_CALENDAR_INDEX_JOB_TEMPLATE = "_calendar_index_job.html"
 # Strict allowlist: only true secondary calendars can be deleted. Primary calendars are a user's
 # email; holiday/system use @group.v.calendar.google.com or a `#…@` id; rooms use
 # @resource.calendar.google.com; imports use @import.calendar.google.com — none end in this suffix.
@@ -151,7 +153,7 @@ async def resources(request: Request, q: str = "") -> HTMLResponse:
         {"cal_id": r.email, "label": r.name or r.email, "meta": r.resource_type or "resource"}
         for r in rs if r.email
     ]
-    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items})
+    return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items})
 
 
 @router.get("/search", response_class=HTMLResponse)
@@ -161,18 +163,19 @@ async def search(request: Request, q: str = "") -> HTMLResponse:
         return _err(request, "Not connected.")
     idx = request.app.state.gamgui.calendar_index
     if idx is None or not _index_ready(request):  # missing, empty, or built for another domain
-        return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {
+        return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {
             "items": [],
             "notes": ["No calendar index yet — build it once (the button above) to search every "
                       "shared calendar by name. After that, searches are instant."],
         })
     items = []
     for c in idx.search(q.strip()):
-        meta = "room" if c.kind == "room" else (f"owned by {c.owner}" if c.owner else "shared")
+        non_room_meta = f"owned by {c.owner}" if c.owner else "shared"
+        meta = "room" if c.kind == "room" else non_room_meta
         if c.kind != "room" and c.subscribers:
             meta += f" · {c.subscribers} subscriber{'' if c.subscribers == 1 else 's'}"
         items.append({"cal_id": c.id, "label": c.summary or c.id, "meta": meta})
-    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items, "notes": []})
+    return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items, "notes": []})
 
 
 async def _build_index(job, conn, idx, domain: str) -> None:
@@ -199,11 +202,11 @@ async def index_rebuild(request: Request) -> HTMLResponse:
         return _err(request, "Calendar index is unavailable.")
     existing = st.jobs.get(st.cal_index_job_id)
     if existing is not None and not existing.finished:  # don't start a second multi-minute scan
-        return TEMPLATES.TemplateResponse(request, "_calendar_index_job.html", {"job": existing})
+        return TEMPLATES.TemplateResponse(request, _CALENDAR_INDEX_JOB_TEMPLATE, {"job": existing})
     job = start_job(st.jobs, 0)
     st.cal_index_job_id = job.id
     job.task = asyncio.create_task(_build_index(job, st.connector, st.calendar_index, st.audit_domain))
-    return TEMPLATES.TemplateResponse(request, "_calendar_index_job.html", {"job": job})
+    return TEMPLATES.TemplateResponse(request, _CALENDAR_INDEX_JOB_TEMPLATE, {"job": job})
 
 
 @router.get("/index/status", response_class=HTMLResponse)
@@ -212,7 +215,7 @@ async def index_status(request: Request, job: str = "") -> HTMLResponse:
     j = st.jobs.get(job) if job else None
     if j is not None:
         # Job partial keeps polling while running, then shows a final result (no more polling).
-        return TEMPLATES.TemplateResponse(request, "_calendar_index_job.html", {"job": j})
+        return TEMPLATES.TemplateResponse(request, _CALENDAR_INDEX_JOB_TEMPLATE, {"job": j})
     # Unknown/pruned job -> the resting status strip (count + age).
     return TEMPLATES.TemplateResponse(request, "_calendar_index_status.html", {"index": _index_ctx(request)})
 
@@ -234,7 +237,7 @@ async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
          "meta": (("primary · " if c.primary else "") + (c.access_role or ""))}
         for c in cals if c.id
     ]
-    return TEMPLATES.TemplateResponse(request, "_calendar_list.html", {"items": items})
+    return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items})
 
 
 @router.get("/detail", response_class=HTMLResponse)

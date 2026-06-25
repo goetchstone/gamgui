@@ -20,8 +20,10 @@ from .models import Catalog, CatalogCommand, CommandSlot, SlotKind
 from .parser import parse_grammar
 from .readbuilder import make_build, parse_read_template
 
-GROUP_ROLES = ["member", "manager", "owner"]
-TRANSFER_SERVICES = ["drive", "calendar"]
+_ROLE_MEMBER = "member"
+GROUP_ROLES = [_ROLE_MEMBER, "manager", "owner"]
+_SERVICE_DRIVE = "drive"
+TRANSFER_SERVICES = [_SERVICE_DRIVE, "calendar"]
 FORWARD_ACTIONS = list(GAMCommands.FORWARD_ACTIONS)
 
 # Group the ~53 grammar categories into a short, browsable set of areas (display order below).
@@ -143,8 +145,8 @@ def _curated() -> List[CatalogCommand]:
              "Remove an email alias so it no longer delivers anywhere."),
         _cmd("build.add_group_member", "Groups", "", "Add member to group", RiskLevel.LOW,
              [_slot("group", "Group", SlotKind.GROUP), _slot("member", "Member", SlotKind.USER),
-              _slot("role", "Role", SlotKind.CHOICE, choices=GROUP_ROLES, default="member")],
-             lambda s: GAMCommands.add_group_member(s["group"], s.get("member", ""), s.get("role") or "member"),
+              _slot("role", "Role", SlotKind.CHOICE, choices=GROUP_ROLES, default=_ROLE_MEMBER)],
+             lambda s: GAMCommands.add_group_member(s["group"], s.get("member", ""), s.get("role") or _ROLE_MEMBER),
              "gam update group <group> add <role> <member>",
              "Add someone to a group as a member, manager, or owner."),
         _cmd("build.remove_group_member", "Groups", "", "Remove member from group", RiskLevel.LOW,
@@ -165,9 +167,9 @@ def _curated() -> List[CatalogCommand]:
              "Set the user's password to a new random value, locking out the old one."),
         _cmd("build.transfer_data", "Data Transfers", "", "Transfer Drive/Calendar ownership", RiskLevel.LOW,
              [_slot("old_owner", "From user", U),
-              _slot("service", "Service", SlotKind.CHOICE, choices=TRANSFER_SERVICES, default="drive"),
+              _slot("service", "Service", SlotKind.CHOICE, choices=TRANSFER_SERVICES, default=_SERVICE_DRIVE),
               _slot("new_owner", "To user", SlotKind.USER)],
-             lambda s: GAMCommands.create_datatransfer(s["old_owner"], s.get("service") or "drive", s.get("new_owner", "")),
+             lambda s: GAMCommands.create_datatransfer(s["old_owner"], s.get("service") or _SERVICE_DRIVE, s.get("new_owner", "")),
              "gam create datatransfer <old> <service> <new>",
              "Hand a departing user's Drive or Calendar content to another user."),
         _cmd("build.suspend_user", "Users", "", "Suspend account", RiskLevel.DESTRUCTIVE,

@@ -16,6 +16,10 @@ from ..server import TEMPLATES
 
 router = APIRouter(prefix="/signatures")
 
+_SIGNATURES_PAGE = "signatures.html"
+_PREVIEW_PARTIAL = "_sig_preview.html"
+_APPLY_PARTIAL = "_sig_apply.html"
+
 
 @dataclass
 class ApplyJob:
@@ -81,17 +85,17 @@ async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
 async def page(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, "signatures.html", {"connected": False})
+        return TEMPLATES.TemplateResponse(request, _SIGNATURES_PAGE, {"connected": False})
     try:
         users = await st.users()
         groups = await st.connector.list_groups()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
-            request, "signatures.html",
+            request, _SIGNATURES_PAGE,
             {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "locations": [], "users": []}, "groups": [], "variables": sig.VARIABLES},
         )
     return TEMPLATES.TemplateResponse(
-        request, "signatures.html",
+        request, _SIGNATURES_PAGE,
         {"connected": True, "options": sig.scope_options(users), "groups": [g.email for g in groups], "variables": sig.VARIABLES},
     )
 
@@ -105,15 +109,15 @@ async def preview(
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, "_sig_preview.html", {"error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": "Not connected."})
     try:
         users = await st.users()
     except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, "_sig_preview.html", {"error": _friendly(exc)})
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": _friendly(exc)})
     matched = await _matched(st, users, scope_type, scope_value)
     sample = matched[0] if matched else None
     return TEMPLATES.TemplateResponse(
-        request, "_sig_preview.html",
+        request, _PREVIEW_PARTIAL,
         {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched), "sample": sample},
     )
 
@@ -127,14 +131,14 @@ async def apply(
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "Not connected."})
     try:
         users = await st.users()
     except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": _friendly(exc)})
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": _friendly(exc)})
     matched = await _matched(st, users, scope_type, scope_value)
     if not matched:
-        return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": "No active users match this scope."})
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "No active users match this scope."})
 
     # Run the (potentially minutes-long) per-user loop in the background and report progress by polling,
     # so the UI never looks frozen on a large apply.
@@ -142,7 +146,7 @@ async def apply(
     _prune_jobs(st)
     st.jobs[job.id] = job
     job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template))
-    return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"job": job})
+    return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})
 
 
 @router.get("/apply/status", response_class=HTMLResponse)
@@ -150,5 +154,5 @@ async def apply_status(request: Request, job: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     j = st.jobs.get(job)
     if j is None:
-        return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"error": "That apply job is no longer available — re-run apply."})
-    return TEMPLATES.TemplateResponse(request, "_sig_apply.html", {"job": j})
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "That apply job is no longer available — re-run apply."})
+    return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": j})

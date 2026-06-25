@@ -18,6 +18,8 @@ import io
 import json
 from typing import Any, Dict, List
 
+_JSON_COLUMN = "JSON"
+
 
 def parse_records(stdout: str) -> List[Dict[str, Any]]:
     """Parse GAM stdout into a list of record dicts. Never raises on shape; returns ``[]`` if empty."""
@@ -61,7 +63,7 @@ def parse_one(stdout: str) -> Dict[str, Any]:
 def _try_json(s: str) -> Any:
     try:
         return json.loads(s)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:
         return None
 
 
@@ -82,10 +84,10 @@ def _parse_csv(text: str) -> List[Dict[str, Any]]:
     # (often alongside a plain key column, e.g. `primaryEmail,JSON`). When present, that column
     # is the source of truth — parse it.
     fieldnames = [f for f in (reader.fieldnames or []) if f is not None]
-    if "JSON" in fieldnames:
+    if _JSON_COLUMN in fieldnames:
         out: List[Dict[str, Any]] = []
         for row in rows:
-            parsed = _try_json(row.get("JSON") or "")
+            parsed = _try_json(row.get(_JSON_COLUMN) or "")
             if parsed is None:
                 continue
             # Keep the plain sibling columns (e.g. `primaryEmail`, `calendarId`) alongside the JSON
@@ -93,7 +95,7 @@ def _parse_csv(text: str) -> List[Dict[str, Any]]:
             # columns carry the owning user / key, which the JSON blob itself often omits. The JSON
             # record wins on any key conflict.
             siblings = {k: v for k, v in row.items()
-                        if k is not None and k != "JSON" and v not in (None, "")}
+                        if k is not None and k != _JSON_COLUMN and v not in (None, "")}
             for rec in _coerce_to_records(parsed):
                 out.append({**siblings, **rec})
         return out

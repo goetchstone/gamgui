@@ -27,7 +27,7 @@ _OVERRIDE = {"users": "users", "user": "a user", "groups": "groups", "group": "a
 # GAM's terser nouns → a clearer phrase (only the common/opaque ones; everything else is humanized)
 _NOUN = {
     "cros": "ChromeOS devices", "crostelemetry": "ChromeOS device telemetry",
-    "ou": "an organizational unit", "ous": "organizational units", "ous": "organizational units",
+    "ou": "an organizational unit", "ous": "organizational units",
     "sakeys": "service-account keys", "svcaccts": "service accounts", "svcacct": "a service account",
     "vaultmatters": "Vault matters", "vaultholds": "Vault holds", "vaultexports": "Vault exports",
     "calendaracls": "calendar sharing (ACLs)", "drivefileacls": "Drive file sharing (ACLs)",
@@ -39,7 +39,6 @@ _NOUN = {
     "privileges": "admin privileges", "schemas": "custom user schemas", "browsers": "managed browsers",
 }
 
-_PLACEHOLDER = re.compile(r"<[^>]+>")
 _PLAIN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 

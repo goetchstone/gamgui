@@ -142,7 +142,7 @@ class SetupService:
         if raw:
             try:
                 client_id = str(json.loads(raw).get("client_id", ""))
-            except (json.JSONDecodeError, ValueError):
+            except ValueError:
                 client_id = ""
         return {"client_id": client_id, "admin_console_url": ADMIN_CONSOLE_DWD_URL}
 

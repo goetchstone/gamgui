@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+_EMAIL_KEY = "email"
+
 
 def _get(d: Dict[str, Any], *keys: str, default: Any = None) -> Any:
     """Return the first present key (GAM varies between e.g. ``primaryEmail``/``email``)."""
@@ -62,7 +64,7 @@ class GAMUser:
         loc = _primary(d.get("locations"))           # building / desk
         phone = _primary(d.get("phones"))            # work phone number
         return cls(
-            primary_email=_get(d, "primaryEmail", "email", "User", default=""),
+            primary_email=_get(d, "primaryEmail", _EMAIL_KEY, "User", default=""),
             given_name=_get(name, "givenName") or _get(d, "givenName", "First Name", default=""),
             family_name=_get(name, "familyName") or _get(d, "familyName", "Last Name", default=""),
             suspended=_as_bool(_get(d, "suspended", "Suspended", default=False)),
@@ -141,7 +143,7 @@ class GAMGroup:
         except (TypeError, ValueError):
             count = None
         return cls(
-            email=_get(d, "email", "Email", "Group", default=""),
+            email=_get(d, _EMAIL_KEY, "Email", "Group", default=""),
             name=_get(d, "name", "Name", default=""),
             description=_get(d, "description", "Description", default=""),
             members_count=count,
@@ -160,7 +162,7 @@ class GroupMember:
     @classmethod
     def from_json(cls, d: Dict[str, Any]) -> "GroupMember":
         return cls(
-            email=_get(d, "email", "Email", default=""),
+            email=_get(d, _EMAIL_KEY, "Email", default=""),
             role=str(_get(d, "role", "Role", default="MEMBER")).upper(),
             member_type=str(_get(d, "type", "Type", default="USER")).upper(),
             status=str(_get(d, "status", "Status", default="")),
@@ -244,7 +246,7 @@ class ResourceCalendar:
         return cls(
             resource_id=str(_get(d, "resourceId", "id", "ResourceID", default="")),
             name=str(_get(d, "resourceName", "name", "Name", default="")),
-            email=str(_get(d, "resourceEmail", "email", "Email", default="")),
+            email=str(_get(d, "resourceEmail", _EMAIL_KEY, "Email", default="")),
             resource_type=str(_get(d, "resourceType", "type", default="")),
             building_id=str(_get(d, "buildingId", default="")),
             raw=d,
@@ -296,13 +298,14 @@ class CalendarEvent:
     @staticmethod
     def _person(obj: Any, d: Dict[str, Any], prefix: str) -> str:
         if isinstance(obj, dict):
-            return str(obj.get("email") or "")
+            return str(obj.get(_EMAIL_KEY) or "")
         return str(d.get(prefix + ".email") or d.get(prefix) or "")
 
     @classmethod
     def from_json(cls, d: Dict[str, Any]) -> "CalendarEvent":
         rec = d.get("recurrence")
-        rec_list = rec if isinstance(rec, list) else ([rec] if rec else [])
+        rec_single = [rec] if rec else []
+        rec_list = rec if isinstance(rec, list) else rec_single
         return cls(
             id=str(_get(d, "id", "eventId", default="")),
             summary=str(_get(d, "summary", "Summary", default="") or "(no title)"),

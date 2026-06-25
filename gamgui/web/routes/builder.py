@@ -29,6 +29,8 @@ router = APIRouter(prefix="/builder")
 
 MAX_SEQUENCE_STEPS = 25
 
+_SEQUENCE_PAGE = "_sequence.html"
+
 
 def _st(request: Request):
     return request.app.state.gamgui
@@ -260,14 +262,14 @@ async def seq_add(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse
         return _err(request, "That command can't be added.")
     if len(st.builder_sequence) >= MAX_SEQUENCE_STEPS:
         return _err(request, f"Sequence is capped at {MAX_SEQUENCE_STEPS} steps.")
-    slots, argv, target, error = await _assemble(request, cmd)
+    _, argv, target, error = await _assemble(request, cmd)
     if error:
         return _err(request, error)
     st.builder_sequence.append({
         "cid": cid, "label": cmd.name, "target": target, "argv": argv,
         "risk": int(cmd.risk), "gam": _gam_str(argv),
     })
-    return TEMPLATES.TemplateResponse(request, "_sequence.html", {"sequence": st.builder_sequence})
+    return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": st.builder_sequence})
 
 
 @router.post("/sequence/remove", response_class=HTMLResponse)
@@ -275,7 +277,7 @@ async def seq_remove(request: Request, index: Annotated[int, Form()]) -> HTMLRes
     st = _st(request)
     if 0 <= index < len(st.builder_sequence):
         st.builder_sequence.pop(index)
-    return TEMPLATES.TemplateResponse(request, "_sequence.html", {"sequence": st.builder_sequence})
+    return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": st.builder_sequence})
 
 
 @router.post("/sequence/move", response_class=HTMLResponse)
@@ -284,13 +286,13 @@ async def seq_move(request: Request, index: Annotated[int, Form()], to: Annotate
     seq = st.builder_sequence
     if 0 <= index < len(seq) and 0 <= to < len(seq):
         seq.insert(to, seq.pop(index))
-    return TEMPLATES.TemplateResponse(request, "_sequence.html", {"sequence": seq})
+    return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": seq})
 
 
 @router.post("/sequence/clear", response_class=HTMLResponse)
 async def seq_clear(request: Request) -> HTMLResponse:
     _st(request).builder_sequence.clear()
-    return TEMPLATES.TemplateResponse(request, "_sequence.html", {"sequence": []})
+    return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": []})
 
 
 def _seq_previews(seq) -> list:

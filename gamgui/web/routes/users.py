@@ -26,6 +26,11 @@ router = APIRouter(prefix="/users")
 
 PAGE_SIZE = 10   # rows per page — sized so a page fits the fixed 13" window (Prev/Next pager)
 
+_USERS_PAGE = "users.html"
+_DELETE_ZONE = "_delete_zone.html"
+_BULK_STORE_PAGE = "bulk_store.html"
+_NOT_CONNECTED = "Not connected."
+
 
 def _conn(request: Request):
     return request.app.state.gamgui.connector
@@ -76,16 +81,16 @@ def _friendly(exc: Exception) -> str:
 async def users_page(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, "users.html", {"connected": False})
+        return TEMPLATES.TemplateResponse(request, _USERS_PAGE, {"connected": False})
     try:
         users = await st.users()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
-            request, "users.html",
+            request, _USERS_PAGE,
             {"connected": True, "domain": st.connector.domain, "error": _friendly(exc), **_table_context([])},
         )
     return TEMPLATES.TemplateResponse(
-        request, "users.html", {"connected": True, "domain": st.connector.domain, **_table_context(users)}
+        request, _USERS_PAGE, {"connected": True, "domain": st.connector.domain, **_table_context(users)}
     )
 
 
@@ -108,7 +113,7 @@ async def user_detail(request: Request, email: str) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return TEMPLATES.TemplateResponse(request, "users.html", {"connected": False, "users": []})
+        return TEMPLATES.TemplateResponse(request, _USERS_PAGE, {"connected": False, "users": []})
     try:
         # Serve identity/role/security from the cached directory (reliable JSON path) so opening a
         # user is instant. Delegates and mail settings load lazily. Fall back to a direct lookup
@@ -134,7 +139,7 @@ async def set_signature(
 ) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.set_signature(email, signature, html=(html == "on"))
     return TEMPLATES.TemplateResponse(
         request, "_action_result.html",
@@ -146,7 +151,7 @@ async def set_signature(
 async def signature_current(request: Request, email: str) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     try:
         sig = await conn.get_signature(email)
     except Exception as exc:
@@ -159,7 +164,7 @@ async def signature_current(request: Request, email: str) -> HTMLResponse:
 async def user_groups(request: Request, email: str) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     return await _groups_partial(request, conn, email)
 
 
@@ -180,7 +185,7 @@ async def _groups_partial(request: Request, conn, email: str) -> HTMLResponse:
 async def groups_add(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.add_group_member(group.strip(), email)
     if not result.ok:
         return _err(request, f"Couldn't add to group: {result.detail}")
@@ -191,7 +196,7 @@ async def groups_add(request: Request, email: Annotated[str, Form()], group: Ann
 async def groups_remove(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.remove_group_member(group.strip(), email)
     if not result.ok:
         return _err(request, f"Couldn't remove from group: {result.detail}")
@@ -202,7 +207,7 @@ async def groups_remove(request: Request, email: Annotated[str, Form()], group: 
 async def add_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     delegate = delegate.strip()
     if not delegate:
         return _err(request, "Enter a delegate email.")
@@ -216,7 +221,7 @@ async def add_delegate(request: Request, email: Annotated[str, Form()], delegate
 async def remove_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.remove_delegate(email, delegate.strip())
     if not result.ok:
         return _err(request, f"Couldn't remove delegate: {result.detail}")
@@ -231,7 +236,7 @@ async def set_organization(
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     title, department = title.strip(), department.strip()
     result = await conn.set_organization(email, title=title, department=department)
     if not result.ok:
@@ -281,19 +286,19 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
 async def bulk_page(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, "bulk_store.html", {"connected": False})
+        return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": False})
     try:
         groups = await st.connector.list_groups()
     except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, "bulk_store.html", {"connected": True, "error": _friendly(exc), "groups": []})
-    return TEMPLATES.TemplateResponse(request, "bulk_store.html", {"connected": True, "groups": [g.email for g in groups]})
+        return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "error": _friendly(exc), "groups": []})
+    return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "groups": [g.email for g in groups]})
 
 
 @router.post("/bulk/preview", response_class=HTMLResponse)
 async def bulk_preview(request: Request, store: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "", emails: Annotated[str, Form()] = "") -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     try:
         targets = await _bulk_targets(st, group.strip(), emails)
     except Exception as exc:
@@ -308,7 +313,7 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     store = store.strip()
     if not store:
         return _err(request, "Enter a store/department value first.")
@@ -337,7 +342,7 @@ async def delegates_get(request: Request, email: str) -> HTMLResponse:
     """Lazy-loaded into the detail page so the page renders before this gam call returns."""
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     return await _delegates_partial(request, conn, email)
 
 
@@ -362,7 +367,7 @@ async def _calendar_partial(request: Request, conn, email: str) -> HTMLResponse:
 async def calendar_get(request: Request, email: str) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     return await _calendar_partial(request, conn, email)
 
 
@@ -372,7 +377,7 @@ async def calendar_add(
 ) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     target = target.strip()
     if not target:
         return _err(request, "Enter an email to share with.")
@@ -386,7 +391,7 @@ async def calendar_add(
 async def calendar_remove(request: Request, email: Annotated[str, Form()], scope: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.remove_calendar_acl(email, scope.strip())
     if not result.ok:
         return _err(request, f"Couldn't remove access: {result.detail}")
@@ -396,7 +401,7 @@ async def calendar_remove(request: Request, email: Annotated[str, Form()], scope
 # --- delete account (irreversible — guarded, type-the-email confirm) ---------------------
 @router.get("/delete/zone", response_class=HTMLResponse)
 async def delete_zone(request: Request, email: str) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_delete_zone.html", {"email": email})
+    return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email})
 
 
 @router.post("/delete/confirm", response_class=HTMLResponse)
@@ -405,7 +410,7 @@ async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTM
     conn = _conn(request)
     pending = await conn.incomplete_transfers_for(email.strip()) if conn else []
     return TEMPLATES.TemplateResponse(
-        request, "_delete_zone.html",
+        request, _DELETE_ZONE,
         {"email": email, "confirming": True, "pending_transfers": pending},
     )
 
@@ -414,17 +419,17 @@ async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTM
 async def delete_apply(request: Request, email: Annotated[str, Form()], confirm: Annotated[str, Form()] = "") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     if confirm.strip().lower() != email.strip().lower():
         return TEMPLATES.TemplateResponse(
-            request, "_delete_zone.html",
+            request, _DELETE_ZONE,
             {"email": email, "confirming": True, "error": "Type the exact email address to confirm."},
         )
     result = await conn.delete_user(email)
     if not result.ok:
         return _err(request, f"Couldn't delete the account: {result.detail}")
     request.app.state.gamgui.invalidate_users()
-    return TEMPLATES.TemplateResponse(request, "_delete_zone.html", {"email": email, "deleted": True})
+    return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "deleted": True})
 
 
 # --- vacation / auto-responder (lazy-loaded into the detail page) ----------------------
@@ -432,7 +437,7 @@ async def delete_apply(request: Request, email: Annotated[str, Form()], confirm:
 async def vacation_get(request: Request, email: str) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     return await _vacation_partial(request, conn, email)
 
 
@@ -457,7 +462,7 @@ async def vacation_set(
 ) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.set_vacation(
         email, subject, message, html=True,
         start=start.strip() or None, end=end.strip() or None,
@@ -472,7 +477,7 @@ async def vacation_set(
 async def vacation_off(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     result = await conn.clear_vacation(email)
     if not result.ok:
         return _err(request, f"Couldn't turn off auto-reply: {result.detail}")
@@ -490,7 +495,7 @@ async def suspend_zone(request: Request, email: str, suspended: str = "false") -
 async def suspend_preview(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     # plan_suspend + guard.evaluate are pure (no GAM call) — they just resolve the target set.
     decision = guard.evaluate(conn.plan_suspend([email], suspend=True))
     return TEMPLATES.TemplateResponse(
@@ -502,7 +507,7 @@ async def suspend_preview(request: Request, email: Annotated[str, Form()]) -> HT
 async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend: Annotated[str, Form()] = "on") -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
-        return _err(request, "Not connected.")
+        return _err(request, _NOT_CONNECTED)
     want_suspend = suspend == "on"
     try:
         results = await conn.apply(conn.plan_suspend([email], suspend=want_suspend))
