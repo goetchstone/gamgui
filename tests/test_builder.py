@@ -45,6 +45,20 @@ def test_builder_page_and_catalog_search(client):
     assert r.status_code == 200 and "Command builder" in r.text and "Users" in r.text
 
 
+def test_export_offered_exactly_for_todrive_reads(client):
+    # Export-to-Sheet shows iff the GAM command actually supports `todrive`.
+    cat = load_catalog()
+    for c in cat.commands:
+        if c.id.startswith("raw."):   # generic rows carry the grammar line — accurate signal
+            expected = c.risk == RiskLevel.READ_ONLY and "todrive" in c.raw_syntax
+            assert c.supports_export == expected, c.raw_syntax
+    # curated print-based read now offers export (its hand-authored syntax omits `todrive`)
+    assert cat.by_id("build.search_messages").supports_export
+    assert "Export to a Google Sheet" in client.get("/builder/command/build.search_messages").text
+    # a non-read curated command never offers export
+    assert not cat.by_id("build.set_signature").supports_export
+
+
 def test_dense_pages_use_full_window_width(client):
     # Dense screens drop the centered 1024px cap so the catalog/results use the whole window.
     assert "max-w-none" in client.get("/builder").text

@@ -60,6 +60,21 @@ class CatalogCommand:
     def risk_label(self) -> str:
         return {RiskLevel.READ_ONLY: "read", RiskLevel.LOW: "change", RiskLevel.DESTRUCTIVE: "destructive"}[self.risk]
 
+    @property
+    def supports_export(self) -> bool:
+        """Can this read be exported to a Google Sheet (GAM `todrive`)? Only print/report CSV reads.
+
+        Generic rows carry the verbatim grammar line, which names `todrive` iff the command supports
+        it (accurate). Curated rows are hand-authored, so fall back to their print/report GAM verb —
+        every curated read points at a print command that supports todrive.
+        """
+        if self.risk != RiskLevel.READ_ONLY:
+            return False
+        if "todrive" in self.raw_syntax:
+            return True
+        toks = self.raw_syntax.split()
+        return self.id.startswith("build.") and ("print" in toks or "report" in toks)
+
     def to_json(self) -> dict:
         return {
             "id": self.id, "category": self.category, "subcategory": self.subcategory,
