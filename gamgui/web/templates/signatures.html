@@ -77,7 +77,16 @@
     var t = document.getElementById("scope_type").value;
     var sel = document.getElementById("scope_value");
     var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "location" ? SIG_LOCATIONS : (t === "group" ? SIG_GROUPS : (t === "user" ? SIG_USERS : []))));
-    sel.innerHTML = list.map(function (v) { return '<option value="' + v + '">' + v + "</option>"; }).join("");
+    // Build options via the DOM (value + textContent), never innerHTML string-concat: OU paths,
+    // departments and locations come from Google and may contain <, > or " — string concat would let
+    // them break out of the markup / inject an attribute. createElement escapes them safely.
+    sel.replaceChildren();
+    list.forEach(function (v) {
+      var o = document.createElement("option");
+      o.value = v;
+      o.textContent = v;
+      sel.appendChild(o);
+    });
     sel.disabled = list.length === 0;
     sel.style.visibility = list.length ? "visible" : "hidden";
   }

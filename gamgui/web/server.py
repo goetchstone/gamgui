@@ -86,14 +86,18 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._token = token
 
+    def _token_ok(self, candidate: "str | None") -> bool:
+        # Constant-time compare (defence-in-depth vs. a local process timing the loopback auth).
+        return candidate is not None and secrets.compare_digest(candidate, self._token)
+
     async def dispatch(self, request: Request, call_next):
         if request.url.path.startswith("/static") or request.url.path == "/healthz":
             return await call_next(request)
 
-        if request.cookies.get(TOKEN_COOKIE) == self._token:
+        if self._token_ok(request.cookies.get(TOKEN_COOKIE)):
             return await call_next(request)
 
-        if request.query_params.get("token") == self._token:
+        if self._token_ok(request.query_params.get("token")):
             response = await call_next(request)
             response.set_cookie(
                 TOKEN_COOKIE, self._token, httponly=True, samesite="strict", max_age=86400

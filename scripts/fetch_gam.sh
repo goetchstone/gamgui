@@ -76,6 +76,25 @@ curl -fSL --retry 5 --retry-all-errors --retry-delay 3 --progress-bar "$ASSET_UR
 SHA="$(shasum -a 256 "$TMP/gam.tar.xz" | awk '{print $1}')"
 echo "==> SHA-256: $SHA"
 
+# Verify against the committed pin BEFORE extracting — refuse a tampered / MITM'd / unexpected
+# binary (the bundled gam can impersonate any user via DWD, so a swapped binary is game over).
+CHECKSUMS="$ROOT/scripts/gam_checksums.txt"
+EXPECTED="$(awk -v a="$ASSET_NAME" '$1!~/^#/ && $2==a {print $1}' "$CHECKSUMS" 2>/dev/null | head -1)"
+if [ -n "$EXPECTED" ]; then
+  if [ "$SHA" != "$EXPECTED" ]; then
+    echo "ERROR: checksum mismatch for $ASSET_NAME" >&2
+    echo "  expected (pinned): $EXPECTED" >&2
+    echo "  downloaded:        $SHA" >&2
+    echo "  Refusing to install — the binary differs from the committed pin (possible tampering)." >&2
+    exit 1
+  fi
+  echo "==> Checksum verified against committed pin (scripts/gam_checksums.txt)."
+else
+  echo "WARNING: no pinned checksum for '$ASSET_NAME' — installing trust-on-first-use." >&2
+  echo "         Verify the download, then add this line to scripts/gam_checksums.txt:" >&2
+  echo "           $SHA  $ASSET_NAME" >&2
+fi
+
 echo "==> Extracting..."
 tar -xJf "$TMP/gam.tar.xz" -C "$TMP"
 

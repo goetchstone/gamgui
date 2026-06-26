@@ -1,0 +1,6 @@
+# Pinned SHA-256 checksums for vendored GAM7 release assets.
+# scripts/fetch_gam.sh verifies each downloaded asset against this committed pin and refuses to
+# install on mismatch (catches a tampered / MITM'd / unexpected binary). Tracked in git so the pin
+# is reviewable. Update DELIBERATELY when bumping EXPECTED_GAM_VERSION (record the new asset's hash).
+# Format: <sha256>  <asset-filename>
+158cc4415a0ed59076f5e329a6856262061c07ed4911d4860d42d9d8e43edd94  gam-7.46.02-macos26.4-arm64.tar.xz
