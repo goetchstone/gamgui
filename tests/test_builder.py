@@ -45,6 +45,41 @@ def test_builder_page_and_catalog_search(client):
     assert r.status_code == 200 and "Command builder" in r.text and "Users" in r.text
 
 
+def test_curated_search_commands_build_safely():
+    cat = load_catalog()
+    poison = "x; rm -rf /"
+    # Find users (domain-wide)
+    u = cat.by_id("build.find_users")
+    assert u and u.buildable and u.risk == RiskLevel.READ_ONLY and u.supports_export
+    argv = u.build({"query": poison})
+    assert argv[:2] == ["print", "users"] and argv.count(poison) == 1 and argv[-1] == "formatjson"
+    assert any(s.key == "query" and "isSuspended=true" in s.hints for s in u.slots)
+    # Find Chromebooks (domain-wide)
+    c = cat.by_id("build.find_cros")
+    assert c and c.buildable and c.supports_export
+    cargv = c.build({"query": poison})
+    assert cargv[:2] == ["print", "cros"] and cargv.count(poison) == 1 and "formatjson" in cargv
+    assert any("status:provisioned" in s.hints for s in c.slots if s.key == "query")
+    # Find Drive files (per-user)
+    f = cat.by_id("build.find_files")
+    assert f and f.buildable and f.supports_export
+    fargv = f.build({"email": "alice@example.com", "query": poison})
+    assert fargv[:4] == ["user", "alice@example.com", "print", "filelist"]
+    assert fargv.count(poison) == 1 and "formatjson" in fargv
+    assert any("'me' in owners" in s.hints for s in f.slots if s.key == "query")
+
+
+def test_curated_search_commands_run(client):
+    # Each renders a result table through the real run path + mock GAM.
+    r = client.post("/builder/run", data={"cid": "build.find_users", "query": "isSuspended=true"})
+    assert r.status_code == 200 and "gam print users" in r.text
+    rc = client.post("/builder/run", data={"cid": "build.find_cros", "query": "status:ACTIVE"})
+    assert rc.status_code == 200 and "5CD123" in rc.text          # a mock device serial
+    rf = client.post("/builder/run", data={"cid": "build.find_files",
+                                           "email": "alice@example.com", "query": "trashed=false"})
+    assert rf.status_code == 200 and "Q4 Budget" in rf.text       # a mock file name
+
+
 def test_export_offered_exactly_for_todrive_reads(client):
     # Export-to-Sheet shows iff the GAM command actually supports `todrive`.
     cat = load_catalog()

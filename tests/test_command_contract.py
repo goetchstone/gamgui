@@ -35,6 +35,8 @@ REQUIRED_TOKENS = [
     "vacation",
     "forwardingaddress",  # gmail forwarding (Builder)
     "print messages",     # mailbox search (Builder: find a message, dump headers)
+    "print cros",         # ChromeOS device search (Builder: Find Chromebooks)
+    "print filelist",     # Drive file search (Builder: Find a user's Drive files)
     "alias",              # user aliases (Builder)
     "todrive",            # export a print command's CSV to a Google Sheet
     "tduser",             # …in a specific user's Drive

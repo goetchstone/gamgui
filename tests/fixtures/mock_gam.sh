@@ -114,6 +114,22 @@ EOF
   exit 0
 fi
 
+# `gam print cros ...` -> formatjson NDJSON of ChromeOS devices (Builder: Find Chromebooks).
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "cros" ]; then
+  printf '%s\n' \
+    '{"deviceId":"cros_1","serialNumber":"5CD123","status":"ACTIVE","orgUnitPath":"/Students","annotatedAssetId":"AST-1","annotatedUser":"sam@example.com","model":"HP Chromebook 11"}' \
+    '{"deviceId":"cros_2","serialNumber":"5CD999","status":"DEPROVISIONED","orgUnitPath":"/Staff","annotatedAssetId":"AST-2","annotatedUser":"","model":"Acer Chromebook 314"}'
+  exit 0
+fi
+
+# `gam user <email> print filelist ...` -> formatjson NDJSON of Drive files (Builder: Find Drive files).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ]; then
+  printf '%s\n' \
+    '{"id":"file_1","name":"Q4 Budget","mimeType":"application/vnd.google-apps.spreadsheet","owners":"alice@example.com","modifiedTime":"2026-06-20T10:00:00Z"}' \
+    '{"id":"file_2","name":"Team Folder","mimeType":"application/vnd.google-apps.folder","owners":"alice@example.com","modifiedTime":"2026-05-01T09:00:00Z"}'
+  exit 0
+fi
+
 # `gam user <email> print forwardingaddresses` -> plain CSV (forwardingEmail + verification).
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forwardingaddresses" ]; then
   printf 'User,forwardingEmail,verificationStatus\n%s,fwd@example.com,accepted\n' "${2:-}"

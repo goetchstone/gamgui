@@ -17,6 +17,8 @@ from ..gam.commands import GAMCommands
 from ..connectors.base import RiskLevel
 from .describe import gloss
 from .models import Catalog, CatalogCommand, CommandSlot, SlotKind
+from .query_hints import (CROS_QUERY_HINTS, CROS_QUERY_NOTE, DRIVE_QUERY_HINTS, DRIVE_QUERY_NOTE,
+                          USER_QUERY_HINTS, USER_QUERY_NOTE)
 from .parser import parse_grammar
 from .readbuilder import make_build, parse_read_template
 
@@ -147,6 +149,30 @@ def _curated() -> List[CatalogCommand]:
              "Find messages in a mailbox by Gmail search (Message-ID, sender, subject, date) and show "
              "their full headers — incl. Return-Path / Received, so an envelope or bounce sender is visible. "
              "Capped at 50 results; Spam & Trash included."),
+        _cmd("build.find_users", "Users", "Users - Search", "Find users", RiskLevel.READ_ONLY,
+             [_slot("query", "User search", SlotKind.TEXT,
+                    placeholder="isSuspended=true · orgUnitPath=/Sales · isEnrolledIn2Sv=false",
+                    hints=USER_QUERY_HINTS, hint_note=USER_QUERY_NOTE)],
+             lambda s: GAMCommands.print_users(query=s.get("query") or None),
+             "gam print users query <QueryUser>",
+             "Search the directory for users by an Admin-SDK query — suspended, admins, by OU, "
+             "2-step status, department, manager, name…"),
+        _cmd("build.find_cros", "ChromeOS Devices", "Devices - Search", "Find Chromebooks", RiskLevel.READ_ONLY,
+             [_slot("query", "Device search", SlotKind.TEXT,
+                    placeholder="status:provisioned · asset_id:… · user:…",
+                    hints=CROS_QUERY_HINTS, hint_note=CROS_QUERY_NOTE)],
+             lambda s: GAMCommands.print_cros(query=s.get("query", "")),
+             "gam print cros query <QueryCrOS>",
+             "Search the managed ChromeOS fleet — by status, asset ID, assigned user, location, "
+             "last-sync/AUE date, or model…"),
+        _cmd("build.find_files", "Users", "Drive - Search", "Find a user's Drive files", RiskLevel.READ_ONLY,
+             [_slot("email", "User", U),
+              _slot("query", "Drive search", SlotKind.TEXT,
+                    placeholder="'me' in owners and trashed=false",
+                    hints=DRIVE_QUERY_HINTS, hint_note=DRIVE_QUERY_NOTE)],
+             lambda s: GAMCommands.print_filelist(s["email"], s.get("query", "")),
+             "gam user <email> print filelist query <QueryDriveFile>",
+             "Search a user's Drive by a Drive query — by name, type, owner, sharing, or modified date…"),
         _cmd("build.print_forwarding", "Users", _SUBCAT_FORWARDING, "List forwarding addresses", RiskLevel.READ_ONLY,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.print_forwarding_addresses(s["email"]),

@@ -36,6 +36,10 @@ USER_DETAIL_FIELDS = (
 )
 # `gam print groups` likewise returns only email unless fields are requested.
 GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
+# Tidy column sets for the Builder "Find Chromebooks" / "Find Drive files" searches.
+CROS_LIST_FIELDS = ("deviceId", "serialNumber", "status", "orgUnitPath", "annotatedAssetId",
+                    "annotatedUser", "lastSync", "model")
+FILE_LIST_FIELDS = ("id", "name", "mimeType", "owners", "modifiedTime", "webViewLink")
 # Superset fetched once and cached to serve the users list (needs title), reports, AND the detail
 # view (so opening a user is instant + uses the reliable JSON path, not the `info user` text format).
 CACHE_FIELDS = (
@@ -80,6 +84,26 @@ class GAMCommands:
             argv += ["query", query]
         argv += ["fields", ",".join(fields or USER_LIST_FIELDS)]
         argv.append("formatjson")
+        return argv
+
+    @staticmethod
+    def print_cros(query: str = "", fields: Optional[Sequence[str]] = None) -> List[str]:
+        """Search the ChromeOS device fleet by a CrOS query (read-only). `query` rides as one argv
+        element. Emits CSV via formatjson for the result table."""
+        argv = ["print", "cros"]
+        if query:
+            argv += ["query", query]
+        argv += ["fields", ",".join(fields or CROS_LIST_FIELDS), "formatjson"]
+        return argv
+
+    @staticmethod
+    def print_filelist(email: str, query: str = "", fields: Optional[Sequence[str]] = None) -> List[str]:
+        """Search a user's Drive files by a Drive v3 query (read-only). `query` rides as one argv
+        element (never shell-spliced)."""
+        argv = ["user", email, "print", "filelist"]
+        if query:
+            argv += ["query", query]
+        argv += ["fields", ",".join(fields or FILE_LIST_FIELDS), "formatjson"]
         return argv
 
     @staticmethod
