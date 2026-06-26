@@ -15,11 +15,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .paths import app_data_dir
+
 WELCOME_VARS = ["name", "role", "email", "manager"]   # the {tokens} the welcome email understands
 
 
 def default_store_path() -> Path:
-    return Path.home() / "Library" / "Application Support" / "GamGUI" / "onboarding.json"
+    return app_data_dir() / "onboarding.json"
 
 
 # Seeded on first run; the admin edits/replaces this entirely — nothing here is hardcoded into logic.

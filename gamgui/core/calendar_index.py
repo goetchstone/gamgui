@@ -23,9 +23,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+from .paths import app_data_dir
+
 
 def default_index_path() -> Path:
-    return Path.home() / "Library" / "Application Support" / "GamGUI" / "calendar_index.db"
+    return app_data_dir() / "calendar_index.db"
 
 
 @dataclass

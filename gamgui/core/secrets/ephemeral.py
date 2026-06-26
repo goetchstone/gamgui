@@ -23,6 +23,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Optional, Type
 
+from ..paths import app_data_dir
 from .vault import FILENAMES, SecretsVault
 
 _REQUIRED = ("oauth2service", "oauth2")
@@ -30,7 +31,7 @@ _REQUIRED = ("oauth2service", "oauth2")
 
 def app_runtime_dir() -> Path:
     """Private base directory for transient runtime files (created ``0700``)."""
-    base = Path.home() / "Library" / "Application Support" / "GamGUI" / "run"
+    base = app_data_dir() / "run"
     base.mkdir(parents=True, exist_ok=True)
     os.chmod(base, 0o700)
     return base

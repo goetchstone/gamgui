@@ -94,6 +94,21 @@ def test_export_offered_exactly_for_todrive_reads(client):
     assert not cat.by_id("build.set_signature").supports_export
 
 
+def test_hardening_csp_and_local_assets(client):
+    # The UI loads no remote executable scripts (vendored locally) and ships security headers.
+    page = client.get("/builder")
+    assert "/static/vendor/tailwind-play.js" in page.text
+    assert "/static/vendor/htmx-1.9.12.min.js" in page.text
+    assert "cdn.tailwindcss.com" not in page.text and "unpkg.com" not in page.text
+    h = page.headers
+    assert "frame-ancestors 'none'" in h.get("content-security-policy", "")
+    assert "object-src 'none'" in h.get("content-security-policy", "")
+    assert h.get("x-content-type-options") == "nosniff"
+    assert h.get("referrer-policy") == "no-referrer"
+    # the vendored assets are actually served
+    assert client.get("/static/vendor/htmx-1.9.12.min.js").status_code == 200
+
+
 def test_dense_pages_use_full_window_width(client):
     # Dense screens drop the centered 1024px cap so the catalog/results use the whole window.
     assert "max-w-none" in client.get("/builder").text

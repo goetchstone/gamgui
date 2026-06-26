@@ -80,7 +80,18 @@ class AppState:
 
 
 class TokenGateMiddleware(BaseHTTPMiddleware):
-    """Allow static assets; otherwise require the launch token (cookie, else ?token= which sets it)."""
+    """Allow static assets; otherwise require the launch token (cookie, else ?token= which sets it).
+
+    Also stamps security headers on every response: a CSP locking down object/base/frame/form
+    vectors (no script-src directive — the app uses inline handlers and all scripts are now same-origin
+    vendored, so there is no remote script to constrain), nosniff, and no-referrer (so the ?token= in
+    the first URL can't leak to fonts.googleapis via the Referer header)."""
+
+    SECURITY_HEADERS = {
+        "Content-Security-Policy": "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+    }
 
     def __init__(self, app, token: str) -> None:
         super().__init__(app)
@@ -90,21 +101,26 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
         # Constant-time compare (defence-in-depth vs. a local process timing the loopback auth).
         return candidate is not None and secrets.compare_digest(candidate, self._token)
 
+    def _secure(self, response):
+        for key, value in self.SECURITY_HEADERS.items():
+            response.headers.setdefault(key, value)
+        return response
+
     async def dispatch(self, request: Request, call_next):
         if request.url.path.startswith("/static") or request.url.path == "/healthz":
-            return await call_next(request)
+            return self._secure(await call_next(request))
 
         if self._token_ok(request.cookies.get(TOKEN_COOKIE)):
-            return await call_next(request)
+            return self._secure(await call_next(request))
 
         if self._token_ok(request.query_params.get("token")):
             response = await call_next(request)
             response.set_cookie(
                 TOKEN_COOKIE, self._token, httponly=True, samesite="strict", max_age=86400
             )
-            return response
+            return self._secure(response)
 
-        return JSONResponse({"error": "forbidden"}, status_code=403)
+        return self._secure(JSONResponse({"error": "forbidden"}, status_code=403))
 
 
 def create_app(state: AppState) -> FastAPI:

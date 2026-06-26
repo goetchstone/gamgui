@@ -12,6 +12,8 @@ import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+
+from .paths import app_data_dir
 from typing import Any, Dict, List, Optional, Sequence
 
 # gam argument keys whose following value must be masked in the log.
@@ -37,7 +39,7 @@ def redact_argv(argv: Optional[Sequence[str]]) -> Optional[List[str]]:
 
 
 def default_audit_path() -> Path:
-    base = Path.home() / "Library" / "Application Support" / "GamGUI"
+    base = app_data_dir()
     base.mkdir(parents=True, exist_ok=True)
     return base / "audit.jsonl"
 
