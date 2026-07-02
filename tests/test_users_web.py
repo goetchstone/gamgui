@@ -703,6 +703,19 @@ def test_add_delegate_returns_list(client):
     assert "Remove" in r.text
 
 
+def test_signout_everywhere_succeeds(client):
+    r = client.post("/users/signout", data={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Signed alice@example.com out of all sessions." in r.text
+
+
+def test_user_detail_has_signout_button(client):
+    r = client.get("/users/detail", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert "Sign out everywhere" in r.text
+    assert 'hx-post="/users/signout"' in r.text
+
+
 def test_suspend_preview_is_guarded(client):
     r = client.post("/users/suspend/preview", data={"email": "alice@example.com"})
     assert r.status_code == 200

@@ -147,6 +147,18 @@ async def set_signature(
     )
 
 
+@router.post("/signout", response_class=HTMLResponse)
+async def signout_user(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, _NOT_CONNECTED)
+    result = await conn.signout_user(email)
+    return TEMPLATES.TemplateResponse(
+        request, "_action_result.html",
+        {"ok": result.ok, "message": f"Signed {email} out of all sessions." if result.ok else result.detail},
+    )
+
+
 @router.get("/signature/current", response_class=HTMLResponse)
 async def signature_current(request: Request, email: str) -> HTMLResponse:
     conn = _conn(request)

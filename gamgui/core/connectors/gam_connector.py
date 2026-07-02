@@ -165,6 +165,9 @@ class GAMConnector(Connector):
         argv = GAMCommands.remove_delegate(email, delegate)
         return await self._run_write("remove_delegate", email, argv, RiskLevel.LOW)
 
+    async def signout_user(self, email: str) -> ChangeResult:
+        return await self._run_write("signout_user", email, GAMCommands.signout_user(email), RiskLevel.LOW)
+
     # --- vacation / auto-responder -----------------------------------------------------
     async def get_vacation(self, email: str) -> Vacation:
         stdout = await self.runner.run_authenticated(self.domain, GAMCommands.show_vacation(email))

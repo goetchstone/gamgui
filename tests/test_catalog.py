@@ -49,6 +49,25 @@ def test_load_catalog_has_buildable_and_browse():
     assert cat.by_id("build.delete_user").risk == RiskLevel.DESTRUCTIVE
 
 
+def test_new_curated_commands_build_correct_argv():
+    cat = load_catalog()
+
+    signout = cat.by_id("build.signout_user")
+    assert signout is not None and signout.buildable and signout.risk == RiskLevel.LOW
+    assert signout.build({"email": "a@e.com"}) == ["user", "a@e.com", "signout"]
+
+    undelete = cat.by_id("build.undelete_user")
+    assert undelete is not None and undelete.buildable and undelete.risk == RiskLevel.LOW
+    assert undelete.build({"email": "a@e.com"}) == ["undelete", "user", "a@e.com"]
+
+    create = cat.by_id("build.create_group")
+    assert create is not None and create.buildable and create.risk == RiskLevel.LOW
+    assert create.build({"email": "g@e.com"}) == ["create", "group", "g@e.com"]
+    assert create.build({"email": "g@e.com", "name": "Sales", "description": "d"}) == [
+        "create", "group", "g@e.com", "name", "Sales", "description", "d",
+    ]
+
+
 def test_areas_group_the_categories():
     cat = load_catalog()
     counts = cat.area_counts()

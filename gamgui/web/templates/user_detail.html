@@ -120,6 +120,14 @@
       <div id="suspend-zone" class="mt-3">
         {% include "_suspend_zone.html" %}
       </div>
+      <div class="mt-4 pt-4 border-t border-brand-gray/20">
+        <p class="text-xs text-brand-blueink/70">End every active session — the user must sign in again everywhere. Doesn't change the password.</p>
+        <button class="mt-2 inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
+                hx-post="/users/signout" hx-target="#signout-result" hx-swap="innerHTML"
+                hx-vals='{"email": {{ email | tojson }} }'
+                hx-confirm="End all of {{ user.full_name }}'s sessions?">Sign out everywhere</button>
+        <div id="signout-result" class="mt-2"></div>
+      </div>
       <div id="delete-zone" class="mt-4 pt-4 border-t border-brand-gray/20">
         {% include "_delete_zone.html" %}
       </div>

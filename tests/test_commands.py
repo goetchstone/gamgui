@@ -107,6 +107,23 @@ def test_lifecycle_commands():
     assert "start" in ev and "allday" in ev and "2026-07-23" in ev and "description" in ev and "attendee" in ev
 
 
+def test_signout_and_undelete_user():
+    assert GAMCommands.signout_user("a@e.com") == ["user", "a@e.com", "signout"]
+    assert GAMCommands.undelete_user("a@e.com") == ["undelete", "user", "a@e.com"]
+
+
+def test_create_group_commands():
+    assert GAMCommands.create_group("g@e.com") == ["create", "group", "g@e.com"]
+    assert GAMCommands.create_group("g@e.com", "Sales") == ["create", "group", "g@e.com", "name", "Sales"]
+    assert GAMCommands.create_group("g@e.com", "Sales", "The sales team") == [
+        "create", "group", "g@e.com", "name", "Sales", "description", "The sales team",
+    ]
+    # description without a name is still valid
+    assert GAMCommands.create_group("g@e.com", "", "Just a desc") == [
+        "create", "group", "g@e.com", "description", "Just a desc",
+    ]
+
+
 def test_set_suspended_on_off():
     assert GAMCommands.set_suspended("a@e.com", True) == ["update", "user", "a@e.com", "suspended", "on"]
     assert GAMCommands.set_suspended("a@e.com", False) == ["update", "user", "a@e.com", "suspended", "off"]
