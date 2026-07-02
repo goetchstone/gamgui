@@ -510,6 +510,51 @@ def test_calendars_delete_refuses_when_owner_suspended(client):
     assert "suspended or no longer exist" in r.text
 
 
+def test_calendars_share_adds_acl_and_subscribes(client):
+    r = client.post("/calendars/share",
+                    data={"cal": SEC_CAL, "target": "assistant@example.com", "role": "reader", "label": "House Call Calendar"})
+    assert r.status_code == 200
+    assert "assistant@example.com" in r.text               # ACL list re-rendered
+    assert "appear in their Google Calendar" in r.text      # subscribed -> emerald notice
+    assert 'hx-post="/calendars/share"' in r.text           # share form still present
+
+
+def test_calendars_share_group_scope_not_subscribed(client):
+    # A group scope is valid to share but can't be auto-subscribed (the form is type=email; POST direct).
+    r = client.post("/calendars/share",
+                    data={"cal": SEC_CAL, "target": "group:team@example.com", "role": "reader"})
+    assert r.status_code == 200
+    assert "auto-subscribed" in r.text                      # groups notice (apostrophe HTML-escaped)
+
+
+def test_calendars_share_requires_target(client):
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "   "})
+    assert "Enter a person or group to share with." in r.text
+
+
+def test_calendars_share_partial_when_subscribe_fails(client):
+    # The ACL add succeeds but the subscribe (add calendars) is refused for a SUBFAIL recipient.
+    r = client.post("/calendars/share",
+                    data={"cal": SEC_CAL, "target": "SUBFAIL-carol@example.com", "role": "reader"})
+    assert r.status_code == 200
+    assert "auto-add it to their calendar list" in r.text    # partial-success notice (apostrophe escaped)
+
+
+def test_calendars_unshare_removes_access(client):
+    r = client.post("/calendars/unshare",
+                    data={"cal": SEC_CAL, "scope": "assistant@example.com", "label": "House Call Calendar"})
+    assert r.status_code == 200
+    assert "Removed access for assistant@example.com" in r.text
+
+
+def test_calendars_detail_has_share_form_and_row_remove(client):
+    r = client.get("/calendars/detail", params={"cal": SEC_CAL, "label": "House Call Calendar"})
+    assert r.status_code == 200
+    assert 'hx-post="/calendars/share"' in r.text and 'name="role"' in r.text
+    # Owner row has NO Remove button; the two non-owner rules (reader + default) each get one.
+    assert r.text.count('hx-post="/calendars/unshare"') == 2
+
+
 def test_lifecycle_page_renders(client):
     r = client.get("/lifecycle")
     assert r.status_code == 200

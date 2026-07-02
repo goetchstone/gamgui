@@ -39,6 +39,34 @@ def test_calendar_acl_commands():
         ["user", "a@e.com", "delete", "calendaracls", "primary", "bob@e.com"]
 
 
+def test_calendar_share_commands():
+    # Standalone admin share (line 1679): role then scope; NO owner impersonation, NO formatjson.
+    argv = GAMCommands.add_calendar_acl_cal("room@x", "bob@e.com", role="reader")
+    assert argv == ["calendars", "room@x", "add", "calendaracls", "reader", "bob@e.com"]
+    assert "formatjson" not in argv
+    # sendnotifications only when explicitly asked (default OFF — the subscribe makes it appear).
+    assert "sendnotifications" not in argv
+    assert GAMCommands.add_calendar_acl_cal("room@x", "bob@e.com", role="writer", send_notifications=True) == \
+        ["calendars", "room@x", "add", "calendaracls", "writer", "bob@e.com", "sendnotifications", "true"]
+    # group: scope passes through unchanged.
+    assert GAMCommands.add_calendar_acl_cal("room@x", "group:team@e.com", role="reader") == \
+        ["calendars", "room@x", "add", "calendaracls", "reader", "group:team@e.com"]
+    # Unshare (line 1681): just the scope, no role.
+    assert GAMCommands.delete_calendar_acl_cal("room@x", "bob@e.com") == \
+        ["calendars", "room@x", "delete", "calendaracls", "bob@e.com"]
+    # Subscribe (line 6217): selected true by default; omitted when selected=False.
+    assert GAMCommands.subscribe_calendar("bob@e.com", "room@x") == \
+        ["user", "bob@e.com", "add", "calendars", "room@x", "selected", "true"]
+    assert GAMCommands.subscribe_calendar("bob@e.com", "room@x", selected=False) == \
+        ["user", "bob@e.com", "add", "calendars", "room@x"]
+
+
+def test_calendar_share_id_is_single_arg_not_shell():
+    # A calendar id with shell metacharacters must stay ONE argv element (no injection surface).
+    argv = GAMCommands.add_calendar_acl_cal("c_x; rm -rf / `whoami`@group.calendar.google.com", "bob@e.com")
+    assert argv[1] == "c_x; rm -rf / `whoami`@group.calendar.google.com"
+
+
 def test_calendar_event_commands():
     assert GAMCommands.print_resources("aspen")[:4] == ["print", "resources", "fields", "id,name,email,resourcetype,buildingid"]
     assert GAMCommands.print_resources("aspen")[-3:] == ["query", "aspen", "formatjson"]

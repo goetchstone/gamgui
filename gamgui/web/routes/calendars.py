@@ -29,11 +29,21 @@ _CALENDAR_INDEX_JOB_TEMPLATE = "_calendar_index_job.html"
 # email; holiday/system use @group.v.calendar.google.com or a `#…@` id; rooms use
 # @resource.calendar.google.com; imports use @import.calendar.google.com — none end in this suffix.
 SECONDARY_SUFFIX = "@group.calendar.google.com"
+# Roles we expose for sharing (app-wide subset of GAM's CalendarACLRole set).
+ACL_ROLES = ("reader", "freebusyreader", "writer", "owner")
 
 
 def _is_secondary(cal: str) -> bool:
     c = (cal or "").strip().lower()
     return bool(c) and "#" not in c and c.endswith(SECONDARY_SUFFIX)
+
+
+def _is_user_scope(scope: str) -> bool:
+    """A bare user email (not a group/domain/default scope) — the only scope we can auto-subscribe."""
+    s = (scope or "").strip().lower()
+    if s in ("default", "domain") or s.startswith(("group:", "domain:")):
+        return False
+    return "@" in s
 
 
 def _owner_candidates(acls, cal: str) -> list:
@@ -241,15 +251,10 @@ async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items})
 
 
-@router.get("/detail", response_class=HTMLResponse)
-async def detail(request: Request, cal: str, label: str = "") -> HTMLResponse:
-    conn = _conn(request)
-    if conn is None:
-        return _err(request, _NOT_CONNECTED)
-    try:
-        acls = await conn.list_calendar_acls_for(cal)
-    except Exception as exc:
-        return _err(request, _friendly(exc))
+async def _detail_ctx(request: Request, conn, cal: str, label: str) -> dict:
+    """Build the shared context for `_calendar_detail.html` — the GET detail view and the share/
+    unshare mutations all re-render from this so the ACL list + delete zone stay identical."""
+    acls = await conn.list_calendar_acls_for(cal)
     is_secondary = _is_secondary(cal)
     owner, delete_note = "", ""
     if is_secondary:
@@ -262,11 +267,71 @@ async def detail(request: Request, cal: str, label: str = "") -> HTMLResponse:
             if not owner:
                 delete_note = (f"This calendar can't be deleted here: owner(s) {', '.join(cands)} are "
                                "suspended or no longer exist. Reassign ownership to an active user first.")
-    return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", {
+    return {
         "cal": cal, "label": label.strip(), "acls": acls, "acl_count": len(acls),
         "is_secondary": is_secondary, "owner": owner, "deletable": bool(owner),
-        "delete_note": delete_note,
-    })
+        "delete_note": delete_note, "share_notice": "",
+    }
+
+
+@router.get("/detail", response_class=HTMLResponse)
+async def detail(request: Request, cal: str, label: str = "") -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, _NOT_CONNECTED)
+    try:
+        ctx = await _detail_ctx(request, conn, cal, label)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
+
+
+@router.post("/share", response_class=HTMLResponse)
+async def share(request: Request, cal: Annotated[str, Form()], target: Annotated[str, Form()],
+                role: Annotated[str, Form()] = "reader", label: Annotated[str, Form()] = "") -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, _NOT_CONNECTED)
+    cal, target = cal.strip(), target.strip()
+    if not target:
+        return _err(request, "Enter a person or group to share with.")
+    role = role if role in ACL_ROLES else "reader"
+    result = await conn.add_calendar_acl_for(cal, target, role=role)
+    if not result.ok:
+        return _err(request, f"Couldn't share calendar: {result.detail}")
+    if _is_user_scope(target):
+        sub = await conn.subscribe_calendar_for(target, cal)
+        if sub.ok:
+            notice = f"Shared with {target} — it will now appear in their Google Calendar."
+        else:
+            notice = (f"Shared with {target}, but couldn't auto-add it to their calendar list — "
+                      "they can add it manually in Google Calendar.")
+    else:
+        notice = f"Shared with {target}. (Groups can't be auto-subscribed — members add it themselves.)"
+    try:
+        ctx = await _detail_ctx(request, conn, cal, label)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    ctx["share_notice"] = notice
+    return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
+
+
+@router.post("/unshare", response_class=HTMLResponse)
+async def unshare(request: Request, cal: Annotated[str, Form()], scope: Annotated[str, Form()],
+                  label: Annotated[str, Form()] = "") -> HTMLResponse:
+    conn = _conn(request)
+    if conn is None:
+        return _err(request, _NOT_CONNECTED)
+    cal, scope = cal.strip(), scope.strip()
+    result = await conn.remove_calendar_acl_for(cal, scope)
+    if not result.ok:
+        return _err(request, f"Couldn't remove access: {result.detail}")
+    try:
+        ctx = await _detail_ctx(request, conn, cal, label)
+    except Exception as exc:
+        return _err(request, _friendly(exc))
+    ctx["share_notice"] = f"Removed access for {scope}."
+    return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
 
 
 def _delete_view(request: Request, *, cal: str, label: str, owner: str, acl_count: int = 0,

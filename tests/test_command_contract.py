@@ -45,6 +45,7 @@ REQUIRED_TOKENS = [
     "calendaracls",   # calendar access view/add/remove
     "print resources",  # resource/room calendars
     "print calendars",  # a user's calendars
+    "add calendars",    # subscribe a recipient so a shared calendar appears in their sidebar
     "print events",     # event search
     "delete events",    # event deletion
     "remove calendars", # PERMANENT secondary-calendar delete (NOT `delete calendars` = unsubscribe)

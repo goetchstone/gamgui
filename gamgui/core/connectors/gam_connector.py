@@ -276,6 +276,18 @@ class GAMConnector(Connector):
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_acls_cal(calendar_id))
         return [CalendarACL.from_json(r) for r in parse_records(out)]
 
+    async def add_calendar_acl_for(self, calendar_id: str, scope: str, role: str = "reader") -> ChangeResult:
+        argv = GAMCommands.add_calendar_acl_cal(calendar_id, scope, role=role)
+        return await self._run_write("add_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, target_extra=scope)
+
+    async def remove_calendar_acl_for(self, calendar_id: str, scope: str) -> ChangeResult:
+        argv = GAMCommands.delete_calendar_acl_cal(calendar_id, scope)
+        return await self._run_write("remove_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, target_extra=scope)
+
+    async def subscribe_calendar_for(self, email: str, calendar_id: str) -> ChangeResult:
+        argv = GAMCommands.subscribe_calendar(email, calendar_id)
+        return await self._run_write("subscribe_calendar", email, argv, RiskLevel.LOW, target_extra=calendar_id)
+
     async def search_events(
         self, calendar_id: str, query: str = "", after: str = "", before: str = "", cap: int = 200
     ) -> List[CalendarEvent]:

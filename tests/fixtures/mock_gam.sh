@@ -180,6 +180,22 @@ if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events"
   exit 0
 fi
 
+# `gam calendars <id> add|delete calendaracls ...` -> standalone share/unshare (admin, no impersonation).
+if [ "${1:-}" = "calendars" ] && { [ "${3:-}" = "add" ] || [ "${3:-}" = "delete" ]; } && [ "${4:-}" = "calendaracls" ]; then
+  echo "Calendar $2, ACL rule ${3}d"
+  exit 0
+fi
+
+# `gam user <email> add calendars <id> ...` -> subscribe so the calendar appears in the sidebar.
+# A SUBFAIL target simulates GAM refusing to act as that recipient (partial-success path).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "add" ] && [ "${4:-}" = "calendars" ]; then
+  case "$*" in
+    *SUBFAIL*) echo "ERROR: 403: Not authorized to act as user" 1>&2; exit 1 ;;
+  esac
+  echo "User $2 subscribed to calendar $5"
+  exit 0
+fi
+
 # `gam user <admin> check serviceaccount` -> simulate a fully-authorized service account.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
   cat <<'EOF'

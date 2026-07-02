@@ -6,15 +6,39 @@
 
   <div>
     <h3 class="eyebrow text-brand-gray">Who has access</h3>
+    {% if share_notice %}
+    <div class="mt-2 rounded-lg border {{ 'border-amber-300 bg-amber-50 text-amber-800' if 'couldn' in share_notice else 'border-emerald-300 bg-emerald-50 text-emerald-800' }} px-3 py-2 text-sm">{{ share_notice }}</div>
+    {% endif %}
     {% if acls %}
     <ul class="mt-2 max-h-44 space-y-1 overflow-y-auto text-sm">
       {% for a in acls %}
-      <li class="border-b border-brand-gray/20 pb-1"><span class="text-brand-black">{{ a.who }}</span> <span class="text-brand-gray">— {{ a.role_label }}</span></li>
+      <li class="flex items-center justify-between gap-3 border-b border-brand-gray/20 pb-1">
+        <span><span class="text-brand-black">{{ a.who }}</span> <span class="text-brand-gray">— {{ a.role_label }}</span></span>
+        {% if a.role != "owner" %}
+        <button class="text-xs text-red-700 hover:underline shrink-0"
+                hx-post="/calendars/unshare" hx-target="#cal-detail" hx-swap="innerHTML"
+                hx-vals='{"cal": {{ cal | tojson }}, "scope": {{ a.scope_token | tojson }}, "label": {{ label | tojson }} }'
+                hx-confirm="Remove access for {{ a.who }}?">Remove</button>
+        {% endif %}
+      </li>
       {% endfor %}
     </ul>
     {% else %}
     <p class="mt-2 text-sm text-brand-gray">No access rules returned.</p>
     {% endif %}
+    <form class="mt-3 flex flex-wrap gap-2" hx-post="/calendars/share" hx-target="#cal-detail" hx-swap="innerHTML">
+      <input type="hidden" name="cal" value="{{ cal }}" />
+      <input type="hidden" name="label" value="{{ label }}" />
+      <input type="email" name="target" required placeholder="share with person@domain.com"
+             class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+      <select name="role" class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none">
+        <option value="reader">See all details</option>
+        <option value="freebusyreader">Free/busy only</option>
+        <option value="writer">Make changes</option>
+        <option value="owner">Make changes &amp; manage</option>
+      </select>
+      <button class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors" type="submit">Share</button>
+    </form>
   </div>
 
   <div>

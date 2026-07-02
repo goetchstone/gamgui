@@ -198,6 +198,31 @@ class GAMCommands:
         return ["calendars", calendar_id, "print", "calendaracls", "formatjson"]
 
     @staticmethod
+    def add_calendar_acl_cal(
+        calendar_id: str, scope: str, role: str = "reader", send_notifications: bool = False
+    ) -> List[str]:
+        # Standalone admin form (same auth path as `calendars <id> print calendaracls`) — no owner
+        # impersonation, no formatjson. `scope`: bare email = user; pass "group:<email>"/"domain"/
+        # "default" through unchanged. Notifications default OFF: the subscribe makes it visibly
+        # appear (the whole point is people miss the sharing email).
+        argv = ["calendars", calendar_id, "add", "calendaracls", role, scope]
+        if send_notifications:
+            argv += ["sendnotifications", "true"]
+        return argv
+
+    @staticmethod
+    def delete_calendar_acl_cal(calendar_id: str, scope: str) -> List[str]:
+        return ["calendars", calendar_id, "delete", "calendaracls", scope]
+
+    @staticmethod
+    def subscribe_calendar(email: str, calendar_id: str, selected: bool = True) -> List[str]:
+        # Makes the calendar appear in the recipient's sidebar; runs as the recipient.
+        argv = ["user", email, "add", "calendars", calendar_id]
+        if selected:
+            argv += ["selected", "true"]
+        return argv
+
+    @staticmethod
     def remove_calendar(owner: str, calendar_id: str) -> List[str]:
         # PERMANENTLY delete a secondary calendar, acting as an owner (Calendars.delete).
         # GAM footgun: `remove calendars` deletes the calendar for everyone; `delete calendars`
