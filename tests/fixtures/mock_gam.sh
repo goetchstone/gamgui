@@ -224,6 +224,25 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "create" ] && [ "${4:-}" = "tasklist" ]
   exit 0
 fi
 
+# `gam create datatransfer <old> <serviceList> <new>` -> succeeds. To reproduce the real 409, an
+# <old> containing CONFLICT409 (e.g. a second transfer for the same user still in flight) returns
+# the exact "already in progress" error Google emits.
+if [ "${1:-}" = "create" ] && [ "${2:-}" = "datatransfer" ]; then
+  case "${3:-}" in
+    *CONFLICT409*) echo "ERROR: 409: conflict - Data transfer already in progress for the user." 1>&2; exit 9 ;;
+  esac
+  echo "Requested transfer of ${4:-} from ${3:-} to ${5:-}"
+  exit 0
+fi
+
+# `gam all users delete calendaracls primary <email>` -> the sweep hits the departing user's OWN
+# primary calendar and Google refuses to remove their owner ACL. Emit the EXACT real stderr (leading
+# spaces preserved) and exit 50, so the connector's PERMISSION_DENIED tolerance is genuinely exercised.
+if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && [ "${4:-}" = "calendaracls" ]; then
+  printf '    Calendar: %s, Calendar ACL: (Scope: user:%s), Delete Failed: Cannot change your own access level.\n' "${6:-}" "${6:-}" 1>&2
+  exit 50
+fi
+
 # Anything else is treated as a mutation: optionally simulate a token refresh, then succeed.
 if [ -n "${GAM_MOCK_REFRESH:-}" ] && [ -n "${GAMCFGDIR:-}" ] && [ -f "$GAMCFGDIR/oauth2.txt" ]; then
   printf 'refreshed-token-payload\n' > "$GAMCFGDIR/oauth2.txt"

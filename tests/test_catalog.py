@@ -68,6 +68,19 @@ def test_new_curated_commands_build_correct_argv():
     ]
 
 
+def test_transfer_offers_combined_service_list():
+    cat = load_catalog()
+    xfer = cat.by_id("build.transfer_data")
+    assert xfer is not None and xfer.buildable
+    service = next(s for s in xfer.slots if s.key == "service")
+    # "drive,calendar" lets the Builder transfer both at once (one transfer avoids the 409).
+    assert service.choices == ["drive", "calendar", "drive,calendar"]
+    # The combined choice rides as ONE argv element — never split into two tokens.
+    assert xfer.build({"old_owner": "a@e.com", "service": "drive,calendar", "new_owner": "b@e.com"}) == [
+        "create", "datatransfer", "a@e.com", "drive,calendar", "b@e.com",
+    ]
+
+
 def test_areas_group_the_categories():
     cat = load_catalog()
     counts = cat.area_counts()

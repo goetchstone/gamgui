@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from gamgui.core.gam.commands import GAMCommands, build_user_query
+from gamgui.core.gam.errors import GAMErrorKind, classify_stderr
 
 
 def test_print_users_requests_list_fields():
@@ -98,6 +99,10 @@ def test_calendar_delete_vs_unsubscribe_commands():
 def test_lifecycle_commands():
     assert GAMCommands.reset_password("a@e.com") == ["update", "user", "a@e.com", "password", "random", "changepassword", "off"]
     assert GAMCommands.create_datatransfer("a@e.com", "drive", "b@e.com") == ["create", "datatransfer", "a@e.com", "drive", "b@e.com"]
+    # A <DataTransferServiceList> rides as ONE argv element (Drive + Calendar in a single transfer).
+    combined = GAMCommands.create_datatransfer("a@e.com", "drive,calendar", "b@e.com")
+    assert combined == ["create", "datatransfer", "a@e.com", "drive,calendar", "b@e.com"]
+    assert combined[3] == "drive,calendar"  # not split into two tokens
     assert GAMCommands.print_datatransfers() == ["print", "datatransfers"]
     assert GAMCommands.print_datatransfers("a@e.com") == ["print", "datatransfers", "olduser", "a@e.com"]
     assert GAMCommands.remove_all_calendar_acls("a@e.com") == ["all", "users", "delete", "calendaracls", "primary", "a@e.com"]
@@ -105,6 +110,14 @@ def test_lifecycle_commands():
     ev = GAMCommands.add_calendar_event("mgr@e.com", "Confirm delete", "2026-07-23", "2026-07-24", description="d", attendee="it@e.com")
     assert ev[:7] == ["user", "mgr@e.com", "add", "event", "primary", "summary", "Confirm delete"]
     assert "start" in ev and "allday" in ev and "2026-07-23" in ev and "description" in ev and "attendee" in ev
+
+
+def test_own_acl_error_classifies_as_permission_denied():
+    # The all-users calendar sweep hits the departing user's OWN primary calendar; GAM's line carries
+    # no 403/forbidden token, so this must match its own pattern (before the generic 403 entry).
+    real = "Calendar: x@e.com, Calendar ACL: (Scope: user:x@e.com), Delete Failed: Cannot change your own access level."
+    assert classify_stderr(real) is GAMErrorKind.PERMISSION_DENIED
+    assert classify_stderr("cannotChangeOwnAcl") is GAMErrorKind.PERMISSION_DENIED
 
 
 def test_signout_and_undelete_user():

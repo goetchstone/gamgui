@@ -275,7 +275,10 @@ class GAMCommands:
 
     @staticmethod
     def create_datatransfer(old_owner: str, service: str, new_owner: str) -> List[str]:
-        # service: "drive" (Drive & Docs) | "calendar".
+        # `service` is a <DataTransferServiceList>: one service ("drive" | "calendar") OR a
+        # comma-joined list ("drive,calendar") that rides as ONE argv element. Passing both in a
+        # single transfer avoids Google's 409 "transfer already in progress" when two separate
+        # transfers for the same user overlap.
         return ["create", "datatransfer", old_owner, service, new_owner]
 
     @staticmethod

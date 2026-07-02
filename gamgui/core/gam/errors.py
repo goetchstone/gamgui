@@ -50,6 +50,10 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     (re.compile(r"insufficient.*scope|access_denied.*scope|not authorized to access", re.I), GAMErrorKind.SCOPE_MISSING),
     (re.compile(r"rate.?limit|quota|userRateLimitExceeded|too many requests|\b429\b", re.I), GAMErrorKind.RATE_LIMITED),
     (re.compile(r"does not exist|not found|notFound|resource.*not found|\b404\b", re.I), GAMErrorKind.NOT_FOUND),
+    # Deleting your OWN owner ACL is refused ("Cannot change your own access level" / cannotChangeOwnAcl)
+    # — semantically a permission refusal. Placed before the generic 403 pattern because GAM's line
+    # here carries no "403"/"forbidden" token. Tolerated by the all-users calendar-ACL offboard sweep.
+    (re.compile(r"cannot change your own access level|cannotChangeOwnAcl", re.I), GAMErrorKind.PERMISSION_DENIED),
     (re.compile(r"forbidden|permission denied|insufficientPermissions|\b403\b", re.I), GAMErrorKind.PERMISSION_DENIED),
     (re.compile(r"please run.*oauth|no.*credentials|oauth2\.txt.*not found|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
 ]

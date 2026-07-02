@@ -25,7 +25,9 @@ from .readbuilder import make_build, parse_read_template
 _ROLE_MEMBER = "member"
 GROUP_ROLES = [_ROLE_MEMBER, "manager", "owner"]
 _SERVICE_DRIVE = "drive"
-TRANSFER_SERVICES = [_SERVICE_DRIVE, "calendar"]
+# "drive,calendar" is a <DataTransferServiceList> (one argv element) — offers "both" in one transfer,
+# avoiding the 409 you hit when two separate same-user transfers overlap. CHOICE values render as-is.
+TRANSFER_SERVICES = [_SERVICE_DRIVE, "calendar", "drive,calendar"]
 _SUBCAT_DELEGATES = "Gmail - Delegates"
 _SUBCAT_FORWARDING = "Gmail - Forwarding"
 _SUBCAT_MESSAGES = "Gmail - Messages"

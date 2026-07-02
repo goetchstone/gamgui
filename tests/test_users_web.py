@@ -565,7 +565,7 @@ def test_lifecycle_offboard_preview_lists_steps(client):
     r = client.post("/lifecycle/offboard/preview",
                     data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
     assert r.status_code == 200
-    assert "7 steps" in r.text
+    assert "6 steps" in r.text  # Drive + Calendar are one combined transfer step now (was two)
     assert "Reset password" in r.text and "Transfer Drive" in r.text and "Run offboarding" in r.text
 
 
