@@ -37,6 +37,12 @@
             {% for u in r.users %}
             <li class="text-sm">
               <a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
+              {% if r.key != 'suspended' and u.suspended is defined and u.suspended %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
+              {% endif %}
+              {% if r.key != 'admins' and u.is_admin is defined and u.is_admin %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-blue-50 text-blue-700">Admin</span>
+              {% endif %}
               <span class="text-brand-gray">— {{ u.primary_email }}</span>
             </li>
             {% endfor %}
