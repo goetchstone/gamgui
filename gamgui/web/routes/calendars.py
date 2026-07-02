@@ -161,7 +161,7 @@ async def resources(request: Request, q: str = "") -> HTMLResponse:
     except Exception as exc:
         return _err(request, _friendly(exc))
     items = [
-        {"cal_id": r.email, "label": r.name or r.email, "meta": r.resource_type or "resource"}
+        {"cal_id": r.email, "label": r.name or r.email, "meta": r.resource_type or "resource", "owner": ""}
         for r in rs if r.email
     ]
     return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items})
@@ -181,11 +181,15 @@ async def search(request: Request, q: str = "") -> HTMLResponse:
         })
     items = []
     for c in idx.search(q.strip()):
-        non_room_meta = f"owned by {c.owner}" if c.owner else "shared"
-        meta = "room" if c.kind == "room" else non_room_meta
-        if c.kind != "room" and c.subscribers:
-            meta += f" · {c.subscribers} subscriber{'' if c.subscribers == 1 else 's'}"
-        items.append({"cal_id": c.id, "label": c.summary or c.id, "meta": meta})
+        owner = c.owner if c.kind != "room" else ""
+        if c.kind == "room":
+            meta = "room"
+        else:
+            meta = "" if owner else "shared"
+            if c.subscribers:
+                sub_text = f"{c.subscribers} subscriber{'' if c.subscribers == 1 else 's'}"
+                meta = f"{meta} · {sub_text}" if meta else sub_text
+        items.append({"cal_id": c.id, "label": c.summary or c.id, "meta": meta, "owner": owner})
     return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items, "notes": []})
 
 
@@ -245,7 +249,7 @@ async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
         return _err(request, _friendly(exc))
     items = [
         {"cal_id": c.id, "label": c.summary or c.id,
-         "meta": (("primary · " if c.primary else "") + (c.access_role or ""))}
+         "meta": (("primary · " if c.primary else "") + (c.access_role or "")), "owner": ""}
         for c in cals if c.id
     ]
     return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {"items": items})

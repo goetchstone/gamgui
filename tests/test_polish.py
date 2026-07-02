@@ -9,7 +9,7 @@ from fastapi import Request
 from fastapi.testclient import TestClient
 
 from gamgui.core.audit import AuditLog
-from gamgui.core.calendar_index import CalendarIndex
+from gamgui.core.calendar_index import CalendarIndex, IndexedCalendar
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.models import GAMUser
 from gamgui.core.gam.runner import GAMRunner
@@ -150,3 +150,31 @@ def test_reports_page_renders_with_mock_fixtures(client):
     assert r.status_code == 200
     assert "Administrators" in r.text
     assert "Suspended" in r.text
+
+
+# --- Navigation dead ends: link people/groups everywhere they appear ---------------------
+
+def test_board_members_link_to_user_detail(client):
+    r = client.get("/groups/members", params={"group": "sales@example.com"})
+    assert r.status_code == 200
+    assert "/users/detail?email=" in r.text
+
+
+def _seed_calendar_index(client):
+    """Populate the persistent index as a rebuild would (background build doesn't run under TestClient)."""
+    client.app.state.gamgui.calendar_index.replace_all(DOMAIN, [
+        IndexedCalendar("c_house123@group.calendar.google.com", "House Call Calendar", "alice@example.com", "secondary", 2),
+    ])
+
+
+def test_calendar_search_owner_links_to_user_detail(client):
+    _seed_calendar_index(client)
+    r = client.get("/calendars/search", params={"q": "house"})
+    assert r.status_code == 200
+    assert "/users/detail?email=" in r.text
+
+
+def test_user_groups_chip_links_to_groups_board(client):
+    r = client.get("/users/groups", params={"email": "alice@example.com"})
+    assert r.status_code == 200
+    assert 'href="/groups"' in r.text
