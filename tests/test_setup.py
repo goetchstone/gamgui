@@ -45,6 +45,28 @@ def test_import_dir_populates_vault(tmp_path):
     assert "service_account" in (vault.get("ex.com", "oauth2service") or "")
 
 
+def test_import_from_managed_dir_wipes_plaintext(tmp_path, monkeypatch):
+    # Security: after credentials land in the Keychain, the managed staging files are destroyed —
+    # no persistent plaintext DWD key on disk.
+    _write_config(tmp_path)
+    vault = SecretsVault(InMemoryBackend())
+    svc = _svc(vault, tmp_path)
+    monkeypatch.setattr(svc, "managed_setup_dir", lambda: tmp_path)  # treat tmp_path as OUR dir
+    imported = svc.import_dir(tmp_path, "ex.com")
+    assert set(imported) == set(FILENAMES.keys())
+    assert vault.has_credentials("ex.com")                       # safely in the Keychain
+    for fname in FILENAMES.values():
+        assert not (tmp_path / fname).exists()                   # …and wiped from disk
+
+
+def test_import_from_user_dir_leaves_files(tmp_path):
+    # A user-chosen dir (e.g. their own ~/.gam) is never wiped — we only clean our own staging dir.
+    _write_config(tmp_path)
+    svc = _svc(SecretsVault(InMemoryBackend()), tmp_path)  # managed dir is the real app dir, != tmp_path
+    svc.import_dir(tmp_path, "ex.com")
+    assert (tmp_path / "oauth2service.json").exists()
+
+
 def test_dwd_details_extracts_client_id(tmp_path):
     _write_config(tmp_path)
     vault = SecretsVault(InMemoryBackend())

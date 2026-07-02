@@ -140,6 +140,24 @@ def test_audit_export_csv(client):
     assert "alice@example.com" in lines[1]
 
 
+def test_audit_export_csv_neutralises_formula_injection(client):
+    # A target/argv that begins with =/+/-/@ must not export as a live spreadsheet formula.
+    _seed(client.audit_path, [
+        {"ts": "2026-06-26T00:00:00+00:00", "action": "set_signature",
+         "target": "=HYPERLINK(\"http://evil\")", "ok": True,
+         "argv": ["@SUM(1+1)", "signature", "x"], "extra": {"error": "-2+3"}},
+    ])
+    r = client.get("/audit/export.csv")
+    assert r.status_code == 200
+    body = r.text
+    # every cell that STARTS with a formula leader is prefixed with a single quote
+    assert "'=HYPERLINK" in body          # target
+    assert "'-2+3" in body                # error
+    assert "'@SUM(1+1)" in body           # argv (joined string starts with @)
+    # no raw formula leader survives at a cell boundary (right after a comma/quote)
+    assert ",=HYPERLINK" not in body and ',"=HYPERLINK' not in body
+
+
 def test_audit_export_csv_no_records_still_200(client):
     r = client.get("/audit/export.csv")
     assert r.status_code == 200

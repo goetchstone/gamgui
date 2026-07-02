@@ -19,6 +19,15 @@ from fastapi.responses import HTMLResponse, Response
 from ...core.audit import default_audit_path, read_records
 from ..server import TEMPLATES
 
+# Cells starting with these can be interpreted as a formula if the CSV is opened in Excel/Sheets;
+# prefix with a single quote to neutralise (CSV injection defence).
+_CSV_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: Any) -> str:
+    s = "" if value is None else str(value)
+    return "'" + s if s[:1] in _CSV_FORMULA_LEADS else s
+
 router = APIRouter(prefix="/audit")
 
 PAGE_SIZE = 25
@@ -103,7 +112,9 @@ async def audit_export(request: Request, q: str = "", failed: int = 0) -> Respon
         extra = r.get("extra") if isinstance(r.get("extra"), dict) else {}
         error = (extra or {}).get("error", "")
         argv = " ".join(str(a) for a in (r.get("argv") or []))
-        writer.writerow([r.get("ts", ""), r.get("action", ""), r.get("target", ""), r.get("ok"), r.get("exit_code"), error, argv])
+        writer.writerow([_csv_safe(c) for c in
+                         (r.get("ts", ""), r.get("action", ""), r.get("target", ""),
+                          r.get("ok"), r.get("exit_code"), error, argv)])
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",

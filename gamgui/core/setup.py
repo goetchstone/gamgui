@@ -27,6 +27,21 @@ from .gam.runner import GAMRunner
 from .secrets.ephemeral import app_runtime_dir
 from .secrets.vault import FILENAMES, SecretsVault
 
+
+def _wipe_file(path: Path) -> None:
+    """Best-effort overwrite-then-unlink of a plaintext credential file (APFS makes true secure-erase
+    unreliable, so this is defence-in-depth, not a guarantee). Silent on any error."""
+    try:
+        if path.is_file():
+            size = path.stat().st_size
+            with open(path, "r+b") as fh:
+                fh.write(b"\0" * size)
+                fh.flush()
+                os.fsync(fh.fileno())
+            path.unlink()
+    except OSError:
+        pass
+
 ADMIN_CONSOLE_DWD_URL = "https://admin.google.com/ac/owl/domainwidedelegation"
 _REQUIRED = ("oauth2service", "oauth2")
 
@@ -121,7 +136,14 @@ class SetupService:
 
     # --- importing into the vault ------------------------------------------------------
     def import_dir(self, path, domain: str) -> List[str]:
-        """Read whatever credential files exist in ``path`` into the Keychain. Returns imported names."""
+        """Read whatever credential files exist in ``path`` into the Keychain. Returns imported names.
+
+        Security: once the credentials are in the Keychain they must not also linger as persistent
+        plaintext files (a same-UID process could read them without a Keychain prompt). So after a
+        successful import from OUR managed staging dir, the plaintext files are wiped — the Keychain
+        is the only durable home. A user-chosen dir (e.g. ``~/.gam``, their own GAM install) is
+        never touched.
+        """
         p = Path(path).expanduser()
         imported: List[str] = []
         for name, fname in FILENAMES.items():
@@ -129,7 +151,17 @@ class SetupService:
             if f.is_file():
                 self.vault.set(domain, name, f.read_text(encoding="utf-8"))
                 imported.append(name)
+        if imported and self._is_managed(p):
+            for fname in FILENAMES.values():
+                _wipe_file(p / fname)
         return imported
+
+    def _is_managed(self, p: Path) -> bool:
+        """True only for our own staging dir — never a user's ~/.gam or another chosen path."""
+        try:
+            return p.resolve() == self.managed_setup_dir().resolve()
+        except OSError:
+            return False
 
     def is_ready(self, domain: str) -> bool:
         return self.vault.has_credentials(domain)
