@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Audit — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex items-end justify-between gap-4">
+    <div>
+      <p class="eyebrow text-brand-blue">Audit</p>
+      <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Audit log</h1>
+      <p class="text-brand-blueink/80 mt-1 text-sm">{{ total }} action{{ "s" if total != 1 else "" }} logged · {{ failures }} failure{{ "s" if failures != 1 else "" }}</p>
+    </div>
+    <a href="/audit/export.csv" class="text-sm font-medium text-brand-blueink hover:text-brand-black">Export CSV ↓</a>
+  </div>
+  <p class="text-xs text-brand-gray -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads the full log (filters aren't applied to the download in v1).</p>
+
+  <form class="flex flex-wrap items-center gap-3" hx-get="/audit/rows" hx-target="#audit-rows" hx-trigger="keyup changed delay:300ms from:input[name='q'], change from:input[name='failed']">
+    <input type="search" name="q" placeholder="Filter by action, target, or error…"
+           class="flex-1 min-w-[16rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    <label class="flex items-center gap-2 text-sm text-brand-blueink">
+      <input type="checkbox" name="failed" value="1" /> Failures only
+    </label>
+  </form>
+
+  <div id="audit-rows" hx-get="/audit/rows" hx-trigger="load" hx-include="[name='q'],[name='failed']">
+    {% include "_audit_rows.html" %}
+  </div>
+</div>
+{% endblock %}

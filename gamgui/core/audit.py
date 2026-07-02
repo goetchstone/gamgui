@@ -99,3 +99,33 @@ class AuditLog:
             except json.JSONDecodeError:
                 continue
         return out
+
+
+def read_records(path: Optional[Path] = None, limit: int = 2000) -> List[Dict[str, Any]]:
+    """Read the JSONL audit log for display purposes only (no writes, no gam calls).
+
+    Tolerant of a missing file and of malformed/blank lines (skipped rather than raised).
+    Returns the most-recent-written-first, capped at ``limit`` entries.
+    """
+    p = Path(path) if path else default_audit_path()
+    if not p.exists():
+        return []
+    try:
+        with open(p, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return []
+    out: List[Dict[str, Any]] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        out.append(record)
+    out.reverse()  # most-recent-first
+    return out[:limit]

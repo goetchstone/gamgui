@@ -1,0 +1,76 @@
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left text-brand-gray border-b border-brand-gray/30">
+        <th class="font-medium px-5 py-2 eyebrow">Time</th>
+        <th class="font-medium px-5 py-2 eyebrow">Action</th>
+        <th class="font-medium px-5 py-2 eyebrow">Target</th>
+        <th class="font-medium px-5 py-2 eyebrow">Result</th>
+        <th class="font-medium px-5 py-2 eyebrow">Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        <tr class="border-b border-brand-gray/15 hover:bg-paper/70 transition-colors align-top">
+          <td class="px-5 py-2 whitespace-nowrap text-brand-blueink/70 font-mono text-xs">{{ r.ts or "—" }}</td>
+          <td class="px-5 py-2 text-brand-black">{{ r.action or "—" }}</td>
+          <td class="px-5 py-2 text-brand-blueink/80">
+            {% if r.target and "@" in r.target %}
+              <a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ r.target | urlencode }}">{{ r.target }}</a>
+            {% else %}
+              {{ r.target or "—" }}
+            {% endif %}
+          </td>
+          <td class="px-5 py-2">
+            {% if r.ok == false %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Failed</span>
+            {% elif r.ok == true %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-emerald-50 text-emerald-700">Ok</span>
+            {% else %}
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-brand-gray/10 text-brand-gray">Unknown</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-2 text-brand-blueink/70">
+            {% set err = (r.extra.error if r.extra is mapping else None) %}
+            {% if err %}
+              <span class="font-mono text-xs break-words">{{ err[:160] }}{{ "…" if err|length > 160 else "" }}</span>
+            {% elif r.argv %}
+              <span class="font-mono text-xs break-words">{{ (r.argv | join(" "))[:160] }}{{ "…" if (r.argv | join(" "))|length > 160 else "" }}</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="5" class="px-5 py-8 text-center text-brand-gray">
+            {% if q or failed %}
+              No matches.
+              <div class="mt-2">
+                <button class="rounded border border-brand-gray/50 px-2 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors"
+                        hx-get="/audit/rows?q=&failed=&page=1" hx-target="#audit-rows">Clear filters</button>
+              </div>
+            {% else %}
+              No audited actions yet.
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="mt-2 flex items-center justify-between text-xs text-brand-gray">
+  <span>{{ total }} total{% if q or failed %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
+  {% if pages > 1 %}
+  <div class="flex items-center gap-2">
+    {% if page > 1 %}
+    <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
+            hx-get="/audit/rows?q={{ q | urlencode }}&failed={{ '1' if failed else '' }}&page={{ page - 1 }}" hx-target="#audit-rows">Prev</button>
+    {% endif %}
+    {% if page < pages %}
+    <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
+            hx-get="/audit/rows?q={{ q | urlencode }}&failed={{ '1' if failed else '' }}&page={{ page + 1 }}" hx-target="#audit-rows">Next</button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
