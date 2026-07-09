@@ -3,14 +3,14 @@ name = "gamgui"
 version = "0.0.1"
 description = "A local, open-source macOS GUI for managing Google Workspace via GAM7 (connector-ready)."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "GamGUI contributors" }]
 dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "jinja2>=3.1",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.31",
     "keyring>=24",
 ]
 
@@ -21,7 +21,7 @@ desktop = [
     "pywebview>=5.1",
 ]
 dev = [
-    "pytest>=8",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.23",
     "pytest-timeout>=2.3",
     "pytest-cov>=5",
