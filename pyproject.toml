@@ -3,7 +3,7 @@ name = "gamgui"
 version = "0.0.1"
 description = "A local, open-source macOS GUI for managing Google Workspace via GAM7 (connector-ready)."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "GamGUI contributors" }]
 dependencies = [

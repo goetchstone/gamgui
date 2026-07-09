@@ -1,4 +1,4 @@
-# Pinned, known-good dependency set (macOS / Linux, Python 3.9+).
+# Pinned, known-good dependency set (macOS / Linux, Python 3.10+).
 # Runtime + test tooling. For an exact reproducible install:  pip install -r requirements.txt
 # (pyproject.toml is the flexible source of truth: pip install -e ".[dev]")
 #
