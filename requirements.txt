@@ -13,6 +13,6 @@ python-multipart==0.0.20
 keyring==25.7.0
 
 # --- tests ---
-pytest==8.4.2
+pytest==9.0.3
 pytest-asyncio==1.2.0
 httpx==0.28.1
