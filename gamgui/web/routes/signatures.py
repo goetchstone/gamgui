@@ -136,7 +136,8 @@ async def preview(
     sample = matched[0] if matched else None
     return TEMPLATES.TemplateResponse(
         request, _PREVIEW_PARTIAL,
-        {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched), "sample": sample},
+        {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),
+         "sample": sample, "warning": sig.smart_quote_warning(template)},
     )
 
 

@@ -1,6 +1,9 @@
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% else %}
+{% if warning %}
+<div class="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ warning }}</div>
+{% endif %}
 <p class="text-sm text-brand-blueink">Applies to <strong>{{ count }}</strong> user{{ "s" if count != 1 }}{% if sample %} · previewing as {{ sample.full_name }}{% endif %}</p>
 {% if sample %}
   <iframe sandbox title="Signature preview" class="mt-3 w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ rendered }}"></iframe>

@@ -19,6 +19,20 @@ from .paths import app_data_dir
 # A ``[[ ... ]]`` block is kept only if every variable inside it resolves to a non-empty value.
 _OPTIONAL_RE = re.compile(r"\[\[(.*?)\]\]", re.DOTALL)
 
+# Curly ("smart") quotes INSIDE a tag — pasted from Word/Mail/chat, they don't close HTML attributes,
+# so the parser swallows everything after them (including {variables}) into the attribute value.
+# Curly quotes in visible text are fine; only flag them between < and >.
+_SMART_QUOTE_IN_TAG_RE = re.compile(r"<[^>]*[“”‘’][^>]*>")
+
+
+def smart_quote_warning(template: str) -> str:
+    """A human warning when the template has curly quotes inside a tag ('' if clean)."""
+    if _SMART_QUOTE_IN_TAG_RE.search(template or ""):
+        return ("Heads-up: this HTML contains curly quotes (” or ’) inside a tag — pasted "
+                "from Word/Mail they break attributes and can swallow your {variables}. Replace them "
+                "with straight quotes (\").")
+    return ""
+
 # Template variable -> human description (shown in the editor's variable reference).
 # `{role}` is an alias for `{title}` since the org uses the job title as the role.
 VARIABLES: Dict[str, str] = {

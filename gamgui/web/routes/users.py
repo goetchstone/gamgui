@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard
 from ...core.gam.errors import GAMError
+from ...core.signatures import smart_quote_warning
 from ..jobs import start_job
 from ..server import TEMPLATES
 
@@ -141,9 +142,11 @@ async def set_signature(
     if conn is None:
         return _err(request, _NOT_CONNECTED)
     result = await conn.set_signature(email, signature, html=(html == "on"))
+    note = smart_quote_warning(signature) if result.ok else ""
+    message = ("Signature updated." + (" " + note if note else "")) if result.ok else result.detail
     return TEMPLATES.TemplateResponse(
         request, "_action_result.html",
-        {"ok": result.ok, "message": "Signature updated." if result.ok else result.detail},
+        {"ok": result.ok, "message": message},
     )
 
 

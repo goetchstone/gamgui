@@ -117,3 +117,32 @@ def test_signatures_page_mounts_templates_container(client):
     r = client.get("/signatures")
     assert r.status_code == 200
     assert 'id="sig-templates"' in r.text and 'hx-get="/signatures/templates"' in r.text
+
+
+# --- smart-quote detection (curly quotes inside a tag swallow {variables}) --------------
+
+def test_smart_quote_warning_detects_curly_in_tag():
+    from gamgui.core.signatures import smart_quote_warning
+    broken = '<strong style="font-weight:700”>{name}</strong>'
+    assert "curly quotes" in smart_quote_warning(broken)
+    # curly quotes in visible TEXT are fine — only inside tags is dangerous
+    assert smart_quote_warning("<div>we’re hiring “now”</div>") == ""
+    assert smart_quote_warning('<div style="color:#000">{name}</div>') == ""
+    assert smart_quote_warning("") == ""
+
+
+def test_preview_surfaces_smart_quote_warning(client):
+    r = client.post("/signatures/preview", data={
+        "template": '<strong style="font-weight:700”>{name}</strong>',
+        "scope_type": "company", "scope_value": ""})
+    assert r.status_code == 200 and "curly quotes" in r.text
+    r2 = client.post("/signatures/preview", data={
+        "template": "<div>{name}</div>", "scope_type": "company", "scope_value": ""})
+    assert "curly quotes" not in r2.text
+
+
+def test_set_signature_notes_smart_quotes(client):
+    r = client.post("/users/signature", data={
+        "email": "alice@example.com",
+        "signature": '<span style="color:#000”>{name}</span>', "html": "on"})
+    assert r.status_code == 200 and "Signature updated." in r.text and "curly quotes" in r.text
