@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import signatures as sig
 from ...core.gam.errors import GAMError
+from ...core.signatures import SignatureStore
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/signatures")
@@ -19,6 +20,23 @@ router = APIRouter(prefix="/signatures")
 _SIGNATURES_PAGE = "signatures.html"
 _PREVIEW_PARTIAL = "_sig_preview.html"
 _APPLY_PARTIAL = "_sig_apply.html"
+_TEMPLATES_PARTIAL = "_sig_templates.html"
+
+
+def _store(request: Request) -> SignatureStore:
+    """The saved-template store, lazily created on first use (real ~/Library file unless a test
+    pre-seeds ``st.sig_templates`` with a store pointed at a tmp path)."""
+    st = request.app.state.gamgui
+    if st.sig_templates is None:
+        st.sig_templates = SignatureStore()
+    return st.sig_templates
+
+
+def _tctx(store: SignatureStore, **extra) -> dict:
+    """Context for ``_sig_templates.html``: each template as {name, body}, plus any saved/error flag."""
+    ctx: dict = {"templates": [{"name": n, "body": store.get(n)} for n in store.names()]}
+    ctx.update(extra)
+    return ctx
 
 
 @dataclass
@@ -156,3 +174,33 @@ async def apply_status(request: Request, job: str = "") -> HTMLResponse:
     if j is None:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "That apply job is no longer available — re-run apply."})
     return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": j})
+
+
+# --- saved templates: load / save-as / delete ----------------------------------------------------
+
+@router.get("/templates", response_class=HTMLResponse)
+async def list_templates(request: Request) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(_store(request)))
+
+
+@router.post("/templates/save", response_class=HTMLResponse)
+async def save_template(
+    request: Request,
+    name: Annotated[str, Form()] = "",
+    template: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    # `template` rides in via hx-include="#sig-form" — the CURRENT editor content — while `name`
+    # comes from the save form's own input.
+    store = _store(request)
+    try:
+        store.save(name, template)
+    except ValueError as exc:
+        return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(store, error=str(exc)))
+    return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(store, saved=name.strip()))
+
+
+@router.post("/templates/delete", response_class=HTMLResponse)
+async def delete_template(request: Request, name: Annotated[str, Form()] = "") -> HTMLResponse:
+    store = _store(request)
+    store.delete(name)
+    return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(store))

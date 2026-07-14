@@ -17,6 +17,15 @@
   </div>
   {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
 
+  <!-- saved templates: load a starter into the editor, or save the current editor content as a named template -->
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+    <h2 class="eyebrow text-brand-gray">Saved templates</h2>
+    <p class="mt-1 text-xs text-brand-gray">Load a starter into the editor, tweak it, then save your own for next time.</p>
+    <div id="sig-templates" class="mt-3" hx-get="/signatures/templates" hx-trigger="load" hx-swap="innerHTML">
+      <p class="text-sm text-brand-gray">Loading…</p>
+    </div>
+  </div>
+
   <div class="grid gap-5 lg:grid-cols-2">
     <!-- editor -->
     <form id="sig-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
@@ -52,7 +61,7 @@
       </div>
       <p class="text-xs text-brand-gray">Wrap a part in <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[ … ]]</code> to drop it when a variable inside is empty — e.g. <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[{title} · ]]</code> disappears for users with no title.</p>
 
-      <button type="button"
+      <button type="button" id="sig-preview-btn"
               class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
               hx-post="/signatures/preview" hx-include="#sig-form" hx-target="#sig-preview" hx-swap="innerHTML">Preview</button>
     </form>
@@ -91,6 +100,18 @@
     sel.style.visibility = list.length ? "visible" : "hidden";
   }
   sigPopulate();
+
+  // Load a saved template into the editor WITHOUT a round trip: the HTML is carried in the button's
+  // data-body (Jinja attribute-escaped, so it's inert text here — never innerHTML'd), dropped straight
+  // into the textarea value, then the existing Preview button is clicked to refresh the preview.
+  function sigLoadTemplate(btn) {
+    var ta = document.querySelector("#sig-form textarea[name=template]");
+    if (!ta) return;
+    ta.value = btn.dataset.body || "";
+    ta.focus();
+    var preview = document.getElementById("sig-preview-btn");
+    if (preview) preview.click();
+  }
 </script>
 {% endif %}
 {% endblock %}

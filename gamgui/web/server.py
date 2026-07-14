@@ -47,6 +47,7 @@ class AppState:
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
+    sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
 
     async def users(self, force: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports)."""

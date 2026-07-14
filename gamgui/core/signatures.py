@@ -7,10 +7,14 @@ substitution (so the preview is exactly what each user gets); apply sets each us
 
 from __future__ import annotations
 
+import json
+import os
 import re
-from typing import Dict, List
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from .gam.models import GAMUser
+from .paths import app_data_dir
 
 # A ``[[ ... ]]`` block is kept only if every variable inside it resolves to a non-empty value.
 _OPTIONAL_RE = re.compile(r"\[\[(.*?)\]\]", re.DOTALL)
@@ -90,3 +94,100 @@ def scope_options(users: List[GAMUser]) -> Dict[str, List[str]]:
     locations = sorted({u.location for u in users if u.location})
     user_emails = sorted(u.primary_email for u in users if not u.suspended)
     return {"ous": ous, "departments": departments, "locations": locations, "users": user_emails}
+
+
+# --- saved template store ------------------------------------------------------------------------
+
+def default_templates_path() -> Path:
+    return app_data_dir() / "signatures.json"
+
+
+# Three tasteful starters seeded on first run. All are email-client-safe: inline styles only, no
+# external images or fonts, a system font stack, a table where the accent alignment matters, and
+# ``[[ … ]]`` optional segments so title / phone / department degrade cleanly for sparse profiles.
+# "Your Company" is placeholder text the admin swaps for their org name.
+_DEFAULT_TEMPLATES: Dict[str, str] = {
+    "Classic": (
+        '<div style="font-family:-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;'
+        'font-size:13px;line-height:1.5;color:#3f4a5a;">\n'
+        '  <div style="font-weight:600;color:#1f2733;">{name}</div>\n'
+        '  <div>[[{title} · ]]Your Company</div>\n'
+        '  <div style="color:#6b7280;">{email}[[ · {phone}]]</div>\n'
+        '</div>'
+    ),
+    "Modern accent": (
+        '<table cellpadding="0" cellspacing="0" role="presentation" '
+        'style="font-family:-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;'
+        'font-size:13px;color:#3f4a5a;">\n'
+        '  <tr>\n'
+        '    <td style="border-left:3px solid #52647B;padding:1px 0 1px 12px;line-height:1.5;">\n'
+        '      <div style="font-weight:600;font-size:14px;color:#1f2733;">{name}</div>\n'
+        '      <div style="color:#52647B;">[[{title} · ]]Your Company</div>\n'
+        '      <div style="color:#6b7280;">{email}[[ · {phone}]]</div>\n'
+        '      [[<div style="color:#6b7280;">{department}</div>]]\n'
+        '    </td>\n'
+        '  </tr>\n'
+        '</table>'
+    ),
+    "Minimal": (
+        '<div style="font-family:-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;'
+        'font-size:13px;color:#3f4a5a;">{name}[[ · {title}]] · Your Company · {email}</div>'
+    ),
+}
+
+_MAX_NAME_LEN = 60
+
+
+class SignatureStore:
+    """Plain-JSON persistence for named HTML signature templates (0600, seeded on first run).
+
+    Mirrors ``RunbookStore``: a corrupt or missing file falls back to a deep copy of the seed, so the
+    admin always has the three starters to load and tweak.
+    """
+
+    def __init__(self, path: Optional[Path] = None) -> None:
+        self.path = Path(path) if path else default_templates_path()
+        self._data = self._load()
+
+    def _load(self) -> dict:
+        if self.path.exists():
+            try:
+                data = json.loads(self.path.read_text())
+                if isinstance(data, dict) and isinstance(data.get("templates"), dict):
+                    return data
+            except Exception:  # noqa: BLE001 — corrupt/old file: fall back to the seed
+                pass
+        return json.loads(json.dumps({"templates": _DEFAULT_TEMPLATES}))   # deep copy of the seed
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.path.parent, 0o700)
+        except OSError:
+            pass
+        self.path.write_text(json.dumps(self._data, indent=2))
+        try:
+            os.chmod(self.path, 0o600)
+        except OSError:
+            pass
+
+    def names(self) -> List[str]:
+        return sorted(self._data["templates"].keys())
+
+    def get(self, name: str) -> str:
+        return self._data["templates"].get(name, "")
+
+    def save(self, name: str, body: str) -> None:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Template name is required.")
+        if len(name) > _MAX_NAME_LEN:
+            raise ValueError("Template name must be {} characters or fewer.".format(_MAX_NAME_LEN))
+        if not (body or "").strip():
+            raise ValueError("Template body is empty — put some HTML in the editor before saving.")
+        self._data["templates"][name] = body
+        self._save()
+
+    def delete(self, name: str) -> None:
+        self._data["templates"].pop(name, None)
+        self._save()
