@@ -4,7 +4,11 @@
   <iframe sandbox title="Current Gmail signature" class="w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ signature }}"></iframe>
   <details>
     <summary class="text-xs text-brand-gray cursor-pointer hover:text-brand-black">View HTML source</summary>
-    <pre class="mt-1 overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 p-3 text-[12.5px] text-ink whitespace-pre-wrap">{{ signature }}</pre>
+    <div class="copy-wrap mt-1">
+      <button type="button" onclick="copyEl(this)"
+              class="mb-1 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors">Copy HTML</button>
+      <pre class="overflow-x-auto rounded-lg bg-paper border border-brand-gray/40 p-3 text-[12.5px] text-ink whitespace-pre-wrap">{{ signature }}</pre>
+    </div>
   </details>
 </div>
 {% else %}

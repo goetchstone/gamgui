@@ -207,6 +207,8 @@ def test_signature_current_renders(client):
     assert "Best," in r.text  # current signature read from the mailbox
     assert "<iframe" in r.text and "srcdoc=" in r.text  # rendered preview, not just source
     assert "View HTML source" in r.text                  # raw HTML still available, collapsed
+    # one-click copy of the raw HTML (copyEl copies the <pre> inside the .copy-wrap)
+    assert "copy-wrap" in r.text and 'onclick="copyEl(this)"' in r.text and "Copy HTML" in r.text
 
 
 def test_user_groups_view_add_remove(client):
