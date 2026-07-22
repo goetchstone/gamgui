@@ -12,7 +12,7 @@ REPO="GAM-team/GAM"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/gamgui/resources/gam7"
 # Pinned for reproducible builds. Override with `--tag latest` to grab the newest release.
-TAG="v7.46.02"
+TAG="v7.46.11"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -46,7 +46,7 @@ if [ -n "$_TOKEN" ]; then
   GH_API_AUTH=(-H "Authorization: Bearer $_TOKEN")
 fi
 curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
-  -H "Accept: application/vnd.github+json" "${GH_API_AUTH[@]}" "$API" -o "$TMP/release.json"
+  -H "Accept: application/vnd.github+json" ${GH_API_AUTH[@]+"${GH_API_AUTH[@]}"} "$API" -o "$TMP/release.json"
 
 # Parse the release JSON from the file (no stdin, so a heredoc script is safe here). Print one
 # line: "<tag> <asset-name> <download-url>". Prefer the highest macosNN build if several match.
