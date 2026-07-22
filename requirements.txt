@@ -14,5 +14,5 @@ keyring==25.7.0
 
 # --- tests ---
 pytest==9.0.3
-pytest-asyncio==1.2.0
+pytest-asyncio==1.4.0
 httpx==0.28.1

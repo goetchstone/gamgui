@@ -79,7 +79,7 @@ domain and `oauth2.txt` is effectively an admin password, so GamGUI:
 
 ## Build from source
 
-Requirements: **Python 3.9+** and **macOS** (to run the native window; the test suite itself runs on
+Requirements: **Python 3.10+** and **macOS** (to run the native window; the test suite itself runs on
 Linux too). No Google credentials are needed to build or test.
 
 ```bash
@@ -162,7 +162,7 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
 ### Tests & CI
 
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across
-Python 3.9 and 3.12 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Python 3.10, 3.12, and 3.14 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Email signatures
 
