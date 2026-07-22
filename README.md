@@ -152,12 +152,17 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
 
 **To bump GAM:**
 
-1. `make gam --tag vX.Y.Z` — re-vendor the binary, command reference, and checksum.
-2. Update `EXPECTED_GAM_VERSION` (`gamgui/core/gam/commands.py`) and `TAG` (`scripts/fetch_gam.sh`).
-3. `make test` — the command-contract test flags any sub-command that changed.
-4. Skim `gamgui/resources/gam7/GamUpdate.txt` for breaking changes.
-5. `.venv/bin/python scripts/acceptance.py` against a tenant — read-only; the true output-shape check.
-6. Commit.
+1. `make gam TAG=vX.Y.Z` (or `./scripts/fetch_gam.sh --tag vX.Y.Z`) — re-vendor the binary + command
+   reference. It prints the new tarball's SHA-256; if the asset isn't yet pinned it says so.
+2. Add that `<sha>  <asset-name>` line to `scripts/gam_checksums.txt` so future fetches are verified
+   against a committed pin (not trust-on-first-use).
+3. Update `EXPECTED_GAM_VERSION` (`gamgui/core/gam/commands.py`) and `TAG` (`scripts/fetch_gam.sh`);
+   `.venv/bin/python scripts/build_command_catalog.py` to regenerate the browse catalog.
+4. `make test` — the command-contract, catalog-matches-grammar, and pinned-version-consistent tests
+   flag any sub-command that changed or any version string left behind.
+5. Skim `gamgui/resources/gam7/GamUpdate.txt` for breaking changes.
+6. `.venv/bin/python scripts/acceptance.py` against a tenant — read-only; the true output-shape check.
+7. Commit.
 
 ### Tests & CI
 

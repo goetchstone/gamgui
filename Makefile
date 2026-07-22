@@ -17,7 +17,7 @@ setup:
 	$(PY) -m pip install -e ".[dev,desktop]"
 
 gam:
-	./scripts/fetch_gam.sh
+	./scripts/fetch_gam.sh $(if $(TAG),--tag $(TAG))
 
 test:
 	$(PY) -m pytest -q
