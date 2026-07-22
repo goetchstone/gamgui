@@ -10,18 +10,30 @@
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
     <span class="spinner"></span>
-    <span>Applying signature… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-gray">{{ job.current }}</span>{% endif %}</span>
+    <span>Applying signature… <strong>{{ job.done }}</strong> of {{ job.total }}
+      · {{ job.applied }} set{% if job.failed_total %} · <span class="text-rose-600">{{ job.failed_total }} failed</span>{% endif %}{% if job.current %} · <span class="text-brand-gray">{{ job.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
   </div>
+  {% if job.recent %}
+  <ul class="mt-2.5 space-y-0.5 font-mono text-xs leading-relaxed" aria-label="Recently set signatures">
+    {% for r in job.recent | reverse %}
+    <li class="flex items-center gap-1.5">
+      {% if r.ok %}<span class="text-emerald-600" aria-hidden="true">✓</span>{% else %}<span class="text-rose-600" aria-hidden="true">✗</span>{% endif %}
+      <span class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}">{{ r.email }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </div>
 {% else %}
 {% set _applied = job.applied if job else applied %}
 {% set _total = job.total if job else total %}
-{% set _failed = job.failed if job else failed %}
-<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not _failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+{% set _failed = job.failed if job else (failed or []) %}
+{% set _failed_total = job.failed_total if job else (failed | length if failed else 0) %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not _failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
   Applied to {{ _applied }} of {{ _total }} user{{ "s" if _total != 1 }}.
-  {% if _failed %}<div class="mt-1 max-h-24 overflow-y-auto text-xs">Failed ({{ _failed | length }}): {{ _failed | join(", ") }}</div>{% endif %}
+  {% if _failed_total %}<div class="mt-1 max-h-24 overflow-y-auto text-xs">Failed ({{ _failed_total }}): {{ _failed | join(", ") }}{% if _failed_total > (_failed | length) %} … +{{ _failed_total - (_failed | length) }} more{% endif %}</div>{% endif %}
 </div>
 {% endif %}

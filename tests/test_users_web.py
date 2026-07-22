@@ -186,6 +186,71 @@ def test_signatures_apply_status_unknown_job(client):
     assert "no longer available" in r.text
 
 
+def test_apply_job_record_tracks_tallies_and_feed():
+    from gamgui.web.routes.signatures import ApplyJob
+
+    job = ApplyJob(id="x", total=3)
+    job.record("a@x.com", True)
+    job.record("b@x.com", False)
+    job.record("c@x.com", True)
+    assert (job.applied, job.failed_total, job.done) == (2, 1, 3)
+    assert job.failed == ["b@x.com"]
+    # the live feed carries each outcome in order, newest last
+    assert [(r.email, r.ok) for r in job.recent] == [
+        ("a@x.com", True), ("b@x.com", False), ("c@x.com", True),
+    ]
+
+
+def test_apply_job_record_stays_bounded_at_scale():
+    # A domain-wide apply must not let the polled status HTML grow with the user count: both the
+    # retained failed sample and the live feed are capped no matter how many users are processed.
+    from gamgui.web.routes.signatures import ApplyJob, _RECENT_WINDOW, _FAILED_SAMPLE_CAP
+
+    job = ApplyJob(id="x", total=5000)
+    for i in range(5000):
+        job.record(f"u{i}@x.com", ok=(i % 2 == 0))  # half succeed, half fail
+    assert (job.done, job.applied, job.failed_total) == (5000, 2500, 2500)
+    assert len(job.failed) == _FAILED_SAMPLE_CAP     # sample capped, full count kept in failed_total
+    assert len(job.recent) == _RECENT_WINDOW         # feed is a fixed-size rolling window
+    assert job.recent[-1].email == "u4999@x.com"     # newest last
+    assert job.recent[0].email == f"u{5000 - _RECENT_WINDOW}@x.com"
+
+
+def test_signatures_apply_status_shows_live_feed(client):
+    from gamgui.web.routes.signatures import ApplyJob
+
+    st = client.app.state.gamgui
+    job = ApplyJob(id="feedtest", total=4)
+    job.record("alice@example.com", True)
+    job.record("bob@example.com", False)
+    st.jobs[job.id] = job
+
+    r = client.get("/signatures/apply/status", params={"job": job.id})
+    assert r.status_code == 200
+    # running tallies in the header
+    assert "1 set" in r.text and "1 failed" in r.text
+    # per-user feed: each processed user shown with an outcome marker, newest first
+    assert "alice@example.com" in r.text and "bob@example.com" in r.text
+    assert "✓" in r.text and "✗" in r.text
+    assert r.text.index("bob@example.com") < r.text.index("alice@example.com")
+
+
+def test_signatures_apply_final_summary_caps_failed_list(client):
+    from gamgui.web.routes.signatures import ApplyJob
+
+    st = client.app.state.gamgui
+    job = ApplyJob(id="captest", total=300)
+    for i in range(300):
+        job.record(f"u{i}@example.com", False)
+    job.finished = True
+    st.jobs[job.id] = job
+
+    r = client.get("/signatures/apply/status", params={"job": job.id})
+    assert r.status_code == 200
+    assert "Failed (300)" in r.text  # full count, not the capped sample length
+    assert "more" in r.text          # "+N more" overflow indicator for the truncated list
+
+
 def test_signatures_preview_user_scope(client):
     r = client.post("/signatures/preview", data={"template": "{name} <{email}>", "scope_type": "user", "scope_value": "alice@example.com"})
     assert r.status_code == 200

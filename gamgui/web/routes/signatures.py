@@ -40,6 +40,18 @@ def _tctx(store: SignatureStore, **extra) -> dict:
 
 
 @dataclass
+class SigResult:
+    """One user's outcome in a bulk apply — the unit of the live "as they get set" feed."""
+
+    email: str
+    ok: bool
+
+
+_RECENT_WINDOW = 12       # most-recent per-user results kept for the live feed (bounds the polled HTML)
+_FAILED_SAMPLE_CAP = 200  # cap the retained failed-email list so a mostly-failing run can't bloat the poll
+
+
+@dataclass
 class ApplyJob:
     """In-memory progress for one bulk signature apply, polled by the UI."""
 
@@ -47,11 +59,30 @@ class ApplyJob:
     total: int
     applied: int = 0
     done: int = 0
-    failed: List[str] = field(default_factory=list)
+    failed_total: int = 0
+    failed: List[str] = field(default_factory=list)         # capped sample of failed emails (see _FAILED_SAMPLE_CAP)
+    recent: List[SigResult] = field(default_factory=list)   # rolling window, newest last; drives the live feed
     current: str = ""
     finished: bool = False
     error: Optional[str] = None
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
+
+    def record(self, email: str, ok: bool) -> None:
+        """Log one user's outcome: tallies, the capped failed sample, and the rolling live feed.
+
+        Both the failed list and the feed are bounded so the polled status partial stays small even
+        on a domain-wide (thousands of users) apply — the feed shows only the most recent handful.
+        """
+        if ok:
+            self.applied += 1
+        else:
+            self.failed_total += 1
+            if len(self.failed) < _FAILED_SAMPLE_CAP:
+                self.failed.append(email)
+        self.recent.append(SigResult(email, ok))
+        if len(self.recent) > _RECENT_WINDOW:
+            del self.recent[0]
+        self.done += 1
 
 
 def _friendly(exc: Exception) -> str:
@@ -87,11 +118,7 @@ async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
                 ok = bool(getattr(result, "ok", False))
             except Exception:
                 ok = False
-            if ok:
-                job.applied += 1
-            else:
-                job.failed.append(u.primary_email)
-            job.done += 1
+            job.record(u.primary_email, ok)
     except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
         job.error = _friendly(exc)
     finally:
