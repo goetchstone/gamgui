@@ -13,11 +13,11 @@ import hashlib
 import io
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -192,6 +192,13 @@ def test_ci_only_grants_the_opt_in_to_the_preview_job():
 
 
 def test_pywebview_is_pinned():
-    deps = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
-    desktop = deps["project"]["optional-dependencies"]["desktop"]
-    assert [d for d in desktop if d.startswith("pywebview==")], desktop
+    # Matched textually rather than with a TOML parser: tomllib is 3.11+, and the supported floor
+    # is 3.10. pywebview hosts the WKWebView, so an unpinned floor would pull an unreviewed
+    # version into the shipped .app.
+    text = (REPO_ROOT / "pyproject.toml").read_text()
+    assert re.search(r'^\s*"pywebview==[\d.]+"', text, re.MULTILINE), text
+
+    # build_app.sh is the path that actually builds the bundle, so it must pin too.
+    build = (REPO_ROOT / "scripts" / "build_app.sh").read_text()
+    assert "pywebview>=" not in build, build
+    assert re.search(r'"pywebview==[\d.]+"', build), build
