@@ -48,7 +48,7 @@
               No matches.
               <div class="mt-2">
                 <button class="rounded border border-brand-gray/50 px-2 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors"
-                        hx-get="/audit/rows?q=&failed=&page=1" hx-target="#audit-rows">Clear filters</button>
+                        hx-get="/audit/rows?q=&page=1" hx-target="#audit-rows">Clear filters</button>
               </div>
             {% else %}
               No audited actions yet.
@@ -65,11 +65,11 @@
   <div class="flex items-center gap-2">
     {% if page > 1 %}
     <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/audit/rows?q={{ q | urlencode }}&failed={{ '1' if failed else '' }}&page={{ page - 1 }}" hx-target="#audit-rows">Prev</button>
+            hx-get="/audit/rows?q={{ q | urlencode }}{% if failed %}&failed=1{% endif %}&page={{ page - 1 }}" hx-target="#audit-rows">Prev</button>
     {% endif %}
     {% if page < pages %}
     <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/audit/rows?q={{ q | urlencode }}&failed={{ '1' if failed else '' }}&page={{ page + 1 }}" hx-target="#audit-rows">Next</button>
+            hx-get="/audit/rows?q={{ q | urlencode }}{% if failed %}&failed=1{% endif %}&page={{ page + 1 }}" hx-target="#audit-rows">Next</button>
     {% endif %}
   </div>
   {% endif %}

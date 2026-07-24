@@ -6,7 +6,7 @@
 <ul class="flex flex-wrap gap-2">
   {% for m in members %}
   <li class="inline-flex items-center gap-1.5 rounded-full bg-paper border border-brand-gray/40 pl-3 pr-1.5 py-1 text-sm cursor-grab"
-      draggable="true" ondragstart="gqDrag(event, {{ m.email | tojson }}, 'remove')">
+      draggable="true" data-email="{{ m.email }}" ondragstart="gqDrag(event, this, 'remove')">
     <a href="/users/detail?email={{ m.email | urlencode }}" class="text-brand-black hover:underline">{{ m.email }}</a>
     <button class="text-brand-gray hover:text-red-700 text-base leading-none" aria-label="Remove {{ m.email }}"
             hx-post="/groups/members" hx-target="#members" hx-swap="innerHTML"

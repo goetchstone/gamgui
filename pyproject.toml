@@ -18,7 +18,7 @@ dependencies = [
 # The native window shell. Kept optional so the core + web can be developed/tested
 # without the GUI toolkit installed (e.g. in CI / headless).
 desktop = [
-    "pywebview>=5.1",
+    "pywebview==6.2.1",
 ]
 dev = [
     "pytest>=9.0.3",

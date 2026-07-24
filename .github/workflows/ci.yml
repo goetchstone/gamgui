@@ -76,7 +76,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Vendor the LATEST GAM7 (preview only)
-        run: ./scripts/fetch_gam.sh --tag latest
+        # --allow-unpinned: a newer-than-pinned asset has no committed checksum by definition. Safe
+        # only because this job is a throwaway preview — never add it to the gam-compat job above.
+        run: ./scripts/fetch_gam.sh --tag latest --allow-unpinned
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # authenticate api.github.com -> avoid the 60/hr 403
       - name: Command-token contract against latest (early warning)

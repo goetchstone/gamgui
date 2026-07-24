@@ -5,7 +5,8 @@
 # GAM-team/GAM GitHub releases, records its SHA-256, extracts it, and copies the PyInstaller
 # bundle (the `gam` executable plus its support files) into resources/gam7/. Records the version.
 #
-# Usage: scripts/fetch_gam.sh [--tag vX.Y.Z|latest]   (default: the pinned, tested version)
+# Usage: scripts/fetch_gam.sh [--tag vX.Y.Z|latest] [--allow-unpinned]
+#        (default: the pinned, tested version, verified against scripts/gam_checksums.txt)
 set -euo pipefail
 
 REPO="GAM-team/GAM"
@@ -13,10 +14,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/gamgui/resources/gam7"
 # Pinned for reproducible builds. Override with `--tag latest` to grab the newest release.
 TAG="v7.46.11"
+# Installing an asset we have no pinned hash for is opt-in: see the checksum gate below.
+ALLOW_UNPINNED=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --tag) TAG="$2"; shift 2 ;;
+    --allow-unpinned) ALLOW_UNPINNED=1; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -89,10 +93,20 @@ if [ -n "$EXPECTED" ]; then
     exit 1
   fi
   echo "==> Checksum verified against committed pin (scripts/gam_checksums.txt)."
-else
-  echo "WARNING: no pinned checksum for '$ASSET_NAME' — installing trust-on-first-use." >&2
+elif [ "$ALLOW_UNPINNED" -eq 1 ]; then
+  echo "WARNING: no pinned checksum for '$ASSET_NAME' — installing UNVERIFIED (--allow-unpinned)." >&2
   echo "         Verify the download, then add this line to scripts/gam_checksums.txt:" >&2
   echo "           $SHA  $ASSET_NAME" >&2
+else
+  # Fail closed. The asset name is chosen by the release JSON we just downloaded, so "no pin for
+  # this name" is exactly what an attacker who renames an asset produces — treating it as
+  # trust-on-first-use would let anyone bypass the pin, and gam can impersonate any user via DWD.
+  echo "ERROR: no pinned checksum for '$ASSET_NAME' — refusing to install an unverified binary." >&2
+  echo "  Verify this download yourself, then add the pin to scripts/gam_checksums.txt:" >&2
+  echo "    $SHA  $ASSET_NAME" >&2
+  echo "  Or pass --allow-unpinned to install without verification (CI previews of an unpinned tag" >&2
+  echo "  only — never for a build you intend to run against a real domain)." >&2
+  exit 1
 fi
 
 echo "==> Extracting..."

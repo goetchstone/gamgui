@@ -82,7 +82,13 @@ class AppState:
 
 
 class TokenGateMiddleware(BaseHTTPMiddleware):
-    """Allow static assets; otherwise require the launch token (cookie, else ?token= which sets it).
+    """Reject cross-origin callers, allow static assets, else require the launch token
+    (cookie, else ?token= which sets it).
+
+    The origin check comes first because the cookie alone is not enough: cookies are not port-scoped
+    (RFC 6265 §8.5), so SameSite=Strict treats *every* port on 127.0.0.1 as the same site. Without
+    this, a page served by any other local process could fire a form POST at us — a simple request,
+    so no preflight — and the browser would helpfully attach our token cookie.
 
     Also stamps security headers on every response: a CSP locking down object/base/frame/form
     vectors (no script-src directive — the app uses inline handlers and all scripts are now same-origin
@@ -95,13 +101,34 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
         "Referrer-Policy": "no-referrer",
     }
 
+    # Sec-Fetch-Site values that mean another origin initiated this. "same-site" is included on
+    # purpose: that is exactly the other-port-on-loopback case. Anything else (including a missing
+    # header, or a value a future browser invents) falls through to the Origin check below.
+    CROSS_ORIGIN_FETCH_SITES = frozenset({"cross-site", "same-site"})
+
     def __init__(self, app, token: str) -> None:
         super().__init__(app)
         self._token = token
 
     def _token_ok(self, candidate: "str | None") -> bool:
         # Constant-time compare (defence-in-depth vs. a local process timing the loopback auth).
-        return candidate is not None and secrets.compare_digest(candidate, self._token)
+        # Compared as UTF-8 bytes: compare_digest's str form rejects codepoints > 127 with a
+        # TypeError, and a cookie or query string can carry those, which would turn a bad token
+        # into a 500 instead of a 403.
+        if candidate is None:
+            return False
+        return secrets.compare_digest(candidate.encode("utf-8"), self._token.encode("utf-8"))
+
+    def _same_origin(self, request: Request) -> bool:
+        if request.headers.get("sec-fetch-site", "").lower() in self.CROSS_ORIGIN_FETCH_SITES:
+            return False
+        origin = request.headers.get("origin")
+        if origin is None:
+            # Browsers always send Origin cross-origin, so absence means a same-origin navigation
+            # or a non-browser client (the native WKWebView's initial load, curl, the test client).
+            return True
+        # The listening port is picked at runtime, so our own authority is whatever Host says.
+        return origin.casefold() == f"{request.url.scheme}://{request.headers.get('host', '')}".casefold()
 
     def _secure(self, response):
         for key, value in self.SECURITY_HEADERS.items():
@@ -109,6 +136,9 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
         return response
 
     async def dispatch(self, request: Request, call_next):
+        if not self._same_origin(request):
+            return self._secure(JSONResponse({"error": "forbidden"}, status_code=403))
+
         if request.url.path.startswith("/static") or request.url.path == "/healthz":
             return self._secure(await call_next(request))
 
@@ -117,9 +147,9 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
 
         if self._token_ok(request.query_params.get("token")):
             response = await call_next(request)
-            response.set_cookie(
-                TOKEN_COOKIE, self._token, httponly=True, samesite="strict", max_age=86400
-            )
+            # A session cookie: the token is regenerated every launch, so persisting it for a day
+            # only widens the window in which it can be lifted out of the browser's cookie jar.
+            response.set_cookie(TOKEN_COOKIE, self._token, httponly=True, samesite="strict")
             return self._secure(response)
 
         return self._secure(JSONResponse({"error": "forbidden"}, status_code=403))

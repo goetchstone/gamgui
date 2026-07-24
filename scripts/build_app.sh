@@ -22,7 +22,9 @@ if [ ! -x "gamgui/resources/gam7/gam" ]; then
 fi
 
 echo "==> Installing PyInstaller (and the native window) into the venv..."
-"$PY" -m pip install -q --upgrade pyinstaller "pywebview>=5.1"
+# Pinned: this is the path that actually builds the shipped .app, so an unpinned upgrade here would
+# put an unreviewed pywebview (the WKWebView host) and PyInstaller bootloader inside the bundle.
+"$PY" -m pip install -q --upgrade "pyinstaller==6.21.0" "pywebview==6.2.1"
 
 echo "==> Building..."
 "$PY" -m PyInstaller --noconfirm --clean gamgui.spec
