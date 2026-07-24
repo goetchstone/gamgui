@@ -17,16 +17,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.audit import default_audit_path, read_records
+from ..csvutil import csv_safe as _csv_safe
 from ..server import TEMPLATES
-
-# Cells starting with these can be interpreted as a formula if the CSV is opened in Excel/Sheets;
-# prefix with a single quote to neutralise (CSV injection defence).
-_CSV_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_safe(value: Any) -> str:
-    s = "" if value is None else str(value)
-    return "'" + s if s[:1] in _CSV_FORMULA_LEADS else s
 
 router = APIRouter(prefix="/audit")
 

@@ -46,6 +46,7 @@ class AppState:
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
+    builder_last_result: Optional[dict] = None  # last read-command result set, for the CSV download
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
 

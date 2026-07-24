@@ -74,6 +74,10 @@ def main() -> None:
             server.stop()
         return
 
+    # WKWebView drops Content-Disposition downloads unless this is on — without it the CSV export
+    # links (Audit viewer, Builder results) silently do nothing in the native window.
+    webview.settings["ALLOW_DOWNLOADS"] = True
+
     window = webview.create_window("GamGUI", url, width=1100, height=760, min_size=(900, 600))
 
     def _fit_to_screen() -> None:

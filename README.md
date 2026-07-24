@@ -25,7 +25,8 @@ Actively developed and used against live Google Workspace tenants. Working today
 - **Users** — fast list/search/detail (cached + paginated), profile editing
   (title/department/location) with a bulk "assign store" tool, mailbox **delegates**, **vacation
   responders**, and a guarded **suspend**.
-- **Gmail signatures** — a scoped designer with variables, a live preview, and bulk apply.
+- **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
+  bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — membership management, including a drag-and-drop board.
 - **Calendars** — find any shared calendar by name (instant, from a local index that scales to large
   tenants), see who has access, search a calendar's events, and remove a stray event or an entire
@@ -33,7 +34,13 @@ Actively developed and used against live Google Workspace tenants. Working today
 - **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
   transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
   live preview of the generated auto-reply.
+- **Onboarding** — role → task-list runbooks (persisted, editable) that become a Google Tasks
+  checklist on the new hire, plus a templated welcome email.
+- **Command Builder** — browse/search the full categorized GAM catalog (~1,040 commands); curated
+  commands get typed slots, drag-a-user targeting, a guarded preview → run, linear sequencing, and
+  results export (CSV download or straight to a Google Sheet).
 - **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, and directory completeness.
+- **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
 
 You build and run it yourself; it is not yet notarized for distribution to other Macs.
 
@@ -95,7 +102,8 @@ make run       # launch the app (native window; prints a browser URL if pywebvie
 flexible one, use `pip install -r requirements.txt`.
 
 The GAM7 binary is **not committed** (platform-specific, large) — `make gam` / `scripts/fetch_gam.sh`
-fetches the pinned version (`v7.46.02`) from the official releases and records its checksum.
+fetches the pinned, tested version from the official releases and verifies it against the committed
+checksum (the pin's source of truth is `EXPECTED_GAM_VERSION` — see "Staying current with GAM").
 
 ### Build a standalone `.app` (macOS)
 

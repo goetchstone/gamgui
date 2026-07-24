@@ -9,10 +9,12 @@ audited BatchJob. Browse-only commands are inert (read/copy syntax only).
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from ...core import guard as guard_mod
 from ...core.catalog import load_catalog
@@ -22,6 +24,7 @@ from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ...core.gam.parser import parse_records
+from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..server import TEMPLATES
 
@@ -101,8 +104,38 @@ def _render_read(request: Request, out: str, gam: str) -> HTMLResponse:
     looks_tabular = text[:1] in "[{" or "," in first
     records = parse_records(out) if looks_tabular else []
     if records:
+        # Keep the full result set for the CSV download — the table itself truncates at 100 rows.
+        _st(request).builder_last_result = {"records": records, "gam": gam}
         return TEMPLATES.TemplateResponse(request, "_records_table.html", {"records": records, "gam": gam})
     return TEMPLATES.TemplateResponse(request, "_read_output.html", {"output": out, "gam": gam})
+
+
+@router.get("/export.csv")
+async def export_csv(request: Request) -> Response:
+    """Download the most recent read-command result set as CSV (all rows, not just the first 100)."""
+    last = _st(request).builder_last_result
+    if not last or not last.get("records"):
+        return Response("No results to export — run a read command first.",
+                        media_type="text/plain", status_code=404)
+    records = last["records"]
+    # Column order: first record's keys, then any extras later records introduce (ragged JSON).
+    cols = list(records[0].keys())
+    seen = set(cols)
+    for r in records[1:]:
+        for k in r:
+            if k not in seen:
+                seen.add(k)
+                cols.append(k)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([csv_safe(k) for k in cols])  # header too — every emitted cell goes through the guard
+    for r in records:
+        writer.writerow([csv_safe(r.get(k, "")) for k in cols])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=gam-results.csv"},
+    )
 
 
 # --- pages -----------------------------------------------------------------------------

@@ -362,6 +362,43 @@ def test_run_read_command_renders_table(client):
     assert "assistant@example.com" in r.text          # from the mock `print delegates` CSV
 
 
+def test_read_results_export_csv(client):
+    # Run a read command, then download the SAME result set as CSV.
+    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    assert "Download CSV" in r.text                    # the table offers the download
+    e = client.get("/builder/export.csv")
+    assert e.status_code == 200
+    assert e.headers["content-type"].startswith("text/csv")
+    assert "attachment" in e.headers["content-disposition"]
+    assert "assistant@example.com" in e.text           # same records the table showed
+
+
+def test_export_csv_without_a_run_is_friendly(client):
+    e = client.get("/builder/export.csv")
+    assert e.status_code == 404
+    assert "run a read command first" in e.text
+
+
+def test_export_csv_is_formula_injection_safe_and_handles_ragged_rows(client):
+    import csv as _csv
+    import io as _io
+
+    # Stash a crafted result set directly: a formula-leading cell + a column only row 2 has.
+    client.app.state.gamgui.builder_last_result = {
+        "records": [
+            {"email": "a@x.com", "name": "=HYPERLINK(\"evil\")"},
+            {"email": "b@x.com", "name": "Bea", "extra": "+more"},
+        ],
+        "gam": "gam print users",
+    }
+    e = client.get("/builder/export.csv")
+    assert e.status_code == 200
+    rows = list(_csv.reader(_io.StringIO(e.text)))
+    assert rows[0] == ["email", "name", "extra"]       # union columns, first-record order first
+    assert rows[1] == ["a@x.com", "'=HYPERLINK(\"evil\")", ""]   # formula neutralized, gap filled
+    assert rows[2] == ["b@x.com", "Bea", "'+more"]
+
+
 def test_browse_only_command_cannot_run(client):
     browse_id = next(c.id for c in load_catalog().commands if not c.buildable)
     assert "Browse-only" in client.get(f"/builder/command/{browse_id}").text

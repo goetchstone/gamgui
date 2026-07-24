@@ -6,6 +6,7 @@
     <input class="rt-filter w-44 rounded border border-brand-gray/50 px-2 py-1 text-xs focus:border-brand-blue focus:outline-none" type="search" placeholder="Filter rows…" />
     <label class="flex items-center gap-1 text-brand-blueink"><input type="checkbox" class="rt-external" /> External only</label>
     <span class="rt-count text-brand-gray"></span>
+    <a href="/builder/export.csv" class="font-medium text-brand-blueink hover:text-brand-black">Download CSV ↓</a>
     <code class="ml-auto truncate text-brand-gray/80">{{ gam }}</code>
   </div>
   <div class="overflow-x-auto">
@@ -19,7 +20,7 @@
       </tbody>
     </table>
   </div>
-  {% if records | length > 100 %}<p class="mt-1 text-xs text-brand-gray">Showing the first 100 of {{ records | length }}.</p>{% endif %}
+  {% if records | length > 100 %}<p class="mt-1 text-xs text-brand-gray">Showing the first 100 of {{ records | length }} — the CSV download has every row.</p>{% endif %}
 </div>
 {% else %}
 <p class="text-sm text-brand-gray">No records returned. <code>{{ gam }}</code></p>
