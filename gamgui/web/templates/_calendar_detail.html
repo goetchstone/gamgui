@@ -9,6 +9,7 @@
     {% if share_notice %}
     <div class="mt-2 rounded-lg border {{ 'border-amber-300 bg-amber-50 text-amber-800' if 'couldn' in share_notice else 'border-emerald-300 bg-emerald-50 text-emerald-800' }} px-3 py-2 text-sm">{{ share_notice }}</div>
     {% endif %}
+    {% include "_calendar_subscribe_job.html" %}
     {% if acls %}
     <ul class="mt-2 max-h-44 space-y-1 overflow-y-auto text-sm">
       {% for a in acls %}

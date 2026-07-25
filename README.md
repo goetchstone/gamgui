@@ -38,9 +38,11 @@ Actively developed and used against live Google Workspace tenants. Working today
   no live domain scan — and a **Rebuild** button refreshes it (deleting a calendar in the app drops
   it from the index immediately). From there: list every room/resource in the domain, list one
   person's calendars with their access role on each, see who has access and **grant or revoke it** at
-  a chosen role (sharing with a person also auto-subscribes them so the calendar shows up in their
-  Google Calendar sidebar; a group only gets the ACL — members still add it themselves), search a
-  calendar's events, and remove a stray event or an entire orphaned secondary calendar.
+  a chosen role. **Sharing also makes the calendar actually appear**, which an ACL alone does not do:
+  a person is auto-subscribed, and a **group is expanded and subscribed member by member** as a
+  background job with live per-member progress — so nobody is left saying "you shared it but I can't
+  see it", and you get the list of anyone it couldn't be added for. Also: search a calendar's events,
+  and remove a stray event or an entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
   transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
   live preview of the generated auto-reply.
@@ -82,7 +84,9 @@ reads (a read-only pass over the parsers ships as `scripts/acceptance.py`).
 
 **Not yet confirmed live** — treat as unproven and test on a throwaway target first: unshare a
 calendar (remove ACL) · remove delegate · clear vacation · add group member · sign out everywhere ·
-delete event · delete user · and the two offboarding repairs described below.
+delete event · delete user · the group fan-out of a calendar share (the individual calls it makes —
+ACL add and subscribe — are each confirmed live, but the group expansion itself is not) · and the two
+offboarding repairs described below.
 
 **Known-good repairs awaiting live re-run.** Two offboarding bugs were found in real audit logs and
 fixed, but the fixes have not themselves been exercised live yet: Drive and calendar are now

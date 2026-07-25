@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -586,12 +587,95 @@ def test_calendars_share_adds_acl_and_subscribes(client):
     assert 'hx-post="/calendars/share"' in r.text           # share form still present
 
 
-def test_calendars_share_group_scope_not_subscribed(client):
-    # A group scope is valid to share but can't be auto-subscribed (the form is type=email; POST direct).
+def test_calendars_share_group_fans_out_to_members(client):
+    # CHANGED BEHAVIOUR (was: "groups can't be auto-subscribed"). An ACL grants access but does not
+    # put the calendar on anyone's list, which is why members kept reporting they couldn't see it —
+    # so a group grant now subscribes each member as a background job.
     r = client.post("/calendars/share",
                     data={"cal": SEC_CAL, "target": "group:team@example.com", "role": "reader"})
     assert r.status_code == 200
-    assert "auto-subscribed" in r.text                      # groups notice (apostrophe HTML-escaped)
+    assert "adding it to 2 members' calendars" in r.text or "adding it to 2 members&#39; calendars" in r.text
+    assert re.search(r"/calendars/share/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:400]
+
+
+def test_calendars_share_bare_group_address_also_fans_out(client):
+    # No "group:" prefix: a bare address is ambiguous, and it has to resolve as a group from the
+    # directory rather than from how it was typed.
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "sales@example.com"})
+    assert r.status_code == 200
+    assert "members" in r.text
+    assert "/calendars/share/status?job=" in r.text
+
+
+def test_calendars_share_known_user_is_never_treated_as_a_group(client):
+    # The regression this guards: mistaking a person for a group skips the subscribe entirely, which
+    # is the exact bug the feature exists to fix. A cached directory account wins over any lookup.
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "alice@example.com"})
+    assert r.status_code == 200
+    assert "appear in their Google Calendar" in r.text
+    assert "/calendars/share/status?job=" not in r.text      # a single user needs no fan-out job
+
+
+def test_calendars_share_empty_group_says_so(client):
+    r = client.post("/calendars/share",
+                    data={"cal": SEC_CAL, "target": "group:empty-group@example.com"})
+    assert r.status_code == 200
+    assert "no members" in r.text
+
+
+def test_calendars_share_domain_scope_cannot_be_subscribed(client):
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "domain"})
+    assert r.status_code == 200
+    assert "can't be auto-subscribed" in r.text or "can&#39;t be auto-subscribed" in r.text
+
+
+def test_calendars_share_status_reports_progress_then_result(client):
+    from gamgui.web.jobs import start_job
+    st = client.app.state.gamgui
+
+    running = start_job(st.jobs, 3)
+    running.done, running.applied, running.current = 1, 1, "bob@example.com"
+    running.log = ["✓ alice@example.com"]
+    r = client.get("/calendars/share/status", params={"job": running.id})
+    assert "1 added" in r.text and "bob@example.com" in r.text
+    assert "/calendars/share/status?job=" in r.text          # still polling
+
+    done = start_job(st.jobs, 3)
+    done.done, done.applied, done.failed, done.finished = 3, 2, ["carol@example.com"], True
+    r = client.get("/calendars/share/status", params={"job": done.id})
+    assert "appears in 2 of 3" in r.text
+    assert "carol@example.com" in r.text                     # who to tell to add it manually
+    assert "every 1s" not in r.text                          # stopped polling
+
+
+def test_calendars_share_status_unknown_job_is_quiet(client):
+    r = client.get("/calendars/share/status", params={"job": "nope"})
+    assert r.status_code == 200
+    assert "Adding to calendars" not in r.text
+
+
+async def test_run_subscribe_bounds_its_log_at_scale():
+    # A big group must not make each 1s poll carry a line per member.
+    import types
+    from gamgui.web.jobs import BatchJob
+    from gamgui.web.routes.calendars import _run_subscribe, _SUBSCRIBE_LOG_WINDOW
+
+    emails = [f"u{i}@example.com" for i in range(500)]
+    conn = types.SimpleNamespace(
+        subscribe_calendar_for=lambda e, c: _ok(e))
+    job = BatchJob(id="x", total=len(emails))
+    await _run_subscribe(job, conn, "c@group.calendar.google.com", emails)
+    assert job.done == 500 and job.applied == 490 and len(job.failed) == 10
+    assert len(job.log) == _SUBSCRIBE_LOG_WINDOW             # bounded window, newest kept
+    assert job.log[-1].endswith("u499@example.com")
+    assert job.finished and job.current == ""
+
+
+async def _ok(email: str):
+    # every 50th member fails, so the failed-list path is exercised too
+    import types
+    return types.SimpleNamespace(ok=not email.startswith(("u0@", "u50@", "u100@", "u150@", "u200@",
+                                                          "u250@", "u300@", "u350@", "u400@", "u450@")))
 
 
 def test_calendars_share_requires_target(client):

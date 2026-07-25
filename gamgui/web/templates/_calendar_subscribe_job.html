@@ -1,0 +1,36 @@
+{# Group fan-out progress: the calendar is on each member's list only once their row lands. #}
+{% set j = subscribe_job %}
+{% if j and j.error %}
+<div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+  {{ j.error }}<br>Added to {{ j.applied }} of {{ j.total }} members' calendars before stopping.
+</div>
+{% elif j and not j.finished %}
+<div hx-get="/calendars/share/status?job={{ j.id }}" hx-trigger="load delay:600ms, every 1s"
+     hx-target="this" hx-swap="outerHTML"
+     class="mt-2 rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-3 py-2.5 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2">
+    <span class="spinner"></span>
+    <span>Adding to calendars… <strong>{{ j.done }}</strong> of {{ j.total }}
+      · {{ j.applied }} added{% if j.failed %} · <span class="text-rose-600">{{ j.failed | length }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-gray">{{ j.current }}</span>{% endif %}</span>
+  </div>
+  <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
+    <div class="h-full bg-brand-blue transition-all" style="width: {{ (j.done * 100 // j.total) if j.total else 100 }}%"></div>
+  </div>
+  {% if j.log %}
+  <ul class="mt-2 space-y-0.5 font-mono text-xs leading-relaxed" aria-label="Members the calendar was added for">
+    {% for line in j.log | reverse %}
+    <li class="truncate {{ 'text-brand-gray' if line.startswith('✓') else 'text-rose-700' }}">{{ line }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% elif j %}
+<div class="mt-2 rounded-lg border px-3 py-2 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not j.failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  It now appears in {{ j.applied }} of {{ j.total }} members' Google Calendars.
+  {% if j.failed %}
+  <div class="mt-1 max-h-24 overflow-y-auto text-xs">
+    Couldn't add it for {{ j.failed | length }} — they can add it manually: {{ j.failed | join(", ") }}
+  </div>
+  {% endif %}
+</div>
+{% endif %}

@@ -25,12 +25,15 @@ EVENT_CAP = 200
 _NOT_CONNECTED = "Not connected."
 _CALENDAR_LIST_TEMPLATE = "_calendar_list.html"
 _CALENDAR_INDEX_JOB_TEMPLATE = "_calendar_index_job.html"
+_SUBSCRIBE_JOB_TEMPLATE = "_calendar_subscribe_job.html"
 # Strict allowlist: only true secondary calendars can be deleted. Primary calendars are a user's
 # email; holiday/system use @group.v.calendar.google.com or a `#…@` id; rooms use
 # @resource.calendar.google.com; imports use @import.calendar.google.com — none end in this suffix.
 SECONDARY_SUFFIX = "@group.calendar.google.com"
 # Roles we expose for sharing (app-wide subset of GAM's CalendarACLRole set).
 ACL_ROLES = ("reader", "freebusyreader", "writer", "owner")
+# Most-recent per-member lines kept while a group subscribe runs (bounds the polled partial).
+_SUBSCRIBE_LOG_WINDOW = 12
 
 
 def _is_secondary(cal: str) -> bool:
@@ -44,6 +47,62 @@ def _is_user_scope(scope: str) -> bool:
     if s in ("default", "domain") or s.startswith(("group:", "domain:")):
         return False
     return "@" in s
+
+
+async def _subscribers_for(conn, target: str, known_users: set) -> "tuple[str, list]":
+    """Who to auto-subscribe for an ACL scope: ``("user"|"group"|"none", [emails])``.
+
+    Granting an ACL is not what makes a calendar show up — subscribing it onto the person's calendar
+    list is. That is the whole complaint this answers ("I shared it and they still can't see it"), so
+    a group grant has to fan out to the group's members.
+
+    A *bare* address is ambiguous: GAM accepts a group's address as a calendar ACL scope exactly like
+    a person's, and nothing in the string says which it is. Resolve it against the directory we
+    already have cached first — a known account is a person, full stop. Only then ask whether it is a
+    group, because "the member lookup errored" is a weak signal to hang the decision on: it is also
+    what a transient failure looks like, and mistaking a person for an empty group would silently skip
+    the subscribe that is the point of the feature.
+    """
+    scope = (target or "").strip()
+    low = scope.lower()
+    if low in ("default", "domain") or low.startswith("domain:"):
+        return "none", []                       # can't enumerate a whole domain; no fan-out
+    if not low.startswith("group:") and low in known_users:
+        return "user", [scope]                  # a known account: never treat it as a group
+    group = scope[len("group:"):].strip() if low.startswith("group:") else scope
+    try:
+        members = await conn.list_group_members(group)
+    except Exception:                           # noqa: BLE001 — not a group, or the lookup failed
+        members = []
+    emails = [m.email for m in members if getattr(m, "email", "") and "@" in m.email]
+    if emails:
+        return "group", emails
+    # An explicit group: scope that resolved to nothing is still a group — just an empty one.
+    return ("group", []) if low.startswith("group:") else ("user", [scope] if _is_user_scope(scope) else [])
+
+
+async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
+    """Background: put ``cal`` on each member's calendar list so it actually appears for them."""
+    try:
+        for email in emails:
+            job.current = email
+            try:
+                res = await conn.subscribe_calendar_for(email, cal)
+                ok = bool(getattr(res, "ok", False))
+            except Exception:                   # noqa: BLE001 — one member must not stop the rest
+                ok = False
+            if ok:
+                job.applied += 1
+            else:
+                job.failed.append(email)
+            job.log.append(f"{'✓' if ok else '✗'} {email}")
+            del job.log[:-_SUBSCRIBE_LOG_WINDOW]  # bounded: a big group must not bloat each poll
+            job.done += 1
+    except Exception as exc:                    # noqa: BLE001 — whole-batch failure (auth expired)
+        job.error = _friendly(exc)
+    finally:
+        job.current = ""
+        job.finished = True
 
 
 def _owner_candidates(acls, cal: str) -> list:
@@ -303,21 +362,43 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
     result = await conn.add_calendar_acl_for(cal, target, role=role)
     if not result.ok:
         return _err(request, f"Couldn't share calendar: {result.detail}")
-    if _is_user_scope(target):
-        sub = await conn.subscribe_calendar_for(target, cal)
+    kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
+    notice, job = "", None
+    if kind == "user" and emails:
+        sub = await conn.subscribe_calendar_for(emails[0], cal)
         if sub.ok:
             notice = f"Shared with {target} — it will now appear in their Google Calendar."
         else:
             notice = (f"Shared with {target}, but couldn't auto-add it to their calendar list — "
                       "they can add it manually in Google Calendar.")
+    elif kind == "group" and emails:
+        # Fan out in the background: one gam call per member, so a large group would otherwise hold
+        # the request open for minutes. Progress is polled, same as the index rebuild.
+        st = request.app.state.gamgui
+        job = start_job(st.jobs, len(emails))
+        job.task = asyncio.create_task(_run_subscribe(job, conn, cal, emails))
+        notice = (f"Shared with {target} — adding it to {len(emails)} "
+                  f"member{'s' if len(emails) != 1 else ''}' calendars now.")
+    elif kind == "group":
+        notice = f"Shared with {target}, but that group has no members to add it for."
     else:
-        notice = f"Shared with {target}. (Groups can't be auto-subscribed — members add it themselves.)"
+        notice = (f"Shared with {target}. That scope can't be auto-subscribed, so people may need to "
+                  "add the calendar themselves.")
     try:
         ctx = await _detail_ctx(request, conn, cal, label)
     except Exception as exc:
         return _err(request, _friendly(exc))
     ctx["share_notice"] = notice
+    ctx["subscribe_job"] = job
     return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
+
+
+@router.get("/share/status", response_class=HTMLResponse)
+async def share_status(request: Request, job: str = "") -> HTMLResponse:
+    """Poll target for the group fan-out panel (unknown/pruned job renders as finished, not an error)."""
+    st = request.app.state.gamgui
+    return TEMPLATES.TemplateResponse(
+        request, _SUBSCRIBE_JOB_TEMPLATE, {"subscribe_job": st.jobs.get(job) if job else None})
 
 
 @router.post("/unshare", response_class=HTMLResponse)

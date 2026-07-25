@@ -10,11 +10,6 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Next — small, and each closes a real daily gap
 
-- **Share a calendar with a whole group.** Sharing with a *person* already adds the ACL *and*
-  subscribes them, so it shows up in their sidebar. Sharing with a *group* only sets the ACL, so
-  members still report "I can't see it" — the exact complaint the share feature was built to end.
-  Expand the group and subscribe each member as a background job. `subscribe_calendar_for()`,
-  `list_group_members()` and the job machinery all already exist.
 - **Make the report buckets actionable.** `/reports` already computes the worklists that matter
   (inactive 90+ days, no 2SV, suspended, missing recovery). Every one is currently a dead end you
   can only click through one user at a time. The bulk executor and the guard already handle exactly

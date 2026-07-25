@@ -40,8 +40,18 @@ if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   fi
   exit 0
 fi
+# `gam print group-members group <addr>` -> members, but ONLY for an address that is really a group.
+# Real GAM fails for a user's address, and code that has to tell a person from a group (calendar
+# sharing fans a group grant out to its members) would otherwise pass here and break live.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
-  cat "$GAM_MOCK_FIXTURES/group_members.json"
+  case "$*" in
+    *sales@example.com*|*staff@example.com*|*it@example.com*|*team@example.com*)
+      cat "$GAM_MOCK_FIXTURES/group_members.json" ;;
+    *empty-group@example.com*)
+      printf 'email\n' ;;          # a real, but memberless, group
+    *)
+      echo "ERROR: 400: Bad Request - notFound: Resource Not Found: groupKey" 1>&2; exit 1 ;;
+  esac
   exit 0
 fi
 
