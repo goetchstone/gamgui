@@ -54,7 +54,12 @@ async def do_import(
             {"message": "Enter the domain and super-admin email, then choose a credentials folder."},
         )
     svc = _service(request)
-    imported = svc.import_dir(config_dir, domain)
+    try:
+        imported = svc.import_dir(config_dir, domain)
+    except ValueError as exc:
+        # A typo'd or non-directory path is operator error, not a crash — say which, and let them
+        # correct it in place.
+        return TEMPLATES.TemplateResponse(request, "_error.html", {"message": str(exc)})
     return TEMPLATES.TemplateResponse(
         request, "_dwd.html",
         {

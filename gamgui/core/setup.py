@@ -135,8 +135,35 @@ class SetupService:
         return DirInspection(path=str(p), files=files)
 
     # --- importing into the vault ------------------------------------------------------
+    def resolve_dir(self, path) -> Path:
+        """Normalise a caller-supplied credentials folder, or raise ``ValueError`` for the UI.
+
+        Picking the folder IS the feature — ``~/.gam``, a ``$GAMCFGDIR``, our own staging dir, or
+        wherever else the operator keeps their GAM install — so any directory they can read is fair
+        game and no allow-list applies. What is worth insisting on is that the thing named actually
+        exists and is a directory: a typo or a file otherwise imports nothing and reports it as "no
+        credential files found", which sends the operator looking for the wrong problem. Resolved
+        (symlinks and ``..`` collapsed) so the path the rest of the flow compares and shows is the
+        real one; only the fixed ``FILENAMES`` are ever read from it.
+        """
+        raw = str(path).strip()
+        if not raw:
+            raise ValueError("Choose the folder that holds your GAM credential files.")
+        try:
+            p = Path(raw).expanduser().resolve()
+        except OSError as exc:
+            raise ValueError(f"That folder can't be read: {exc.strerror or raw}") from exc
+        if not p.exists():
+            raise ValueError(f"No such folder: {p}")
+        if not p.is_dir():
+            raise ValueError(f"That's a file, not a folder — pick the folder it sits in: {p}")
+        return p
+
     def import_dir(self, path, domain: str) -> List[str]:
         """Read whatever credential files exist in ``path`` into the Keychain. Returns imported names.
+
+        Rejects a path that isn't an existing directory (see :meth:`resolve_dir`) instead of
+        reporting an empty import.
 
         Security: once the credentials are in the Keychain they must not also linger as persistent
         plaintext files (a same-UID process could read them without a Keychain prompt). So after a
@@ -144,7 +171,7 @@ class SetupService:
         is the only durable home. A user-chosen dir (e.g. ``~/.gam``, their own GAM install) is
         never touched.
         """
-        p = Path(path).expanduser()
+        p = self.resolve_dir(path)
         imported: List[str] = []
         for name, fname in FILENAMES.items():
             f = p / fname

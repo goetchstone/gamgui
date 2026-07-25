@@ -255,6 +255,13 @@ build you intend to run against a real domain.
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across
 Python 3.10, 3.12, and 3.14 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
+**Static analysis.** CodeQL runs on every push and PR to `main`, plus weekly, over both the Python
+code and the workflows themselves — configured in-tree so it is reviewable rather than hidden in
+repository settings: [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml) with
+[`.github/codeql/codeql-config.yml`](.github/codeql/codeql-config.yml). It uses the broader
+`security-extended` suite, and skips `tests/`, the vendored GAM release, and vendored browser
+libraries — the config explains why for each.
+
 ## Email signatures
 
 The **Signatures** screen designs one HTML signature with variables, previews it rendered for a real

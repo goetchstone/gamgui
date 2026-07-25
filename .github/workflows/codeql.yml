@@ -1,0 +1,52 @@
+name: CodeQL
+
+# Advanced setup rather than GitHub's default, so the analysis is configured in-tree and reviewable:
+# see .github/codeql/codeql-config.yml for the query suite and the paths we deliberately skip.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Catch newly-published queries against code that hasn't changed.
+  schedule:
+    - cron: "27 5 * * 1"
+  workflow_dispatch:
+
+# Least privilege at the top; the analyse job adds only the one write scope it needs.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Uploading results is the only write this workflow performs.
+      security-events: write
+      contents: read
+      # Lets the actions analysis resolve reusable workflows.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # python = the app itself. actions = the workflows, which hold a token and fetch the
+        # checksum-pinned GAM release, so they are part of the supply chain worth analysing.
+        language: [python, actions]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      # No build step: Python and Actions are extracted directly from source.
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

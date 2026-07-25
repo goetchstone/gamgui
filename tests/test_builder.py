@@ -207,7 +207,9 @@ def test_search_messages_runs_and_surfaces_return_path(client):
         "cid": "build.search_messages", "email": "alice@example.com",
         "query": "after:2026/06/23 before:2026/06/24", "detail": "Headers"})
     assert r.status_code == 200
-    assert "amazonses.com" in r.text   # the SES Return-Path is visible in the result table
+    # Asserts on rendered output, not a URL/host check: the fixture's envelope-sender id is a
+    # non-domain token, so this pins the actual Return-Path cell rather than any substring of a host.
+    assert "0101019ef4e29302-4b960d36-aba1-4a59-9f22-123f07e3fce8-000000" in r.text
     assert "gam user alice@example.com print messages" in r.text
 
 

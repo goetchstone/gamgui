@@ -1,0 +1,20 @@
+name: "GamGUI CodeQL config"
+
+# Broader than the default suite: this app holds credentials that can impersonate any user in a
+# Google Workspace domain, so it is worth accepting a few more false positives to catch more.
+queries:
+  - uses: security-extended
+
+# Analyse only code we actually ship and control.
+#
+# - tests/  — not shipped, and CodeQL's remote-attacker threat model does not fit a test harness:
+#   fixtures are deliberately hostile strings and assertions on rendered output get flagged as
+#   "incomplete URL sanitization" and similar. Real defects in the app are what we want surfaced.
+# - gamgui/resources/  — the vendored GAM7 release (58 MB of someone else's PyInstaller bundle plus
+#   its grammar/changelog text). We pin it by SHA-256 rather than audit its source here.
+# - gamgui/web/static/vendor/  — third-party browser libraries (htmx, Tailwind), vendored verbatim so
+#   the app never reaches a CDN at runtime. Upstream's problems are not ours to fix in-tree.
+paths-ignore:
+  - tests
+  - gamgui/resources
+  - gamgui/web/static/vendor

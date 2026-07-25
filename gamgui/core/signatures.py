@@ -16,18 +16,36 @@ from typing import Dict, List, Optional
 from .gam.models import GAMUser
 from .paths import app_data_dir
 
-# A ``[[ ... ]]`` block is kept only if every variable inside it resolves to a non-empty value.
-_OPTIONAL_RE = re.compile(r"\[\[(.*?)\]\]", re.DOTALL)
-
 # Curly ("smart") quotes INSIDE a tag — pasted from Word/Mail/chat, they don't close HTML attributes,
 # so the parser swallows everything after them (including {variables}) into the attribute value.
 # Curly quotes in visible text are fine; only flag them between < and >.
-_SMART_QUOTE_IN_TAG_RE = re.compile(r"<[^>]*[“”‘’][^>]*>")
+_CURLY_QUOTE_RE = re.compile(r"[“”‘’]")
+
+
+def _curly_quote_in_tag(template: str) -> bool:
+    """True if a curly quote sits between a ``<`` and the first ``>`` that follows it.
+
+    Walks the tag spans with ``str.find`` instead of one regex: a pattern like ``<[^>]*[“”‘’][^>]*>``
+    re-scans the tail from every ``<`` when the input never closes its tags, which is quadratic on
+    pasted-garbage templates. This pass is linear — each character is visited once.
+    """
+    pos = 0
+    while True:
+        lt = template.find("<", pos)
+        if lt < 0:
+            return False
+        gt = template.find(">", lt + 1)
+        if gt < 0:
+            return False        # nothing closes from here on, so no later "<" can be a tag either
+        if _CURLY_QUOTE_RE.search(template, lt + 1, gt):
+            return True
+        # Any "<" nested inside this span shares this ">", so its span is a subset — skip past it.
+        pos = gt + 1
 
 
 def smart_quote_warning(template: str) -> str:
     """A human warning when the template has curly quotes inside a tag ('' if clean)."""
-    if _SMART_QUOTE_IN_TAG_RE.search(template or ""):
+    if _curly_quote_in_tag(template or ""):
         return ("Heads-up: this HTML contains curly quotes (” or ’) inside a tag — pasted "
                 "from Word/Mail they break attributes and can swallow your {variables}. Replace them "
                 "with straight quotes (\").")
@@ -47,6 +65,32 @@ VARIABLES: Dict[str, str] = {
     "{location}": "Location / store",
     "{ou}": "Org unit path",
 }
+
+
+def _expand_optional(template: str, values: Dict[str, str]) -> str:
+    """Resolve the ``[[ ... ]]`` blocks: keep the inner text, or drop the block if a variable it
+    references is empty for this user. A trailing unterminated ``[[`` is left verbatim.
+
+    A ``find``-based walk rather than ``\\[\\[(.*?)\\]\\]``: the lazy quantifier restarts its search at
+    every ``[[``, so a template full of unclosed brackets costs O(n²) — and render runs once per
+    mailbox in the bulk apply, so that cost multiplies across the domain.
+    """
+    out: List[str] = []
+    pos = 0
+    while True:
+        start = template.find("[[", pos)
+        if start < 0:
+            break
+        end = template.find("]]", start + 2)
+        if end < 0:
+            break                       # unterminated: the rest of the template is literal text
+        out.append(template[pos:start])
+        inner = template[start + 2:end]
+        if not any(var in inner and not val for var, val in values.items()):
+            out.append(inner)
+        pos = end + 2
+    out.append(template[pos:])
+    return "".join(out)
 
 
 def render_signature(template: str, user: GAMUser) -> str:
@@ -69,14 +113,7 @@ def render_signature(template: str, user: GAMUser) -> str:
         "{ou}": user.org_unit_path or "",
     }
 
-    def _resolve_optional(match: "re.Match[str]") -> str:
-        inner = match.group(1)
-        for var, val in values.items():
-            if var in inner and not val:
-                return ""  # a referenced variable is empty -> drop the whole block
-        return inner
-
-    out = _OPTIONAL_RE.sub(_resolve_optional, template or "")
+    out = _expand_optional(template or "", values)
     for var, val in values.items():
         out = out.replace(var, val)
     return out

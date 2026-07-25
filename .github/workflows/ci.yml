@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Every job here only checks out, installs, vendors the GAM binary and runs pytest — nothing writes
+# back to the repo, so read-only content access is all GITHUB_TOKEN needs (it is also what the
+# fetch_gam.sh api.github.com calls authenticate with, purely to dodge the anonymous 60/hr limit).
+permissions:
+  contents: read
+
 jobs:
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})

@@ -146,3 +146,68 @@ def test_set_signature_notes_smart_quotes(client):
         "email": "alice@example.com",
         "signature": '<span style="color:#000”>{name}</span>', "html": "on"})
     assert r.status_code == 200 and "Signature updated." in r.text and "curly quotes" in r.text
+
+
+def test_smart_quote_warning_tag_span_edge_cases():
+    from gamgui.core.signatures import smart_quote_warning
+    # a curly quote inside an unclosed inner tag still counts — it's between a "<" and the next ">"
+    assert "curly quotes" in smart_quote_warning("<a<b ’ >")
+    assert "curly quotes" in smart_quote_warning("<div\n style=’x’>")   # tags may span newlines
+    # ...but a stray ">" in visible text does not open a tag span
+    assert smart_quote_warning("<a>b ’ c>") == ""
+    assert smart_quote_warning("<x ’ y") == ""      # never closed -> not a tag
+    assert smart_quote_warning("’<div>") == ""      # curly before any tag
+
+
+# --- template scanning is linear, not quadratic -----------------------------------------
+# Malformed templates (brackets/tags that never close) used to backtrack quadratically. That
+# matters most for render: bulk apply renders once PER MAILBOX, so a slow template multiplies
+# across the domain. The bounds below are ~5 orders of magnitude above the measured cost.
+
+def _user(**kw):
+    from gamgui.core.gam.models import GAMUser
+    return GAMUser(primary_email="a@example.com", given_name="Al", family_name="Ant", **kw)
+
+
+def test_smart_quote_warning_is_linear_on_unclosed_tags():
+    import time
+    from gamgui.core.signatures import smart_quote_warning
+    hostile = "<a " * 32000        # 32k tags, none of them closed
+    start = time.perf_counter()
+    assert smart_quote_warning(hostile) == ""
+    assert time.perf_counter() - start < 0.25
+
+
+def test_render_signature_is_linear_on_unclosed_optional_blocks():
+    import time
+    from gamgui.core.signatures import render_signature
+    hostile = "[[" * 16000        # 16k opening brackets, none of them closed
+    start = time.perf_counter()
+    assert render_signature(hostile, _user()) == hostile   # left verbatim, as today
+    assert time.perf_counter() - start < 0.25
+
+
+# --- optional [[ ... ]] semantics that must not drift ------------------------------------
+
+def test_render_optional_block_spans_newlines():
+    from gamgui.core.signatures import render_signature
+    u = _user(title="Director", phone="")
+    assert render_signature("[[{title}\nline2]]tail", u) == "Director\nline2tail"
+    assert render_signature("[[{title}\n{phone}]]tail", u) == "tail"   # empty phone drops the block
+
+
+def test_render_unterminated_optional_block_is_literal():
+    from gamgui.core.signatures import render_signature
+    u = _user(title="Director")
+    assert render_signature("a[[b", u) == "a[[b"
+    assert render_signature("[[{title}]]x[[{title}", u) == "Directorx[[Director"
+    assert render_signature("x]]y", u) == "x]]y"
+
+
+def test_render_nested_looking_brackets_close_at_the_first_pair():
+    from gamgui.core.signatures import render_signature
+    u = _user(title="Director", phone="")
+    assert render_signature("[[a[[b]]c", u) == "a[[bc"
+    assert render_signature("[[[{title}]]]", u) == "[Director]"
+    assert render_signature("[[]]x", u) == "x"
+    assert render_signature("[[{phone}]][[{title}]]", u) == "Director"
