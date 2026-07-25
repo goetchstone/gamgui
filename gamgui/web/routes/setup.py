@@ -56,10 +56,17 @@ async def do_import(
     svc = _service(request)
     try:
         imported = svc.import_dir(config_dir, domain)
-    except ValueError as exc:
+    except (ValueError, OSError, RuntimeError) as exc:
         # A typo'd or non-directory path is operator error, not a crash — say which, and let them
-        # correct it in place.
-        return TEMPLATES.TemplateResponse(request, "_error.html", {"message": str(exc)})
+        # correct it in place. The import path is written to raise only operator-facing ValueError,
+        # but it stands on the filesystem and on $HOME: an unreadable folder (OSError) or an
+        # environment with no determinable home (RuntimeError from Path.home()/expanduser) are
+        # conditions the operator can act on, and a 500 tells them nothing. Deliberately narrow —
+        # a programming error is not an OSError, and still surfaces as a 500.
+        return TEMPLATES.TemplateResponse(
+            request, "_error.html",
+            {"message": str(exc) or "That folder could not be read — check the path and try again."},
+        )
     return TEMPLATES.TemplateResponse(
         request, "_dwd.html",
         {
