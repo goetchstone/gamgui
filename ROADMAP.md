@@ -74,8 +74,10 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Deliberate trade-offs
 
-Two things this project does not do today. Neither is a principle — the reasoning is written down so
-it can be argued with, and both are revisitable.
+Two things this project does not do today. Neither is a principle, and neither is closed off: they
+are simply not on the maintainer's list. The reasoning is written down so it can be argued with — and
+the design should keep both *possible*, so a change here should be a decision, never a dead end you
+discover later.
 
 - **Windows / Linux builds.** Not a technical barrier: the core is portable and the test suite
   already runs on Linux in CI. What is macOS-specific is the *shell* — the WKWebView window, Keychain
