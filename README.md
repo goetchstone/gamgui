@@ -21,16 +21,26 @@ then uncomment these to show them here:
 
 Actively developed and used against live Google Workspace tenants. Working today:
 
-- **Setup wizard** — first-run GAM project / OAuth / domain-wide-delegation flow.
-- **Users** — fast list/search/detail (cached + paginated), profile editing
-  (title/department/location) with a bulk "assign store" tool, mailbox **delegates**, **vacation
-  responders**, and a guarded **suspend**.
+- **Setup wizard** — either **import an existing GAM install** (it auto-detects `$GAMCFGDIR`,
+  `~/.gam`, and its own setup dir, shows which credential files each one holds, and moves them into
+  the Keychain) or follow the guided fresh GAM project / OAuth flow; then the manual
+  domain-wide-delegation step and a verify.
+- **Users** — fast list/search/detail (cached + paginated), profile editing (title/department —
+  location is shown but not editable) with a bulk "assign store" tool, mailbox **delegates**,
+  **vacation responders**, group membership, per-user calendar sharing (grant/revoke access to that
+  person's own calendar), **sign out everywhere**, and a guarded **suspend**.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — membership management, including a drag-and-drop board.
-- **Calendars** — find any shared calendar by name (instant, from a local index that scales to large
-  tenants), see who has access, search a calendar's events, and remove a stray event or an entire
-  orphaned secondary calendar.
+- **Calendars** — find any shared calendar by name. The first time, click **Build index** on the
+  Calendars screen: a one-time background scan of every user's calendars (minutes on a large tenant,
+  with live progress). After that, name search is instant and served entirely from the local index —
+  no live domain scan — and a **Rebuild** button refreshes it (deleting a calendar in the app drops
+  it from the index immediately). From there: list every room/resource in the domain, list one
+  person's calendars with their access role on each, see who has access and **grant or revoke it** at
+  a chosen role (sharing with a person also auto-subscribes them so the calendar shows up in their
+  Google Calendar sidebar; a group only gets the ACL — members still add it themselves), search a
+  calendar's events, and remove a stray event or an entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
   transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
   live preview of the generated auto-reply.
@@ -38,23 +48,53 @@ Actively developed and used against live Google Workspace tenants. Working today
   checklist on the new hire, plus a templated welcome email.
 - **Command Builder** — browse/search the full categorized GAM catalog (~1,040 commands); curated
   commands get typed slots, drag-a-user targeting, a guarded preview → run, linear sequencing, and
-  results export (CSV download or straight to a Google Sheet).
-- **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, and directory completeness.
+  results export (CSV download or straight to a Google Sheet). Result tables slice like grep — a live
+  row filter plus an **External only** toggle that keeps just the rows referencing addresses outside
+  your domain — and clicking any address in a result offers pre-filled follow-ups (delegates,
+  forwarding, vacation, signature, title/dept, reset password, suspend, delete, group add/remove).
+- **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, suspended accounts, and
+  directory completeness (missing title/department/phone/location), plus a **storage & mail usage**
+  panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
+  (which lags a few days).
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
 
 You build and run it yourself; it is not yet notarized for distribution to other Macs.
 
-> **Destructive actions are guarded — but verify before trusting them on production.** Suspend,
+> **Destructive actions are guarded — but check what has actually been proven live.** Suspend,
 > account delete, calendar/event delete, data transfer, the offboarding routine, and bulk operations
-> all run behind a *preview → typed confirmation → audit-logged* path. A few of the newer ones
-> haven't yet been exercised against a live tenant, so run them once on a **throwaway test
-> user/event** before relying on them. Account deletion is reversible only within Google's ~20-day
-> window. GamGUI is provided **as-is under the MIT License, with no warranty — use at your own
-> risk**; you are responsible for what you run against your own tenant.
+> all run behind a *preview → typed confirmation → audit-logged* path. That guard is well covered by
+> tests; what tests cannot prove is that a given GAM command behaves as expected against a real
+> tenant. See [Live verification status](#live-verification-status) for which writes have been
+> confirmed against a production domain and which have not — and run anything in the second list
+> once on a **throwaway user/event/calendar** before you rely on it. Account deletion is reversible
+> only within Google's ~20-day window. GamGUI is provided **as-is under the MIT License, with no
+> warranty — use at your own risk**; you are responsible for what you run against your own tenant.
+
+### Live verification status
+
+Every write is audited, so this list is derived from real audit logs rather than memory. "Confirmed
+live" means the operation has succeeded at least once against a production Google Workspace domain.
+
+**Confirmed live:** calendar share (ACL) · calendar auto-subscribe (making a shared calendar appear
+in someone's sidebar) · add calendar event · delete calendar · add delegate · remove group member ·
+reset password · set organization fields · set signature · set vacation · transfer data · plus all
+reads (a read-only pass over the parsers ships as `scripts/acceptance.py`).
+
+**Not yet confirmed live** — treat as unproven and test on a throwaway target first: unshare a
+calendar (remove ACL) · remove delegate · clear vacation · add group member · sign out everywhere ·
+delete event · delete user · and the two offboarding repairs described below.
+
+**Known-good repairs awaiting live re-run.** Two offboarding bugs were found in real audit logs and
+fixed, but the fixes have not themselves been exercised live yet: Drive and calendar are now
+transferred in a *single* data-transfer call (two separate calls collided with a `409 conflict`),
+and "remove from everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to
+abort the sweep.
 
 ## Design goals
 
-- **Local & native** — a single bundled `.app`; no server, nothing leaves your machine.
+- **Local & native** — a single bundled `.app`; no cloud service, nothing leaves your machine. The
+  UI is served by a loopback-only local server on a random port, gated by a per-launch token (see
+  [Security model](#security-model)).
 - **Secure** — secrets live in the macOS Keychain; GAM's plaintext credential files are
   materialized into a locked-down temporary directory only for the duration of each `gam`
   invocation, then wiped. ([details](#security-model))
@@ -70,7 +110,9 @@ HTMX views → FastAPI routes → Services → Connector protocol → GAMConnect
                                               → SecretsVault (Keychain) + EphemeralConfig (temp GAMCFGDIR)
 ```
 
-Wrapped in a `pywebview` native window (WKWebView). See `docs`/the plan for the full design.
+Wrapped in a `pywebview` native window (WKWebView). See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+layout and conventions, and [docs/builder-commands.md](docs/builder-commands.md) for the Builder
+catalog.
 
 ## Security model
 
@@ -81,8 +123,24 @@ domain and `oauth2.txt` is effectively an admin password, so GamGUI:
 1. keeps the canonical copies in the **Keychain** (`keyring`, device-bound, not synced);
 2. materializes them into a `chmod 700` temp dir (files `chmod 600`) set as `GAMCFGDIR` only for
    each `gam` call;
-3. wipes that dir on completion (success or failure);
+3. wipes that dir on completion (success or failure) — and, because "the app quit mid-call" is the
+   case that actually strands plaintext credentials, also via an `atexit` hook, a graceful-shutdown
+   timeout that lets in-flight calls unwind, and an owner-PID marker so a later run can collect a
+   directory whose owning process is gone;
 4. writes refreshed OAuth tokens back to the Keychain.
+
+Beyond the credentials themselves:
+
+- **The local server is not open to other local processes.** It binds loopback on a random port and
+  requires a per-launch token — and because cookies are *not* port-scoped (so `SameSite` alone would
+  treat every port on `127.0.0.1` as the same site), it also rejects cross-origin callers outright.
+- **GAM is never invoked through a shell.** Every command is an explicit argv list built by
+  `GAMCommands`; user input is always a single list element, never string-interpolated.
+- **Every mutation is guarded and audited** — `guard.evaluate()` classifies risk and resolves the
+  concrete affected set for a preview, and the write is appended to a local audit log.
+- **The vendored `gam` binary is checksum-pinned and verified fail-closed.** A release asset with no
+  committed pin is refused rather than installed, since a swapped binary would inherit
+  domain-wide impersonation.
 
 ## Build from source
 
@@ -97,9 +155,19 @@ make test      # offline test suite — uses a mock gam, no binary/credentials r
 make run       # launch the app (native window; prints a browser URL if pywebview is absent)
 ```
 
+`make setup` builds the venv with whatever `python3` is first on your PATH — macOS's bundled
+`python3` is 3.9 and `pip install -e .` will refuse it ("requires a different Python"). If
+`python3 -V` is below 3.10, skip `make setup` and create the venv explicitly:
+
+```bash
+python3.14 -m venv .venv && .venv/bin/pip install -e ".[dev,desktop]"
+```
+
 `make help` lists all targets. Prefer raw commands? `pip install -e ".[dev,desktop]"`, then
-`scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`. For an exact pinned install instead of the
-flexible one, use `pip install -r requirements.txt`.
+`scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`. `pip install -r requirements.txt` is an
+exact pinned **runtime + basic test** install; the rest of the dev extra (`pytest-timeout`, which the
+60s per-test timeout in `pyproject.toml` needs, and `pytest-cov`) only comes with
+`pip install -e ".[dev]"`.
 
 The GAM7 binary is **not committed** (platform-specific, large) — `make gam` / `scripts/fetch_gam.sh`
 fetches the pinned, tested version from the official releases and verifies it against the committed
@@ -160,17 +228,27 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
 
 **To bump GAM:**
 
-1. `make gam TAG=vX.Y.Z` (or `./scripts/fetch_gam.sh --tag vX.Y.Z`) — re-vendor the binary + command
-   reference. It prints the new tarball's SHA-256; if the asset isn't yet pinned it says so.
-2. Add that `<sha>  <asset-name>` line to `scripts/gam_checksums.txt` so future fetches are verified
-   against a committed pin (not trust-on-first-use).
-3. Update `EXPECTED_GAM_VERSION` (`gamgui/core/gam/commands.py`) and `TAG` (`scripts/fetch_gam.sh`);
+1. `make gam TAG=vX.Y.Z` (or `./scripts/fetch_gam.sh --tag vX.Y.Z`) — **this first run fails by
+   design.** The new release asset has no committed pin yet, so the script downloads it, prints its
+   SHA-256, and exits without extracting or installing anything.
+2. Add that `<sha>  <asset-name>` line to `scripts/gam_checksums.txt` — exactly as the script prints
+   it. Verify the download yourself first; this line is the pin every future fetch is checked
+   against, and a swapped `gam` inherits domain-wide impersonation.
+3. `make gam TAG=vX.Y.Z` again — now the checksum matches the committed pin, and the binary +
+   command reference are vendored into `gamgui/resources/gam7`.
+4. Update `EXPECTED_GAM_VERSION` (`gamgui/core/gam/commands.py`) and `TAG` (`scripts/fetch_gam.sh`);
    `.venv/bin/python scripts/build_command_catalog.py` to regenerate the browse catalog.
-4. `make test` — the command-contract, catalog-matches-grammar, and pinned-version-consistent tests
+5. `make test` — the command-contract, catalog-matches-grammar, and pinned-version-consistent tests
    flag any sub-command that changed or any version string left behind.
-5. Skim `gamgui/resources/gam7/GamUpdate.txt` for breaking changes.
-6. `.venv/bin/python scripts/acceptance.py` against a tenant — read-only; the true output-shape check.
-7. Commit.
+6. Skim `gamgui/resources/gam7/GamUpdate.txt` for breaking changes.
+7. `.venv/bin/python scripts/acceptance.py` against a tenant — read-only; the true output-shape check.
+8. Commit.
+
+Steps 1–3 are not busywork: the fetch is fail-closed precisely so "no pin for this asset name" can
+never be silently upgraded to trust-on-first-use. There is an escape hatch —
+`./scripts/fetch_gam.sh --tag vX.Y.Z --allow-unpinned` installs without verifying (it isn't reachable
+through `make gam`) — and it exists for CI's throwaway `gam-latest-preview` job. Never use it for a
+build you intend to run against a real domain.
 
 ### Tests & CI
 
@@ -226,6 +304,13 @@ Size icons ~2× their display size and set explicit `width`/`height` on each `<i
 - **GitHub + jsDelivr (free, no billing).** Commit the images to a public repo and serve them via the
   jsDelivr CDN: `https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch>/path/logo.png`. CDN-fast, no card.
 - **Cloudflare R2 / Amazon S3** — or any public-object store — also work.
+
+## Where this is going
+
+[ROADMAP.md](ROADMAP.md) — the ranked backlog (and what is deliberately *not* planned).
+[CONTRIBUTING.md](CONTRIBUTING.md) — layout, conventions, and how to add a Builder command.
+[SECURITY.md](SECURITY.md) — threat model, the invariants the code is expected to hold, and how to
+report a vulnerability privately.
 
 ## License
 

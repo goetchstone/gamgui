@@ -178,3 +178,17 @@ def test_user_groups_chip_links_to_groups_board(client):
     r = client.get("/users/groups", params={"email": "alice@example.com"})
     assert r.status_code == 200
     assert 'href="/groups"' in r.text
+
+
+# --- make setup must not build the venv from macOS's system python3 (3.9) ----------------
+
+def test_makefile_setup_selects_the_interpreter_via_a_variable():
+    """`python3 -m venv` picks /usr/bin/python3 = 3.9.6 on a stock Mac, and the install then dies on
+    requires-python >= 3.10. The interpreter must come from the overridable PYTHON variable."""
+    makefile = (Path(__file__).parent.parent / "Makefile").read_text()
+    assert "PYTHON ?=" in makefile, "make setup must honour an overridable PYTHON"
+    setup = makefile.split("\nsetup:", 1)[1].split("\n\n", 1)[0]
+    assert "-m venv" in setup
+    for line in setup.splitlines():
+        assert "python3 -m venv" not in line, f"setup hardcodes the system interpreter: {line.strip()}"
+    assert "$(PYTHON)" in setup and "$(PYTHON_CANDIDATES)" in setup

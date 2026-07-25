@@ -28,6 +28,11 @@ surrounding code so the change is indistinguishable from the rest.
 
 ## Invariants (never break)
 
-- argv is always a `list` from `GAMCommands` — never shell-spliced, never built from grammar tokens.
-- Only `buildable=True` commands run; the guard is enforced in the route, not just the UI.
+- argv is always a `list`, never shell-spliced, and every user/slot value lands as exactly one
+  element. A **write**'s argv comes from a `GAMCommands` static method; auto-promoted `READ_ONLY`
+  commands get theirs from the grammar template in `core/catalog/readbuilder.py` (literal tokens from
+  the vendored grammar are not user input) — that is by design, not a violation.
+- Only `buildable=True` commands run; `_make_reads_buildable()` promotes a grammar command only when
+  it is `RiskLevel.READ_ONLY` and not `uncertain`, so a promotion can never make a write runnable.
+  The guard is enforced in the route, not just the UI.
 - Every mutation goes through `apply → _run_write` (audited); reads via `parse_records`.

@@ -3,11 +3,19 @@
 Thanks for helping out. GamGUI is a local, open-source macOS GUI for managing Google Workspace via
 [GAM7](https://github.com/GAM-team/GAM).
 
+Looking for something to pick up? [ROADMAP.md](ROADMAP.md) is the ranked backlog, and its "Not
+planned" section explains the two things this project deliberately refuses to build.
+
 ## Quick start
+
+You need **Python 3.10+** (`pyproject.toml` sets `requires-python = ">=3.10"`). macOS's own
+`/usr/bin/python3` is 3.9 and cannot install this project, so `make setup` auto-picks the newest
+`python3.1x` on your PATH; pin it with `make setup PYTHON=python3.13` if you'd rather choose. If
+nothing suitable is installed, `make setup` says so and stops instead of building a broken venv.
 
 ```bash
 git clone <your-fork-url> && cd gamgui
-make setup        # creates .venv and installs dev + native-window deps
+make setup        # creates .venv (Python 3.10+) and installs dev + native-window deps
 make gam          # vendors the GAM7 binary into gamgui/resources/gam7 (needs network)
 make test         # runs the offline test suite
 make run          # launches the app
@@ -27,12 +35,16 @@ gamgui/web/         # FastAPI app + Jinja/HTMX templates (the UI)
 gamgui/app.py       # entry point: pywebview window wrapping the local server
 gamgui/resources/   # vendored GAM7 binary (fetched, not committed)
 tests/              # offline test suite + fixtures (incl. the mock gam)
-scripts/            # fetch_gam.sh (vendor GAM7), build_app.sh (PyInstaller .app)
+scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (SHA-256 pins),
+                    # build_command_catalog.py (regenerate the browse catalog after a GAM bump),
+                    # build_app.sh (PyInstaller .app), acceptance.py (read-only live check),
+                    # vendor_assets.sh (vendor the JS/CSS the UI loads)
 ```
 
 ## Conventions
 
-- Target **Python 3.9+** (`from __future__ import annotations`; no 3.10+ runtime-only syntax).
+- Target **Python 3.10+**, matching `requires-python` in `pyproject.toml` (`from __future__ import
+  annotations`; no 3.11+ runtime-only syntax — CI's floor job is 3.10).
 - All `gam` invocations are built in `gamgui/core/gam/commands.py` as **arg lists** (never shell
   strings) — keep it that way; it's the injection-safety boundary, and the arg-shape tests pin it.
 - Mutations go through the destructive-op guard and the audit log.
@@ -56,12 +68,15 @@ Write like the surrounding code — a reviewer shouldn't be able to tell which l
 
 ## Adding a Builder command
 
-The Builder (`/builder`) runs only *curated* commands. Full recipe + safety invariants in
+Every *write* the Builder (`/builder`) can run is curated by hand. Full recipe + safety invariants in
 [`docs/builder-commands.md`](docs/builder-commands.md). In short: verify the syntax against the
 vendored `GamCommands.txt`; add the arg-list builder to `core/gam/commands.py` (+ an arg-shape test
 + a contract token); add a `CatalogCommand` with typed slots and an authoritative `RiskLevel` to
-`core/catalog/catalog.py`; add a web test. Never assemble argv from raw grammar tokens, and never let
-a browse-only command run.
+`core/catalog/catalog.py`; add a web test. Two rules hold everywhere: a slot value is always exactly
+one argv element (never shell-spliced, never f-stringed into a token), and only `buildable=True`
+commands run. Anything that can write must be hand-curated in `GAMCommands` — the generic
+grammar-derived builder in `core/catalog/readbuilder.py`, which does assemble argv from the vendored
+grammar line, is attached only to commands confidently classified `RiskLevel.READ_ONLY`.
 
 ## Before opening a PR
 
@@ -69,4 +84,7 @@ a browse-only command run.
 make test
 ```
 
-CI runs the same suite on Ubuntu and macOS across Python 3.9 and 3.12.
+CI runs the same suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14. On top of that there's
+a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs `tests/test_command_contract.py`
+against the real command reference, plus a non-blocking `gam-latest-preview` job that runs the token
+contract against the *newest* GAM7 as an early warning that a command we use was renamed or removed.
