@@ -307,7 +307,7 @@ Size icons ~2× their display size and set explicit `width`/`height` on each `<i
 
 ## Where this is going
 
-[ROADMAP.md](ROADMAP.md) — the ranked backlog (and what is deliberately *not* planned).
+[ROADMAP.md](ROADMAP.md) — the ranked backlog, plus the trade-offs behind what it does *not* do yet.
 [CONTRIBUTING.md](CONTRIBUTING.md) — layout, conventions, and how to add a Builder command.
 [SECURITY.md](SECURITY.md) — threat model, the invariants the code is expected to hold, and how to
 report a vulnerability privately.

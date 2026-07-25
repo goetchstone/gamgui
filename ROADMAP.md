@@ -72,13 +72,25 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Notarization**, if the app is ever to be handed to another Mac. Needs an Apple Developer ID.
 - **Screenshots in the README.** The slots are ready in `docs/screenshots/`.
 
-## Not planned
+## Deliberate trade-offs
 
-- **Windows / Linux builds.** macOS-only by design. (The test suite runs on Linux in CI; the app does
-  not.)
-- **A free-text `gam …` runner.** It would be an embedded terminal, puncturing the argv-only model
-  that makes everything else in this app safe to hand to a hurried admin. The escape hatch is
-  *growing the curated set*, not opening a shell.
+Two things this project does not do today. Neither is a principle — the reasoning is written down so
+it can be argued with, and both are revisitable.
+
+- **Windows / Linux builds.** Not a technical barrier: the core is portable and the test suite
+  already runs on Linux in CI. What is macOS-specific is the *shell* — the WKWebView window, Keychain
+  storage, codesigning, and the `.app` bundle — plus GAM's own per-platform binaries. Nobody has
+  asked for it, so the effort goes elsewhere. The connector/core split is where you would start if
+  that changed.
+- **A free-text `gam …` box.** The tempting escape hatch, and the trade-off is narrower than it
+  sounds. *Reads are already open*: 507 grammar-derived read commands run today with no curation at
+  all. The line is drawn at **writes** — every command that can change something is hand-modeled, so
+  a preview can show the real blast radius before you confirm, and every write lands in the audit
+  log. A free-text box that could write would end that property, because the risk of an arbitrary
+  command line has to be *inferred* from its verb, and the catalog itself marks some verbs
+  uncertain. It could still be built safely — split into argv with `shlex` (never through a shell),
+  classify, and treat anything unrecognized as destructive so it fails safe into a typed
+  confirmation. That is a design worth doing on purpose rather than by accident. Ask if you want it.
 
 ## Verification debt
 

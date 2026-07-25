@@ -3,8 +3,8 @@
 Thanks for helping out. GamGUI is a local, open-source macOS GUI for managing Google Workspace via
 [GAM7](https://github.com/GAM-team/GAM).
 
-Looking for something to pick up? [ROADMAP.md](ROADMAP.md) is the ranked backlog, and its "Not
-planned" section explains the two things this project deliberately refuses to build.
+Looking for something to pick up? [ROADMAP.md](ROADMAP.md) is the ranked backlog, and its
+"Deliberate trade-offs" section explains the two things GamGUI does not do today, and why.
 
 ## Quick start
 
