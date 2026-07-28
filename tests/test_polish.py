@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -192,3 +193,45 @@ def test_makefile_setup_selects_the_interpreter_via_a_variable():
     for line in setup.splitlines():
         assert "python3 -m venv" not in line, f"setup hardcodes the system interpreter: {line.strip()}"
     assert "$(PYTHON)" in setup and "$(PYTHON_CANDIDATES)" in setup
+
+
+# --- CLAUDE.md is instructions to an agent, so its facts have to stay true ----------------
+# Two agent-facing docs once both asserted that only the 26 curated commands can run (533 can), which
+# made a reviewer agent flag correct readbuilder code as a violation. Scattered copies rot silently;
+# a guard turns the load-bearing claims into something CI can fail on.
+
+
+def _claude_md() -> str:
+    return (Path(__file__).parent.parent / "CLAUDE.md").read_text()
+
+
+def test_claude_md_command_counts_match_the_real_catalog():
+    from gamgui.core.catalog.catalog import load_catalog
+
+    cmds = list(load_catalog().commands)
+    buildable = [c for c in cmds if getattr(c, "buildable", False)]
+    curated = [c for c in buildable if not str(getattr(c, "id", "")).startswith("raw.")]
+    text = _claude_md()
+    for claim in (str(len(cmds)), str(len(buildable)), str(len(curated)),
+                  str(len(buildable) - len(curated))):
+        assert claim in text, (
+            f"CLAUDE.md no longer states {claim}: the catalog is now {len(cmds)} total, "
+            f"{len(buildable)} buildable ({len(curated)} curated + {len(buildable) - len(curated)} "
+            "auto-promoted reads)")
+
+
+def test_claude_md_states_the_current_gam_pin_and_python_floor():
+    from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
+
+    text = _claude_md()
+    assert EXPECTED_GAM_VERSION in text, f"CLAUDE.md names a stale GAM pin (now {EXPECTED_GAM_VERSION})"
+    pyproject = (Path(__file__).parent.parent / "pyproject.toml").read_text()
+    floor = re.search(r'requires-python\s*=\s*"[^0-9]*([0-9]+\.[0-9]+)"', pyproject).group(1)
+    assert floor in text, f"CLAUDE.md names a stale Python floor (pyproject requires {floor})"
+
+
+def test_claude_md_covers_the_invariants_that_have_actually_bitten():
+    # Not prose-policing: each of these names a defect this project shipped and then fixed.
+    text = _claude_md().lower()
+    for topic in ("argv", "guard", "keychain", "o_nofollow", "origin", "tojson", "mock"):
+        assert topic in text, f"CLAUDE.md no longer covers '{topic}'"
