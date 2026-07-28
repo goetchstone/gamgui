@@ -66,6 +66,26 @@ unproven until it has run against one — see the live-verification status in th
   either — keep platform specifics in the shell (window, Keychain, codesigning, `.app`), not in
   `core/`. Same framing for a free-text `gam` runner: not planned, not forbidden. See ROADMAP.md.
 
+## Working here economically
+
+This file loads every session (~1k tokens). Subagent fan-out has cost **millions** in a single
+session — one security audit ran 31 agents for 2.15M tokens and ended a monthly budget. So the
+efficiency that matters is not shorter instructions, it is fewer and better-aimed agents:
+
+- **Point subagents at this file** instead of restating the invariants in every prompt. One session
+  re-typed them into nine workflow prompts, which is both wasteful and a drift risk.
+- **Scale fan-out to the stakes.** Adversarial verification (one agent tries to *break* another's
+  work, proving it by running code) genuinely earns its cost on security properties, path handling
+  and anything touching credentials — it caught a symlink read of `/etc/passwd`, a wipe that deleted
+  an un-imported file, and a regression that silently skipped the plaintext wipe. For ordinary
+  feature work, one agent or none is as good and far cheaper.
+- **Put a cheap deterministic filter before an expensive one.** Let a script decide whether there is
+  work before a model is invoked.
+- **Long procedures belong in `.claude/skills/`, not here** — a skill costs nothing until it is
+  needed, while everything in this file is paid for on every turn.
+- **Summarize large tool output, don't re-read it.** Parse a 100 KB workflow result down to the few
+  fields that matter rather than pulling it into context whole.
+
 ## Layout
 
 ```
