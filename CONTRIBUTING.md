@@ -3,6 +3,13 @@
 Thanks for helping out. GamGUI is a local, open-source macOS GUI for managing Google Workspace via
 [GAM7](https://github.com/GAM-team/GAM).
 
+**Read [CLAUDE.md](CLAUDE.md) first.** It is addressed to an AI coding agent, but it is the shortest
+route to the invariants this codebase actually enforces — the argv-only chokepoint, why every
+mutation goes through the guard and the audit log, why only read-only commands may be auto-promoted
+to runnable, and why a mock that is *more permissive* than real GAM is worse than no mock. Each entry
+is there because something broke once. If a change of yours contradicts one of them, that is the
+conversation to have in the PR.
+
 Looking for something to pick up? [ROADMAP.md](ROADMAP.md) is the ranked backlog, and its
 "Deliberate trade-offs" section explains the two things GamGUI does not do today, and why.
 

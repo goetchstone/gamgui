@@ -322,6 +322,9 @@ Size icons ~2× their display size and set explicit `width`/`height` on each `<i
 [CONTRIBUTING.md](CONTRIBUTING.md) — layout, conventions, and how to add a Builder command.
 [SECURITY.md](SECURITY.md) — threat model, the invariants the code is expected to hold, and how to
 report a vulnerability privately.
+[CLAUDE.md](CLAUDE.md) — the operational invariants, written for an AI coding agent but the fastest
+way for a human to learn what this codebase refuses to do and why. Each entry exists because
+something broke once.
 
 ## License
 
