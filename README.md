@@ -221,8 +221,11 @@ actions doesn't re-prompt; tune with `GAMGUI_SECRET_CACHE_TTL` (seconds; `0` dis
 GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam/commands.py`, matched by
 `scripts/fetch_gam.sh`. It never auto-upgrades; you bump deliberately, and three guards keep that safe:
 
-- **Release-watch** (`.github/workflows/gam-watch.yml`, weekly) opens an issue when GAM ships a version
-  newer than the pin — awareness, not auto-upgrade.
+- **Release-watch** (`.github/workflows/gam-watch.yml`, weekly) does the mechanical bump when GAM
+  ships a newer version and **opens a PR** — the asset's GitHub build attestation verified, pinned,
+  vendored, catalog regenerated, suite run. It never merges: you review the changelog, run the live
+  acceptance pass, and merge. Automatic pinning is safe *because* the attestation check gates it — no
+  verified provenance, no PR — so it isn't trust-on-first-use.
 - **Compat check** (`gam-compat` CI job + `tests/test_command_contract.py`) asserts every GAM
   sub-command our builders use still exists in the vendored command reference, so a renamed/removed
   command fails CI rather than your tenant. A non-blocking `gam-latest-preview` job runs the same check
@@ -230,7 +233,9 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
 - **Runtime self-check** — if the running `gam` differs from the tested version (e.g. a
   `GAMGUI_GAM_BINARY` override), the setup screen shows a soft warning. It never blocks.
 
-**To bump GAM:**
+**To bump GAM:** the weekly workflow usually opens the PR for you. To do it by hand — or to understand
+what that PR contains — `python scripts/bump_gam.py vX.Y.Z` runs steps 1–4 below as one command
+(attestation-verify → pin → vendor → bump → regenerate). The manual steps, for when you want them:
 
 1. `make gam TAG=vX.Y.Z` (or `./scripts/fetch_gam.sh --tag vX.Y.Z`) — **this first run fails by
    design.** The new release asset has no committed pin yet, so the script downloads it, prints its
