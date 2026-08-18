@@ -1,0 +1,35 @@
+# Dependabot keeps dependencies current and, with the dependency graph enabled, opens PRs for known
+# CVEs automatically. This is the guard that would have caught the starlette 0.52.x CVEs months
+# earlier instead of on a manual `pip-audit`.
+#
+# Note: the vendored GAM7 binary is deliberately NOT a Dependabot dependency — it is pinned by
+# SHA-256 in scripts/gam_checksums.txt and bumped through its own fail-closed runbook (see the README).
+version: 2
+updates:
+  # Python runtime + test deps (requirements.txt and pyproject.toml at the repo root).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    groups:
+      # One PR for the routine minor/patch churn, so the noise stays low; a security fix or a major
+      # bump still comes as its own PR worth a closer look.
+      python-minor:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+
+  # The workflows themselves hold a token and fetch the pinned GAM release, so their actions are part
+  # of the supply chain — keep actions/checkout, setup-python, codeql-action current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "github-actions"]
+    groups:
+      actions:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]

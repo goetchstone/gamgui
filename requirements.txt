@@ -6,7 +6,12 @@
 #   pip install "pywebview==6.2.1"
 
 # --- runtime ---
-fastapi==0.128.8
+fastapi==0.141.1
+# starlette is FastAPI's ASGI core (transitive). Pinned explicitly because 0.52.x carried 7 CVEs
+# (Host-header URL reconstruction, multipart limits) fixed in 1.x — and the security floor should be
+# reviewable here, not buried in whatever FastAPI happens to resolve. FastAPI dropped its
+# `starlette<1.0` cap, so 1.x is allowed; the whole suite passes on it.
+starlette==1.6.0
 uvicorn[standard]==0.39.0
 jinja2==3.1.6
 python-multipart==0.0.32

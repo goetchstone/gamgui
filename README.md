@@ -271,6 +271,11 @@ repository settings: [`.github/workflows/codeql.yml`](.github/workflows/codeql.y
 `security-extended` suite, and skips `tests/`, the vendored GAM release, and vendored browser
 libraries — the config explains why for each.
 
+**Dependencies.** [`.github/dependabot.yml`](.github/dependabot.yml) watches the Python packages and
+the GitHub Actions weekly and — with the dependency graph enabled — opens PRs for known CVEs. The
+vendored GAM binary is intentionally excluded: it is pinned by SHA-256 and bumped through its own
+fail-closed runbook, not by a bot.
+
 ## Email signatures
 
 The **Signatures** screen designs one HTML signature with variables, previews it rendered for a real
