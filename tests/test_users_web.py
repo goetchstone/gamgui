@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -587,24 +588,44 @@ def test_calendars_share_adds_acl_and_subscribes(client):
     assert 'hx-post="/calendars/share"' in r.text           # share form still present
 
 
-def test_calendars_share_group_fans_out_to_members(client):
+def _fanout_job_rendered(html: str) -> bool:
+    """A subscribe fan-out job was created and rendered — either the live poller (job still running)
+    or the final panel (the instant test stub finished it within the request). Both prove the job
+    existed; which one shows is a timing detail, not behaviour worth pinning."""
+    return "/calendars/share/status?job=" in html or "now appears in" in html
+
+
+def _stub_subscribe(client, monkeypatch):
+    """Make the fan-out job's per-member subscribe instant and I/O-free. These tests only assert the
+    job STARTED; letting the real background task spawn a subprocess per member (via mock gam) leaves
+    it racing TestClient teardown — a hang that showed up as a 60s timeout on one CI runner."""
+    async def _instant(email, cal, selected=True):
+        return SimpleNamespace(ok=True)
+    monkeypatch.setattr(client.app.state.gamgui.connector, "subscribe_calendar_for", _instant)
+
+
+def test_calendars_share_group_fans_out_to_members(client, monkeypatch):
     # CHANGED BEHAVIOUR (was: "groups can't be auto-subscribed"). An ACL grants access but does not
     # put the calendar on anyone's list, which is why members kept reporting they couldn't see it —
     # so a group grant now subscribes each member as a background job.
+    _stub_subscribe(client, monkeypatch)
     r = client.post("/calendars/share",
                     data={"cal": SEC_CAL, "target": "group:team@example.com", "role": "reader"})
     assert r.status_code == 200
+    # The share-notice proves the group fan-out path was taken (a job was created for 2 members).
     assert "adding it to 2 members' calendars" in r.text or "adding it to 2 members&#39; calendars" in r.text
-    assert re.search(r"/calendars/share/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:400]
+    # A fan-out job was created and rendered — still polling, or (with the instant stub) already done.
+    assert _fanout_job_rendered(r.text), r.text[:400]
 
 
-def test_calendars_share_bare_group_address_also_fans_out(client):
+def test_calendars_share_bare_group_address_also_fans_out(client, monkeypatch):
     # No "group:" prefix: a bare address is ambiguous, and it has to resolve as a group from the
     # directory rather than from how it was typed.
+    _stub_subscribe(client, monkeypatch)
     r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "sales@example.com"})
     assert r.status_code == 200
     assert "members" in r.text
-    assert "/calendars/share/status?job=" in r.text
+    assert _fanout_job_rendered(r.text)
 
 
 def test_calendars_share_known_user_is_never_treated_as_a_group(client):
