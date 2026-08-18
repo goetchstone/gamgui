@@ -27,7 +27,7 @@ jobs:
       contents: write        # push the bump branch
       pull-requests: write   # open the PR
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Is a newer GAM out?  # cheap check first — no download unless we're actually behind
         id: check
