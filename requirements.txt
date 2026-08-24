@@ -12,7 +12,7 @@ fastapi==0.141.1
 # reviewable here, not buried in whatever FastAPI happens to resolve. FastAPI dropped its
 # `starlette<1.0` cap, so 1.x is allowed; the whole suite passes on it.
 starlette==1.6.0
-uvicorn[standard]==0.52.3
+uvicorn[standard]==0.52.4
 jinja2==3.1.6
 python-multipart==0.0.32
 keyring==25.7.0
