@@ -13,7 +13,7 @@ REPO="GAM-team/GAM"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/gamgui/resources/gam7"
 # Pinned for reproducible builds. Override with `--tag latest` to grab the newest release.
-TAG="v7.47.02"
+TAG="v7.48.00"
 # Installing an asset we have no pinned hash for is opt-in: see the checksum gate below.
 ALLOW_UNPINNED=0
 

@@ -18,8 +18,8 @@ Each of these exists because something went wrong. Several have tests guarding t
 2. **Every mutation goes through the chokepoint**: `GAMCommands` builder → `ChangePreview` →
    `guard.evaluate()` → connector `_run_write(...)`, which is serialized and appended to the audit
    log. There is no second write path. Don't add one.
-3. **Only read-only commands may become runnable automatically.** Of 1070 catalog entries, 535 run:
-   26 hand-curated (the only ones that can *change* anything) plus 509 grammar-derived commands
+3. **Only read-only commands may become runnable automatically.** Of 1075 catalog entries, 538 run:
+   26 hand-curated (the only ones that can *change* anything) plus 512 grammar-derived commands
    auto-promoted by `core/catalog/readbuilder.py` **because they are confidently `READ_ONLY` and not
    flagged uncertain**. Everything else is inert, syntax display only. Adding write coverage is a
    deliberate act of curation. (Two agent-facing docs once claimed only the 26 curated commands run —
@@ -106,7 +106,7 @@ make gam TAG=vX.Y.Z                 # re-vendor GAM (fails closed on an unpinned
 make app                            # build dist/GamGUI.app
 ```
 
-GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.47.02); three drift
+GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.00); three drift
 guards (`test_command_contract`, `test_catalog_matches_grammar`, `test_pinned_version_consistent`)
 fail if a bump breaks a command we use. The bump runbook is in the README — step 1 **fails by
 design**.
