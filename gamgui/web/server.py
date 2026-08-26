@@ -10,7 +10,9 @@ HTTP layer offline.
 
 from __future__ import annotations
 
+import asyncio
 import secrets
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -155,8 +157,23 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
         return self._secure(JSONResponse({"error": "forbidden"}, status_code=403))
 
 
+@asynccontextmanager
+async def _lifespan(app: "FastAPI"):
+    yield
+    # Bulk apply, offboarding, and the calendar scan are fire-and-forget `asyncio.create_task` jobs
+    # (return fast, poll for progress). On shutdown, cancel any still in flight so the loop can close
+    # instead of blocking on their in-flight gam subprocesses — a graceful quit for the real app, and
+    # (with a context-managed TestClient) a teardown that doesn't hang on the asyncio child-watcher,
+    # which is what made the "job started" route tests flake on Linux/py3.12.
+    st = getattr(app.state, "gamgui", None)
+    for job in list(getattr(st, "jobs", {}).values()) if st else []:
+        task = getattr(job, "task", None)
+        if task is not None and not task.done():
+            task.cancel()
+
+
 def create_app(state: AppState) -> FastAPI:
-    app = FastAPI(title="GamGUI", docs_url=None, redoc_url=None)
+    app = FastAPI(title="GamGUI", docs_url=None, redoc_url=None, lifespan=_lifespan)
     app.state.gamgui = state
     app.add_middleware(TokenGateMiddleware, token=state.token)
     # Ensure the dir exists before mounting — a fresh clone or a stripped bundle may lack it,

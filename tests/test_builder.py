@@ -28,9 +28,9 @@ def client(tmp_path, monkeypatch):
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t")
-    c = TestClient(create_app(state))
-    c.get("/?token=t")
-    return c
+    with TestClient(create_app(state)) as c:
+        c.get("/?token=t")
+        yield c
 
 
 def test_slot_value_is_a_single_argv_element():

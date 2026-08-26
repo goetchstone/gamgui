@@ -29,9 +29,9 @@ def client(tmp_path, monkeypatch):
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t")
     state.runbooks = RunbookStore(tmp_path / "onboarding.json")   # isolated store, not the real ~/Library file
-    c = TestClient(create_app(state))
-    c.get("/?token=t")
-    return c
+    with TestClient(create_app(state)) as c:
+        c.get("/?token=t")
+        yield c
 
 
 # --- GAM argv (injection-safe single elements) ---

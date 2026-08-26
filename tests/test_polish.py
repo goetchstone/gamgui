@@ -31,9 +31,9 @@ def client(tmp_path, monkeypatch):
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t",
                      calendar_index=CalendarIndex(tmp_path / "calendar_index.db"))
-    c = TestClient(create_app(state))
-    c.get("/?token=t")
-    return c
+    with TestClient(create_app(state)) as c:
+        c.get("/?token=t")
+        yield c
 
 
 def _fake_request() -> Request:
