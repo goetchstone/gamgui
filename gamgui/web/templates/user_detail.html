@@ -12,7 +12,8 @@
     <div>
       <h1 class="font-serif text-2xl text-brand-black tracking-tight">{{ user.full_name }}</h1>
       <p class="text-brand-blueink/80">{{ user.primary_email }}</p>
-      {% if user.title %}<p class="text-sm text-brand-gray">{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}</p>{% endif %}
+      {# Always rendered (even when empty) so a save can refresh it out-of-band — see _org_form.html. #}
+      <p id="dtl-subtitle" class="text-sm text-brand-gray">{% if user.title %}{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}{% endif %}</p>
     </div>
     <div class="flex items-center gap-2">
       {% if user.suspended %}
@@ -44,7 +45,7 @@
         <dl class="mt-3 text-sm space-y-2">
           <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Name</dt><dd class="text-brand-black text-right">{{ user.full_name or "—" }}</dd></div>
           <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Email</dt><dd class="text-brand-black text-right">{{ user.primary_email }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd id="dtl-title" class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
           {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
           <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
           {% if user.location %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Location</dt><dd class="text-brand-black text-right">{{ user.location }}</dd></div>{% endif %}

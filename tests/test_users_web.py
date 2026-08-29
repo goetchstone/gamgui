@@ -310,6 +310,19 @@ def test_set_organization_saves(client):
     assert "Old Saybrook" in r.text  # the new value is echoed back into the form
 
 
+def test_set_organization_refreshes_the_displayed_role(client):
+    # The form only swaps itself, so without out-of-band updates the header + Title row keep the
+    # pre-save value until a full reload — which looked like the title didn't save. The save must
+    # carry hx-swap-oob refreshes for both spots that show the role.
+    r = client.post("/users/organization",
+                    data={"email": "alice@example.com", "title": "Showroom Manager", "department": "Old Saybrook"})
+    assert r.status_code == 200
+    assert 'id="dtl-subtitle" hx-swap-oob="true"' in r.text
+    assert 'id="dtl-title" hx-swap-oob="true"' in r.text
+    # both OOB elements carry the just-saved value
+    assert r.text.count("Showroom Manager") >= 2
+
+
 def test_bulk_store_page_renders(client):
     r = client.get("/users/bulk")
     assert r.status_code == 200

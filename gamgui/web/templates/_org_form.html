@@ -12,3 +12,9 @@
     {% if saved %}<span class="text-sm text-emerald-700">Saved ✓</span>{% endif %}
   </div>
 </form>
+{% if saved %}
+{# Refresh the title/role shown elsewhere on the page — the form only swaps itself, so without these
+   the header and the Title row keep the pre-save value until a full reload (looked like "didn't save"). #}
+<p id="dtl-subtitle" hx-swap-oob="true" class="text-sm text-brand-gray">{% if title %}{{ title }}{% if department %} · {{ department }}{% endif %}{% endif %}</p>
+<dd id="dtl-title" hx-swap-oob="true" class="text-brand-black text-right">{{ title or "—" }}</dd>
+{% endif %}
