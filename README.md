@@ -8,14 +8,13 @@ without memorizing CLI commands, with your credentials kept in the macOS **Keych
 > signatures/delegates/forwarding, advanced group settings, bulk operations, reporting). GamGUI
 > puts a safe, native front end on top of it.
 
-<!--
-Screenshots: drop PNGs into docs/screenshots/ (see that folder's README for the recommended shots),
-then uncomment these to show them here:
-![Users](docs/screenshots/users.png)
-![Signature designer](docs/screenshots/signatures.png)
-![Calendars](docs/screenshots/calendars.png)
-![Offboarding](docs/screenshots/lifecycle.png)
--->
+![Users — fast directory search, with title and status](docs/screenshots/users.png)
+
+![Signature designer — variables with a live preview](docs/screenshots/signatures.png)
+
+![Calendars — find any shared calendar and manage who has access](docs/screenshots/calendars.png)
+
+![Offboarding — a guided routine with a rendered auto-reply preview](docs/screenshots/lifecycle.png)
 
 ## Status
 
@@ -325,16 +324,6 @@ Size icons ~2× their display size and set explicit `width`/`height` on each `<i
 - **GitHub + jsDelivr (free, no billing).** Commit the images to a public repo and serve them via the
   jsDelivr CDN: `https://cdn.jsdelivr.net/gh/<user>/<repo>@<branch>/path/logo.png`. CDN-fast, no card.
 - **Cloudflare R2 / Amazon S3** — or any public-object store — also work.
-
-## Where this is going
-
-[ROADMAP.md](ROADMAP.md) — the ranked backlog, plus the trade-offs behind what it does *not* do yet.
-[CONTRIBUTING.md](CONTRIBUTING.md) — layout, conventions, and how to add a Builder command.
-[SECURITY.md](SECURITY.md) — threat model, the invariants the code is expected to hold, and how to
-report a vulnerability privately.
-[CLAUDE.md](CLAUDE.md) — the operational invariants, written for an AI coding agent but the fastest
-way for a human to learn what this codebase refuses to do and why. Each entry exists because
-something broke once.
 
 ## License
 
