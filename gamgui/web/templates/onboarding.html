@@ -76,10 +76,16 @@
             <option value="">— none —</option>
             {% for t in sig_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
           </select></label>
-        <label class="block text-xs text-brand-gray">Groups <span class="text-brand-gray/70">(one email per line)</span>
-          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="groups" rows="2" placeholder="sales@example.com&#10;all-staff@example.com"></textarea></label>
-        <label class="block text-xs text-brand-gray">Shared calendars <span class="text-brand-gray/70">(one id per line)</span>
-          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="calendars" rows="2" placeholder="team@group.calendar.google.com"></textarea></label>
+        <div class="block text-xs text-brand-gray">Groups <span class="text-brand-gray/70">(search, or type one email per line)</span>
+          <input type="search" name="q" autocomplete="off" placeholder="Search your groups…" class="{{ fld }} mt-1"
+                 hx-get="/onboard/search/groups" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-group-picker" hx-swap="innerHTML" />
+          <div id="ob-group-picker"></div>
+          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="groups" rows="2" placeholder="sales@example.com&#10;all-staff@example.com"></textarea></div>
+        <div class="block text-xs text-brand-gray">Shared calendars <span class="text-brand-gray/70">(search, or type one id per line)</span>
+          <input type="search" name="q" autocomplete="off" placeholder="Search shared calendars…" class="{{ fld }} mt-1"
+                 hx-get="/onboard/search/calendars" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-calendar-picker" hx-swap="innerHTML" />
+          <div id="ob-calendar-picker"></div>
+          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="calendars" rows="2" placeholder="team@group.calendar.google.com"></textarea></div>
       </div>
       <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save role</button>
     </form>
@@ -131,6 +137,16 @@
   function obToggleCreate(cb) {
     var box = document.getElementById("ob-create-fields");
     if (box) box.classList.toggle("hidden", !cb.checked);
+  }
+
+  // Add a picked group/calendar to its textarea (deduped, one per line).
+  function obAddToField(field, value) {
+    var f = document.querySelector('form[hx-post="/onboard/role"]');
+    var ta = f && f.querySelector('[name="' + field + '"]');
+    if (!ta || !value) return;
+    var lines = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+    if (lines.indexOf(value) === -1) lines.push(value);
+    ta.value = lines.join("\n") + "\n";
   }
 
   (function () {

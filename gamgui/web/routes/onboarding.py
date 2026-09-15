@@ -456,6 +456,46 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()],
     return resp
 
 
+# --- pickers: search the tenant's groups + shared calendars while editing a role -----------
+
+@router.get("/search/groups", response_class=HTMLResponse)
+async def search_groups(request: Request, q: str = "") -> HTMLResponse:
+    st = _st(request)
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
+                                          {"field": "groups", "items": [], "error": "Not connected."})
+    try:
+        groups = await st.groups()   # cached `gam print groups`
+    except Exception as exc:  # noqa: BLE001
+        return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
+                                          {"field": "groups", "items": [], "error": "Couldn't list groups: " + str(exc)})
+    ql = q.strip().lower()
+    items = []
+    for g in groups:
+        if not ql or ql in g.email.lower() or ql in (g.name or "").lower():
+            items.append({"value": g.email, "label": g.name or g.email, "sub": g.email if g.name else ""})
+        if len(items) >= 15:
+            break
+    return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
+                                      {"field": "groups", "items": items, "error": None})
+
+
+@router.get("/search/calendars", response_class=HTMLResponse)
+async def search_calendars(request: Request, q: str = "") -> HTMLResponse:
+    st = _st(request)
+    idx = st.calendar_index
+    status = idx.status() if idx is not None else None
+    # Serve only an index that has rows AND belongs to the connected tenant (mirrors calendars._index_ready).
+    if status is None or status.count == 0 or status.domain != st.audit_domain:
+        return TEMPLATES.TemplateResponse(request, "_onboard_picker.html", {
+            "field": "calendars", "items": [],
+            "error": "No calendar index yet — build it on the Calendars screen, then search here."})
+    items = [{"value": c.id, "label": c.summary or c.id, "sub": c.id if c.summary else ""}
+             for c in idx.search(q, limit=15)]
+    return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
+                                      {"field": "calendars", "items": items, "error": None})
+
+
 @router.get("/bulk/status", response_class=HTMLResponse)
 async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     j = _st(request).jobs.get(job) if job else None

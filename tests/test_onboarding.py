@@ -400,3 +400,35 @@ def test_bulk_status_credentials_are_one_shot_and_no_store(client):
     assert r1.headers.get("cache-control") == "no-store"        # not cacheable/bookmarkable
     r2 = client.get("/onboard/bulk/status?job=oneshot")
     assert "SHEETpw-1234-5678" not in r2.text                   # gone on re-fetch (one-shot)
+
+
+# --- group + calendar pickers (search while editing a role) ---
+
+def test_search_groups_filters_by_email_and_name(client):
+    r = client.get("/onboard/search/groups?q=sales")     # mock groups: Sales/Staff/IT
+    assert r.status_code == 200
+    assert "sales@example.com" in r.text and "staff@example.com" not in r.text
+    assert client.get("/onboard/search/groups?q=IT").text.count("it@example.com") >= 1   # name match
+    both = client.get("/onboard/search/groups").text     # empty query -> all
+    assert "sales@example.com" in both and "it@example.com" in both
+
+
+def test_search_calendars_needs_a_built_index(client):
+    r = client.get("/onboard/search/calendars?q=team")
+    assert r.status_code == 200 and "No calendar index yet" in r.text
+
+
+def test_search_calendars_uses_the_index(client, tmp_path):
+    from gamgui.core.calendar_index import CalendarIndex, IndexedCalendar
+    idx = CalendarIndex(tmp_path / "cal.db")
+    idx.replace_all("example.com", [
+        IndexedCalendar("team@group.calendar.google.com", "Team Calendar", "o@example.com", "secondary", 3),
+        IndexedCalendar("room@resource.calendar.google.com", "Aspen Room", "", "room", 0),
+    ])
+    client.app.state.gamgui.calendar_index = idx
+    r = client.get("/onboard/search/calendars?q=team")
+    assert "Team Calendar" in r.text and "team@group.calendar.google.com" in r.text
+    assert "Aspen" not in r.text   # filtered by the query
+    # an index built for another tenant is not served
+    idx.replace_all("other.com", [IndexedCalendar("x@g.com", "X", "", "secondary", 0)])
+    assert "No calendar index yet" in client.get("/onboard/search/calendars?q=x").text

@@ -43,6 +43,7 @@ class AppState:
     connector: Optional[GAMConnector] = None
     token: str = ""
     user_cache: UserCache = field(default_factory=UserCache)
+    group_cache: UserCache = field(default_factory=UserCache)  # cached `gam print groups` for the pickers
     jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
@@ -64,6 +65,15 @@ class AppState:
 
     def invalidate_users(self) -> None:
         self.user_cache.invalidate()
+
+    async def groups(self, force: bool = False) -> list:
+        """The cached group list (one ``gam print groups``), shared by the onboarding group picker."""
+        if self.connector is None:
+            return []
+        return await self.group_cache.get(lambda: self.connector.list_groups(), force=force)
+
+    def invalidate_groups(self) -> None:
+        self.group_cache.invalidate()
 
     @classmethod
     def create(cls, vault: Optional[SecretsVault] = None, token: Optional[str] = None) -> "AppState":

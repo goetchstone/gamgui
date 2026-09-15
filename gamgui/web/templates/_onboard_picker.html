@@ -1,0 +1,17 @@
+{% if error %}
+<p class="mt-1 text-xs text-amber-700">{{ error }}</p>
+{% elif items %}
+<ul class="mt-1 max-h-44 overflow-y-auto rounded-lg border border-brand-gray/30 divide-y divide-brand-gray/20 bg-brand-white text-sm shadow-sm">
+  {% for it in items %}
+  <li>
+    <button type="button" onclick="obAddToField('{{ field }}', this.dataset.value)" data-value="{{ it.value }}"
+            class="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-brand-blue/10">
+      <span class="truncate text-brand-black">{{ it.label }}</span>
+      {% if it.sub %}<span class="shrink-0 font-mono text-xs text-brand-gray">{{ it.sub }}</span>{% endif %}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="mt-1 text-xs text-brand-gray">No matches.</p>
+{% endif %}
