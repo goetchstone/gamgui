@@ -107,9 +107,31 @@ make app                            # build dist/GamGUI.app
 ```
 
 GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.07); three drift
-guards (`test_command_contract`, `test_catalog_matches_grammar`, `test_pinned_version_consistent`)
-fail if a bump breaks a command we use. The bump runbook is in the README — step 1 **fails by
+guards (`test_required_command_tokens_present`, `test_catalog_matches_grammar`,
+`test_pinned_version_consistent`) fail if a bump breaks a command we use. The bump runbook is in the README — step 1 **fails by
 design**.
+
+## The layered system — and how this file changes
+
+This file is the **constitution**, loaded every session. Two companions are not,
+by design (they cost nothing until needed):
+
+- **Domain runbooks** — [docs/domains/](docs/domains/README.md), one per area
+  (secrets, connectors, catalog, onboarding, …). Read the relevant one *before*
+  working in an area; each carries that area's files, flow, failure history, and
+  mock-lies traps.
+- **Skills** — [.claude/skills/](.claude/skills): procedures for a moment
+  (`start-session`, `pre-commit`, `post-failure`, `end-of-session`,
+  `improve-rules`).
+
+Sessions **don't add, reword, or retire the numbered invariants here directly** —
+log the incident in [docs/failure-log.md](docs/failure-log.md), append the
+rule-strain to [docs/RULE-FEEDBACK.md](docs/RULE-FEEDBACK.md), and let the
+`improve-rules` observer pass propose one focused edit as a PR, with distance.
+(Fixing a mechanical fact — the catalog counts after a GAM bump, a renamed test —
+is ordinary doc-follows-code maintenance, not a rule change.) Invariant numbers
+are never reused. The whole loop and the three enforcement homes (skill / hook /
+tripwire) are in [docs/FRAMEWORK.md](docs/FRAMEWORK.md).
 
 ## Also worth reading
 

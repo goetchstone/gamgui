@@ -1,0 +1,41 @@
+# Domain: Catalog & Builder
+
+**One line:** Turns GAM's vendored grammar into a browsable, categorized command catalog and decides which commands become *runnable* (buildable) — 26 hand-curated writes/reads plus every confidently read-only command auto-promoted to a generic, injection-safe builder — powering the `/builder` screen.
+
+**Owns invariant(s):** #3 (only confidently `READ_ONLY` commands auto-promote to runnable; the buildable-vs-browse boundary). Touches #1 (argv-only) and #8 (no `| tojson` in attrs) at the Builder route/template edge.
+**Enforcement home:** `tests/test_builder.py` (`test_only_read_commands_became_generically_buildable`, `test_every_read_command_is_buildable`, `test_generic_read_argv_is_injection_safe`), `tests/test_catalog.py` (parse/risk/areas), `tests/test_command_contract.py::test_catalog_matches_grammar` (committed-JSON drift), `tests/test_polish.py::test_claude_md_command_counts_match_the_real_catalog` (the 1075/538/26/512 claims in CLAUDE.md). Skill: `.claude/skills/add-builder-command`.
+
+## Files
+- `gamgui/core/catalog/parser.py` — shallow grammar parse: `parse_grammar()` → browse-only `CatalogCommand`s; category from `# ` headers, `_verb_risk`/`_find_verb` infer risk from the FIRST known verb (sets `uncertain=True` when no verb is recognized).
+- `gamgui/core/catalog/readbuilder.py` — generic read builder: `parse_read_template()` (grammar line → slots + argv template) and `make_build()` (template → injection-safe `build(values)→argv` closure). Emits no verb of its own.
+- `gamgui/core/catalog/catalog.py` — `load_catalog()`, the `_curated()` overlay (the 26 runnable writes/reads), `_make_reads_buildable()` (the auto-promotion gate), area grouping (`_AREA`, `AREA_ORDER`, `_area_of`).
+- `gamgui/core/catalog/models.py` — `CatalogCommand`, `CommandSlot`, `SlotKind`, `Catalog` (sorting/search/`supports_export`).
+- `gamgui/core/catalog/describe.py` / `nouns.py` — deterministic fallback `gloss()` when a command has no vendored description.
+- `gamgui/web/routes/builder.py` — the `/builder` screen: browse/search, slot assembly (`_assemble`), preview, run, sequence, CSV export, `/pick` type-ahead.
+- `scripts/build_command_catalog.py` — regenerates the committed browse-only `command_catalog.json` from `GamCommands.txt` on each GAM bump (buildable overlay is NOT here — it lives in `catalog.py`).
+- `docs/builder-commands.md` — the fuller domain reference (note: its counts read ~533/1,067 @7.46.11 and are stale vs. the live 538/1075 @7.48.07).
+
+## How it works
+`load_catalog()` = `_curated()` (26 hand-modeled commands with friendly slots + a `build` lambda calling a `GAMCommands` static method) **+** `_load_shallow()` (parse of the committed JSON, else a live parse of `GamCommands.txt`). Then `_make_reads_buildable()` attaches the generic `readbuilder` to every remaining command that is `RiskLevel.READ_ONLY` and not `uncertain`, flipping `buildable=True`. The route never shell-splices: `_assemble()` reads form slots and calls `cmd.build(slots)` to get an argv list; a read runs via `conn.runner.run_authenticated`, a mutation goes through `guard.evaluate` → `conn.apply` → `_run_write` (the chokepoint, invariant #2). Live count: **1075 total, 538 buildable (26 curated + 512 auto reads)** at pin 7.48.07.
+
+## Invariants & the failure history
+- **The auto-promotion gate is the whole safety story (#3).** `_make_reads_buildable` skips `c.risk != READ_ONLY` and `c.uncertain`, and the generic builder emits *no verb* — so a promoted command can only ever read; a mis-classified `LOW`/`DESTRUCTIVE` line can never gain a run path. Guarded by `test_only_read_commands_became_generically_buildable`.
+- **Risk comes from the first recognized verb, not token 2** (`_find_verb` scans `after[:6]`): `gam <UserTypeEntity> delete delegate` is DESTRUCTIVE, `gam update group … remove member` is LOW. An unknown verb → `uncertain=True`, risk `LOW`, never `READ_ONLY` → stays browse-only.
+- **Two agent docs once claimed only the 26 curated commands run** (512 more do). That false claim made a reviewer flag correct `readbuilder` code as a violation — hence `test_claude_md_command_counts_match_the_real_catalog` now fails CI if CLAUDE.md's counts drift.
+- **Curated `RiskLevel` is authoritative** (matches the connector's real `_run_write(... RiskLevel.X)`); auto reads inherit inferred risk, which is safe only because they can't mutate.
+- **`transfer_data` offers `drive,calendar` as ONE argv element** (a `<DataTransferServiceList>`) to avoid the 409 from two overlapping same-user transfers.
+
+## Gotchas / mock-lies traps
+- **The mock lies here too.** `parse_read_template` builds argv from the *vendored grammar*, so a syntactically valid line can still be rejected live (e.g. some print/show commands reject `formatjson` — see MEMORY `gamgui-gam-formatjson`). `tests/fixtures/mock_gam.sh` proves the argv shape and table render, NOT that GAM accepts the command. Check `gamgui/resources/gam7/GamCommands.txt`, not memory.
+- **Optional `[...]` groups are dropped** — a promoted command runs on required args only. Exceptions kept as slots: self-contained `[<UserTypeEntity>]`/`[<CrOSTypeEntity>]` (emitted as `optpair` `user <x>`/`cros <x>`) and a single-token optional positional (`info user [<UserItem>]`). A `<UserTypeEntity>` buried in `[data <…>]` is NOT touched. Paren-group/alternation junk (`)`, `(`) is skipped, not guessed.
+- **Curated writes must exist in the pinned grammar** or `test_command_contract.py` fails; passing the contract proves *syntax exists*, not that the write does what you expect — verify destructive ones on a throwaway account (house rule).
+- Directory data reaches templates via autoescaped `data-*` attributes read by JS (`el.dataset.*`), never `| tojson` in an attribute (#8).
+
+## Testing / live-verification status
+`.venv/bin/python -m pytest -q tests/test_catalog.py tests/test_builder.py tests/test_command_contract.py tests/test_polish.py` — fully offline (mock gam + in-memory Keychain). Coverage: parse/risk/area grouping, the auto-promotion boundary, generic-read injection safety, preview/run/guard/confirm flows, CSV export formula-injection safety, sequence runs. **Unproven offline:** every curated *mutation* against a real tenant, and any auto-promoted read whose grammar-derived argv GAM rejects live (formatjson-class rejections). The mock cannot catch either.
+
+## To do common tasks here
+- **Add a runnable write** (or a friendlier read): follow `docs/builder-commands.md` §"Adding a buildable command" or run the `add-builder-command` skill — (1) verify syntax in `GamCommands.txt`; (2) add a `@staticmethod` to `core/gam/commands.py`; (3) arg-shape test in `tests/test_commands.py` + a contract token in `tests/test_command_contract.py`; (4) append a `_cmd(...)` to `_curated()` in `catalog.py` with the authoritative `RiskLevel`; (5) web test in `tests/test_builder.py`; (6) a `mock_gam.sh` branch if the output shape is new.
+- **Change how reads auto-promote:** edit `parse_read_template`/`make_build` in `readbuilder.py`; re-run `test_builder.py` (esp. the injection-safety and boundary tests).
+- **After a GAM bump:** run `scripts/build_command_catalog.py` to regenerate `command_catalog.json`, then confirm `test_catalog_matches_grammar` and `test_claude_md_command_counts_match_the_real_catalog` pass (update CLAUDE.md's counts if they moved).
+- **Re-group categories into areas:** edit `_AREA`/`AREA_ORDER` in `catalog.py`; `test_areas_group_the_categories` guards the shape.
