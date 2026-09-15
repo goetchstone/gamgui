@@ -6,12 +6,16 @@
       <span class="font-medium text-brand-black">{{ r.name }}</span>
       <span class="flex gap-3">
         <button type="button" class="text-xs text-brand-blueink hover:underline" onclick="obEdit(this)"
-                data-name="{{ r.name }}" data-steps="{{ r.steps | join('\n') }}">Edit</button>
+                data-name="{{ r.name }}" data-steps="{{ r.steps | join('\n') }}"
+                data-org="{{ r.org_unit }}" data-signature="{{ r.signature }}">Edit</button>
         <button class="text-xs text-red-600 hover:underline"
                 hx-post="/onboard/role/delete" hx-vals='{"name": {{ r.name | tojson }}}' hx-target="#onboard-roles" hx-swap="innerHTML">Delete</button>
       </span>
     </div>
     <ul class="mt-1 list-disc pl-5 text-xs text-brand-gray">{% for s in r.steps %}<li>{{ s }}</li>{% endfor %}</ul>
+    {% if r.org_unit or r.signature %}
+    <p class="mt-1 text-[11px] text-brand-gray/80">{% if r.org_unit %}OU <span class="text-brand-blueink">{{ r.org_unit }}</span>{% endif %}{% if r.org_unit and r.signature %} · {% endif %}{% if r.signature %}signature <span class="text-brand-blueink">{{ r.signature }}</span>{% endif %}</p>
+    {% endif %}
   </li>
   {% endfor %}
 </ul>

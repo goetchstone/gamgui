@@ -14,6 +14,7 @@ from gamgui.core.gam.commands import GAMCommands
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.onboarding import RunbookStore
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
+from gamgui.core.signatures import SignatureStore
 from gamgui.web.server import AppState, create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -29,6 +30,7 @@ def client(tmp_path, monkeypatch):
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t")
     state.runbooks = RunbookStore(tmp_path / "onboarding.json")   # isolated store, not the real ~/Library file
+    state.sig_templates = SignatureStore(tmp_path / "signatures.json")   # isolated; seeds "Classic"/"Modern accent"/"Minimal"
     with TestClient(create_app(state)) as c:
         c.get("/?token=t")
         yield c
@@ -110,3 +112,99 @@ def test_run_creates_google_tasks_list(client):
 def test_run_needs_an_assignee_or_email(client):
     r = client.post("/onboard/run", data={"role": "Salesperson", "name": "Jordan"})
     assert "assignee" in r.text.lower()
+
+
+# --- account creation: temp password, argv builder, per-role config ---
+
+def test_temp_password_shape_and_alphabet():
+    pw = onboarding.generate_temp_password()
+    groups = pw.split("-")
+    assert len(groups) == 3 and all(len(g) == 4 for g in groups)     # default is three groups of four
+    assert set(pw) <= set(onboarding._PW_ALPHABET) | {"-"}
+    assert not (set("0O1lI") & set(onboarding._PW_ALPHABET))         # no glyphs misread off a printed sheet
+    assert len(onboarding.generate_temp_password(groups=4, size=5).replace("-", "")) == 20   # configurable
+    assert len({onboarding.generate_temp_password() for _ in range(200)}) == 200             # effectively unique
+
+
+def test_create_user_argv():
+    assert GAMCommands.create_user("new@x.com", "Ada", "Byte", "s3cr-et", change_password=True, org_unit="/Sales") == \
+        ["create", "user", "new@x.com", "firstname", "Ada", "lastname", "Byte",
+         "password", "s3cr-et", "changepassword", "on", "org", "/Sales"]
+    # no OU -> no org tokens; changepassword off is honoured
+    assert GAMCommands.create_user("n@x.com", "A", "B", "p", change_password=False) == \
+        ["create", "user", "n@x.com", "firstname", "A", "lastname", "B", "password", "p", "changepassword", "off"]
+    # a poisoned name lands as ONE argv element (injection-safe)
+    assert GAMCommands.create_user("n@x.com", "A; rm -rf /", "B", "p")[4] == "A; rm -rf /"
+
+
+def test_role_config_persists_and_migrates(tmp_path):
+    p = tmp_path / "ob.json"
+    RunbookStore(p).set_role("Sales", ["Do a thing"], signature="Classic", org_unit="/Sales")
+    r = RunbookStore(p).role("Sales")   # reload from disk
+    assert r.steps == ["Do a thing"] and r.signature == "Classic" and r.org_unit == "/Sales"
+    # an older file stored a role as a bare list of steps -> migrated to the dict form on load
+    import json
+    p.write_text(json.dumps({"roles": {"Legacy": ["Step A", "Step B"]}}))
+    lr = RunbookStore(p).role("Legacy")
+    assert lr.steps == ["Step A", "Step B"] and lr.signature == "" and lr.org_unit == ""
+
+
+# --- connector: the temp password is never audited or surfaced ---
+
+@pytest.mark.asyncio
+async def test_create_user_redacts_password(connector, tmp_path):
+    secret = "Xk7m-Qp9r-2Tzv"
+    res = await connector.create_user("brand-new@example.com", "Ada", "Byte", secret, org_unit="/Sales")
+    assert res.ok
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert secret not in audit and "create_user" in audit        # never written to the audit log
+    assert secret not in " ".join(res.preview.argv or [])         # nor surfaced in the change preview
+    assert "********" in (res.preview.argv or [])                 # the masked copy is what's shown/audited
+
+
+@pytest.mark.asyncio
+async def test_create_user_fails_on_duplicate(connector):
+    res = await connector.create_user("exists@example.com", "Al", "Ready", "pw")
+    assert not res.ok   # the mock mirrors GAM's 409 on an account that already exists
+
+
+# --- web flow: create the account, print the sheet, keep the password out of the log ---
+
+def test_preview_shows_create_account_block(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
+                                        "signature": "Classic", "org_unit": "/Sales"})
+    r = client.post("/onboard/preview", data={"role": "Sales", "name": "Ada Byte",
+                                              "email": "ada@example.com", "create_account": "1"})
+    assert r.status_code == 200
+    assert "Creates the account" in r.text and "ada@example.com" in r.text
+    assert "/Sales" in r.text and "Classic" in r.text        # role's OU + signature surfaced
+    assert "Ada" in r.text and "Byte" in r.text              # first/last derived from the display name
+
+
+def test_run_refuses_account_without_confirmation(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte",
+                                          "email": "ada@example.com", "create_account": "1"})   # no confirm=1
+    assert "confirm" in r.text.lower()   # gated behind the preview's confirmation
+
+
+def test_run_creates_account_and_returns_sheet(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "SENTINELpw-1234-5678")
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
+                                        "signature": "Classic", "org_unit": "/Sales"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte",
+                                          "email": "ada@example.com", "assignee": "it@example.com",
+                                          "create_account": "1", "confirm": "1"})
+    assert r.status_code == 200
+    assert "Account created" in r.text and "SENTINELpw-1234-5678" in r.text   # the printable sheet shows the temp pw
+    assert "Classic applied" in r.text                                        # the role's signature was applied
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert "SENTINELpw-1234-5678" not in audit and "create_user" in audit     # ...but it never reaches the audit log
+
+
+def test_run_account_duplicate_fails_gracefully(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Al Ready",
+                                          "email": "exists@example.com", "assignee": "it@example.com",
+                                          "create_account": "1", "confirm": "1"})
+    assert "create the account" in r.text and "409" in r.text   # the 409 is surfaced, not swallowed

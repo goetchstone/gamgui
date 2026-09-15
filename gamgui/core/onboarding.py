@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -19,20 +20,38 @@ from .paths import app_data_dir
 
 WELCOME_VARS = ["name", "role", "email", "manager"]   # the {tokens} the welcome email understands
 
+# Unambiguous alphabet for a temp password someone reads off a printed sheet and types once:
+# no 0/O, 1/l/I. Grouped for legibility. It is single-use — the account is created with
+# `changepassword on`, so Google forces a reset at first login.
+_PW_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def generate_temp_password(groups: int = 3, size: int = 4) -> str:
+    """A strong, human-transcribable one-time password (e.g. ``Xk7m-Qp9r-2Tzv``, ~69 bits)."""
+    return "-".join(
+        "".join(secrets.choice(_PW_ALPHABET) for _ in range(size)) for _ in range(groups)
+    )
+
 
 def default_store_path() -> Path:
     return app_data_dir() / "onboarding.json"
 
 
 # Seeded on first run; the admin edits/replaces this entirely — nothing here is hardcoded into logic.
+# A role is stored as {"steps": [...], "signature": "<saved template name>", "org_unit": "/Path"};
+# an older file's bare list of steps is migrated on load (see RunbookStore._load).
 _DEFAULT = {
     "roles": {
-        "Salesperson": [
-            "Set up Brite for the employee",
-            "Create Wesley Hall login",
-            "Set up POS login (salesperson)",
-            "Add to the sales group",
-        ],
+        "Salesperson": {
+            "steps": [
+                "Set up Brite for the employee",
+                "Create Wesley Hall login",
+                "Set up POS login (salesperson)",
+                "Add to the sales group",
+            ],
+            "signature": "",
+            "org_unit": "",
+        },
     },
     "welcome": {
         "subject": "Welcome to the team, {name}!",
@@ -42,10 +61,25 @@ _DEFAULT = {
 }
 
 
+def _as_role(value) -> Dict:
+    """Normalise a stored role to {steps, signature, org_unit} — tolerating the old list-of-steps form."""
+    if isinstance(value, list):
+        return {"steps": [str(s) for s in value], "signature": "", "org_unit": ""}
+    if isinstance(value, dict):
+        return {
+            "steps": [str(s) for s in value.get("steps", [])],
+            "signature": str(value.get("signature", "") or ""),
+            "org_unit": str(value.get("org_unit", "") or ""),
+        }
+    return {"steps": [], "signature": "", "org_unit": ""}
+
+
 @dataclass
 class RoleTemplate:
     name: str
     steps: List[str]
+    signature: str = ""   # a saved signature-template name to apply to the new hire (blank = none)
+    org_unit: str = ""    # the OU the account is created in (blank = domain default "/")
 
 
 def render(template: str, ctx: Dict[str, str]) -> str:
@@ -68,6 +102,7 @@ class RunbookStore:
             try:
                 data = json.loads(self.path.read_text())
                 data.setdefault("roles", {})
+                data["roles"] = {n: _as_role(v) for n, v in data["roles"].items()}  # migrate old list form
                 data.setdefault("welcome", dict(_DEFAULT["welcome"]))
                 return data
             except Exception:  # noqa: BLE001 — corrupt/old file: fall back to the seed
@@ -88,19 +123,34 @@ class RunbookStore:
 
     # --- roles ---
     def roles(self) -> List[RoleTemplate]:
-        return [RoleTemplate(n, list(s)) for n, s in sorted(self._data["roles"].items())]
+        out = []
+        for n, v in sorted(self._data["roles"].items()):
+            r = _as_role(v)
+            out.append(RoleTemplate(n, r["steps"], r["signature"], r["org_unit"]))
+        return out
 
     def role_names(self) -> List[str]:
         return sorted(self._data["roles"].keys())
 
-    def steps_for(self, name: str) -> List[str]:
-        return list(self._data["roles"].get(name, []))
+    def role(self, name: str) -> Optional[RoleTemplate]:
+        v = self._data["roles"].get(name)
+        if v is None:
+            return None
+        r = _as_role(v)
+        return RoleTemplate(name, r["steps"], r["signature"], r["org_unit"])
 
-    def set_role(self, name: str, steps: List[str]) -> None:
+    def steps_for(self, name: str) -> List[str]:
+        return _as_role(self._data["roles"].get(name, {}))["steps"]
+
+    def set_role(self, name: str, steps: List[str], signature: str = "", org_unit: str = "") -> None:
         name = (name or "").strip()
         if not name:
             raise ValueError("Role name is required.")
-        self._data["roles"][name] = [s.strip() for s in steps if s.strip()]
+        self._data["roles"][name] = {
+            "steps": [s.strip() for s in steps if s.strip()],
+            "signature": (signature or "").strip(),
+            "org_unit": (org_unit or "").strip(),
+        }
         self._save()
 
     def delete_role(self, name: str) -> None:

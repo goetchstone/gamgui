@@ -55,6 +55,8 @@ REQUIRED_TOKENS = [
     "delete user",      # offboarding final delete
     "signout",          # end all of a user's active sessions (Builder + user-detail action)
     "undelete user",    # restore a recently deleted account (Builder)
+    "create|add user",  # onboarding can create the new hire's account (grammar reads `create|add user`)
+    "changepassword",   # created accounts force a reset at first login (changepassword on)
     "create tasklist",  # onboarding runbook -> Google Tasks list
     "create task",      # onboarding runbook -> a task on the list
     "sendemail",        # onboarding welcome email

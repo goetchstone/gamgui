@@ -137,6 +137,14 @@ class GAMConnector(Connector):
         argv = GAMCommands.set_signature(email, signature, html=html)
         return await self._run_write("set_signature", email, argv, RiskLevel.LOW)
 
+    async def create_user(self, email: str, first_name: str, last_name: str, password: str,
+                          change_password: bool = True, org_unit: Optional[str] = None) -> ChangeResult:
+        """Create a Google Workspace account. The temp ``password`` is redacted before it is audited or
+        surfaced — it only ever leaves the app on the printable credentials sheet the operator prints."""
+        argv = GAMCommands.create_user(email, first_name, last_name, password, change_password, org_unit)
+        redacted = GAMCommands.create_user(email, first_name, last_name, "********", change_password, org_unit)
+        return await self._run_write("create_user", email, argv, RiskLevel.LOW, audit_argv=redacted)
+
     async def get_signature(self, email: str) -> str:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.show_signature(email))
         return _parse_signature(out)
@@ -440,16 +448,21 @@ class GAMConnector(Connector):
         risk: RiskLevel,
         target_extra: Optional[str] = None,
         tolerate_kinds: tuple = (),
+        audit_argv: Optional[List[str]] = None,
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
-        a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)."""
-        preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=argv)
+        a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected).
+
+        ``audit_argv`` is what gets recorded and surfaced in the preview when the real ``argv`` carries
+        a secret that must never touch the audit log or the UI — e.g. a create-user temp password."""
+        shown = audit_argv if audit_argv is not None else argv   # never the raw secret
+        preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
         try:
             await self.runner.run_authenticated(self.domain, argv, serialize=True)
         except Exception as exc:
             tolerated = bool(tolerate_kinds) and getattr(exc, "kind", None) in tolerate_kinds
             self.audit.record(
-                action, target=target, argv=argv, ok=tolerated,
+                action, target=target, argv=shown, ok=tolerated,
                 extra={"error": str(exc), "tolerated": tolerated,
                        **({"group": target_extra} if target_extra else {})},
             )
@@ -459,7 +472,7 @@ class GAMConnector(Connector):
                                            "own-calendar notices are expected and were skipped).")
             return ChangeResult(preview=preview, ok=False, detail=str(exc))
         self.audit.record(
-            action, target=target, argv=argv, ok=True,
+            action, target=target, argv=shown, ok=True,
             extra={"group": target_extra} if target_extra else None,
         )
         return ChangeResult(preview=preview, ok=True)

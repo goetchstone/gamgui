@@ -38,6 +38,13 @@
       <label class="block text-sm sm:col-span-2"><span class="text-brand-blueink">Assignee — whose Google Tasks gets the checklist <span class="text-brand-gray">(blank = the new hire)</span></span>
         <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@domain.com" /></label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="send_welcome" value="1" /> Also send the welcome email to the new hire</label>
+      <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="create_account" value="1" onchange="obToggleCreate(this)" /> <span><strong>Create the Google account</strong> — with a temp password on a printable sheet; the user must reset it at first login. Uses the role's org unit &amp; signature.</span></label>
+      <div id="ob-create-fields" class="hidden gap-3 sm:grid sm:grid-cols-2 sm:col-span-2">
+        <label class="block text-sm"><span class="text-brand-blueink">First name</span>
+          <input class="{{ fld }} mt-1" name="first" placeholder="Jordan" /></label>
+        <label class="block text-sm"><span class="text-brand-blueink">Last name</span>
+          <input class="{{ fld }} mt-1" name="last" placeholder="Lee" /></label>
+      </div>
       <div class="flex gap-2 pt-1 sm:col-span-2">
         <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
                 hx-post="/onboard/preview" hx-include="#onboard-form" hx-target="#onboard-result" hx-swap="innerHTML">Preview</button>
@@ -57,9 +64,18 @@
     </div>
     <form class="{{ card }} space-y-2" hx-post="/onboard/role" hx-target="#onboard-roles" hx-swap="innerHTML">
       <h2 class="eyebrow text-brand-gray">Add / edit a role</h2>
-      <p class="text-xs text-brand-gray">Saving an existing role name replaces its steps. One step per line.</p>
+      <p class="text-xs text-brand-gray">Saving an existing role name replaces it. One step per line. The org unit &amp; signature are used only when onboarding creates the account.</p>
       <input class="{{ fld }}" name="name" placeholder="Role name (e.g. Salesperson)" required />
-      <textarea class="{{ fld }} font-mono text-[12.5px]" name="steps" rows="7" placeholder="Set up Brite&#10;Create Wesley Hall login&#10;Set up POS login"></textarea>
+      <textarea class="{{ fld }} font-mono text-[12.5px]" name="steps" rows="6" placeholder="Set up Brite&#10;Create Wesley Hall login&#10;Set up POS login"></textarea>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <label class="block text-xs text-brand-gray">Org unit <span class="text-brand-gray/70">(new account)</span>
+          <input class="{{ fld }} mt-1" name="org_unit" placeholder="/Sales" /></label>
+        <label class="block text-xs text-brand-gray">Signature template
+          <select class="{{ fld }} mt-1" name="signature">
+            <option value="">— none —</option>
+            {% for t in sig_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+          </select></label>
+      </div>
       <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save role</button>
     </form>
   </div>
@@ -71,13 +87,22 @@
 </div>
 
 <script>
-  // Edit a role: copy its name + steps into the add/edit form.
+  // Edit a role: copy its name + steps + org unit + signature into the add/edit form.
   function obEdit(btn) {
     var f = document.querySelector('form[hx-post="/onboard/role"]');
     if (!f) return;
     f.querySelector('[name=name]').value = btn.dataset.name;
     f.querySelector('[name=steps]').value = btn.dataset.steps;
+    f.querySelector('[name=org_unit]').value = btn.dataset.org || "";
+    var sig = f.querySelector('[name=signature]');
+    if (sig) sig.value = btn.dataset.signature || "";
     f.querySelector('[name=name]').focus();
+  }
+
+  // Reveal the first/last name fields only when "Create the Google account" is ticked.
+  function obToggleCreate(cb) {
+    var box = document.getElementById("ob-create-fields");
+    if (box) box.classList.toggle("hidden", !cb.checked);
   }
 
   (function () {

@@ -206,6 +206,17 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "add" ] && [ "${4:-}" = "calendars" ]; 
   exit 0
 fi
 
+# `gam create user <email> firstname ... lastname ... password ... changepassword on` -> new account.
+# Real GAM fails with 409 if the account already exists; mirror that (an *exists* email fails) so the
+# onboarding flow can't silently "succeed" on a duplicate and a test can cover the failure path.
+if [ "${1:-}" = "create" ] && [ "${2:-}" = "user" ]; then
+  case "${3:-}" in
+    *exists*) echo "ERROR: 409: Entity already exists - duplicate: ${3:-}" 1>&2; exit 1 ;;
+    *)        echo "User ${3:-} created" ;;
+  esac
+  exit 0
+fi
+
 # `gam user <admin> check serviceaccount` -> simulate a fully-authorized service account.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
   cat <<'EOF'
