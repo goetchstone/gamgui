@@ -30,6 +30,22 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-09-15 — Secret redaction covers `argv` but not the audit record's `extra.error`
+- **What happened:** An adversarial review of the onboarding `notify` change noted that `_run_write`'s
+  failure path records `extra={"error": str(exc), …}` (`gamgui/core/connectors/gam_connector.py`), and
+  that string is **not** run through `redact_argv` the way `argv` is. It's safe today — `GAMError`'s
+  message excludes the submitted argv and GAM doesn't echo a submitted password in its stderr — so no
+  secret reaches `audit.jsonl` now.
+- **Invariant in force:** #4 (secrets never persisted outside the Keychain) / #2 (the audited chokepoint).
+- **Why it didn't hold:** wording/coverage. "Secrets are redacted before audit" is enforced only on the
+  `argv` field; a future GAM version (or a new command) that echoed a submitted secret value in stderr
+  would land it unredacted in `extra.error`.
+- **Would a rule have caught it?** Only if enforced differently — a redactor applied to *every* audited
+  field (or a tripwire asserting no audited field carries an un-redacted value) rather than to `argv`
+  alone.
+- **Enforcement home if changed:** tripwire test + a one-line scrub of `extra.error` through the
+  redactor in `_run_write`. Low priority (no live exposure today) — for the observer pass.
+
 ## 2026-09-15 — Invariant #2 reads absolute, but audited mutations exist outside `_run_write`
 - **What happened:** While writing the domain runbooks, the adversarial verifiers found that
   `create_onboarding_runbook` (`gamgui/core/connectors/gam_connector.py`) runs its `create tasklist` /

@@ -138,11 +138,14 @@ class GAMConnector(Connector):
         return await self._run_write("set_signature", email, argv, RiskLevel.LOW)
 
     async def create_user(self, email: str, first_name: str, last_name: str, password: str,
-                          change_password: bool = True, org_unit: Optional[str] = None) -> ChangeResult:
+                          change_password: bool = True, org_unit: Optional[str] = None,
+                          notify: Optional[str] = None) -> ChangeResult:
         """Create a Google Workspace account. The temp ``password`` is redacted before it is audited or
-        surfaced — it only ever leaves the app on the printable credentials sheet the operator prints."""
-        argv = GAMCommands.create_user(email, first_name, last_name, password, change_password, org_unit)
-        redacted = GAMCommands.create_user(email, first_name, last_name, "********", change_password, org_unit)
+        surfaced — it only leaves the app on the printable credentials sheet, or (when ``notify`` is set)
+        in the sign-in email GAM/Google sends straight to that address."""
+        argv = GAMCommands.create_user(email, first_name, last_name, password, change_password, org_unit, notify)
+        # "********" lands in both the password and notifypassword positions of the redacted copy.
+        redacted = GAMCommands.create_user(email, first_name, last_name, "********", change_password, org_unit, notify)
         return await self._run_write("create_user", email, argv, RiskLevel.LOW, audit_argv=redacted)
 
     async def get_signature(self, email: str) -> str:

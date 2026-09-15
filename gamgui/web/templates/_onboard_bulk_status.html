@@ -1,0 +1,80 @@
+{% if job is none %}
+<div class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">That bulk job is no longer available.</div>
+{% else %}
+<div id="onboard-bulk-job"
+     {% if not job.finished %}hx-get="/onboard/bulk/status?job={{ job.id }}" hx-trigger="load delay:1s" hx-swap="outerHTML"{% endif %}
+     class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
+  <div class="flex items-center justify-between gap-3">
+    <h3 class="font-serif text-lg text-brand-black">{% if job.finished %}Bulk onboarding — done{% else %}Onboarding… {{ job.done }} / {{ job.total }}{% endif %}</h3>
+    {% if not job.finished %}<span class="text-xs text-brand-gray">refreshing every second…</span>{% endif %}
+  </div>
+
+  <div class="h-2 w-full overflow-hidden rounded-full bg-brand-gray/20">
+    <div class="h-full bg-brand-blue transition-all" style="width: {{ (100 * job.done // job.total) if job.total else 100 }}%"></div>
+  </div>
+
+  <p class="text-sm text-brand-black"><strong>{{ job.ok }}</strong> ok · <strong>{{ job.failed_total }}</strong> failed · {{ job.account_created }} account{{ '' if job.account_created == 1 else 's' }} created ({{ job.notified }} emailed by GAM).</p>
+
+  {% if job.recent %}
+  <ul class="space-y-0.5 text-xs">
+    {% for r in job.recent %}
+    <li class="{{ 'text-emerald-800' if r.ok else 'text-amber-800' }}">{{ '✓' if r.ok else '✗' }} <span class="font-mono">{{ r.email or r.name }}</span>{% if r.errors %} — {{ r.errors | join('; ') }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if job.finished %}
+    {% if job.error %}<p class="text-xs text-red-700">Job error: {{ job.error }}</p>{% endif %}
+    {% if job.failed %}
+    <details class="text-xs text-amber-900"><summary class="cursor-pointer">{{ job.failed_total }} failed{% if job.failed_total > job.failed | length %} (showing first {{ job.failed | length }}){% endif %}</summary>
+      <ul class="mt-1 list-disc pl-5">{% for f in job.failed %}<li>{{ f }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+    {% if credentials %}
+    <div id="ob-bulk-creds" class="rounded-xl border-2 border-brand-blue/40 bg-brand-white p-3">
+      <div class="flex items-center justify-between gap-3">
+        <h4 class="font-medium text-brand-black">Printable credentials — {{ credentials | length }} account{{ '' if credentials | length == 1 else 's' }}</h4>
+        <button type="button" onclick="obPrintBulkCreds()" class="shrink-0 rounded-lg border border-brand-blue px-3 py-1.5 text-xs text-brand-blueink hover:bg-brand-blue/10">Print / Save PDF</button>
+      </div>
+      <p class="mt-1 text-xs text-brand-gray"><strong>Shown once</strong> — print or save now; this page won't show it again, and it is never emailed or written to the audit log. ({{ job.notified }} with a notify address were emailed their sign-in info by GAM instead.) Each must reset at first login.</p>
+      <div id="ob-bulk-creds-sheet" class="mt-2 grid gap-2 sm:grid-cols-2">
+        {% for c in credentials %}
+        <div class="rounded-lg border border-brand-gray/30 p-2 text-xs">
+          <div class="text-brand-black">{{ c.name }}</div>
+          <div class="font-mono text-brand-black">{{ c.email }}</div>
+          <div class="font-mono text-base font-semibold text-brand-black">{{ c.password }}</div>
+          <div class="text-brand-gray">OU {{ c.org_unit }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <script>
+      function obPrintBulkCreds() {
+        var sheet = document.getElementById("ob-bulk-creds-sheet");
+        if (!sheet) return;
+        var f = document.createElement("iframe");
+        f.setAttribute("aria-hidden", "true");
+        f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+        document.body.appendChild(f);
+        var d = f.contentWindow.document;
+        d.open();
+        d.write('<html><head><title>New account credentials</title><style>' +
+          'body{font:13px -apple-system,system-ui,sans-serif;padding:32px;color:#111}' +
+          'h2{font-size:16px}.g{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
+          '.g>div{border:1px solid #ccc;border-radius:8px;padding:10px;line-height:1.6;break-inside:avoid}' +
+          '.g>div>div{font-family:ui-monospace,monospace}' +
+          '.g>div>div:first-child{font-family:-apple-system,system-ui,sans-serif;font-weight:600}' +
+          '.g>div>div:nth-child(3){font-size:15px;font-weight:700}' +
+          '.g>div>div:last-child{color:#555;font-size:11px}</style></head>' +
+          '<body><h2>New account credentials</h2><div class="g">' +
+          sheet.innerHTML + '</div></body></html>');
+        d.close();
+        f.contentWindow.focus();
+        f.contentWindow.print();
+        setTimeout(function () { f.remove(); }, 1500);
+      }
+    </script>
+    {% endif %}
+  {% endif %}
+</div>
+{% endif %}

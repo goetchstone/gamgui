@@ -126,6 +126,7 @@ class GAMCommands:
         password: str,
         change_password: bool = True,
         org_unit: Optional[str] = None,
+        notify: Optional[str] = None,
     ) -> List[str]:
         argv = [
             "create", "user", email,
@@ -136,6 +137,11 @@ class GAMCommands:
         ]
         if org_unit:
             argv += ["org", org_unit]
+        # GAM/Google emails the sign-in info (incl. the one-time password) straight to `notify`, so the
+        # operator never handles it. The notify clause comes after the user attributes (see the grammar's
+        # `create|add user` rule). notifypassword carries the same temp password; it's redacted before audit.
+        if notify:
+            argv += ["notify", notify, "notifypassword", password]
         return argv
 
     @staticmethod

@@ -9,12 +9,14 @@ into a Google Tasks list on whoever is doing the setup, so the checklist lives i
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .paths import app_data_dir
 
@@ -105,6 +107,66 @@ def render(template: str, ctx: Dict[str, str]) -> str:
     for key in WELCOME_VARS:
         out = out.replace("{" + key + "}", str(ctx.get(key, "")))
     return out
+
+
+# --- bulk import: a CSV of new hires, one row each, onboarded via the role template ---
+
+# Recognised columns (header names are matched case-insensitively; extra columns are ignored). `role`
+# picks the template; a blank `notify` means that hire's temp password lands on the printable sheet,
+# while a `notify` email hands sign-in delivery to GAM/Google (see connectors.create_user).
+HIRE_COLUMNS = ["role", "name", "email", "manager", "assignee",
+                "create_account", "first", "last", "send_welcome", "notify"]
+
+HIRE_CSV_TEMPLATE = (
+    "role,name,email,manager,assignee,create_account,first,last,send_welcome,notify\n"
+    "Salesperson,Jordan Lee,jordan@example.com,mgr@example.com,it@example.com,yes,Jordan,Lee,yes,jordan.personal@gmail.com\n"
+    "Salesperson,Sam Rivers,sam@example.com,mgr@example.com,it@example.com,yes,Sam,Rivers,no,\n"
+)
+
+
+def _truthy(value: str) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y", "x", "on"}
+
+
+def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
+    """Parse an onboarding CSV into row dicts + human-readable errors (``"Row N: …"``).
+
+    A row needs a ``role`` and at least an ``email`` or ``assignee`` to be actionable; fully-blank lines
+    are skipped. This is pure/structural — whether the role actually exists is checked by the caller
+    (it owns the template store). ``create_account``/``send_welcome`` parse as booleans."""
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        fieldnames = reader.fieldnames
+    except Exception as exc:  # noqa: BLE001 — malformed CSV
+        return [], ["Couldn't read the CSV: {}".format(exc)]
+    if not fieldnames:
+        return [], ["The CSV has no header row."]
+    fieldmap = {(fn or "").strip().lower(): fn for fn in fieldnames}
+    if "role" not in fieldmap:
+        return [], ["The CSV needs a 'role' column — that's what picks the template."]
+
+    def cell(raw: Dict, key: str) -> str:
+        return str(raw.get(fieldmap.get(key, ""), "") or "").strip()
+
+    rows: List[Dict] = []
+    errors: List[str] = []
+    for raw in reader:
+        i = reader.line_num  # the row's real line number in the file (DictReader silently skips blanks)
+        role, name = cell(raw, "role"), cell(raw, "name")
+        email, assignee = cell(raw, "email"), cell(raw, "assignee")
+        if not any([role, name, email, assignee]):
+            continue  # blank line
+        if not role:
+            errors.append("Row {}: missing role.".format(i)); continue
+        if not email and not assignee:
+            errors.append("Row {}: needs an email or an assignee.".format(i)); continue
+        rows.append({
+            "role": role, "name": name, "email": email, "manager": cell(raw, "manager"),
+            "assignee": assignee, "create_account": _truthy(cell(raw, "create_account")),
+            "first": cell(raw, "first"), "last": cell(raw, "last"),
+            "send_welcome": _truthy(cell(raw, "send_welcome")), "notify": cell(raw, "notify"),
+        })
+    return rows, errors
 
 
 class RunbookStore:

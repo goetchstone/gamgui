@@ -21,6 +21,7 @@
     <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="generate">Generate</button>
     <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="roles">Role templates</button>
     <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="welcome">Welcome email</button>
+    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="bulk">Bulk import</button>
   </nav>
 
   <!-- GENERATE -->
@@ -87,6 +88,25 @@
   <!-- WELCOME EMAIL (editable template) -->
   <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="welcome">
     <div id="onboard-welcome">{% include "_onboard_welcome.html" %}</div>
+  </div>
+
+  <!-- BULK IMPORT (a CSV of hires) -->
+  <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="bulk">
+    <div class="{{ card }} space-y-3">
+      <div>
+        <h2 class="eyebrow text-brand-gray">Import a CSV of hires</h2>
+        <p class="mt-1 text-xs text-brand-gray">One row per hire; the <span class="font-mono">role</span> column picks the template (its steps, signature, org unit, groups &amp; calendars). Columns: <span class="font-mono">role, name, email, manager, assignee, create_account, first, last, send_welcome, notify</span>.
+          Leave <span class="font-mono">notify</span> blank to put that hire's temp password on the printable sheet, or set it to an email and GAM sends the sign-in info there directly.</p>
+        <a href="/onboard/bulk/template.csv" class="mt-1 inline-block text-xs text-brand-blueink hover:underline">Download a template CSV ↓</a>
+      </div>
+      <form hx-post="/onboard/bulk/preview" hx-target="#onboard-bulk-result" hx-swap="innerHTML"
+            hx-encoding="multipart/form-data" class="flex flex-wrap items-center gap-2">
+        <input type="file" name="csv_file" accept=".csv,text/csv" required
+               class="text-sm text-brand-black file:mr-3 file:rounded-lg file:border-0 file:bg-brand-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-white hover:file:bg-brand-blueink" />
+        <button type="submit" class="rounded-lg border border-brand-blue px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/10 transition-colors">Preview</button>
+      </form>
+      <div id="onboard-bulk-result" class="mt-1"></div>
+    </div>
   </div>
 </div>
 

@@ -135,6 +135,12 @@ def test_create_user_argv():
         ["create", "user", "n@x.com", "firstname", "A", "lastname", "B", "password", "p", "changepassword", "off"]
     # a poisoned name lands as ONE argv element (injection-safe)
     assert GAMCommands.create_user("n@x.com", "A; rm -rf /", "B", "p")[4] == "A; rm -rf /"
+    # notify clause is appended after the attributes; notifypassword carries the same temp password
+    assert GAMCommands.create_user("n@x.com", "A", "B", "pw", org_unit="/S", notify="p@x.com")[-4:] == \
+        ["notify", "p@x.com", "notifypassword", "pw"]
+    # a poisoned notify cell stays ONE argv element (GAM rejects it; never a second flag)
+    assert GAMCommands.create_user("n@x.com", "A", "B", "pw", notify="e@x.com notifypassword hijack")[-3] == \
+        "e@x.com notifypassword hijack"
 
 
 def test_role_config_persists_and_migrates(tmp_path):
@@ -257,3 +263,140 @@ def test_run_reports_failed_group_and_calendar_non_fatal(client):
     assert "1 of 2 groups" in r.text and "missing-group@example.com" in r.text   # bad group reported
     assert "0 of 1 shared calendar" in r.text and "SUBFAIL-cal@x" in r.text      # bad calendar reported
     assert "Created" in r.text   # memberships are best-effort; the runbook still ran
+
+
+# --- bulk CSV import ---
+
+def _hire(**over):
+    base = {"role": "Sales", "name": "Ada Byte", "email": "ada@example.com", "first": "", "last": "",
+            "manager": "", "assignee": "it@example.com", "create_account": False, "send_welcome": False,
+            "notify": ""}
+    base.update(over)
+    return base
+
+
+def test_parse_hire_csv():
+    rows, errors = onboarding.parse_hire_csv(onboarding.HIRE_CSV_TEMPLATE)
+    assert len(rows) == 2 and not errors
+    assert rows[0]["create_account"] is True and rows[0]["notify"] == "jordan.personal@gmail.com"
+    assert rows[1]["notify"] == "" and rows[1]["send_welcome"] is False
+    # header case-insensitive, blank lines skipped, per-row validation
+    rows2, errors2 = onboarding.parse_hire_csv("ROLE,Email\nSales,a@x.com\n\n,b@x.com\nSales,\n")
+    assert [r["email"] for r in rows2] == ["a@x.com"]     # role-less and blank rows dropped
+    assert any("Row 4" in e for e in errors2)              # ",b@x.com" -> missing role
+    assert any("Row 5" in e for e in errors2)              # "Sales," -> no email or assignee
+    # a CSV with no role column is a hard error
+    assert onboarding.parse_hire_csv("name,email\nx,y@x.com\n")[1] == \
+        ["The CSV needs a 'role' column — that's what picks the template."]
+
+
+@pytest.mark.asyncio
+async def test_provision_hire_notify_vs_sheet(connector, tmp_path):
+    from gamgui.web.routes.onboarding import _provision_hire
+    store = RunbookStore(tmp_path / "ob.json")
+    store.set_role("Sales", ["Set up POS"], signature="Classic", org_unit="/Sales",
+                   groups=["sales@example.com"], calendars=["team@x"])
+    sig_store = SignatureStore(tmp_path / "sig.json")
+    cfg = store.role("Sales")
+    # notify address -> GAM emails it, nothing on the printable sheet
+    r1 = await _provision_hire(connector, sig_store, store, cfg,
+                               _hire(name="Ada Byte", email="ada@example.com", create_account=True,
+                                     notify="ada.personal@gmail.com"))
+    assert r1["ok"] and r1["account_created"] and r1["notified"] and r1["credential"] is None
+    assert r1["signature"] == "Classic" and r1["groups"]["added"] == 1
+    # blank notify -> a credential for the printable sheet, not notified
+    r2 = await _provision_hire(connector, sig_store, store, cfg,
+                               _hire(name="Sam Rivers", email="sam@example.com", create_account=True))
+    assert r2["credential"] and r2["credential"]["password"] and not r2["notified"]
+    # the temp passwords never reach the audit log
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert r2["credential"]["password"] not in audit and "create_user" in audit
+
+
+@pytest.mark.asyncio
+async def test_provision_hire_account_failure_is_fatal_for_that_row(connector, tmp_path):
+    from gamgui.web.routes.onboarding import _provision_hire
+    store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
+    cfg = store.role("Sales")
+    r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
+                              _hire(name="Al Ready", email="exists@example.com", first="Al", last="Ready",
+                                    create_account=True))
+    assert not r["ok"] and any("create" in e for e in r["errors"])
+
+
+@pytest.mark.asyncio
+async def test_run_bulk_onboard_executor(connector, tmp_path):
+    # Drive the executor directly (never under TestClient — the bg task + mock-gam can deadlock).
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard, _RECENT_WINDOW
+    store = RunbookStore(tmp_path / "ob.json")
+    store.set_role("Sales", ["Set up POS"], groups=["sales@example.com"])
+    sig_store = SignatureStore(tmp_path / "sig.json")
+    rows = [_hire(name="Ada", email="ada@example.com"),                                  # existing acct: ok
+            _hire(name="Bad", email="exists@example.com", first="Bad", last="Row", create_account=True),  # 409
+            _hire(role="Nope", name="X", email="x@example.com")]                          # unknown role
+    cfgs = {"Sales": store.role("Sales"), "Nope": None}
+    job = OnboardJob(id="t", total=3)
+    await _run_bulk_onboard(job, connector, sig_store, store, rows, cfgs)
+    assert job.finished and job.done == 3
+    assert job.ok == 1 and job.failed_total == 2 and len(job.failed) == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_job_feed_is_bounded_at_scale(connector, tmp_path):
+    # #9 — the live feed keeps a fixed rolling window no matter how many hires the CSV holds.
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard, _RECENT_WINDOW
+    store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
+    rows = [_hire(name=f"H{i}", email=f"h{i}@example.com") for i in range(50)]
+    job = OnboardJob(id="t", total=50)
+    await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
+                            rows, {"Sales": store.role("Sales")})
+    assert job.done == 50 and len(job.recent) == _RECENT_WINDOW
+
+
+def test_bulk_template_download(client):
+    r = client.get("/onboard/bulk/template.csv")
+    assert r.status_code == 200 and "role,name,email" in r.text
+    assert "attachment" in r.headers.get("content-disposition", "")
+
+
+def test_bulk_preview_summarizes_and_flags_bad_rows(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    csv = ("role,name,email,create_account,notify\n"
+           "Sales,Ada,ada@example.com,yes,ada.p@gmail.com\n"
+           "Bogus,X,x@example.com,no,\n")
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", csv, "text/csv")})
+    assert r.status_code == 200
+    assert "1 hire" in r.text and "1</strong> account" in r.text and "emailed by GAM" in r.text
+    assert "unknown role" in r.text.lower()   # the Bogus row is skipped and flagged
+
+
+def test_bulk_run_needs_confirmation(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    r = client.post("/onboard/bulk/run", data={"csv_text": "role,name,email\nSales,Ada,ada@example.com\n"})
+    assert "confirm" in r.text.lower()
+
+
+def test_bulk_run_starts_a_job(client):
+    # Only assert the polling panel started; the executor is covered by the direct tests above.
+    import re
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    csv = "role,name,email,assignee\nSales,Ada,ada@example.com,it@example.com\n"
+    r = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirm": "1"})
+    assert r.status_code == 200
+    assert re.search(r"/onboard/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
+
+
+def test_bulk_status_credentials_are_one_shot_and_no_store(client):
+    # The status GET is bookmarkable/re-fetchable, so plaintext temp passwords must show ONCE and the
+    # response must be no-store — otherwise they'd sit in cache/history (invariant 4).
+    from gamgui.web.routes.onboarding import OnboardJob
+    st = client.app.state.gamgui
+    st.jobs["oneshot"] = OnboardJob(
+        id="oneshot", total=1, done=1, ok=1, account_created=1, finished=True,
+        credentials=[{"name": "Ada", "email": "ada@example.com",
+                      "password": "SHEETpw-1234-5678", "org_unit": "/Sales"}])
+    r1 = client.get("/onboard/bulk/status?job=oneshot")
+    assert "SHEETpw-1234-5678" in r1.text                       # shown once
+    assert r1.headers.get("cache-control") == "no-store"        # not cacheable/bookmarkable
+    r2 = client.get("/onboard/bulk/status?job=oneshot")
+    assert "SHEETpw-1234-5678" not in r2.text                   # gone on re-fetch (one-shot)

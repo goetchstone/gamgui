@@ -17,7 +17,7 @@ from .paths import app_data_dir
 from typing import Any, BinaryIO, Dict, Iterator, List, Optional, Sequence
 
 # gam argument keys whose following value must be masked in the log.
-_SENSITIVE_KEYS = {"password", "signature", "recoveryemail", "recoveryphone", "alternateemail"}
+_SENSITIVE_KEYS = {"password", "notifypassword", "signature", "recoveryemail", "recoveryphone", "alternateemail"}
 _MASK = "***redacted***"
 
 # Roll the log past this size. A single bulk apply appends thousands of records and readers walk
