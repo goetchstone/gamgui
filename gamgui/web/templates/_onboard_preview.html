@@ -10,6 +10,19 @@
     </ul>
   </div>
   {% endif %}
+  {% if groups or calendars %}
+  <div class="rounded-lg border border-brand-gray/30 bg-paper p-3 text-sm space-y-1">
+    {% if groups %}
+    <p class="text-brand-black">Adds <span class="font-mono">{{ email or "the new hire" }}</span> to {{ groups | length }} group{{ '' if groups | length == 1 else 's' }}:</p>
+    <ul class="list-disc pl-5 text-xs text-brand-blueink/90">{% for g in groups %}<li class="font-mono">{{ g }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if calendars %}
+    <p class="text-brand-black">Subscribes them to {{ calendars | length }} shared calendar{{ '' if calendars | length == 1 else 's' }}:</p>
+    <ul class="list-disc pl-5 text-xs text-brand-blueink/90">{% for c in calendars %}<li class="font-mono">{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if not email %}<p class="text-[11px] text-red-700">Enter the new hire's email — group &amp; calendar setup needs it.</p>{% endif %}
+  </div>
+  {% endif %}
   <p class="text-sm text-brand-blueink/80">{{ steps | length }} task{{ '' if steps | length == 1 else 's' }} →
     {% if assignee %}<strong>{{ assignee }}</strong>'s Google Tasks{% else %}<span class="text-red-700">enter an assignee or the new hire's email</span>{% endif %}</p>
   <ul class="list-disc pl-5 text-sm text-brand-black">{% for s in steps %}<li>{{ s }}</li>{% endfor %}</ul>

@@ -64,7 +64,7 @@
     </div>
     <form class="{{ card }} space-y-2" hx-post="/onboard/role" hx-target="#onboard-roles" hx-swap="innerHTML">
       <h2 class="eyebrow text-brand-gray">Add / edit a role</h2>
-      <p class="text-xs text-brand-gray">Saving an existing role name replaces it. One step per line. The org unit &amp; signature are used only when onboarding creates the account.</p>
+      <p class="text-xs text-brand-gray">Saving an existing role name replaces it. One step per line. Org unit &amp; signature apply only when onboarding creates the account; groups &amp; calendars apply to the new hire whenever an email is set.</p>
       <input class="{{ fld }}" name="name" placeholder="Role name (e.g. Salesperson)" required />
       <textarea class="{{ fld }} font-mono text-[12.5px]" name="steps" rows="6" placeholder="Set up Brite&#10;Create Wesley Hall login&#10;Set up POS login"></textarea>
       <div class="grid gap-2 sm:grid-cols-2">
@@ -75,6 +75,10 @@
             <option value="">— none —</option>
             {% for t in sig_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
           </select></label>
+        <label class="block text-xs text-brand-gray">Groups <span class="text-brand-gray/70">(one email per line)</span>
+          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="groups" rows="2" placeholder="sales@example.com&#10;all-staff@example.com"></textarea></label>
+        <label class="block text-xs text-brand-gray">Shared calendars <span class="text-brand-gray/70">(one id per line)</span>
+          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="calendars" rows="2" placeholder="team@group.calendar.google.com"></textarea></label>
       </div>
       <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save role</button>
     </form>
@@ -87,7 +91,7 @@
 </div>
 
 <script>
-  // Edit a role: copy its name + steps + org unit + signature into the add/edit form.
+  // Edit a role: copy its name + steps + org unit + signature + groups + calendars into the form.
   function obEdit(btn) {
     var f = document.querySelector('form[hx-post="/onboard/role"]');
     if (!f) return;
@@ -96,6 +100,10 @@
     f.querySelector('[name=org_unit]').value = btn.dataset.org || "";
     var sig = f.querySelector('[name=signature]');
     if (sig) sig.value = btn.dataset.signature || "";
+    var g = f.querySelector('[name=groups]');
+    if (g) g.value = btn.dataset.groups || "";
+    var c = f.querySelector('[name=calendars]');
+    if (c) c.value = btn.dataset.calendars || "";
     f.querySelector('[name=name]').focus();
   }
 

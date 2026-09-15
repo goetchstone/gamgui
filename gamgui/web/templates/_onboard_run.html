@@ -40,6 +40,13 @@
   }
 </script>
 {% endif %}
+{% if memberships %}
+<div class="rounded-2xl border p-4 text-sm shadow-sm mb-3 {{ 'border-emerald-300 bg-emerald-50 text-emerald-900' if not (memberships.groups_failed or memberships.cals_failed) else 'border-amber-300 bg-amber-50 text-amber-900' }}">
+  {% if memberships.groups_total %}Added <strong>{{ email }}</strong> to {{ memberships.groups_added }} of {{ memberships.groups_total }} group{{ '' if memberships.groups_total == 1 else 's' }}.{% if memberships.groups_failed %} <span class="text-amber-800">Couldn't add: {{ memberships.groups_failed | join(", ") }}</span>{% endif %}{% endif %}
+  {% if memberships.groups_total and memberships.cals_total %}<br>{% endif %}
+  {% if memberships.cals_total %}Subscribed to {{ memberships.cals_added }} of {{ memberships.cals_total }} shared calendar{{ '' if memberships.cals_total == 1 else 's' }}.{% if memberships.cals_failed %} <span class="text-amber-800">Couldn't subscribe: {{ memberships.cals_failed | join(", ") }}</span>{% endif %}{% endif %}
+</div>
+{% endif %}
 <div class="rounded-2xl border p-4 text-sm shadow-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-900' if result.tasklist_id else 'border-amber-300 bg-amber-50 text-amber-900' }}">
   {% if result.tasklist_id %}
     Created <strong>{{ result.created }}</strong> of {{ result.total }} task{{ '' if result.total == 1 else 's' }} in <strong>{{ assignee }}</strong>'s Google Tasks — “{{ title }}”.

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -38,8 +38,9 @@ def default_store_path() -> Path:
 
 
 # Seeded on first run; the admin edits/replaces this entirely — nothing here is hardcoded into logic.
-# A role is stored as {"steps": [...], "signature": "<saved template name>", "org_unit": "/Path"};
-# an older file's bare list of steps is migrated on load (see RunbookStore._load).
+# A role is stored as {"steps": [...], "signature": "<saved template name>", "org_unit": "/Path",
+# "groups": ["team@dom"], "calendars": ["cal-id"]}; an older file's bare list of steps (or a dict
+# without the newer keys) is migrated on load (see RunbookStore._load / _as_role).
 _DEFAULT = {
     "roles": {
         "Salesperson": {
@@ -51,6 +52,8 @@ _DEFAULT = {
             ],
             "signature": "",
             "org_unit": "",
+            "groups": [],
+            "calendars": [],
         },
     },
     "welcome": {
@@ -61,17 +64,29 @@ _DEFAULT = {
 }
 
 
+def _as_str_list(value) -> List[str]:
+    """A list of non-blank strings, tolerating a missing key, a bare string, or None."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = value.splitlines()
+    return [str(s).strip() for s in value if str(s).strip()]
+
+
 def _as_role(value) -> Dict:
-    """Normalise a stored role to {steps, signature, org_unit} — tolerating the old list-of-steps form."""
+    """Normalise a stored role to {steps, signature, org_unit, groups, calendars} — tolerating the old
+    list-of-steps form and dicts written before groups/calendars existed."""
     if isinstance(value, list):
-        return {"steps": [str(s) for s in value], "signature": "", "org_unit": ""}
+        return {"steps": [str(s) for s in value], "signature": "", "org_unit": "", "groups": [], "calendars": []}
     if isinstance(value, dict):
         return {
             "steps": [str(s) for s in value.get("steps", [])],
             "signature": str(value.get("signature", "") or ""),
             "org_unit": str(value.get("org_unit", "") or ""),
+            "groups": _as_str_list(value.get("groups")),
+            "calendars": _as_str_list(value.get("calendars")),
         }
-    return {"steps": [], "signature": "", "org_unit": ""}
+    return {"steps": [], "signature": "", "org_unit": "", "groups": [], "calendars": []}
 
 
 @dataclass
@@ -80,6 +95,8 @@ class RoleTemplate:
     steps: List[str]
     signature: str = ""   # a saved signature-template name to apply to the new hire (blank = none)
     org_unit: str = ""    # the OU the account is created in (blank = domain default "/")
+    groups: List[str] = field(default_factory=list)      # group emails the new hire is added to (as member)
+    calendars: List[str] = field(default_factory=list)   # calendar ids the new hire is subscribed to
 
 
 def render(template: str, ctx: Dict[str, str]) -> str:
@@ -126,7 +143,7 @@ class RunbookStore:
         out = []
         for n, v in sorted(self._data["roles"].items()):
             r = _as_role(v)
-            out.append(RoleTemplate(n, r["steps"], r["signature"], r["org_unit"]))
+            out.append(RoleTemplate(n, r["steps"], r["signature"], r["org_unit"], r["groups"], r["calendars"]))
         return out
 
     def role_names(self) -> List[str]:
@@ -137,12 +154,13 @@ class RunbookStore:
         if v is None:
             return None
         r = _as_role(v)
-        return RoleTemplate(name, r["steps"], r["signature"], r["org_unit"])
+        return RoleTemplate(name, r["steps"], r["signature"], r["org_unit"], r["groups"], r["calendars"])
 
     def steps_for(self, name: str) -> List[str]:
         return _as_role(self._data["roles"].get(name, {}))["steps"]
 
-    def set_role(self, name: str, steps: List[str], signature: str = "", org_unit: str = "") -> None:
+    def set_role(self, name: str, steps: List[str], signature: str = "", org_unit: str = "",
+                 groups: Optional[List[str]] = None, calendars: Optional[List[str]] = None) -> None:
         name = (name or "").strip()
         if not name:
             raise ValueError("Role name is required.")
@@ -150,6 +168,8 @@ class RunbookStore:
             "steps": [s.strip() for s in steps if s.strip()],
             "signature": (signature or "").strip(),
             "org_unit": (org_unit or "").strip(),
+            "groups": _as_str_list(groups),
+            "calendars": _as_str_list(calendars),
         }
         self._save()
 

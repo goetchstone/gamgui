@@ -74,10 +74,12 @@ async def page(request: Request) -> HTMLResponse:
 
 @router.post("/role", response_class=HTMLResponse)
 async def save_role(request: Request, name: Annotated[str, Form()], steps: Annotated[str, Form()] = "",
-                    signature: Annotated[str, Form()] = "", org_unit: Annotated[str, Form()] = "") -> HTMLResponse:
+                    signature: Annotated[str, Form()] = "", org_unit: Annotated[str, Form()] = "",
+                    groups: Annotated[str, Form()] = "", calendars: Annotated[str, Form()] = "") -> HTMLResponse:
     store = _store(request)
     try:
-        store.set_role(name, steps.splitlines(), signature=signature, org_unit=org_unit)
+        store.set_role(name, steps.splitlines(), signature=signature, org_unit=org_unit,
+                       groups=groups.splitlines(), calendars=calendars.splitlines())
     except ValueError as exc:
         return _err(request, str(exc))
     return TEMPLATES.TemplateResponse(request, "_onboard_roles.html", {"roles": store.roles()})
@@ -115,6 +117,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
         "manager": manager, "send_welcome": bool(send_welcome),
         "create_account": bool(create_account), "first": f, "last": l,
         "org_unit": cfg.org_unit or "/", "signature": cfg.signature,
+        "groups": cfg.groups, "calendars": cfg.calendars,
         "subject": onboarding.render(w["subject"], ctx), "body": onboarding.render(w["body"], ctx),
     })
 
@@ -167,6 +170,33 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
                 except Exception:  # noqa: BLE001
                     credentials["signature"] = None
 
+    # Add the new hire to the role's groups and subscribe them to its shared calendars. These act on
+    # the new hire's own email — whether or not we just created the account — and are non-fatal per item.
+    memberships = None
+    if email and (cfg.groups or cfg.calendars):
+        g_ok, g_fail = 0, []
+        for g in cfg.groups:
+            try:
+                gr = await conn.add_group_member(g, email)
+                if gr.ok:
+                    g_ok += 1
+                else:
+                    g_fail.append(g)
+            except Exception:  # noqa: BLE001
+                g_fail.append(g)
+        c_ok, c_fail = 0, []
+        for cal in cfg.calendars:
+            try:
+                cr = await conn.subscribe_calendar_for(email, cal)
+                if cr.ok:
+                    c_ok += 1
+                else:
+                    c_fail.append(cal)
+            except Exception:  # noqa: BLE001
+                c_fail.append(cal)
+        memberships = {"groups_added": g_ok, "groups_total": len(cfg.groups), "groups_failed": g_fail,
+                       "cals_added": c_ok, "cals_total": len(cfg.calendars), "cals_failed": c_fail}
+
     assignee = (assignee or email).strip()
     if not assignee:
         return _err(request, "Enter the assignee (who does the setup) or the new hire's email.")
@@ -186,5 +216,5 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
             email_sent = False
     return TEMPLATES.TemplateResponse(request, "_onboard_run.html", {
         "result": result, "assignee": assignee, "title": title, "email_sent": email_sent, "email": email,
-        "credentials": credentials,
+        "credentials": credentials, "memberships": memberships,
     })

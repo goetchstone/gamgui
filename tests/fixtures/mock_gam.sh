@@ -108,6 +108,16 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
   exit 0
 fi
 
+# `gam update group <group> add <role> <member>` -> add a member. Real GAM 404s if the group doesn't
+# exist (a typo'd group address is the common onboarding mistake), so a *missing* group fails like GAM.
+if [ "${1:-}" = "update" ] && [ "${2:-}" = "group" ] && [ "${4:-}" = "add" ]; then
+  case "${3:-}" in
+    *missing*|*nonexistent*) echo "ERROR: 404: Resource Not Found: groupKey - notFound" 1>&2; exit 1 ;;
+    *)                       echo "Group: ${3:-}, added ${6:-} as ${5:-member}" ;;
+  esac
+  exit 0
+fi
+
 # `gam user <email> print messages ...` -> formatjson NDJSON; one row carries an Amazon SES
 # Return-Path header so the mailbox-search flow has an envelope-sender to surface.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ]; then

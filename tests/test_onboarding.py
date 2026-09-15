@@ -208,3 +208,52 @@ def test_run_account_duplicate_fails_gracefully(client):
                                           "email": "exists@example.com", "assignee": "it@example.com",
                                           "create_account": "1", "confirm": "1"})
     assert "create the account" in r.text and "409" in r.text   # the 409 is surfaced, not swallowed
+
+
+# --- per-role group membership + shared calendars ---
+
+def test_role_groups_calendars_persist_and_migrate(tmp_path):
+    p = tmp_path / "ob.json"
+    RunbookStore(p).set_role("Sales", ["Step"], groups=["sales@example.com", ""], calendars=["cal@x", "  "])
+    r = RunbookStore(p).role("Sales")   # reload from disk
+    assert r.groups == ["sales@example.com"] and r.calendars == ["cal@x"]   # blanks dropped, persisted
+    # a dict written before groups/calendars existed migrates to empty lists (keeps other fields)
+    import json
+    p.write_text(json.dumps({"roles": {"Old": {"steps": ["s"], "signature": "", "org_unit": "/O"}}}))
+    old = RunbookStore(p).role("Old")
+    assert old.groups == [] and old.calendars == [] and old.org_unit == "/O"
+
+
+def test_preview_shows_groups_and_calendars(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
+                                        "groups": "sales@example.com\nstaff@example.com",
+                                        "calendars": "team@group.calendar.google.com"})
+    r = client.post("/onboard/preview", data={"role": "Sales", "name": "Ada", "email": "ada@example.com"})
+    assert r.status_code == 200
+    assert "2 groups" in r.text and "sales@example.com" in r.text and "staff@example.com" in r.text
+    assert "1 shared calendar" in r.text and "team@group.calendar.google.com" in r.text
+
+
+def test_run_adds_groups_and_subscribes_calendars(client):
+    # No account creation — groups/calendars apply to an existing hire's email.
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
+                                        "groups": "sales@example.com\nstaff@example.com",
+                                        "calendars": "team@group.calendar.google.com"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada",
+                                          "email": "ada@example.com", "assignee": "it@example.com"})
+    assert r.status_code == 200
+    assert "2 of 2 groups" in r.text and "1 of 1 shared calendar" in r.text
+    assert "Created" in r.text   # the tasklist still ran
+
+
+def test_run_reports_failed_group_and_calendar_non_fatal(client):
+    # A *missing* group 404s in the mock; a SUBFAIL calendar is refused — both reported, neither fatal.
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
+                                        "groups": "sales@example.com\nmissing-group@example.com",
+                                        "calendars": "SUBFAIL-cal@x"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada",
+                                          "email": "ada@example.com", "assignee": "it@example.com"})
+    assert r.status_code == 200
+    assert "1 of 2 groups" in r.text and "missing-group@example.com" in r.text   # bad group reported
+    assert "0 of 1 shared calendar" in r.text and "SUBFAIL-cal@x" in r.text      # bad calendar reported
+    assert "Created" in r.text   # memberships are best-effort; the runbook still ran
