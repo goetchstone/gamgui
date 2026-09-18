@@ -24,7 +24,7 @@ from ...core import signatures as sig
 from ...core.gam.models import GAMUser
 from ...core.onboarding import RunbookStore
 from ...core.signatures import SignatureStore
-from ..jobs import start_job
+from ..jobs import register_job
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/onboard")
@@ -153,7 +153,11 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
                                  "org_unit": cfg.org_unit or "/"}
 
     if email:
-        res["signature"] = await _apply_signature(conn, sig_store, cfg, email, first, last)
+        # Signature only for an account THIS run created — matches the single /run flow and never
+        # clobbers an existing user's customized signature (or renders a blank {name} for an
+        # existing-account row that has no name in the CSV).
+        if res["account_created"]:
+            res["signature"] = await _apply_signature(conn, sig_store, cfg, email, first, last)
         if cfg.groups:
             g_ok, g_fail = await _apply_groups(conn, email, cfg.groups)
             res["groups"] = {"added": g_ok, "total": len(cfg.groups), "failed": g_fail}
@@ -443,12 +447,7 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()],
     valid, cfgs, _summary, _row_errors = _bulk_summary(rows, _store(request))
     if not valid:
         return _err(request, "Nothing to run — every row had an unknown role or was invalid.")
-    # Register the job, pruning finished ones so the registry can't grow (mirrors jobs.start_job).
-    finished = [jid for jid, j in st.jobs.items() if getattr(j, "finished", False)]
-    for jid in finished[:-10] if len(finished) > 10 else []:
-        st.jobs.pop(jid, None)
-    job = OnboardJob(id=secrets.token_urlsafe(8), total=len(valid))
-    st.jobs[job.id] = job
+    job = register_job(st.jobs, OnboardJob(id=secrets.token_urlsafe(8), total=len(valid)))
     job.task = asyncio.create_task(
         _run_bulk_onboard(job, conn, _sig_store(request), _store(request), valid, cfgs))
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": job, "credentials": None})

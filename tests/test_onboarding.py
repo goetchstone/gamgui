@@ -432,3 +432,16 @@ def test_search_calendars_uses_the_index(client, tmp_path):
     # an index built for another tenant is not served
     idx.replace_all("other.com", [IndexedCalendar("x@g.com", "X", "", "secondary", 0)])
     assert "No calendar index yet" in client.get("/onboard/search/calendars?q=x").text
+
+
+@pytest.mark.asyncio
+async def test_provision_hire_skips_signature_for_existing_account(connector, tmp_path):
+    # Bulk must match the single flow: the role signature is applied only to an account this run
+    # created — never clobbering an existing user's signature (create_account=False).
+    from gamgui.web.routes.onboarding import _provision_hire
+    store = RunbookStore(tmp_path / "ob.json")
+    store.set_role("Sales", ["Set up POS"], signature="Classic")
+    cfg = store.role("Sales")
+    r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
+                              _hire(name="Ada Byte", email="ada@example.com", create_account=False))
+    assert r["ok"] and r["account_created"] is False and r["signature"] is None

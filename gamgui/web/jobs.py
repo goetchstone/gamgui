@@ -26,11 +26,17 @@ class BatchJob:
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
 
-def start_job(jobs: dict, total: int, keep: int = 10) -> BatchJob:
-    """Register a fresh job, pruning the oldest finished ones so the registry can't grow forever."""
+def register_job(jobs: dict, job, keep: int = 10):
+    """Register ``job`` (anything with ``.id`` and ``.finished``), pruning the oldest finished jobs
+    first so the registry can't grow forever. Shared by ``start_job`` and feature-specific job
+    types (e.g. onboarding's ``OnboardJob``)."""
     finished = [jid for jid, j in jobs.items() if getattr(j, "finished", False)]
     for jid in finished[:-keep] if len(finished) > keep else []:
         jobs.pop(jid, None)
-    job = BatchJob(id=secrets.token_urlsafe(8), total=total)
     jobs[job.id] = job
     return job
+
+
+def start_job(jobs: dict, total: int, keep: int = 10) -> BatchJob:
+    """Register a fresh job, pruning the oldest finished ones so the registry can't grow forever."""
+    return register_job(jobs, BatchJob(id=secrets.token_urlsafe(8), total=total), keep=keep)
