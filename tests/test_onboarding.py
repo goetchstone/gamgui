@@ -541,3 +541,71 @@ def test_parse_hire_csv_flags_duplicate_emails():
     rows, errors = onboarding.parse_hire_csv("role,email\nSales,a@x.com\nSales,A@X.com\nSales,b@x.com\n")
     assert [r["email"] for r in rows] == ["a@x.com", "b@x.com"]           # case-insensitive dup dropped
     assert any("duplicate email" in e and "Row 3" in e for e in errors)
+
+
+def test_run_reports_actual_task_count(client):
+    # The mock now 404s create-task on a wrong tasklist id, so "Created N of N" proves real creation.
+    client.post("/onboard/role", data={"name": "Cashier", "steps": "A\nB\nC"})
+    r = client.post("/onboard/run", data={"role": "Cashier", "name": "Jo",
+                                          "email": "jo@example.com", "assignee": "it@example.com"})
+    assert "<strong>3</strong> of 3 tasks" in r.text
+
+
+def test_run_welcome_email_sent_and_failed(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    ok = client.post("/onboard/run", data={"role": "Sales", "name": "Jo", "email": "jo@example.com",
+                                           "assignee": "it@example.com", "send_welcome": "1"})
+    assert "sent" in ok.text and "✓" in ok.text                     # sent ✓
+    bad = client.post("/onboard/run", data={"role": "Sales", "name": "Jo", "email": "jo-SENDFAIL@example.com",
+                                            "assignee": "it@example.com", "send_welcome": "1"})
+    assert "failed to send" in bad.text
+
+
+def test_run_create_account_with_groups_calendars_and_signature(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "signature": "Classic",
+                                        "org_unit": "/Sales", "groups": "sales@example.com\nstaff@example.com",
+                                        "calendars": "team@group.calendar.google.com"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
+                                          "assignee": "it@example.com", "create_account": "1", "confirm": "1"})
+    assert "Account created" in r.text and "Classic applied" in r.text
+    assert "2 of 2 group" in r.text and "1 of 1 shared calendar" in r.text and "of 1 task" in r.text
+
+
+@pytest.mark.asyncio
+async def test_provision_hire_notify_never_audits_password(connector, tmp_path, monkeypatch):
+    from gamgui.web.routes.onboarding import _provision_hire
+    monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "NOTIFYpw-1234-5678")
+    store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
+    r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, store.role("Sales"),
+                              _hire(name="Ada Byte", email="ada@example.com", create_account=True,
+                                    first="Ada", last="Byte", notify="ada.personal@gmail.com"))
+    assert r["notified"] is True and r["credential"] is None
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert "NOTIFYpw-1234-5678" not in audit and "create_user" in audit   # notifypassword redacted too
+
+
+def test_bulk_status_does_not_drain_credentials_before_finish(client):
+    from gamgui.web.routes.onboarding import OnboardJob
+    st = client.app.state.gamgui
+    st.jobs["run"] = OnboardJob(id="run", total=2, done=1, ok=1, account_created=1, finished=False,
+                                credentials=[{"name": "Ada", "email": "ada@example.com",
+                                              "password": "PENDINGpw-1", "org_unit": "/Sales"}])
+    r = client.get("/onboard/bulk/status?job=run")
+    assert r.status_code == 200 and "PENDINGpw-1" not in r.text          # not served while running
+    assert st.jobs["run"].credentials != []                             # not drained early
+
+
+def test_bulk_preview_accepts_excel_utf8_bom(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    csv = "role,name,email\nSales,Ada,ada@example.com\n".encode("utf-8-sig")   # Excel "CSV UTF-8" BOM
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", csv, "text/csv")})
+    assert r.status_code == 200 and "1 hire" in r.text                   # BOM didn't break the header
+
+
+@pytest.mark.asyncio
+async def test_bulk_job_failed_sample_is_capped(tmp_path):
+    from gamgui.web.routes.onboarding import OnboardJob, _FAILED_SAMPLE_CAP
+    job = OnboardJob(id="t", total=_FAILED_SAMPLE_CAP + 50)
+    for n in range(_FAILED_SAMPLE_CAP + 50):
+        job.record({"email": "h{}@x.com".format(n), "ok": False, "errors": ["boom"]})
+    assert job.failed_total == _FAILED_SAMPLE_CAP + 50 and len(job.failed) == _FAILED_SAMPLE_CAP  # #9

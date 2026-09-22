@@ -255,6 +255,28 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "create" ] && [ "${4:-}" = "tasklist" ]
   exit 0
 fi
 
+# `gam user <a> create task <tasklistid> title <t>` -> a task on the list. Real GAM 404s if the
+# tasklist id doesn't exist, so only the id our create-tasklist handler returned succeeds. Without
+# this, the catch-all accepted ANY id and "Created N of N" proved nothing (the mock lied).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "create" ] && [ "${4:-}" = "task" ]; then
+  case "${5:-}" in
+    MockTasklist_abc123) echo "User: ${2:-}, Task: MockTask created" ;;
+    *) echo "ERROR: 404: Tasklist not found - notFound" 1>&2; exit 1 ;;
+  esac
+  exit 0
+fi
+
+# `gam sendemail to <addr> subject ... message ... html` -> send. Real GAM 400s on a bad recipient,
+# so a *SENDFAIL* address fails like an invalid `to` header; anything else succeeds. Without this the
+# welcome-email send/fail branches were never exercised.
+if [ "${1:-}" = "sendemail" ] && [ "${2:-}" = "to" ]; then
+  case "${3:-}" in
+    *SENDFAIL*) echo "ERROR: 400: Bad Request - invalidArgument: Invalid to header" 1>&2; exit 1 ;;
+  esac
+  echo "Email sent to ${3:-}"
+  exit 0
+fi
+
 # `gam create datatransfer <old> <serviceList> <new>` -> succeeds. To reproduce the real 409, an
 # <old> containing CONFLICT409 (e.g. a second transfer for the same user still in flight) returns
 # the exact "already in progress" error Google emits.
