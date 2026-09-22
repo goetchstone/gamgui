@@ -12,6 +12,16 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Pattern, Tuple
 
+from ..audit import redact_argv
+
+# GAM echoes the full command line on a usage error, so a submitted `password`/`notifypassword` value
+# can appear in stderr. Mask it before the GAMError can be logged, shown, or its .message built.
+_SECRET_IN_STDERR: Pattern[str] = re.compile(r"(?i)\b(password|notifypassword)\s+\S+")
+
+
+def _scrub_stderr(stderr: str) -> str:
+    return _SECRET_IN_STDERR.sub(r"\1 ***redacted***", stderr or "")
+
 
 class GAMErrorKind(enum.Enum):
     """Coarse classification of a failed GAM run."""
@@ -76,7 +86,8 @@ class GAMError(Exception):
     ----------
     kind: the coarse classification used to drive the UI.
     exit_code: GAM's process exit code (``None`` if the process never returned, e.g. timeout).
-    stderr: the raw stderr captured from GAM (already redaction-safe — GAM does not echo secrets).
+    stderr: GAM's stderr, scrubbed of secrets in __post_init__ (GAM echoes the command line — incl.
+        a submitted password — on a usage error, so this must not be trusted raw).
     argv: the gam argument list that was run (binary path excluded), for diagnostics.
     """
 
@@ -86,6 +97,10 @@ class GAMError(Exception):
     argv: Optional[List[str]] = None
 
     def __post_init__(self) -> None:
+        # Redact any secret the failed command carried BEFORE this exception is logged, shown, or its
+        # .message is built — GAM echoes the command line (incl. the password) on a usage error.
+        self.argv = redact_argv(self.argv)
+        self.stderr = _scrub_stderr(self.stderr)
         super().__init__(self.message)
 
     @property

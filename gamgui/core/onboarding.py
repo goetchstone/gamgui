@@ -150,6 +150,7 @@ def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
 
     rows: List[Dict] = []
     errors: List[str] = []
+    seen: Dict[str, int] = {}   # email (lowercased) -> first row that used it
     for raw in reader:
         i = reader.line_num  # the row's real line number in the file (DictReader silently skips blanks)
         role, name = cell(raw, "role"), cell(raw, "name")
@@ -160,6 +161,11 @@ def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
             errors.append("Row {}: missing role.".format(i)); continue
         if not email and not assignee:
             errors.append("Row {}: needs an email or an assignee.".format(i)); continue
+        key = email.lower()
+        if key and key in seen:
+            errors.append("Row {}: duplicate email {} (first on row {}).".format(i, email, seen[key])); continue
+        if key:
+            seen[key] = i
         rows.append({
             "role": role, "name": name, "email": email, "manager": cell(raw, "manager"),
             "assignee": assignee, "create_account": _truthy(cell(raw, "create_account")),

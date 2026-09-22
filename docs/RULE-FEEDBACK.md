@@ -43,6 +43,10 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently — a redactor applied to *every* audited
   field (or a tripwire asserting no audited field carries an un-redacted value) rather than to `argv`
   alone.
+- **Correction (2026-09-22):** the premise "GAM doesn't echo a submitted password in its stderr" is
+  FALSE — GAM echoes the full command line on a usage error. Now redacted at `GAMError` construction
+  (`core/gam/errors.py.__post_init__`: `redact_argv(argv)` + `_scrub_stderr(stderr)`), so `exc.argv`
+  and `exc.stderr` are safe for any consumer; `extra.error` derives from the scrubbed `.message`.
 - **Enforcement home if changed:** tripwire test + a one-line scrub of `extra.error` through the
   redactor in `_run_write`. Low priority (no live exposure today) — for the observer pass.
 

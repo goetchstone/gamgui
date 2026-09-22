@@ -525,3 +525,19 @@ def test_bulk_status_ignores_foreign_job(client):
     client.app.state.gamgui.jobs["foreign"] = BatchJob(id="foreign", total=3, finished=True)
     r = client.get("/onboard/bulk/status?job=foreign")
     assert r.status_code == 200 and "no longer available" in r.text   # not a 500
+
+
+def test_gam_error_scrubs_password_from_stderr_and_argv():
+    # GAM echoes the command line (incl. the password) on a usage error — the exception must not carry it.
+    from gamgui.core.gam.errors import GAMError
+    exc = GAMError.from_run(
+        2, "ERROR: usage: Command: gam create user @bad.com password SEKRETpw-9999 firstname A",
+        ["create", "user", "@bad.com", "password", "SEKRETpw-9999"])
+    for surface in (str(exc), exc.stderr or "", " ".join(exc.argv or [])):
+        assert "SEKRETpw-9999" not in surface
+
+
+def test_parse_hire_csv_flags_duplicate_emails():
+    rows, errors = onboarding.parse_hire_csv("role,email\nSales,a@x.com\nSales,A@X.com\nSales,b@x.com\n")
+    assert [r["email"] for r in rows] == ["a@x.com", "b@x.com"]           # case-insensitive dup dropped
+    assert any("duplicate email" in e and "Row 3" in e for e in errors)
