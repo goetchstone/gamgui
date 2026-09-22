@@ -178,8 +178,9 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
         title = "Onboard {} — {}".format(name or email or "new hire", hire["role"])
         try:
             tl = await conn.create_onboarding_runbook(assignee, title, cfg.steps)
-            res["tasklist"] = {"assignee": assignee, "created": tl.get("created"),
-                               "total": tl.get("total"), "ok": bool(tl.get("tasklist_id"))}
+            res["tasklist"] = {"assignee": assignee, "tasklist_id": tl.get("tasklist_id", ""),
+                               "created": tl.get("created"), "total": tl.get("total"),
+                               "failed": tl.get("failed", []), "ok": bool(tl.get("tasklist_id"))}
             if not tl.get("tasklist_id"):
                 res["errors"].append("tasks: no tasklist id came back")
         except Exception as exc:  # noqa: BLE001
@@ -339,7 +340,6 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if email and not onboarding.looks_like_email(email):
         return _err(request, "That does not look like a valid email address for the new hire.")
     make_account = bool(create_account)
-    credentials: Optional[dict] = None
 
     # Validate everything that does NOT write BEFORE any mutation, so a bad assignee (or any later
     # step) can't strand a just-created account's one-time password (it exists nowhere else).
@@ -359,51 +359,36 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if not onboarding.looks_like_email(assignee):
         return _err(request, "The assignee does not look like a valid email address.")
 
-    if make_account:
-        temp = onboarding.generate_temp_password()
-        try:
-            res = await conn.create_user(email, f, l, temp, change_password=True,
-                                         org_unit=(cfg.org_unit or None))
-        except Exception as exc:  # noqa: BLE001
-            return _err(request, "Couldn't create the account: " + str(getattr(exc, "remediation", exc)))
-        if not res.ok:
-            return _err(request, "Couldn't create the account: " + (res.detail or "unknown error"))
-        credentials = {"name": name or f"{f} {l}", "email": email, "password": temp,
-                       "org_unit": cfg.org_unit or "/", "signature": None}
-        # Apply the role's signature template to the new account (non-fatal if it fails).
-        credentials["signature"] = await _apply_signature(conn, _sig_store(request), cfg, email, f, l)
+    # Delegate the actual provisioning to the shared per-hire path — ONE implementation for the single
+    # and bulk flows (their divergence is exactly what stranded a temp password before). The single
+    # flow never uses `notify` (always the printable sheet) and turns a hard failure into an error page
+    # while the bulk feed shows it as a per-hire row.
+    hire = {"role": role, "name": name, "email": email, "manager": manager, "assignee": assignee,
+            "create_account": make_account, "first": first, "last": last,
+            "send_welcome": bool(send_welcome), "notify": ""}
+    res = await _provision_hire(conn, _sig_store(request), store, cfg, hire)
+    if make_account and not res["account_created"]:
+        detail = next((e[len("create: "):] for e in res["errors"] if e.startswith("create:")), "unknown error")
+        return _err(request, "Couldn't create the account: " + detail)
 
-    # Add the new hire to the role's groups and subscribe them to its shared calendars. These act on
-    # the new hire's own email — whether or not we just created the account — and are non-fatal per item.
+    # Map the structured result onto the single-hire result panel's contract.
+    credentials = {**res["credential"], "signature": res["signature"]} if res["credential"] else None
     memberships = None
-    if email and (cfg.groups or cfg.calendars):
-        g_ok, g_fail = await _apply_groups(conn, email, cfg.groups)
-        c_ok, c_fail = await _apply_calendars(conn, email, cfg.calendars)
-        memberships = {"groups_added": g_ok, "groups_total": len(cfg.groups), "groups_failed": g_fail,
-                       "cals_added": c_ok, "cals_total": len(cfg.calendars), "cals_failed": c_fail}
-
+    if res["groups"] or res["calendars"]:
+        g = res["groups"] or {"added": 0, "total": 0, "failed": []}
+        c = res["calendars"] or {"added": 0, "total": 0, "failed": []}
+        memberships = {"groups_added": g["added"], "groups_total": g["total"], "groups_failed": g["failed"],
+                       "cals_added": c["added"], "cals_total": c["total"], "cals_failed": c["failed"]}
+    result = res["tasklist"] or {"tasklist_id": "", "created": 0, "total": len(cfg.steps), "failed": []}
+    tl_err = next((e[len("tasks: "):] for e in res["errors"] if e.startswith("tasks:")), "")
+    if tl_err and not result.get("tasklist_id"):
+        result = {**result, "error": tl_err}
+    if not credentials and not memberships and tl_err and not result.get("tasklist_id"):
+        return _err(request, "Couldn't create the task list: " + tl_err)   # nothing else ran -> error page
     title = "Onboard {} — {}".format(name or email or "new hire", role)
-    try:
-        result = await conn.create_onboarding_runbook(assignee, title, cfg.steps)
-    except Exception as exc:  # noqa: BLE001
-        # An account or membership already succeeded — never bare-_err here (that strands the
-        # one-time password). Surface the failure in the result panel beside the credentials sheet.
-        if credentials is None and memberships is None:
-            return _err(request, "Couldn't create the task list: " + str(getattr(exc, "remediation", exc)))
-        result = {"tasklist_id": "", "created": 0, "failed": list(cfg.steps),
-                  "total": len(cfg.steps), "error": str(getattr(exc, "remediation", exc))}
-    email_sent = None
-    if send_welcome and email:
-        w, ctx = store.welcome(), _ctx(name, email, role, manager)
-        try:
-            res = await conn.send_welcome_email(email, onboarding.render(w["subject"], ctx),
-                                                onboarding.render(w["body"], ctx))
-            email_sent = bool(res.ok)
-        except Exception:  # noqa: BLE001
-            email_sent = False
     return TEMPLATES.TemplateResponse(request, "_onboard_run.html", {
-        "result": result, "assignee": assignee, "title": title, "email_sent": email_sent, "email": email,
-        "credentials": credentials, "memberships": memberships,
+        "result": result, "assignee": assignee, "title": title, "email_sent": res["email_sent"],
+        "email": email, "credentials": credentials, "memberships": memberships,
     })
 
 
