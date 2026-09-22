@@ -34,9 +34,12 @@
     <div id="ob-bulk-creds" class="rounded-xl border-2 border-brand-blue/40 bg-brand-white p-3">
       <div class="flex items-center justify-between gap-3">
         <h4 class="font-medium text-brand-black">Printable credentials — {{ credentials | length }} account{{ '' if credentials | length == 1 else 's' }}</h4>
-        <button type="button" onclick="obPrintBulkCreds()" class="shrink-0 rounded-lg border border-brand-blue px-3 py-1.5 text-xs text-brand-blueink hover:bg-brand-blue/10">Print / Save PDF</button>
+        <div class="flex shrink-0 gap-2">
+          <button type="button" onclick="obPrintBulkCreds()" class="rounded-lg border border-brand-blue px-3 py-1.5 text-xs text-brand-blueink hover:bg-brand-blue/10">Print / Save PDF</button>
+          <button type="button" hx-post="/onboard/bulk/done" hx-vals='{"job": "{{ job.id }}"}' hx-target="#onboard-bulk-job" hx-swap="outerHTML" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs text-brand-gray hover:bg-brand-gray/10">Done — I saved it</button>
+        </div>
       </div>
-      <p class="mt-1 text-xs text-brand-gray"><strong>Shown once</strong> — print or save now; this page won't show it again, and it is never emailed or written to the audit log. ({{ job.notified }} with a notify address were emailed their sign-in info by GAM instead.) Each must reset at first login.</p>
+      <p class="mt-1 text-xs text-brand-gray">Print or save now — kept for <strong>15 minutes</strong> or until you click Done, then never shown again. Not emailed or written to the audit log. ({{ job.notified }} with a notify address were emailed their sign-in info by GAM instead.) Each must reset at first login; if lost, reset the password in the Admin console.</p>
       <div id="ob-bulk-creds-sheet" class="mt-2 grid gap-2 sm:grid-cols-2">
         {% for c in credentials %}
         <div class="rounded-lg border border-brand-gray/30 p-2 text-xs">

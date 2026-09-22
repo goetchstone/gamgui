@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+import time
 from dataclasses import dataclass, field
 from typing import Annotated, List, Optional
 
@@ -34,6 +35,7 @@ router = APIRouter(prefix="/onboard")
 # the final panel, not on every poll.
 _RECENT_WINDOW = 12
 _FAILED_SAMPLE_CAP = 200
+_CREDS_TTL = 15 * 60   # keep the bulk credentials sheet re-fetchable for 15 min, or until Done
 
 
 def _st(request: Request):
@@ -214,6 +216,7 @@ class OnboardJob:
     recent: List[dict] = field(default_factory=list)     # capped feed of per-hire result dicts
     credentials: List[dict] = field(default_factory=list)  # printable-sheet rows (blank-notify accounts)
     finished: bool = False
+    finished_at: float = 0.0
     error: Optional[str] = None
     task: object = field(default=None, repr=False)
 
@@ -251,6 +254,7 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[
         job.error = str(exc)
     finally:
         job.finished = True
+        job.finished_at = time.monotonic()
 
 
 @router.get("", response_class=HTMLResponse)
@@ -520,14 +524,28 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     j = _st(request).jobs.get(job) if job else None
     if not isinstance(j, OnboardJob):   # st.jobs is shared; another feature's BatchJob isn't ours
         j = None
-    # One-shot credentials: render the printable sheet once (on the terminal poll), then drop the
-    # plaintext temp passwords from the retained job so this GET — which is bookmarkable, kept in
-    # history, and re-fetchable — can't re-serve them. `no-store` also keeps the browser from caching
-    # the response. (The single-hire flow avoids this by returning credentials in a POST.)
+    # Credentials sheet: serve it while the job is finished and within _CREDS_TTL of finishing, then
+    # drop the plaintext (an explicit "Done" clears it sooner). A GET is bookmarkable/re-fetchable, so
+    # `no-store` keeps it out of the browser cache; the TTL keeps one refresh from losing every
+    # password at once (the old drop-on-first-render did exactly that).
     creds = None
     if j is not None and j.finished and j.credentials:
-        creds = j.credentials
-        j.credentials = []
+        if time.monotonic() - j.finished_at < _CREDS_TTL:
+            creds = j.credentials
+        else:
+            j.credentials = []
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": j, "credentials": creds})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.post("/bulk/done", response_class=HTMLResponse)
+async def bulk_done(request: Request, job: Annotated[str, Form()] = "") -> HTMLResponse:
+    j = _st(request).jobs.get(job) if job else None
+    if not isinstance(j, OnboardJob):
+        j = None
+    elif j.credentials:
+        j.credentials = []   # operator confirmed they printed/saved the sheet — drop the plaintext now
+    resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": j, "credentials": None})
     resp.headers["Cache-Control"] = "no-store"
     return resp

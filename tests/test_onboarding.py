@@ -386,20 +386,28 @@ def test_bulk_run_starts_a_job(client):
     assert re.search(r"/onboard/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
 
 
-def test_bulk_status_credentials_are_one_shot_and_no_store(client):
-    # The status GET is bookmarkable/re-fetchable, so plaintext temp passwords must show ONCE and the
-    # response must be no-store — otherwise they'd sit in cache/history (invariant 4).
+def test_bulk_status_credentials_ttl_no_store_and_done(client):
+    # The status GET is bookmarkable/re-fetchable, so the sheet must be no-store, kept only within the
+    # TTL (a refresh mustn't lose every password), and dropped by an explicit Done or once the TTL
+    # lapses (invariant 4 — no stranded plaintext).
+    import time as _t
     from gamgui.web.routes.onboarding import OnboardJob
     st = client.app.state.gamgui
-    st.jobs["oneshot"] = OnboardJob(
-        id="oneshot", total=1, done=1, ok=1, account_created=1, finished=True,
-        credentials=[{"name": "Ada", "email": "ada@example.com",
-                      "password": "SHEETpw-1234-5678", "org_unit": "/Sales"}])
-    r1 = client.get("/onboard/bulk/status?job=oneshot")
-    assert "SHEETpw-1234-5678" in r1.text                       # shown once
-    assert r1.headers.get("cache-control") == "no-store"        # not cacheable/bookmarkable
-    r2 = client.get("/onboard/bulk/status?job=oneshot")
-    assert "SHEETpw-1234-5678" not in r2.text                   # gone on re-fetch (one-shot)
+    st.jobs["j1"] = OnboardJob(id="j1", total=1, done=1, ok=1, account_created=1, finished=True,
+                               finished_at=_t.monotonic(),
+                               credentials=[{"name": "Ada", "email": "ada@example.com",
+                                             "password": "SHEETpw-1234-5678", "org_unit": "/Sales"}])
+    r1 = client.get("/onboard/bulk/status?job=j1")
+    assert "SHEETpw-1234-5678" in r1.text and r1.headers.get("cache-control") == "no-store"
+    r2 = client.get("/onboard/bulk/status?job=j1")
+    assert "SHEETpw-1234-5678" in r2.text                       # a refresh within the TTL still shows it
+    r3 = client.post("/onboard/bulk/done", data={"job": "j1"})
+    assert "SHEETpw-1234-5678" not in r3.text and st.jobs["j1"].credentials == []   # Done drops it
+    # a job finished longer ago than the TTL: sheet gone and cleared
+    st.jobs["j2"] = OnboardJob(id="j2", total=1, finished=True, finished_at=_t.monotonic() - 10_000,
+                               credentials=[{"name": "B", "email": "b@x.com", "password": "OLDpw", "org_unit": "/"}])
+    r4 = client.get("/onboard/bulk/status?job=j2")
+    assert "OLDpw" not in r4.text and st.jobs["j2"].credentials == []
 
 
 # --- group + calendar pickers (search while editing a role) ---
