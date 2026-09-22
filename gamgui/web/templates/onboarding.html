@@ -40,7 +40,7 @@
         <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@domain.com" /></label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="send_welcome" value="1" /> Also send the welcome email to the new hire</label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="create_account" value="1" onchange="obToggleCreate(this)" /> <span><strong>Create the Google account</strong> — with a temp password on a printable sheet; the user must reset it at first login. Uses the role's org unit &amp; signature.</span></label>
-      <div id="ob-create-fields" class="hidden gap-3 sm:grid sm:grid-cols-2 sm:col-span-2">
+      <div id="ob-create-fields" class="hidden gap-3 sm:grid-cols-2 sm:col-span-2">
         <label class="block text-sm"><span class="text-brand-blueink">First name</span>
           <input class="{{ fld }} mt-1" name="first" placeholder="Jordan" /></label>
         <label class="block text-sm"><span class="text-brand-blueink">Last name</span>
@@ -136,7 +136,11 @@
   // Reveal the first/last name fields only when "Create the Google account" is ticked.
   function obToggleCreate(cb) {
     var box = document.getElementById("ob-create-fields");
-    if (box) box.classList.toggle("hidden", !cb.checked);
+    if (!box) return;
+    // Toggle `grid` (not a static `sm:grid`, which a responsive utility would let win over `hidden`
+    // at desktop widths — the fields then never hid). Only one of hidden/grid is present at a time.
+    box.classList.toggle("hidden", !cb.checked);
+    box.classList.toggle("grid", cb.checked);
   }
 
   // Add a picked group/calendar to its textarea (deduped, one per line).

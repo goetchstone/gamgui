@@ -306,6 +306,8 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
                   assignee: Annotated[str, Form()] = "", send_welcome: Annotated[str, Form()] = "",
                   create_account: Annotated[str, Form()] = "", first: Annotated[str, Form()] = "",
                   last: Annotated[str, Form()] = "") -> HTMLResponse:
+    if email.strip() and not onboarding.looks_like_email(email):
+        return _err(request, "That does not look like a valid email address for the new hire.")
     store = _store(request)
     cfg = store.role(role)
     if cfg is None or not cfg.steps:

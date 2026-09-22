@@ -645,3 +645,9 @@ def test_run_rejects_invalid_email(client):
     r = client.post("/onboard/run", data={"role": "Sales", "name": "X", "email": "oauthuser",
                                           "assignee": "it@example.com"})
     assert "valid email" in r.text.lower()   # rejected before any group-add targets the admin
+
+
+def test_preview_rejects_invalid_email(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    r = client.post("/onboard/preview", data={"role": "Sales", "name": "X", "email": "oauthuser"})
+    assert "valid email" in r.text.lower()   # caught at preview, before Run
