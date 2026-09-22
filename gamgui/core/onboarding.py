@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import json
 import os
 import secrets
@@ -128,6 +129,16 @@ def _truthy(value: str) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "x", "on"}
 
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def looks_like_email(value: str) -> bool:
+    """Pragmatic address check: a non-empty local part, one @, a dotted domain. Rejects GAM keyword
+    traps (oauthuser, @domain, a bare name) that would target the authorizing admin instead of the
+    intended hire when passed to update-group / add-calendars."""
+    return bool(_EMAIL_RE.match((value or "").strip()))
+
+
 def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
     """Parse an onboarding CSV into row dicts + human-readable errors (``"Row N: …"``).
 
@@ -161,6 +172,10 @@ def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
             errors.append("Row {}: missing role.".format(i)); continue
         if not email and not assignee:
             errors.append("Row {}: needs an email or an assignee.".format(i)); continue
+        bad = next(("{} '{}'".format(lbl, v) for lbl, v in (("email", email), ("assignee", assignee))
+                    if v and not looks_like_email(v)), None)
+        if bad:
+            errors.append("Row {}: {} is not a valid email address.".format(i, bad)); continue
         key = email.lower()
         if key and key in seen:
             errors.append("Row {}: duplicate email {} (first on row {}).".format(i, email, seen[key])); continue

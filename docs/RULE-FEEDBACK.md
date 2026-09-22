@@ -69,5 +69,10 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Enforcement home if changed:** tripwire test (allowlist of non-`_run_write` audited mutations) plus
   a one-clause sharpening of #2's wording to name the audited-exception shape. For the observer pass —
   not this session.
+- **Resolved (2026-09-22):** the tripwire now exists —
+  `tests/test_command_contract.py::test_audit_record_only_in_run_write_or_allowlist` asserts every
+  `self.audit.record(` in the connector sits in `_run_write` or the named allowlist
+  (`{_run_write, create_onboarding_runbook}`) and fails on any new bypass. The #2 wording-sharpening
+  remains for the observer pass.
 
 <!-- Add new entries ABOVE this line, newest first. -->

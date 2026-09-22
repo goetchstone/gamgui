@@ -108,3 +108,21 @@ def test_pinned_version_consistent():
 
     mock = (ROOT / "tests" / "fixtures" / "mock_gam.sh").read_text()
     assert EXPECTED_GAM_VERSION in mock, "mock_gam.sh must echo EXPECTED_GAM_VERSION"
+
+
+def test_audit_record_only_in_run_write_or_allowlist():
+    """Invariant #2: every ``self.audit.record(`` in the connector is inside ``_run_write`` or a small,
+    named allowlist of documented non-chokepoint audited paths. A NEW audited write path outside them
+    fails here — surfacing a mutation that skipped ChangePreview -> guard.evaluate."""
+    import ast
+    src = (ROOT / "gamgui" / "core" / "connectors" / "gam_connector.py").read_text()
+    allow = {"_run_write", "create_onboarding_runbook"}   # the documented audited two-step helper
+    offenders = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            seg = ast.get_source_segment(src, node) or ""
+            if "self.audit.record(" in seg and node.name not in allow:
+                offenders.append(node.name)
+    assert not offenders, (
+        "audit.record() outside _run_write / the allowlist — a mutation may be skipping the "
+        "ChangePreview->guard chokepoint (invariant #2): {}".format(sorted(set(offenders))))

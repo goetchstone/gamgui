@@ -617,3 +617,31 @@ async def test_bulk_job_failed_sample_is_capped(tmp_path):
     for n in range(_FAILED_SAMPLE_CAP + 50):
         job.record({"email": "h{}@x.com".format(n), "ok": False, "errors": ["boom"]})
     assert job.failed_total == _FAILED_SAMPLE_CAP + 50 and len(job.failed) == _FAILED_SAMPLE_CAP  # #9
+
+
+@pytest.mark.asyncio
+async def test_bulk_recent_feed_holds_no_plaintext_password(connector, tmp_path, monkeypatch):
+    import json
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
+    monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "RECENTpw-9999")
+    store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
+    job = OnboardJob(id="t", total=1)
+    await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
+                            [_hire(name="Ada Byte", email="ada@example.com", first="Ada", last="Byte",
+                                   create_account=True)], {"Sales": store.role("Sales")})
+    assert "RECENTpw-9999" not in json.dumps(job.recent)                    # feed never retains plaintext
+    assert any(c["password"] == "RECENTpw-9999" for c in job.credentials)   # only the sheet holds it
+
+
+def test_parse_hire_csv_rejects_invalid_email_targets():
+    rows, errors = onboarding.parse_hire_csv(
+        "role,email\nSales,oauthuser\nSales,@example.com\nSales,ok@example.com\n")
+    assert [r["email"] for r in rows] == ["ok@example.com"]                 # the two traps dropped
+    assert sum("not a valid email" in e for e in errors) == 2
+
+
+def test_run_rejects_invalid_email(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "groups": "sales@example.com"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "X", "email": "oauthuser",
+                                          "assignee": "it@example.com"})
+    assert "valid email" in r.text.lower()   # rejected before any group-add targets the admin

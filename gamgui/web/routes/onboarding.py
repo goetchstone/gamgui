@@ -235,7 +235,9 @@ class OnboardJob:
             self.notified += 1
         if res.get("credential"):
             self.credentials.append(res["credential"])
-        self.recent.append(res)
+        # The live feed shows only email/name/ok/errors — never keep the temp password here
+        # (it lives, briefly, only in `credentials` for the printable sheet).
+        self.recent.append({k: res.get(k) for k in ("email", "name", "ok", "errors")})
         del self.recent[:-_RECENT_WINDOW]
 
 
@@ -334,6 +336,8 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if cfg is None or not cfg.steps:
         return _err(request, "That role has no steps.")
     email = email.strip()
+    if email and not onboarding.looks_like_email(email):
+        return _err(request, "That does not look like a valid email address for the new hire.")
     make_account = bool(create_account)
     credentials: Optional[dict] = None
 
@@ -352,6 +356,8 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     assignee = assignee.strip() or email
     if not assignee:
         return _err(request, "Enter the assignee (who does the setup) or the new hire's email.")
+    if not onboarding.looks_like_email(assignee):
+        return _err(request, "The assignee does not look like a valid email address.")
 
     if make_account:
         temp = onboarding.generate_temp_password()
