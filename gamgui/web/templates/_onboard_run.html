@@ -52,7 +52,7 @@
     Created <strong>{{ result.created }}</strong> of {{ result.total }} task{{ '' if result.total == 1 else 's' }} in <strong>{{ assignee }}</strong>'s Google Tasks — “{{ title }}”.
     {% if result.failed %}<br><span class="text-amber-800">Couldn't add: {{ result.failed | join(", ") }}</span>{% endif %}
   {% else %}
-    Couldn't create the task list — no tasklist id came back. Check the assignee email and that the Tasks API scope is granted in Domain-Wide Delegation.
+    Couldn't create the task list{% if result.error %}: {{ result.error }}{% else %} — no tasklist id came back. Check the assignee email and that the Tasks API scope is granted in Domain-Wide Delegation.{% endif %}
   {% endif %}
   {% if email_sent is not none %}<br>Welcome email to {{ email }}: {{ "sent ✓" if email_sent else "failed to send" }}.{% endif %}
 </div>

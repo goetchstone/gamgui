@@ -323,6 +323,9 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     make_account = bool(create_account)
     credentials: Optional[dict] = None
 
+    # Validate everything that does NOT write BEFORE any mutation, so a bad assignee (or any later
+    # step) can't strand a just-created account's one-time password (it exists nowhere else).
+    f = l = ""
     if make_account:
         # Creating a real account is gated behind the preview: its Run button posts confirm=1.
         if confirm != "1":
@@ -332,6 +335,11 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
         f, l = _split_name(name, first, last)
         if not f or not l:
             return _err(request, "Enter the new hire's first and last name to create the account.")
+    assignee = assignee.strip() or email
+    if not assignee:
+        return _err(request, "Enter the assignee (who does the setup) or the new hire's email.")
+
+    if make_account:
         temp = onboarding.generate_temp_password()
         try:
             res = await conn.create_user(email, f, l, temp, change_password=True,
@@ -354,14 +362,16 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
         memberships = {"groups_added": g_ok, "groups_total": len(cfg.groups), "groups_failed": g_fail,
                        "cals_added": c_ok, "cals_total": len(cfg.calendars), "cals_failed": c_fail}
 
-    assignee = (assignee or email).strip()
-    if not assignee:
-        return _err(request, "Enter the assignee (who does the setup) or the new hire's email.")
     title = "Onboard {} — {}".format(name or email or "new hire", role)
     try:
         result = await conn.create_onboarding_runbook(assignee, title, cfg.steps)
     except Exception as exc:  # noqa: BLE001
-        return _err(request, "Couldn't create the task list: " + str(getattr(exc, "remediation", exc)))
+        # An account or membership already succeeded — never bare-_err here (that strands the
+        # one-time password). Surface the failure in the result panel beside the credentials sheet.
+        if credentials is None and memberships is None:
+            return _err(request, "Couldn't create the task list: " + str(getattr(exc, "remediation", exc)))
+        result = {"tasklist_id": "", "created": 0, "failed": list(cfg.steps),
+                  "total": len(cfg.steps), "error": str(getattr(exc, "remediation", exc))}
     email_sent = None
     if send_welcome and email:
         w, ctx = store.welcome(), _ctx(name, email, role, manager)

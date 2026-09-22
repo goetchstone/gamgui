@@ -445,3 +445,19 @@ async def test_provision_hire_skips_signature_for_existing_account(connector, tm
     r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
                               _hire(name="Ada Byte", email="ada@example.com", create_account=False))
     assert r["ok"] and r["account_created"] is False and r["signature"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_keeps_credentials_when_tasklist_fails(client, monkeypatch):
+    # After the account is created, a task-list failure must NOT strand the one-time password.
+    monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "KEEPpw-1234-5678")
+    async def boom(self, assignee, title, steps):
+        raise RuntimeError("insufficientPermissions: Tasks scope not granted")
+    monkeypatch.setattr(
+        "gamgui.core.connectors.gam_connector.GAMConnector.create_onboarding_runbook", boom)
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
+                                          "assignee": "it@example.com", "create_account": "1", "confirm": "1"})
+    assert r.status_code == 200
+    assert "KEEPpw-1234-5678" in r.text                 # temp password still shown
+    assert "Couldn't create the task list" in r.text    # failure surfaced, not swallowed
