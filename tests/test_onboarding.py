@@ -461,3 +461,67 @@ async def test_run_keeps_credentials_when_tasklist_fails(client, monkeypatch):
     assert r.status_code == 200
     assert "KEEPpw-1234-5678" in r.text                 # temp password still shown
     assert "Couldn't create the task list" in r.text    # failure surfaced, not swallowed
+
+
+def test_setup_verify_busts_group_cache(client, monkeypatch):
+    # A tenant switch (any successful /setup/verify) must invalidate the non-domain-tagged group
+    # cache, or the onboarding group picker serves the previous tenant's groups for the TTL window.
+    from gamgui.core.setup import VerifyResult
+    st = client.app.state.gamgui
+    client.get("/onboard/search/groups")                       # prime group_cache from the mock
+    assert st.group_cache._items is not None
+    async def ok_verify(self, domain, admin):
+        return VerifyResult(ok=True, summary="verified")
+    monkeypatch.setattr("gamgui.core.setup.SetupService.verify", ok_verify)
+    client.post("/setup/verify", data={"domain": "example.com", "admin": "admin@example.com"})
+    assert st.group_cache._items is None                       # busted on switch
+
+
+@pytest.mark.asyncio
+async def test_provision_hire_partial_failure_counts_as_failed(connector, tmp_path):
+    # A hire whose group add fails is NOT "ok" — the failure reaches res['errors'] and the job feed.
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard, _provision_hire
+    store = RunbookStore(tmp_path / "ob.json")
+    store.set_role("Sales", ["Set up POS"], groups=["missing-group@example.com"])  # 404s in the mock
+    sig_store = SignatureStore(tmp_path / "sig.json")
+    r = await _provision_hire(connector, sig_store, store, store.role("Sales"), _hire(email="ada@example.com"))
+    assert r["ok"] is False and any("groups" in e for e in r["errors"])
+    job = OnboardJob(id="t", total=1)
+    await _run_bulk_onboard(job, connector, sig_store, store, [_hire(email="ada@example.com")],
+                            {"Sales": store.role("Sales")})
+    assert job.failed_total == 1 and job.ok == 0
+
+
+@pytest.mark.asyncio
+async def test_failed_tasklist_create_is_audited(connector, tmp_path, monkeypatch):
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+    orig = connector.runner.run_authenticated
+    async def fail_tasklist(domain, argv, **kw):
+        if "tasklist" in argv:
+            raise GAMError(kind=GAMErrorKind.SCOPE_MISSING, exit_code=1, stderr="insufficient scope")
+        return await orig(domain, argv, **kw)
+    monkeypatch.setattr(connector.runner, "run_authenticated", fail_tasklist)
+    with pytest.raises(GAMError):
+        await connector.create_onboarding_runbook("it@example.com", "Onboard Ada", ["Step"])
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert '"action": "onboard_runbook"' in audit and '"ok": false' in audit   # attempt recorded
+
+
+def test_split_name_single_word_has_no_fabricated_surname():
+    from gamgui.web.routes.onboarding import _split_name
+    assert _split_name("Ada", "", "") == ("Ada", "")
+    assert _split_name("Ada Byte", "", "") == ("Ada", "Byte")
+
+
+def test_run_single_word_name_requires_last(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada", "email": "ada@example.com",
+                                          "assignee": "it@example.com", "create_account": "1", "confirm": "1"})
+    assert "first and last name" in r.text.lower()   # single-word name no longer becomes "Ada Ada"
+
+
+def test_bulk_status_ignores_foreign_job(client):
+    from gamgui.web.jobs import BatchJob
+    client.app.state.gamgui.jobs["foreign"] = BatchJob(id="foreign", total=3, finished=True)
+    r = client.get("/onboard/bulk/status?job=foreign")
+    assert r.status_code == 200 and "no longer available" in r.text   # not a 500

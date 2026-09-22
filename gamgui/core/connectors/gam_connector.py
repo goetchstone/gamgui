@@ -346,8 +346,14 @@ class GAMConnector(Connector):
 
         Additive/low-risk, serialized + audited. The tasklist id comes back via ``returnidonly``;
         each step then becomes a task on it. A step that fails is reported, not fatal."""
-        out = await self.runner.run_authenticated(
-            self.domain, GAMCommands.create_tasklist(assignee, title), serialize=True)
+        try:
+            out = await self.runner.run_authenticated(
+                self.domain, GAMCommands.create_tasklist(assignee, title), serialize=True)
+        except Exception as exc:  # noqa: BLE001 — record the attempt before it propagates
+            self.audit.record("onboard_runbook", target=assignee,
+                              argv=GAMCommands.create_tasklist(assignee, title), ok=False,
+                              extra={"title": title, "error": str(exc)})
+            raise
         lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
         tasklist_id = lines[-1] if lines else ""
         created, failed = 0, []

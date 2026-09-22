@@ -68,7 +68,7 @@ def _split_name(name: str, first: str, last: str) -> "tuple[str, str]":
     if not first and not last and name.strip():
         parts = name.strip().split()
         first = parts[0]
-        last = " ".join(parts[1:]) or parts[0]
+        last = " ".join(parts[1:])
     return first, last
 
 
@@ -158,12 +158,18 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
         # existing-account row that has no name in the CSV).
         if res["account_created"]:
             res["signature"] = await _apply_signature(conn, sig_store, cfg, email, first, last)
+            if cfg.signature and not res["signature"]:
+                res["errors"].append("signature: not applied")
         if cfg.groups:
             g_ok, g_fail = await _apply_groups(conn, email, cfg.groups)
             res["groups"] = {"added": g_ok, "total": len(cfg.groups), "failed": g_fail}
+            if g_fail:
+                res["errors"].append("groups: couldn't add " + ", ".join(g_fail))
         if cfg.calendars:
             c_ok, c_fail = await _apply_calendars(conn, email, cfg.calendars)
             res["calendars"] = {"added": c_ok, "total": len(cfg.calendars), "failed": c_fail}
+            if c_fail:
+                res["errors"].append("calendars: couldn't subscribe " + ", ".join(c_fail))
 
     assignee = (hire.get("assignee") or email).strip()
     if assignee:
@@ -185,6 +191,10 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             res["email_sent"] = bool(we.ok)
         except Exception:  # noqa: BLE001
             res["email_sent"] = False
+    if res["email_sent"] is False:
+        res["errors"].append("welcome email: failed to send")
+    # A hire is only "ok" if every best-effort sub-step also succeeded (not just the create).
+    res["ok"] = not res["errors"]
     return res
 
 
@@ -508,6 +518,8 @@ async def search_calendars(request: Request, q: str = "") -> HTMLResponse:
 @router.get("/bulk/status", response_class=HTMLResponse)
 async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     j = _st(request).jobs.get(job) if job else None
+    if not isinstance(j, OnboardJob):   # st.jobs is shared; another feature's BatchJob isn't ours
+        j = None
     # One-shot credentials: render the printable sheet once (on the terminal poll), then drop the
     # plaintext temp passwords from the retained job so this GET — which is bookmarkable, kept in
     # history, and re-fetchable — can't re-serve them. `no-store` also keeps the browser from caching

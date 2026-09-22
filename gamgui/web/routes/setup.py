@@ -110,6 +110,8 @@ async def verify(
     if result.ok:
         st.connector = GAMConnector(runner=st.runner, domain=domain)
         st.audit_domain = domain
+        st.invalidate_users()   # caches aren't domain-tagged; a tenant switch must bust them
+        st.invalidate_groups()  # (the calendar index self-checks its stored domain, so it's already safe)
     return TEMPLATES.TemplateResponse(
         request, "_verify.html", {"result": result, "domain": domain, "admin": admin}
     )
