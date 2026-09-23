@@ -49,6 +49,7 @@ class AppState:
     previews: Previews = field(default_factory=Previews)  # per flow: single-use token -> what a preview showed
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
+    offboard_jobs: dict = field(default_factory=dict)  # leaver (lowercase) -> their running offboarding's job id
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
     builder_last_result: Optional[dict] = None  # last read-command result set, for the CSV download

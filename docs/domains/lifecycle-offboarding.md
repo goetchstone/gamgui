@@ -19,7 +19,8 @@ combined transfer service list is one argv element (CLAUDE.md #1).
   directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No scheduler,
   no persisted state.
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
-  Executes the steps as a progress-tracked `BatchJob` (`_run_offboard`); name-resolution helpers.
+  Executes the steps as a progress-tracked `BatchJob` (`_run_offboard`); name-resolution helpers;
+  `_running` (one offboarding per leaver).
 - `gamgui/web/routes/users.py` (lines ~425-455) — the **delete** flow: `delete_zone`,
   `delete_confirm` (warns on pending transfers), `delete_apply` (type-the-exact-email confirm —
   `guard.enforce`'s rule for every account delete, so the Builder's "Delete account" asks for the
@@ -63,7 +64,8 @@ shared `AppState.previews` store (`web/previews.py`: at most 8 per flow, for `PR
 which the other confirm steps now use too. Run refuses a missing, used or expired
 token, and a live form (`hx-include`) that no longer matches the previewed one (`_form_key`) — edit a
 field after Preview and you must preview again. It then re-checks the previewed addresses against the
-directory and hands the held steps, never rebuilt ones, to `start_job` and `_run_offboard` (once it
+directory, refuses a leaver whose offboarding is still running (below), and hands the held steps,
+never rebuilt ones, to `start_job` and `_run_offboard` (once it
 rebuilt them from the live form, failure-log 2026-09-23). An emptied subject/message runs the default
 text, as the auto-reply block shows. `_run_offboard` runs each step in order and appends a `✓/✗`
 line to `job.log`; **a step whose `requires` did not all succeed is not run** (a `–` line, listed in
@@ -72,6 +74,12 @@ means every step succeeded; any `✗` makes it "incomplete" (amber, with the rec
 reminder event on the manager's calendar `days` out — there is no app-side scheduler. The final
 account **delete** is a distinct guarded action on the user detail page (`delete_user`,
 `RiskLevel.DESTRUCTIVE`).
+
+**One offboarding per leaver at a time.** `AppState.offboard_jobs` maps a leaver to their running
+job; while it runs, a Preview or a Run for that leaver is refused with the running job's own
+progress panel (`_offboard_running.html`), the way back to it after a reload or leaving the page.
+Two held previews once both ran, interleaved: two resets, transfers, sweeps and reminders
+(failure-log 2026-09-23). The check and the registration have no `await` between them.
 
 ### When a step fails
 `lifecycle.REQUIRES`, pinned by `test_offboard_step_dependencies_are_the_documented_ones`. Until
@@ -215,7 +223,8 @@ and the panel then isn't "complete", `test_offboard_a_refused_sign_out_is_a_fail
 forwarding turned off after the revoke, and its failure stopping nothing,
 `test_offboard_turns_off_forwarding_and_a_failure_stops_nothing`), the re-run ticks
 (`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), the
-unreadable-delegates warning (`test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read`), and the preview's
+unreadable-delegates warning (`test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read`),
+one run per leaver (`test_offboard_refuses_a_second_run_for_a_leaver_whose_offboarding_is_running`), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
@@ -240,7 +249,8 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   `drive,calendar` as one argument; the auto-reply text as senders should read it (sent as HTML, so
   line breaks collapse); the reminder date and invitee.
 - Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
-  writes in the app waiting behind it. Don't close the app mid-run.
+  writes in the app waiting behind it. Don't close the app mid-run. Left the page or reloaded? Enter
+  the same two addresses and Preview: it shows the running offboarding's progress instead.
 
 **After the run** — the panel should say "Offboarding complete — 8 of 8 steps succeeded"; GamGUI →
 Audit shows eight `ok` records, one per step. Then check in Google, not just in GamGUI:

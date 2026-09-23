@@ -1383,6 +1383,41 @@ def test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read(client
     assert "Couldn't read" not in html.unescape(_offboard_preview(client, done=["delegate"])[0].text)
 
 
+def test_offboard_refuses_a_second_run_for_a_leaver_whose_offboarding_is_running(client, gam_calls, monkeypatch):
+    # Two held previews for one leaver both ran, interleaved (two resets, transfers, hour-long sweeps
+    # and reminders), and a reload lost the only progress view. While one runs, a preview or a Run for
+    # the same leaver is refused and shows the running one's progress panel instead.
+    import asyncio
+    import html
+
+    st = client.app.state.gamgui
+    gate, real = asyncio.Event(), st.connector.reset_password
+
+    async def held_reset(email):          # keeps the first run on its first step
+        await gate.wait()
+        return await real(email)
+
+    monkeypatch.setattr(st.connector, "reset_password", held_reset)
+    _, second = _offboard_preview(client)
+    _, first = _offboard_preview(client)
+    job = _job(client, _offboard_run(client, first).text, "/lifecycle/offboard/status")
+    try:
+        text = html.unescape(client.post("/lifecycle/offboard/preview", data=OFFBOARD_FORM).text)
+        assert f"An offboarding of {LEAVER} is already running" in text and "Run offboarding" not in text
+        assert f"/lifecycle/offboard/status?job={job.id}" in text          # its live progress panel
+        text = html.unescape(_offboard_run(client, second).text)
+        assert "is already running" in text and f"?job={job.id}" in text
+        assert list(st.jobs) == [job.id]
+        other = client.post("/lifecycle/offboard/preview", data={**OFFBOARD_FORM, "user": "alice@example.com",
+                                                                 "manager": LEAVER})
+        assert "already running" not in other.text and "Run offboarding" in other.text   # other leavers: fine
+    finally:
+        client.portal.call(gate.set)
+        wait_for_job(client, job)
+    assert (job.applied, job.failed) == (8, [])
+    assert "Run offboarding" in _offboard_preview(client)[0].text        # finished: a new run may start
+
+
 def test_offboard_with_every_step_ticked_done_has_nothing_to_run(client):
     from gamgui.core.lifecycle import REQUIRES
 

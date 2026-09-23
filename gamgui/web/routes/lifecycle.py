@@ -68,6 +68,19 @@ def _form_key(user: str, manager: str, subject: str, message: str, days: str, no
             tuple(sorted(done)))
 
 
+def _running(st, user: str):
+    """The offboarding still running for ``user``, or None. One per leaver at a time: a second one
+    would reset the password again and repeat the transfer, the hour-long sweep and the reminder."""
+    job = st.jobs.get(st.offboard_jobs.get(user.lower(), ""))
+    return job if job is not None and not job.finished else None
+
+
+def _already_running(request: Request, job, user: str) -> HTMLResponse:
+    """The refusal, with the running job's own progress panel — the way back to it after a reload."""
+    return TEMPLATES.TemplateResponse(request, "_offboard_running.html",
+                                      {"job": job, "user": user, "revoke_label": lifecycle.STEP_NAMES["revoke"]})
+
+
 async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     """Both addresses against the cached directory — before the preview and again before the run.
     Fails closed: a directory that can't be read blocks the routine rather than skipping the check."""
@@ -168,6 +181,8 @@ async def offboard_preview(
     if check.errors:
         return _err(request, " ".join(check.errors))
     user, manager = check.user.primary_email, check.manager.primary_email
+    if running := _running(st, user):
+        return _already_running(request, running, user)
     if "delegate" not in done and (warning := await _delegate_warning(st.connector, user, manager)):
         check.warnings.append(warning)
     # An emptied field runs the default text — the auto-reply block below shows the default too.
@@ -262,7 +277,12 @@ async def offboard_run(
     if check.errors:
         return _err(request, " ".join(check.errors))
     user, steps = held.user, held.steps
+    # No await from here to the registration, so two Runs can't both pass the check.
+    if running := _running(st, user):
+        return _already_running(request, running, user)
     job = start_job(st.jobs, len(steps))
+    st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
+    st.offboard_jobs[user.lower()] = job.id
     job.task = asyncio.create_task(_run_offboard(job, conn, steps, done=held.done))
     st.invalidate_users()  # password/org/etc. changed
     return _panel(request, job, user)
