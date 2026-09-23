@@ -230,7 +230,7 @@ def build_offboard_steps(
                      [GAMCommands.remove_all_calendar_acls(user)]),
         OffboardStep("reminder", f"{days}-day reminder for {manager}",
                      f"Add a calendar reminder on {manager}"
-                     + (f" (also invites {notify})" if notify else "")
+                     + (f" (also invites {notify}, who gets an invitation email)" if notify else "")
                      + f" for {due.isoformat()} to confirm deletion",
                      lambda c: c.add_calendar_event(
                          manager, reminder_summary, start, end, description=reminder_desc, attendee=notify),

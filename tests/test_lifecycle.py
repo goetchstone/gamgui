@@ -86,6 +86,8 @@ async def test_offboard_reminder_invites_notify_target():
     await steps[-1].action(_FakeConn())  # the reminder step
     assert captured["cal"] == "mgr@e.com" and captured["attendee"] == "it@e.com"
     assert "invites it@e.com" in steps[-1].summary
+    # …by email: GAM's `add event` sends no invitation unless told to (sendUpdates defaults to none).
+    assert steps[-1].commands[0][-4:] == ["attendee", "it@e.com", "sendupdates", "all"]
 
 
 async def test_offboard_autoreply_substitutes_employee_and_manager():

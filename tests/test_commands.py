@@ -128,6 +128,11 @@ def test_lifecycle_commands():
     ev = GAMCommands.add_calendar_event("mgr@e.com", "Confirm delete", "2026-07-23", "2026-07-24", description="d", attendee="it@e.com")
     assert ev[:7] == ["user", "mgr@e.com", "add", "event", "primary", "summary", "Confirm delete"]
     assert "start" in ev and "allday" in ev and "2026-07-23" in ev and "description" in ev and "attendee" in ev
+    # GAM's `add event` defaults sendUpdates to none: the attendee would get no invitation email.
+    # `[<EventNotificationAttribute>]` follows the attributes (GamCommands.txt 6469; `sendupdates all`, 6460).
+    assert ev[-4:] == ["attendee", "it@e.com", "sendupdates", "all"]
+    alone = GAMCommands.add_calendar_event("mgr@e.com", "Confirm delete", "2026-07-23", "2026-07-24")
+    assert "sendupdates" not in alone and "attendee" not in alone        # nobody to notify
 
 
 def test_own_acl_error_classifies_as_its_own_kind():

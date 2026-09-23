@@ -122,7 +122,7 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Undelete an account | Builder | not yet |
 | Transfer Drive + calendar data | Offboarding, Builder | **confirmed** as two calls; the single call offboarding now makes (with `all`: private and shared Drive files) is not yet |
 | Remove the leaver from everyone's calendars | Offboarding | not yet |
-| Add a calendar event (the manager's reminder) | Offboarding | **confirmed** |
+| Add a calendar event (the manager's reminder) | Offboarding | **confirmed**; with an invitee it now adds `sendupdates all` (so they get the invitation email), not yet run live |
 | Share a calendar (add an ACL) | Calendars, Users (their own calendar) | **confirmed** |
 | Subscribe someone, so a shared calendar appears | Calendars, Onboard | **confirmed** |
 | Share with a group, subscribing each member | Calendars | not yet — each call it makes is confirmed, the expansion is not |

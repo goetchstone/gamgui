@@ -116,7 +116,7 @@ the reminder runs without one). What each step does if run again after it succee
 | Auto-reply | Harmless: the command names every setting (on, subject, message, every sender, no start or end date), so a re-run writes the same reply. GAM itself *merges* `vacation` into the stored settings — see Gotchas. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
 | Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist" and users without Calendar "Calendar Service/App not enabled", both tolerated. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
-| Manager reminder | **Duplicates**: `add event` without an `id` creates a second event. | **yes** |
+| Manager reminder | **Duplicates**: `add event` without an `id` creates a second event (and emails the invitee again). | **yes** |
 
 A failed step changed nothing, except a sweep stopped by its timeout (partly done — run it again).
 
@@ -134,7 +134,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
 | Auto-reply | `user <leaver> vacation on subject <S> message <M> html contactsonly false domainonly false start Started end NotSpecified` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly [<Boolean>]] [domainonly [<Boolean>]] [start\|startdate <Date>\|Started] [end\|enddate <Date>\|NotSpecified]` (8283-8288); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. GAM's `getYYYYMMDD` compares `Started`/`NotSpecified` case-insensitively and returns no date for them, which clears a stored one. Why every setting is named, and `html`: see Gotchas. |
 | Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager> all` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598-3601) | Match; the service list is ONE element. `all` = `PRIVACY_LEVEL: PRIVATE,SHARED` (GAM's `PRIVACY_LEVEL_CHOICE_MAP`), attached by `_assignAppParameter` only to a listed app whose `transferParams` take it — Drive, not Calendar (read statically from the vendored build; GamUpdate 6.07.21 fixed it reaching every listed app). See Gotchas. |
 | Calendar sweep | `all users delete calendaracls primary <leaver>` | `gam <UserTypeEntity> delete calendaracls <UserCalendarEntity> <CalendarACLRole>] <CalendarACLScopeEntity>` (6327) | Match. The grammar line lost its `[`: the role is optional, as in `calendars … delete acls [<CalendarACLRole>]` (1689) and in GAM's parser (`getChoice(…, defaultChoice=None)`, then the scope, then no extra arguments). `all users` = `<UserTypeEntity>`, `primary` = `<UserCalendarEntity>`, a bare address = `<CalendarACLScope>` (a user). |
-| Manager reminder | `user <manager> add event primary summary <S> start allday <D> end allday <D+1> [description <T>] [attendee <E>]` | `gam <UserTypeEntity> create\|add event <UserCalendarEntity> [id <String>] <EventAttribute>+ [<EventNotificationAttribute>]` (6469); `<EventAttribute>` (6391): `summary`, `start\|starttime (allday <Date>)`, `end\|endtime (allday <Date>)`, `description`, `attendee <EmailAddress>` | Match. The end date is exclusive, so a one-day event on D. |
+| Manager reminder | `user <manager> add event primary summary <S> start allday <D> end allday <D+1> [description <T>] [attendee <E> sendupdates all]` | `gam <UserTypeEntity> create\|add event <UserCalendarEntity> [id <String>] <EventAttribute>+ [<EventNotificationAttribute>]` (6469); `<EventAttribute>` (6391): `summary`, `start\|starttime (allday <Date>)`, `end\|endtime (allday <Date>)`, `description`, `attendee <EmailAddress>`; `<EventNotificationAttribute>` (6459-6460): `sendupdates all\|…\|none` | Match. The end date is exclusive, so a one-day event on D. With an invitee, `sendupdates all`: GAM's `add event` defaults `sendUpdates` to `none` (`_getCalendarCreateImportUpdateEventOptions`, read statically), so until 2026-09-23 the invitee got no email, only a silent calendar entry (failure-log). |
 | Delete (later, user detail page) | `delete user <leaver>` | `gam delete user <UserItem> [noactionifalias]` (5964) | Match; `noactionifalias` unused (the page passes the primary address). |
 | Undelete (Builder) | `undelete user <email>` | `gam undelete user <UserItem> [ou\|org\|orgunit <OrgUnitPath>]` (5965) | Match. |
 | Delete gate (read) | `print datatransfers olduser <leaver>` | `gam print datatransfers\|transfers [todrive …] [olduser\|oldowner <UserItem>] …` (3603) | Match. |
@@ -242,7 +242,7 @@ argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL, not
 without Calendar) vs. real auth errors and a per-user 403, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
 the transfer's `all` privacy level (and the mock refusing one without Drive), auto-reply substitution, the auto-reply sent as the previewed text (`test_offboard_autoreply_is_sent_as_the_text_the_preview_shows`), the auto-reply not inheriting the leaver's old vacation settings (stateful
-mock, `test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings`), reminder invitee, `incomplete_transfers_for` filtering, the directory check
+mock, `test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings`), reminder invitee (emailed: `sendupdates all`), `incomplete_transfers_for` filtering, the directory check
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
 edited form, a used/expired token and a directory change are refused), the dependency rules (a failed
@@ -304,7 +304,8 @@ Audit shows eight `ok` records, one per step. Then check in Google, not just in 
   live-verification status.**
 - Calendar sweep: a colleague who had shared a calendar with the leaver no longer lists them
   (Calendar → Settings → Share with specific people).
-- Reminder: the all-day event is on the manager's calendar on the date; the invitee got the invite.
+- Reminder: the all-day event is on the manager's calendar on the date; the invitee got an
+  invitation email (`sendupdates all`) and has it on their calendar.
 
 **If a step fails** — the panel names it, its `✗` line says why, and `–` lines were not run (the
 "When a step fails" table). Nothing is half-done except a sweep stopped by its timeout.

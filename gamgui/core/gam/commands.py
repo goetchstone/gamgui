@@ -333,7 +333,10 @@ class GAMCommands:
         if description:
             argv += ["description", description]
         if attendee:
-            argv += ["attendee", attendee]
+            # GAM's `add event` defaults sendUpdates to none (read from the vendored build), so an
+            # attendee would get no invitation email. `[<EventNotificationAttribute>]` comes after the
+            # attributes (GamCommands.txt 6469; `sendupdates all|…|none`, 6460).
+            argv += ["attendee", attendee, "sendupdates", "all"]
         return argv
 
     @staticmethod
