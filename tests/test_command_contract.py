@@ -114,6 +114,10 @@ def test_pinned_version_consistent():
 AUDITED_OUTSIDE_RUN_WRITE = {
     "create_onboarding_runbook": "a two-step tasklist build; records `onboard_runbook` itself",
 }
+# Reads that record() — never the output (plan S9, operator decision D3).
+AUDITED_READS = {
+    "catalog_read": "records `sensitive_read` for a SENSITIVE_READS command",
+}
 # Functions that run an argv the tripwire can't trace to one builder, each proven a read another way.
 READ_BY_CONTRACT = {
     "catalog_read": "refuses a non-READ_ONLY catalog command "
@@ -127,7 +131,7 @@ def test_audit_record_only_in_run_write_or_allowlist():
     fails here — surfacing a mutation that skipped ChangePreview -> guard.evaluate."""
     import ast
     src = (ROOT / "gamgui" / "core" / "connectors" / "gam_connector.py").read_text()
-    allow = {"_run_write", *AUDITED_OUTSIDE_RUN_WRITE}
+    allow = {"_run_write", *AUDITED_OUTSIDE_RUN_WRITE, *AUDITED_READS}
     offenders = []
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):

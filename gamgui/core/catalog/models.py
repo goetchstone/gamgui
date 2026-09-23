@@ -50,6 +50,7 @@ class CatalogCommand:
     capability: Optional[Capability] = None
     buildable: bool = False
     uncertain: bool = False      # risk inferred from an unknown verb
+    sensitive: bool = False      # a read whose output is a secret or a file — audited when run (set at load)
     area: str = ""               # top-level grouping (set at load time from the category)
     description: str = ""        # one-line "what it does" (vendored if verified, else a gloss at load)
     slots: List[CommandSlot] = field(default_factory=list)

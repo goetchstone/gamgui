@@ -233,6 +233,15 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ];
   exit 0
 fi
 
+# `gam <UserTypeEntity> show backupcodes|verificationcodes` (no options) -> text; a Builder sensitive
+# read. The canned codes are what the audit must never contain.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && { [ "${4:-}" = "backupcodes" ] || [ "${4:-}" = "verificationcodes" ]; }; then
+  [ $# -eq 4 ] || invalid_arg "$5"
+  check_exists "User" "$2"
+  printf 'User: %s, Backup Verification Codes (2)\n  1: 11112222\n  2: 33334444\n' "$2"
+  exit 0
+fi
+
 # `gam user <email> print forwardingaddresses` -> plain CSV (forwardingEmail + verification).
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forwardingaddresses" ]; then
   printf 'User,forwardingEmail,verificationStatus\n%s,fwd@example.com,accepted\n' "${2:-}"

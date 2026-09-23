@@ -281,11 +281,28 @@ def _make_reads_buildable(commands: List[CatalogCommand]) -> None:
         c.buildable = True
 
 
+# Reads whose output is account-takeover material or a file's contents: 2SV backup codes, Chrome
+# browser enrollment tokens, a Drive file / Doc download. They stay buildable (operator decision D3)
+# and every run is audited. Matched on the grammar's verb + object, since the raw.<line> ids move on a
+# GAM bump; test_sensitive_reads_are_flagged_and_still_buildable pins what this resolves to.
+SENSITIVE_READS = {("show", "backupcodes"), ("print", "backupcodes"), ("show", "browsertokens"),
+                   ("print", "browsertokens"), ("get", "drivefile"), ("get", "document")}
+
+
+def _is_sensitive(c: CatalogCommand) -> bool:
+    toks = c.raw_syntax.split()
+    if c.risk != RiskLevel.READ_ONLY or c.verb not in toks[:-1]:
+        return False
+    obj = toks[toks.index(c.verb) + 1]
+    return any((c.verb, alt) in SENSITIVE_READS for alt in obj.split("|"))
+
+
 def load_catalog() -> Catalog:
     shallow, version = _load_shallow()
     commands = _curated() + shallow
     _make_reads_buildable(commands)
     for c in commands:
+        c.sensitive = _is_sensitive(c)
         c.area = _area_of(c.category)
         if not c.description:                 # vendored/curated text wins; else a grammar-derived gloss
             c.description = gloss(c)

@@ -415,19 +415,35 @@ class GAMConnector(Connector):
         return await self._run_write("delete_user", email, GAMCommands.delete_user(email), RiskLevel.DESTRUCTIVE)
 
     # --- the Builder's catalog reads ---------------------------------------------------
-    async def catalog_read(self, cmd, argv: List[str]) -> str:
+    async def catalog_read(self, cmd, argv: List[str], target: str = "") -> str:
         """Run a Builder catalog read and return its output. Refuses anything the catalog doesn't mark
-        READ_ONLY (the Builder sends a write to ``apply``), so this can't become a second write path."""
+        READ_ONLY (the Builder sends a write to ``apply``), so this can't become a second write path.
+
+        A ``cmd.sensitive`` read (backup codes, browser tokens, a file download) is audited as
+        ``sensitive_read``: which command, on whom, whether it ran — never the output, which is the
+        secret itself."""
         _require_read(cmd)
-        return await self.runner.run_authenticated(self.domain, argv)
+        if not cmd.sensitive:
+            return await self.runner.run_authenticated(self.domain, argv)
+        extra = {"command": cmd.id}
+        try:
+            out = await self.runner.run_authenticated(self.domain, argv)
+        except Exception as exc:
+            self.audit.record("sensitive_read", target=target, argv=argv, ok=False,
+                              extra={**extra, "error": str(exc)})
+            raise
+        self.audit.record("sensitive_read", target=target, argv=argv, ok=True, extra=extra)
+        return out
 
     async def export_to_sheet(self, cmd, argv: List[str], owner: str = "", title: str = "") -> ChangeResult:
         """Run a Builder read with ``todrive``: GAM writes the result to a new Google Sheet in
         ``owner``'s Drive (blank = the admin's). Creating a file is a write, so it runs through the
-        chokepoint; ``output`` carries the Sheet URL GAM prints."""
+        chokepoint; ``output`` carries the Sheet URL GAM prints. A sensitive read's export is audited
+        as ``sensitive_export`` so it files next to ``sensitive_read``."""
         _require_read(cmd)
         argv = list(argv) + GAMCommands.todrive_args(owner, title)
-        return await self._run_write("export_to_sheet", owner or "(admin Drive)", argv, RiskLevel.LOW)
+        action = "sensitive_export" if cmd.sensitive else "export_to_sheet"
+        return await self._run_write(action, owner or "(admin Drive)", argv, RiskLevel.LOW)
 
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:

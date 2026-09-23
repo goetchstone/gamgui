@@ -280,7 +280,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
                                               {"gam": _gam_str(res.preview.argv), "output": res.output,
                                                "owner": owner or "the admin account"})
         try:
-            out = await conn.catalog_read(cmd, argv)
+            out = await conn.catalog_read(cmd, argv, target)
         except Exception as exc:  # noqa: BLE001
             return _err(request, _friendly(exc), _details(exc))
         return _render_read(request, out, _gam_str(argv))

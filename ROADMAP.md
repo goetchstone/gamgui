@@ -81,7 +81,8 @@ discover later.
   that changed.
 - **A free-text `gam …` box.** The tempting escape hatch, and the trade-off is narrower than it
   sounds. *Reads are already open*: 507 grammar-derived read commands run today with no curation at
-  all. The line is drawn at **writes** — every command that can change something is hand-modeled, so
+  all (the handful whose output is a secret — backup codes, browser tokens, file downloads — are
+  audited when run). The line is drawn at **writes** — every command that can change something is hand-modeled, so
   a preview can show the real blast radius before you confirm, and every write lands in the audit
   log. A free-text box that could write would end that property, because the risk of an arbitrary
   command line has to be *inferred* from its verb, and the catalog itself marks some verbs

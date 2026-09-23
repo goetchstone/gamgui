@@ -63,7 +63,10 @@ guarding them:
   tripwire posts to every route to prove it); the write is then appended to a local audit log.
 - **Only read-only commands can become runnable automatically.** The Builder promotes
   grammar-derived commands to runnable *only* when they are confidently read-only; every write must
-  be hand-curated. Anything uncertain stays inert.
+  be hand-curated. Anything uncertain stays inert. The few reads whose output is itself a secret or
+  a file — 2-Step Verification backup codes, Chrome browser enrollment tokens, a Drive file or Doc
+  download — stay runnable but every run is audited (`sensitive_read`: the command and the target,
+  never the output), and exporting any read to a Google Sheet is audited as the write it is.
 - **The loopback server rejects cross-origin callers and foreign hosts.** Cookies are not
   port-scoped, so a token cookie alone would let any page on another `127.0.0.1` port drive the app;
   and every request, even the health check, must carry a `Host` of `127.0.0.1:<port>` or

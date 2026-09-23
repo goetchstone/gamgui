@@ -323,6 +323,64 @@ def test_a_failed_export_is_audited_and_shown(client, monkeypatch):
     assert (entry["action"], entry["target"], entry["ok"]) == ("export_to_sheet", "boss@example.com", False)
 
 
+SENSITIVE_HEADS = {
+    "gam <UserTypeEntity> show backupcodes|verificationcodes",
+    "gam <UserTypeEntity> print backupcodes|verificationcodes",
+    "gam show browsertokens",
+    "gam print browsertokens",
+    "gam <UserTypeEntity> get drivefile <DriveFileEntity>",
+    "gam <UserTypeEntity> get document <DriveFileEntity>",
+}
+
+
+def _sensitive(needle):
+    return next(c for c in load_catalog().commands if c.sensitive and needle in c.raw_syntax)
+
+
+def test_sensitive_reads_are_flagged_and_still_buildable():
+    # Operator decision D3: keep them runnable, audit every run. Pinned by syntax (the raw.<line> ids
+    # move on a GAM bump), so a bump that renames one fails here instead of silently losing its audit.
+    flagged = [c for c in load_catalog().commands if c.sensitive]
+    assert {c.raw_syntax.split("[")[0].strip() for c in flagged} == SENSITIVE_HEADS
+    assert len(flagged) == len(SENSITIVE_HEADS)
+    assert all(c.buildable and c.risk == RiskLevel.READ_ONLY for c in flagged)
+
+
+def test_a_sensitive_read_is_audited_without_its_output(client):
+    cmd = _sensitive("show backupcodes")
+    r = client.post("/builder/run", data={"cid": cmd.id, "a0": "alice@example.com"})
+    assert "11112222" in r.text                              # the operator still sees the codes
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("sensitive_read", "alice@example.com", True)
+    assert entry["extra"] == {"command": cmd.id}
+    assert entry["argv"] == ["user", "alice@example.com", "show", "backupcodes"]
+    log = client.app.state.gamgui.connector.audit.path.read_text()
+    assert "11112222" not in log and "33334444" not in log   # never the output
+
+
+def test_a_failed_sensitive_read_is_audited(client):
+    cmd = _sensitive("show backupcodes")
+    r = client.post("/builder/run", data={"cid": cmd.id, "a0": "missing@example.com"})
+    assert "Does not exist" in r.text
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("sensitive_read", "missing@example.com", False)
+    assert entry["extra"]["command"] == cmd.id and "Does not exist" in entry["extra"]["error"]
+
+
+async def test_a_sensitive_export_is_audited_as_such(connector, monkeypatch):
+    async def uploaded(domain, argv, **kw):
+        return "Data uploaded to Drive File: https://docs.google.com/spreadsheets/d/abc"
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", uploaded)
+    cmd = _sensitive("print backupcodes")
+    res = await connector.export_to_sheet(cmd, cmd.build({"a0": "alice@example.com"}), "boss@example.com")
+    assert res.ok and "spreadsheets/d/abc" in res.output
+    [entry] = connector.audit.tail()
+    assert (entry["action"], entry["target"]) == ("sensitive_export", "boss@example.com")
+    assert entry["argv"] == ["user", "alice@example.com", "print", "backupcodes", "todrive", "tduser",
+                             "boss@example.com"]
+
+
 def test_a_plain_read_writes_no_audit_entry(client):
     r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
     assert "assistant@example.com" in r.text and _audit(client) == []
