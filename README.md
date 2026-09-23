@@ -44,7 +44,7 @@ Actively developed and used against live Google Workspace tenants. Working today
   and remove a stray event or an entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
   transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
-  live preview of the generated auto-reply.
+  live preview of the generated auto-reply and the exact `gam` command each step will run.
 - **Onboarding** — role → task-list runbooks (persisted, editable) that become a Google Tasks
   checklist on the new hire, plus a templated welcome email.
 - **Command Builder** — browse/search the full categorized GAM catalog (~1,040 commands); curated
@@ -93,7 +93,8 @@ offboarding repairs described below.
 fixed, but the fixes have not themselves been exercised live yet: Drive and calendar are now
 transferred in a *single* data-transfer call (two separate calls collided with a `409 conflict`),
 and "remove from everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to
-abort the sweep.
+abort the sweep. That sweep is one domain-wide call, so it now runs under a 1-hour timeout instead of
+the 2-minute per-call default; how long it really takes on a large tenant is unmeasured.
 
 ## Design goals
 
