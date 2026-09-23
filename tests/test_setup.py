@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -331,6 +332,19 @@ def test_a_credential_file_that_vanishes_after_the_check_is_skipped(tmp_path, mo
     imported = _svc(vault, tmp_path).import_dir(tmp_path, "ex.com")
     assert "client_secrets" not in imported
     assert vault.has_credentials("ex.com")           # the others were unaffected
+
+
+def test_a_fifo_named_like_a_credential_is_refused_without_blocking(tmp_path, bounded_home, fifo):
+    # A read-only open of a FIFO blocks until a writer appears, and it used to happen BEFORE the
+    # regular-file check: one mkfifo'd oauth2service.json froze the import (and the app) for good.
+    (tmp_path / "oauth2.txt").write_text("admin-refresh-token")
+    fifo(tmp_path / "oauth2service.json")
+    vault = SecretsVault(InMemoryBackend())
+    start = time.monotonic()
+    imported = _svc(vault, tmp_path).import_dir(tmp_path, "ex.com")
+    assert time.monotonic() - start < 1.0            # well inside the fifo fixture's watchdog
+    assert imported == ["oauth2"]                    # the FIFO is refused, the real file still lands
+    assert vault.get("ex.com", "oauth2service") is None
 
 
 def test_import_from_user_dir_leaves_files(tmp_path, bounded_home):

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import pwd
+import time
 import unicodedata
 from pathlib import Path
 
@@ -130,6 +132,39 @@ def test_import_route_reports_a_file_instead_of_crashing(ctx):
     assert "not a folder" in r.text
     assert not vault.has_credentials("ex.com")
     assert f.is_file()
+
+
+def test_import_route_refuses_a_fifo_credential_quickly(ctx, fifo):
+    client, base, vault, _ = ctx
+    cfg = base / "cfg"
+    cfg.mkdir()
+    fifo(cfg / "oauth2service.json")
+    start = time.monotonic()
+    r = client.post("/setup/import", data={"domain": "ex.com", "admin": "a@ex.com", "config_dir": str(cfg)})
+    assert time.monotonic() - start < 1.0            # well inside the fifo fixture's watchdog
+    assert r.status_code == 200
+    assert "No credential files found" in r.text
+    assert not vault.has_credentials("ex.com")
+
+
+def test_import_route_runs_the_filesystem_import_off_the_event_loop(ctx, monkeypatch):
+    # import_dir is synchronous filesystem + Keychain work; on the loop, one slow or blocking open
+    # freezes every other request (and every live progress poll) with it.
+    client, base, _, _ = ctx
+    seen = {}
+
+    def import_dir(self, path, domain):
+        try:
+            asyncio.get_running_loop()
+            seen["on_loop"] = True
+        except RuntimeError:            # no running loop: a worker thread
+            seen["on_loop"] = False
+        return []
+
+    monkeypatch.setattr(SetupService, "import_dir", import_dir)
+    r = client.post("/setup/import", data={"domain": "ex.com", "admin": "a@ex.com", "config_dir": str(base)})
+    assert r.status_code == 200
+    assert seen == {"on_loop": False}
 
 
 def test_resolve_dir_accepts_a_real_dir_and_expands_home(ctx):

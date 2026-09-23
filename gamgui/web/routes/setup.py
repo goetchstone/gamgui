@@ -7,6 +7,7 @@ verify the Google Workspace connector is activated on the app state.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
@@ -55,7 +56,8 @@ async def do_import(
         )
     svc = _service(request)
     try:
-        imported = svc.import_dir(config_dir, domain)
+        # Synchronous filesystem + Keychain work: off the event loop, or it stalls every request.
+        imported = await asyncio.to_thread(svc.import_dir, config_dir, domain)
     except (ValueError, OSError, RuntimeError) as exc:
         # A typo'd or non-directory path is operator error, not a crash — say which, and let them
         # correct it in place. The import path is written to raise only operator-facing ValueError,

@@ -239,15 +239,18 @@ def _open_in_dir(dir_fd: int, fname: str, flags: int) -> Optional[Tuple[int, Tup
     write the credential file's contents directly and has better options than this.
     """
     try:
-        fd = os.open(fname, flags | os.O_NOFOLLOW, dir_fd=dir_fd)
+        # O_NONBLOCK because the regular-file check can only happen after the open: without it a
+        # FIFO blocks right here, waiting for a writer, and the import (and the app) hangs with it.
+        fd = os.open(fname, flags | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     except (OSError, ValueError, NotImplementedError):
         return None                     # absent, a symlink, unreadable, or vanished mid-import
     try:
         st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):    # a fifo, a device: not a credential file
+            _close(fd)
+            return None
+        os.set_blocking(fd, True)       # ordinary blocking I/O from here on
     except OSError:
-        _close(fd)
-        return None
-    if not stat.S_ISREG(st.st_mode):    # a fifo would block, a device is not a credential file
         _close(fd)
         return None
     return fd, (st.st_dev, st.st_ino)
