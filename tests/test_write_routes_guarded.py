@@ -1,4 +1,4 @@
-"""Tripwire: no POST route runs a GAM write on a bare POST.
+"""Tripwire: no POST route runs a GAM write on a bare POST, or on a form edited after its preview.
 
 The guard once lived only in the templates: five routes ran a suspend, an event delete, a
 company-wide signature overwrite and a full offboarding for any POST that reached them. This file
@@ -6,6 +6,12 @@ enumerates every POST route from the app itself, so a new route fails here until
 either exempt below, with a reason, or GATED with a plausible form. For each gated route, a POST
 without the confirmation must reach the mock `gam` with zero writes; and the confirm step the UI
 really renders, posted back as HTMX would post it, must run the write.
+
+A confirm step that posts the page's live form (``hx-include``) proves only that *a* preview was
+confirmed: its ``confirmed=1`` is just as true after the form was edited. Signatures, onboarding, the
+bulk department job and the Builder all once ran values nobody had previewed that way. So such a
+step must carry its preview's single-use token, its Case must name an ``edit`` made after the
+preview — which must write nothing — and a replayed step must not write twice.
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 import pytest
 from fastapi.testclient import TestClient
@@ -77,6 +83,10 @@ def _ten_deletes(client) -> None:   # destructive + bulk: the typed confirmation
         client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"})
 
 
+def _another_step(client) -> None:  # the sequence lives on the server: its "edit" is a step added
+    client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "alice@example.com"})
+
+
 @dataclass
 class Case:
     bare: dict                               # plausible form data (incl. what hx-include adds), no confirmation
@@ -85,12 +95,14 @@ class Case:
     preview_files: Optional[dict] = None
     typed: dict = field(default_factory=dict)            # what the operator types into the confirm step
     setup: Optional[Callable] = None
+    edit: Union[dict, Callable, None] = None  # changed after the preview (fields, or a server-side change)
 
 
 GATED = {
     "/users/suspend/apply": Case({"email": "alice@example.com", "suspend": "on"}, "/users/suspend/preview",
                                  {"email": "alice@example.com"}),
-    "/users/bulk/apply": Case({"store": "Downtown", "group": "", "emails": "alice@example.com"}, "/users/bulk/preview"),
+    "/users/bulk/apply": Case({"store": "Downtown", "group": "", "emails": "alice@example.com"}, "/users/bulk/preview",
+                              edit={"store": "Finance", "emails": "alice@example.com\ncarol@example.com"}),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
                                 typed={"confirm_email": "alice@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},
@@ -98,17 +110,21 @@ GATED = {
     "/calendars/delete": Case({"cal": SEC_CAL, "label": "Team Calendar"}, "/calendars/delete/preview",
                               typed={"confirm": "DELETE"}),
     "/lifecycle/offboard/run": Case({"user": "carol@example.com", "manager": "alice@example.com", "subject": "s",
-                                     "message": "m", "days": "30", "notify": ""}, "/lifecycle/offboard/preview"),
-    "/signatures/apply": Case({"template": "{name}", "scope_type": "company", "scope_value": ""}, "/signatures/preview"),
+                                     "message": "m", "days": "30", "notify": ""}, "/lifecycle/offboard/preview",
+                                    edit={"manager": "bob@example.com"}),
+    "/signatures/apply": Case({"template": "{name}", "scope_type": "user", "scope_value": "alice@example.com"},
+                              "/signatures/preview", edit={"scope_type": "company", "scope_value": ""}),
     "/onboard/run": Case({"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
-                          "assignee": "it@example.com", "create_account": "1"}, "/onboard/preview", setup=_sales_role),
+                          "assignee": "it@example.com", "create_account": "1"}, "/onboard/preview", setup=_sales_role,
+                         edit={"email": "zed@example.com"}),
     "/onboard/bulk/run": Case({"csv_text": HIRES_CSV}, "/onboard/bulk/preview", preview_data={},
                               preview_files={"csv_file": ("hires.csv", HIRES_CSV.encode(), "text/csv")},
                               setup=_sales_role),
-    "/builder/run": Case({"cid": "build.suspend_user", "email": "alice@example.com"}, "/builder/preview"),
+    "/builder/run": Case({"cid": "build.suspend_user", "email": "alice@example.com"}, "/builder/preview",
+                         edit={"email": "carol@example.com"}),
     "/builder/sequence/run": Case({}, "/builder/sequence/preview",
                                   typed={"confirm": "confirm", "confirm_email": "carol@example.com"},
-                                  setup=_ten_deletes),
+                                  setup=_ten_deletes, edit=_another_step),
 }
 
 
@@ -152,7 +168,7 @@ class _ConfirmStep(HTMLParser):
 
     def __init__(self, route: str) -> None:
         super().__init__(convert_charrefs=True)
-        self.route, self.found, self.fields = route, False, {}
+        self.route, self.found, self.fields, self.includes = route, False, {}, ""
         self._in_form, self._textarea = False, None
 
     def handle_starttag(self, tag, attrs):
@@ -160,6 +176,7 @@ class _ConfirmStep(HTMLParser):
         if a.get("hx-post") == self.route:
             self.found = True
             self.fields.update(json.loads(a.get("hx-vals") or "{}"))
+            self.includes = a.get("hx-include") or ""
             self._in_form = tag == "form"
         elif self._in_form and a.get("name"):
             if tag == "input" and a.get("value") is not None:   # a typed field has no value: Case.typed
@@ -220,6 +237,63 @@ def test_the_rendered_confirm_step_runs_the_write(route, client, gam_calls):
     assert gam_writes(gam_calls()), f"the confirmed POST to {route} ran no write"
     audited = client.app.state.gamgui.connector.audit.tail()
     assert audited and all(e["ok"] for e in audited), audited
+
+
+def _confirm_step(client, case: Case, route: str) -> _ConfirmStep:
+    """Preview, and parse the confirm step the preview rendered for ``route``."""
+    data = case.bare if case.preview_data is None else case.preview_data
+    shown = client.post(case.preview, data=data, files=case.preview_files)
+    step = _ConfirmStep(route)
+    step.feed(shown.text)
+    assert step.found, f"{case.preview} rendered no control posting to {route}"
+    return step
+
+
+def _posts_a_live_page(step: _ConfirmStep) -> bool:
+    """The step posts the page's own form (``hx-include="#…-form"``) or runs a held preview."""
+    return "-form" in step.includes or "preview" in step.fields
+
+
+@pytest.mark.parametrize("route", sorted(GATED))
+def test_a_confirm_step_that_posts_the_page_runs_only_its_preview(route, client, gam_calls):
+    case = GATED[route]
+    if case.setup:
+        case.setup(client)
+    step = _confirm_step(client, case, route)
+    if not _posts_a_live_page(step):
+        assert case.edit is None, f"{route}'s confirm step carries its own values; its edit tests nothing"
+        return
+    assert "preview" in step.fields, f"{route}'s confirm step posts the live page but no preview token"
+    assert case.edit is not None, f"{route}: name an edit made after the preview (it must write nothing)"
+    form = dict(case.bare)
+    if callable(case.edit):
+        case.edit(client)
+    else:
+        form.update(case.edit)
+    r = client.post(route, data={**form, **step.fields, **case.typed})
+    assert r.status_code == 200 and "changed after the preview" in r.text, r.text[:300]
+    assert _finish_jobs(client) == 0
+    assert gam_writes(gam_calls()) == [], f"{route} ran a form edited after its preview"
+    assert client.app.state.gamgui.connector.audit.tail() == []
+
+
+@pytest.mark.parametrize("route", sorted(GATED))
+def test_a_replayed_confirm_step_does_not_write_twice(route, client, gam_calls):
+    case = GATED[route]
+    if case.setup:
+        case.setup(client)
+    step = _confirm_step(client, case, route)
+    if "preview" not in step.fields:
+        return   # a self-contained step (suspend, a delete): repeating it repeats the same, confirmed change
+    body = {**case.bare, **step.fields, **case.typed}
+    client.post(route, data=body)
+    _finish_jobs(client)
+    writes = len(gam_writes(gam_calls()))
+    assert writes, f"the confirmed POST to {route} ran no write"
+    jobs = len(client.app.state.gamgui.jobs)
+    r = client.post(route, data=body)
+    assert "expired or was already run" in r.text, r.text[:300]
+    assert len(client.app.state.gamgui.jobs) == jobs and len(gam_writes(gam_calls())) == writes
 
 
 def test_every_write_button_disables_itself_while_in_flight():
