@@ -216,7 +216,9 @@ parser was read statically (its bytecode, never run). No mismatch found.
   multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test proves
   classification/argv, not that a live tenant transfers cleanly.
 - **Route tests offboard fixture users** (`carol@` leaves, `alice@` takes over): the directory check
-  refuses anyone else. The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
+  refuses anyone else. The mock's per-user reads answer for that user (`print delegates`: Alice has
+  assistant@/backup@, Carol has helpdesk@, Bob none) and fail for an address that isn't one, as GAM
+  does. The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
   they can use any address — including the mock's trigger substrings above.
 - **The transfer names the Drive privacy level `all`.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
   `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser).

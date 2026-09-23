@@ -91,6 +91,30 @@ def test_user_detail_marks_admin_status(client):
     assert "Super admin" not in r2.text
 
 
+# Each lazy panel on a user's detail page reads THAT user: (the GAM read it must send, what only
+# Carol's data shows, what only Alice's shows). The mock answers per user, so a panel reading the
+# wrong or a fixed user fails here; it used to answer Alice's data for anyone (review F20).
+CAROL = "carol@example.com"
+PANEL_READS = {
+    "/users/signature/current": (["user", CAROL, "show", "signature"], "Carol Clark", "Alice"),
+    "/users/groups": (["print", "groups", "member", CAROL], None, None),
+    "/users/delegates": (["user", CAROL, "print", "delegates"], "helpdesk@example.com", "assistant@example.com"),
+    "/users/calendar": (["user", CAROL, "print", "calendaracls", "primary", "formatjson"],
+                        "helpdesk@example.com", "assistant@example.com"),
+    "/users/vacation": (["user", CAROL, "show", "vacation"], "Conference week", "Out of office"),
+}
+
+
+@pytest.mark.parametrize("route", sorted(PANEL_READS))
+def test_a_detail_panel_reads_the_user_it_is_for(client, gam_calls, route):
+    argv, carols, alices = PANEL_READS[route]
+    r = client.get(route, params={"email": CAROL})
+    assert_ok_partial(r)
+    assert argv in gam_calls(), gam_calls()
+    if carols:
+        assert carols in r.text and alices not in r.text
+
+
 def test_user_detail_lazy_loads_delegates(client):
     # The detail page renders before the delegates gam call; delegates arrive via a lazy endpoint.
     page = client.get("/users/detail", params={"email": "alice@example.com"})

@@ -20,6 +20,11 @@
 # and exit codes are GAM7's shape (2 usage error, 50 action failed, 51 action not performed, 56 does
 # not exist) written from its source conventions, not captured from a tenant — only a live capture
 # (plan Phase 8) proves them.
+#
+# The per-user reads (info user, show vacation/signature, print delegates, print groups member, user
+# print calendaracls) answer for THAT user: each fixture user (tests/fixtures/print_users.json) has
+# different data, and an address that isn't a user fails as GAM fails. Answering Alice's data for
+# anyone let five wrong-target reads pass the whole suite (failure-log 2026-09-23).
 
 set -eu
 
@@ -43,6 +48,39 @@ does_not_exist() {  # <entity> <name>; ENTITY_DOES_NOT_EXIST_RC
 }
 check_exists() {  # <entity> <name>: the *missing*/*nonexistent* trigger
   case "$2" in *missing*|*nonexistent*) does_not_exist "$1" "$2" ;; esac
+}
+
+in_directory() { grep -qF "\"primaryEmail\": \"$1\"" "$GAM_MOCK_FIXTURES/print_users.json"; }
+# A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
+# one that isn't a user the token request fails, and GAM reports the token endpoint's words against it
+# (handleOAuthTokenError -> entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build).
+not_a_user() {  # <address> <Show|Print>
+  printf 'User: %s, User:, %s Failed: invalid_grant: Invalid email or User ID\n' "$1" "$2" 1>&2
+  exit 50
+}
+need_user() {  # <address> <Show|Print>: a fixture-directory user, or one the mock keeps state for
+  in_directory "$1" && return 0
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/vacation/$1" ]; then
+    return 0
+  fi
+  not_a_user "$1" "$2"
+}
+canned_delegates() {  # <user>: each fixture user's own mail delegates, one per line
+  case "$1" in
+    alice@example.com) printf 'assistant@example.com\nbackup@example.com\n' ;;
+    carol@example.com) printf 'helpdesk@example.com\n' ;;
+  esac
+}
+# `todrive <ToDriveAttribute>*` (grammar 655) after a print/report read: only the attributes the Builder
+# emits (GAMCommands.todrive_args) — tduser <EmailAddress>, tdtitle <String>.
+todrive_tail() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      tduser) need_value $# "EmailAddress"; shift 2 ;;
+      tdtitle) need_value $# "String"; shift 2 ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
 }
 
 is_bool() { case "${1:-}" in true|on|yes|enabled|1|false|off|no|disabled|0) return 0 ;; esac; return 1; }
@@ -120,6 +158,23 @@ case "${1:-}" in
     ;;
 esac
 
+# A print/report read may end in `todrive …` (the Builder's export to a Sheet). Check its attributes, then
+# handle the read as without it (the canned CSV stays the output; GAM would print the Sheet's URL). A
+# `show` takes no todrive, so there the word stays and its strict handler refuses it.
+if [ "${1:-}" = "print" ] || [ "${1:-}" = "report" ] || [ "${3:-}" = "print" ]; then
+  td=0; i=0
+  for a in "$@"; do i=$((i + 1)); if [ "$a" = "todrive" ]; then td=$i; break; fi; done
+  if [ "$td" -gt 0 ]; then
+    ( shift "$td"; todrive_tail "$@" ) || exit $?
+    i=0
+    for a in "$@"; do   # keep the words before `todrive` (the list was expanded before the loop)
+      i=$((i + 1))
+      [ "$i" -gt 1 ] || set --
+      [ "$i" -ge "$td" ] || set -- "$@" "$a"
+    done
+  fi
+fi
+
 # Read commands -> echo the matching fixture.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
   cat "$GAM_MOCK_FIXTURES/print_users.json"
@@ -156,6 +211,8 @@ fi
 # and a stored setting for the user, the stored one in GAM's _showVacation shape (a date, else
 # Started/NotSpecified while it is on); otherwise canned.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "vacation" ]; then
+  [ $# -eq 4 ] || invalid_arg "$5"
+  need_user "$2" Show
   vdir="${GAM_MOCK_STATE:-}/vacation/$2"
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -d "$vdir" ]; then
     stored() { if [ -f "$vdir/$1" ]; then cat "$vdir/$1"; else printf '%s' "$2"; fi; }
@@ -170,15 +227,13 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "vacation" ]; 
     stored message None | sed 's/^/    /'; echo
     exit 0
   fi
-  cat <<'EOF'
-User: someone@example.com, Vacation:
-  Enabled: True
-  Contacts Only: False
-  Domain Only: False
-  Subject: Out of office
-  Message:
-    I am away until next week.
-EOF
+  case "$2" in   # each fixture user's own setting
+    alice@example.com) on=True; subject="Out of office"; message="I am away until next week." ;;
+    carol@example.com) on=False; subject="Conference week"; message="Carol is at a conference." ;;
+    *) on=False; subject=None; message=None ;;
+  esac
+  printf 'User: %s, Vacation:\n  Enabled: %s\n  Contacts Only: False\n  Domain Only: False\n' "$2" "$on"
+  printf '  Subject: %s\n  Message:\n    %s\n' "$subject" "$message"
   exit 0
 fi
 
@@ -194,21 +249,31 @@ EOF
   exit 0
 fi
 
-# `gam user <email> show signature` (no formatjson) -> text.
+# `gam user <email> show signature` (no formatjson) -> THAT user's signature, as text.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "signature" ]; then
-  cat <<'EOF'
-SendAs Address: <someone@example.com>
-  IsPrimary: True
-  Default: True
-  Signature:
-    Best,<br>Alice
-EOF
+  [ $# -eq 4 ] || invalid_arg "$5"
+  in_directory "$2" || not_a_user "$2" Show
+  case "$2" in
+    alice@example.com) sig='Best,<br>Alice' ;;
+    carol@example.com) sig='Carol Clark<br>Operations' ;;
+    *) sig='None' ;;
+  esac
+  printf 'SendAs Address: <%s>\n  IsPrimary: True\n  Default: True\n  Signature:\n    %s\n' "$2" "$sig"
   exit 0
 fi
 
-# `gam print groups member <email>` -> CSV of the user's group emails.
+# `gam print groups member <email>` -> CSV of THAT user's group emails. For an address that isn't a user
+# the Directory API says "Invalid Input: memberKey" and GAM stops (invalidMember -> entityActionFailedExit,
+# ACTION_FAILED_RC; read from the vendored build — wording approximate).
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ] && [ "${3:-}" = "member" ]; then
-  printf 'email\nsales@example.com\nstaff@example.com\n'
+  [ -n "${4:-}" ] || missing_arg "EmailItem"
+  [ $# -eq 4 ] || invalid_arg "$5"
+  case "$4" in
+    alice@example.com) printf 'email\nsales@example.com\nstaff@example.com\n' ;;
+    bob@example.com)   printf 'email\nstaff@example.com\n' ;;
+    carol@example.com) printf 'email\nit@example.com\n' ;;
+    *) echo "ERROR: Group:, Print Failed: Invalid Input: memberKey" 1>&2; exit 50 ;;
+  esac
   exit 0
 fi
 
@@ -268,15 +333,34 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forwardingad
   exit 0
 fi
 
-# `gam user <email> print delegates` (no formatjson) -> plain CSV, like real GAM.
+# `gam user <email> print delegates` (no formatjson) -> THAT user's delegates as plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
-  printf 'User,delegateAddress,delegationStatus\n%s,assistant@example.com,accepted\n%s,backup@example.com,accepted\n' "${2:-}" "${2:-}"
+  [ $# -eq 4 ] || invalid_arg "$5"
+  need_user "$2" Print
+  printf 'User,delegateAddress,delegationStatus\n'
+  canned_delegates "$2" | while IFS= read -r d; do
+    if [ -n "$d" ]; then printf '%s,%s,accepted\n' "$2" "$d"; fi
+  done
   exit 0
 fi
 
-# `gam user <email> print calendaracls primary formatjson` -> NDJSON of calendar access rules.
+# `gam user <email> print calendaracls primary formatjson` -> NDJSON of THAT user's calendar access rules.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls" ]; then
-  cat "$GAM_MOCK_FIXTURES/calendar_acls.json"
+  [ -n "${5:-}" ] || missing_arg "UserCalendarEntity"
+  case "${6:-}" in ""|formatjson) ;; *) invalid_arg "$6" ;; esac
+  [ $# -le 6 ] || invalid_arg "$7"
+  in_directory "$2" || not_a_user "$2" Print
+  [ "$5" = "primary" ] || [ "$5" = "$2" ] || does_not_exist "Calendar" "$5"
+  acl() {  # <scope value> <role>: one user-scoped rule on this user's primary calendar
+    printf '{"primaryEmail": "%s", "calendarId": "%s", "id": "user:%s", "role": "%s", "scope": {"type": "user", "value": "%s"}}\n' \
+      "$user" "$user" "$1" "$2" "$1"
+  }
+  user="$2"
+  case "$user" in
+    alice@example.com) cat "$GAM_MOCK_FIXTURES/calendar_acls.json" ;;
+    carol@example.com) acl "$user" owner; acl helpdesk@example.com reader ;;
+    *) acl "$user" owner ;;
+  esac
   exit 0
 fi
 

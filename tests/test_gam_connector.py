@@ -1,7 +1,25 @@
 from __future__ import annotations
 
+import pytest
+
 from gamgui.core.connectors.base import RiskLevel
-from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
+from gamgui.core.gam.commands import EXPECTED_GAM_VERSION, GAMCommands
+from gamgui.core.gam.errors import GAMError, GAMErrorKind
+
+# The per-user reads, and the argv each must send for the user asked about. The mock answers them per
+# user, as GAM does (each fixture user has different data; an address that isn't a user fails), so a
+# connector reading the wrong user — or a fixed one — fails here. It used to answer Alice's data for
+# anyone, and five wrong-target reads passed the whole suite (review F20).
+# For an address that isn't a user, the Gmail/Calendar reads fail as GAM's token request for it does
+# (NOT_FOUND); `print groups member` gets the Directory API's "Invalid Input: memberKey", which names
+# no user and stays UNKNOWN.
+PER_USER_READS = [
+    ("list_delegates", GAMCommands.print_delegates, GAMErrorKind.NOT_FOUND),
+    ("get_signature", GAMCommands.show_signature, GAMErrorKind.NOT_FOUND),
+    ("list_user_groups", GAMCommands.print_groups_member, GAMErrorKind.UNKNOWN),
+    ("get_vacation", GAMCommands.show_vacation, GAMErrorKind.NOT_FOUND),
+    ("list_calendar_acls", GAMCommands.print_calendar_acls, GAMErrorKind.NOT_FOUND),
+]
 
 
 async def test_list_users(connector):
@@ -137,3 +155,26 @@ async def test_revoke_access_is_one_audited_deprovision_whose_failure_is_returne
     assert bad.ok is False and "Sign Out Failed" in bad.detail          # returned, not swallowed
     assert _audit_rows(connector) == [("revoke_access", "alice@example.com", True),
                                       ("revoke_access", "SIGNOUTFAIL-alice@example.com", False)]
+
+
+@pytest.mark.parametrize("read, builder, unknown", PER_USER_READS, ids=[r[0] for r in PER_USER_READS])
+async def test_a_per_user_read_asks_gam_about_that_user(connector, gam_calls, read, builder, unknown):
+    alice = await getattr(connector, read)("alice@example.com")
+    carol = await getattr(connector, read)("carol@example.com")
+    assert gam_calls() == [builder("alice@example.com"), builder("carol@example.com")]
+    assert alice != carol
+    with pytest.raises(GAMError) as ei:
+        await getattr(connector, read)("nobody@example.com")
+    assert ei.value.kind is unknown and ei.value.exit_code == 50
+
+
+async def test_per_user_reads_return_that_users_data(connector):
+    carol = "carol@example.com"
+    assert await connector.list_delegates(carol) == ["helpdesk@example.com"]
+    assert await connector.list_delegates("bob@example.com") == []
+    assert await connector.get_signature(carol) == "Carol Clark<br>Operations"
+    assert await connector.list_user_groups(carol) == ["it@example.com"]
+    vac = await connector.get_vacation(carol)
+    assert (vac.enabled, vac.subject, vac.message) == (False, "Conference week", "Carol is at a conference.")
+    acls = await connector.list_calendar_acls(carol)
+    assert [(a.scope_value, a.role) for a in acls] == [(carol, "owner"), ("helpdesk@example.com", "reader")]

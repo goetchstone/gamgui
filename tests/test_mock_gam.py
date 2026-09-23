@@ -72,7 +72,8 @@ WRITES = {
     "remove_group_member": [C.remove_group_member("sales@example.com", "carol@example.com")],
 }
 
-# Reads stay canned, but each one the app issues must still have a handler.
+# Reads stay canned, but each one the app issues must still have a handler. The per-user ones answer
+# for their target (tests/test_gam_connector.py::test_a_per_user_read_asks_gam_about_that_user).
 READS = {
     "version": [C.version()],
     "check_svcacct": [C.check_svcacct("admin@example.com")],
@@ -152,6 +153,18 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     (["user", "alice@example.com", "deprovision", "signout", "now"], "Invalid argument"),
     (["delete", "calendars", CAL], "mock: unhandled argv"),       # the catch-all fails now
     (["user", "alice@example.com", "delete", "calendars", CAL], "mock: unhandled argv"),
+    # The per-user reads take only what the grammar gives them (formatjson is the classic trap).
+    (["user", "alice@example.com", "print", "delegates", "formatjson"], "Invalid argument"),
+    (["user", "alice@example.com", "show", "signature", "formatjson"], "Invalid argument"),
+    (["user", "alice@example.com", "show", "vacation", "formatjson"], "Invalid argument"),
+    (["print", "groups", "member", "alice@example.com", "bogus"], "Invalid argument"),
+    (["user", "alice@example.com", "print", "calendaracls", "primary", "formatjson", "x"], "Invalid argument"),
+    # `todrive <ToDriveAttribute>*`: only on a print/report read, and only the attributes the Builder emits.
+    (["user", "alice@example.com", "show", "vacation", "todrive"], "Invalid argument"),
+    (C.print_delegates("alice@example.com") + ["todrive", "tdshare", "x@example.com", "writer"], "Invalid argument"),
+    (C.print_delegates("alice@example.com") + ["todrive", "tduser"], "Missing argument"),
+    (C.print_users() + ["todrive", "tdtitle"], "Missing argument"),
+    (C.print_users() + ["todrive", "tduser", "boss@example.com", "extra"], "Invalid argument"),
 ])
 async def test_mock_rejects_a_malformed_shape(runner, domain, argv, needle):
     with pytest.raises(GAMError) as ei:
@@ -167,6 +180,11 @@ async def test_mock_rejects_a_malformed_shape(runner, domain, argv, needle):
     C.remove_delegate("alice@example.com", "missing@example.com"),
     C.delete_event(CAL, "missing-evt"),
     C.info_user("nobody@example.com"),        # info user is keyed on the address, not "always Alice"
+    # So are the per-user Gmail/Calendar reads: GAM can't get a token for an address that isn't a user.
+    C.print_delegates("nobody@example.com"),
+    C.show_signature("nobody@example.com"),
+    C.show_vacation("nobody@example.com"),
+    C.print_calendar_acls("nobody@example.com"),
 ])
 async def test_mock_reports_a_missing_entity_as_not_found(runner, domain, argv):
     with pytest.raises(GAMError) as ei:
@@ -193,3 +211,26 @@ async def test_argv_recorder_sees_exactly_what_ran(runner, domain, gam_calls):
     tricky = "Best,\nAlice <a href='x'>  two  spaces</a>"
     await runner.run_authenticated(domain, C.set_signature("alice@example.com", tricky), serialize=True)
     assert gam_calls() == [["user", "alice@example.com", "signature", tricky, "html"]]
+
+
+async def test_mock_fails_a_per_user_read_of_an_unknown_address_as_gam_does(runner, domain):
+    # GAM 7.48.11, read from the vendored build: the token request for an address that isn't a user
+    # fails and is reported against it (handleOAuthTokenError → entityActionFailedWarning, exit 50);
+    # `print groups member` gets the Directory API's "Invalid Input: memberKey" (invalidMember →
+    # entityActionFailedExit). Real wording approximate — not captured from a tenant.
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.show_vacation("nobody@example.com"))
+    assert ei.value.exit_code == 50
+    assert "User: nobody@example.com, User:, Show Failed: invalid_grant: Invalid email or User ID" in ei.value.stderr
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.print_groups_member("nobody@example.com"))
+    assert ei.value.exit_code == 50 and "Invalid Input: memberKey" in ei.value.stderr
+
+
+@pytest.mark.parametrize("todrive", [C.todrive_args(), C.todrive_args("boss@example.com"),
+                                     C.todrive_args(title="Delegates"), C.todrive_args("boss@example.com", "D")],
+                         ids=lambda a: " ".join(a))
+@pytest.mark.parametrize("read", [C.print_delegates("alice@example.com"), C.print_users(), C.print_groups(),
+                                  C.print_calendar_acls("alice@example.com")], ids=lambda a: " ".join(a[:4]))
+async def test_mock_accepts_the_todrive_shapes_the_builder_emits(runner, domain, read, todrive):
+    await runner.run_authenticated(domain, read + todrive)
