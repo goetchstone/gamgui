@@ -13,22 +13,30 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 
 ## Files
 - `gamgui/core/lifecycle.py` — pure step builder. `build_offboard_steps(...)`, `fill_autoreply`,
-  `OffboardStep` dataclass, `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No scheduler, no persisted state.
+  `OffboardStep` dataclass (its `commands` = the exact argv(s) it runs), `command_line` (argv → the
+  quoted, redacted `gam …` line the preview shows), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No
+  scheduler, no persisted state.
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
   Executes the steps as a progress-tracked `BatchJob` (`_run_offboard`); name-resolution helpers.
-- `gamgui/web/routes/users.py` (lines ~416-447) — the **delete** flow: `delete_zone`,
+- `gamgui/web/routes/users.py` (lines ~425-455) — the **delete** flow: `delete_zone`,
   `delete_confirm` (warns on pending transfers), `delete_apply` (type-the-exact-email confirm).
 - `gamgui/core/connectors/gam_connector.py` — the real mutations: `transfer_data`,
   `remove_from_all_calendars`, `reset_password`, `delete_user`, `add_delegate`, `set_vacation`,
   `add_calendar_event`; all via `_run_write` (`tolerate_kinds`). `incomplete_transfers_for` is a
   **read** (direct `run_authenticated`, not `_run_write`) that the delete gate calls.
-- `gamgui/core/gam/commands.py` (~268-315) — argv builders (`create_datatransfer`,
+- `gamgui/core/gam/commands.py` (~275-325) — argv builders (`create_datatransfer`,
   `remove_all_calendar_acls`, `print_datatransfers`, `delete_user`, `reset_password`, …).
 
 ## How it works
 `build_offboard_steps` returns 6 ordered `OffboardStep`s (`password`, `delegate`, `vacation`,
-`transfer`, `calacls`, `reminder`), each a `lambda conn: conn.<method>(...)`. It is pure and
-testable; the route runs it. `offboard_run` first refuses a POST without `confirmed=1`
+`transfer`, `calacls`, `reminder`), each a `lambda conn: conn.<method>(...)` plus `commands`, the
+argv(s) that method runs, built from the same `GAMCommands` builders and values. It is pure and
+testable; the route runs it. The **preview** lists every step with its exact command
+(`command_line`: one `gam …` line per argv, each element shell-quoted so a subject with spaces is
+visibly one argument; a value after a sensitive key masked as the audit log masks it, GAM's own
+`password random` shown as is — offboarding carries no secret). Display only: nothing is ever run
+through a shell. `test_offboard_preview_commands_are_what_runs` holds the preview to what the mock
+receives, in order. `offboard_run` first refuses a POST without `confirmed=1`
 (`guard.enforce`, the leaver declared `DESTRUCTIVE`: the preview's Run button posts it, and
 `hx-disabled-elt` stops a double-click starting a second run — a bare POST once ran the whole
 routine, failure-log 2026-09-23), then builds the steps, calls `start_job`, and hands them to
@@ -36,6 +44,24 @@ routine, failure-log 2026-09-23), then builds the steps, calls `start_job`, and 
 on a failed step** (every failure is reported). The "timer" is the last step: a calendar reminder
 event on the manager's calendar `days` out — there is no app-side scheduler. The final account
 **delete** is a distinct guarded action on the user detail page (`delete_user`, `RiskLevel.DESTRUCTIVE`).
+
+## Grammar check of every step (GAM 7.48.11, re-verified 2026-09-23)
+Each argv our builder emits, next to its line in the vendored `gamgui/resources/gam7/GamCommands.txt`
+(line numbers at this pin). Where the grammar was ambiguous the vendored GAM build's own argument
+parser was read statically (its bytecode, never run). No mismatch found.
+
+| Step | argv we emit | Grammar | Verdict |
+|---|---|---|---|
+| Reset password | `update user <leaver> password random changepassword off` | `gam update user <UserItem> [ignorenullpassword] <UserAttribute>*` (5942); `<UserBasicAttribute>` (5823): `(password (random [<Integer>])\|…)`, `(changepassword\|changepasswordatnextlogin <Boolean>)` | Match. GAM generates the password; we never see it. |
+| …then sign-out (only if the reset worked) | `user <leaver> signout` | `gam <UserTypeEntity> signout` (8938) | Match; the command takes no options. |
+| Delegate | `user <leaver> add delegate <manager>` | `gam <UserTypeEntity> create\|add delegate\|delegates [convertalias] <UserEntity>` (7910) | Match; `convertalias` optional, unused. |
+| Auto-reply | `user <leaver> vacation on subject <S> message <M> html` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly …] [domainonly …] [start …] [end …]` (8283); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. `html`: see Gotchas. |
+| Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager>` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598) | Match; the service list is ONE element. No privacy keyword: see Gotchas. |
+| Calendar sweep | `all users delete calendaracls primary <leaver>` | `gam <UserTypeEntity> delete calendaracls <UserCalendarEntity> <CalendarACLRole>] <CalendarACLScopeEntity>` (6327) | Match. The grammar line lost its `[`: the role is optional, as in `calendars … delete acls [<CalendarACLRole>]` (1689) and in GAM's parser (`getChoice(…, defaultChoice=None)`, then the scope, then no extra arguments). `all users` = `<UserTypeEntity>`, `primary` = `<UserCalendarEntity>`, a bare address = `<CalendarACLScope>` (a user). |
+| Manager reminder | `user <manager> add event primary summary <S> start allday <D> end allday <D+1> [description <T>] [attendee <E>]` | `gam <UserTypeEntity> create\|add event <UserCalendarEntity> [id <String>] <EventAttribute>+ [<EventNotificationAttribute>]` (6469); `<EventAttribute>` (6391): `summary`, `start\|starttime (allday <Date>)`, `end\|endtime (allday <Date>)`, `description`, `attendee <EmailAddress>` | Match. The end date is exclusive, so a one-day event on D. |
+| Delete (later, user detail page) | `delete user <leaver>` | `gam delete user <UserItem> [noactionifalias]` (5964) | Match; `noactionifalias` unused (the page passes the primary address). |
+| Undelete (Builder) | `undelete user <email>` | `gam undelete user <UserItem> [ou\|org\|orgunit <OrgUnitPath>]` (5965) | Match. |
+| Delete gate (read) | `print datatransfers olduser <leaver>` | `gam print datatransfers\|transfers [todrive …] [olduser\|oldowner <UserItem>] …` (3603) | Match. |
 
 ## Invariants & the failure history
 - **Delete gated on transfer completion (advisory).** `delete_confirm` calls
@@ -79,6 +105,13 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
   handler that fails a malformed argv. It does **not** model real DTS async timing, partial
   multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test proves
   classification/argv, not that a live tenant transfers cleanly.
+- **The transfer names no Drive privacy level.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
+  `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser) —
+  without one, the Data Transfer API's own default decides whether files the leaver *shared* move to
+  the manager. Unverified which; check the manager's Drive after the first live run, before the
+  account is deleted. GAM also refuses a transfer to the same user (the step fails with a usage error).
+- **The auto-reply is sent as HTML** (`html`): line breaks typed into the message collapse and `<`/`&`
+  are markup, while the preview block shows the line breaks. A one-paragraph message is unaffected.
 - `incomplete_transfers_for` reads `overallTransferStatusCode` (falling back to `status`) and treats
   anything not `"completed"` as pending; a real tenant's status vocabulary is the source of truth.
 
@@ -88,7 +121,9 @@ gam + in-memory Keychain). Covered: step order/keys, the single combined-service
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL and not-found) vs. real
 auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
-auto-reply substitution, reminder invitee, and `incomplete_transfers_for` filtering.
+auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, and the preview's
+commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
+(`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
 actual per-user calendar sweep at domain scale, and `delete_user` itself. Per CLAUDE.md, these must
 be run against a **throwaway** account before being trusted.

@@ -878,6 +878,29 @@ def test_lifecycle_offboard_preview_lists_steps(client):
     assert "Reset password" in r.text and "Transfer Drive" in r.text and "Run offboarding" in r.text
 
 
+def test_lifecycle_offboard_preview_shows_each_exact_command(client):
+    # Before the first live run the operator reads the exact gam command of every step, quoted so a
+    # value with spaces is visibly one argument.
+    import html
+
+    r = client.post("/lifecycle/offboard/preview",
+                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "Away now",
+                          "message": "m", "days": "30"})
+    text = html.unescape(r.text)
+    for line in [
+        "gam update user leaver@example.com password random changepassword off",
+        "gam user leaver@example.com signout",
+        "gam user leaver@example.com add delegate mgr@example.com",
+        "gam user leaver@example.com vacation on subject 'Away now' message m html",
+        "gam create datatransfer leaver@example.com drive,calendar mgr@example.com",
+        "gam all users delete calendaracls primary leaver@example.com",
+        "gam user mgr@example.com add event primary summary 'Offboarding leaver@example.com: confirm",
+    ]:
+        assert line in text, line
+    assert text.count("<pre") == 7
+    assert "stopped and reported failed after 60 min" in text      # the sweep's domain-wide bound
+
+
 def test_lifecycle_offboard_preview_requires_both_emails(client):
     r = client.post("/lifecycle/offboard/preview", data={"user": "leaver@example.com", "manager": "  "})
     assert "Enter both" in r.text

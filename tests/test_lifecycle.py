@@ -4,7 +4,12 @@ from datetime import date
 
 import pytest
 
-from gamgui.core.lifecycle import DEFAULT_MESSAGE, DEFAULT_SUBJECT, build_offboard_steps
+import shlex
+
+from gamgui.core.gam.commands import GAMCommands
+from gamgui.core.lifecycle import DEFAULT_MESSAGE, DEFAULT_SUBJECT, build_offboard_steps, command_line
+
+from .helpers import gam_writes
 
 
 def test_offboard_steps_order_and_due_date():
@@ -193,3 +198,34 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     assert job.log[-1].startswith("✓ ") and "reminder" in job.log[-1]
     rec = next(e for e in connector.audit.tail() if e["action"] == "remove_from_all_calendars")
     assert rec["ok"] is False and rec["extra"]["tolerated"] is False
+
+
+@pytest.mark.asyncio
+async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
+    # The preview prints each step's `commands`; the connector builds its own argv. Every write the
+    # mock received, in order, must be exactly the previewed list — any drift between the two fails here.
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.lifecycle import _run_offboard
+
+    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "{employee} has left",
+                                 "Line one.\nAsk {manager} — it's fine", 30, date(2026, 6, 23),
+                                 notify="it@example.com", employee_name="Lee Ver",
+                                 manager_contact="Mo Gr (mgr@example.com)")
+    job = start_job({}, len(steps))
+    await _run_offboard(job, connector, steps)
+    assert (job.applied, job.failed) == (len(steps), [])
+    assert gam_writes(gam_calls()) == [argv for s in steps for argv in s.commands]
+    assert [len(s.commands) for s in steps] == [2, 1, 1, 1, 1, 1]      # the reset's sign-out follows it
+
+
+def test_command_line_shows_argument_bounds_and_masks_secrets():
+    argv = GAMCommands.set_vacation("a@example.com", "Jane has left", "It's \"done\"\nbye")
+    line = command_line(argv)
+    assert line.startswith("gam user a@example.com vacation on subject 'Jane has left' message ")
+    assert shlex.split(line)[1:] == argv                             # each element's bounds survive
+    assert "It's" in line and "'\"'\"'" not in line                   # an apostrophe stays readable
+    # GAM generates `password random` itself — nothing secret to hide, so it reads as it runs.
+    assert command_line(GAMCommands.reset_password("a@example.com")) == (
+        "gam update user a@example.com password random changepassword off")
+    typed = command_line(GAMCommands.create_user("n@example.com", "N", "U", "S3cret pw!", notify="b@example.com"))
+    assert "S3cret" not in typed and typed.count("***redacted***") == 2
