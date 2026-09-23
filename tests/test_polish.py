@@ -18,6 +18,8 @@ from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.reports import Report
 from gamgui.web.server import AppState, TEMPLATES, create_app
 
+from .helpers import TEST_HOSTS
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
 
@@ -31,7 +33,7 @@ def client(tmp_path, monkeypatch):
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t",
                      calendar_index=CalendarIndex(tmp_path / "calendar_index.db"))
-    with TestClient(create_app(state)) as c:
+    with TestClient(create_app(state, allowed_hosts=TEST_HOSTS)) as c:
         c.get("/?token=t")
         yield c
 

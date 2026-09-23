@@ -136,7 +136,8 @@ Beyond the credentials themselves:
 
 - **The local server is not open to other local processes.** It binds loopback on a random port and
   requires a per-launch token — and because cookies are *not* port-scoped (so `SameSite` alone would
-  treat every port on `127.0.0.1` as the same site), it also rejects cross-origin callers outright.
+  treat every port on `127.0.0.1` as the same site), it also rejects cross-origin callers outright,
+  and any request whose `Host` is not its own loopback port (DNS rebinding).
 - **GAM is never invoked through a shell.** Every command is an explicit argv list built by
   `GAMCommands`; user input is always a single list element, never string-interpolated.
 - **Every mutation is guarded and audited** — `guard.evaluate()` classifies risk and resolves the

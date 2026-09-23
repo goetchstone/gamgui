@@ -17,6 +17,8 @@ from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.setup import SetupService, _root_is_sane
 from gamgui.web.server import AppState, create_app
 
+from .helpers import TEST_HOSTS
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -31,7 +33,7 @@ def ctx(tmp_path, monkeypatch):
     vault = SecretsVault(InMemoryBackend())
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     state = AppState(vault=vault, runner=runner, audit_domain="", connector=None, token="t")
-    client = TestClient(create_app(state))
+    client = TestClient(create_app(state, allowed_hosts=TEST_HOSTS))
     client.get("/?token=t")  # establish the token cookie
     return client, tmp_path, vault, state
 

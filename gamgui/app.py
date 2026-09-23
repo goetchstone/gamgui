@@ -14,7 +14,7 @@ import time
 import uvicorn
 
 from .core.secrets.ephemeral import sweep_stale_configs, wipe_live_configs
-from .web.server import AppState, create_app
+from .web.server import AppState, create_app, loopback_hosts
 
 # Seconds uvicorn may spend waiting for in-flight requests at shutdown. This has to be set: with no
 # graceful-shutdown timeout uvicorn waits forever and never cancels, so a gam call still running
@@ -73,8 +73,8 @@ def _fit_size(screen_w: int, screen_h: int) -> "tuple[int, int]":
 
 def main() -> None:
     state = AppState.create()
-    app = create_app(state)
     host, port = "127.0.0.1", _free_loopback_port()
+    app = create_app(state, allowed_hosts=loopback_hosts(port))
     server = _BackgroundServer(app, host, port)
     server.start()
     url = f"http://{host}:{port}/?token={state.token}"

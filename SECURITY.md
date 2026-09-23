@@ -62,8 +62,10 @@ guarding them:
 - **Only read-only commands can become runnable automatically.** The Builder promotes
   grammar-derived commands to runnable *only* when they are confidently read-only; every write must
   be hand-curated. Anything uncertain stays inert.
-- **The loopback server rejects cross-origin callers.** Cookies are not port-scoped, so a token
-  cookie alone would let any page on another `127.0.0.1` port drive the app.
+- **The loopback server rejects cross-origin callers and foreign hosts.** Cookies are not
+  port-scoped, so a token cookie alone would let any page on another `127.0.0.1` port drive the app;
+  and every request, even the health check, must carry a `Host` of `127.0.0.1:<port>` or
+  `localhost:<port>`, so a DNS-rebound page can't reach it.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed.
 

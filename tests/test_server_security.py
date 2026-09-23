@@ -16,12 +16,17 @@ from gamgui.core.calendar_index import CalendarIndex
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
-from gamgui.web.server import TOKEN_COOKIE, AppState, create_app
+from gamgui.web.server import TOKEN_COOKIE, AppState, create_app, loopback_hosts
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
-# TestClient's default base_url; the gate derives our authority from Host, so this is our origin.
-SELF_ORIGIN = "http://testserver"
+# These tests run the real app's Host rule (loopback_hosts), not the other suites' "testserver".
+PORT = 8765
+SELF_ORIGIN = f"http://127.0.0.1:{PORT}"
+
+
+def _client(app, base_url: str = SELF_ORIGIN) -> TestClient:
+    return TestClient(app, base_url=base_url)
 
 
 @pytest.fixture
@@ -33,12 +38,12 @@ def app(tmp_path, monkeypatch):
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t",
                      calendar_index=CalendarIndex(tmp_path / "calendar_index.db"))
-    return create_app(state)
+    return create_app(state, allowed_hosts=loopback_hosts(PORT))
 
 
 @pytest.fixture
 def client(app):
-    c = TestClient(app)
+    c = _client(app)
     c.get("/?token=t")  # bootstrap: sets the cookie for the rest of the session
     return c
 
@@ -46,7 +51,7 @@ def client(app):
 # --- the ?token= bootstrap ---------------------------------------------------------------
 
 def test_token_bootstrap_sets_the_cookie(app):
-    c = TestClient(app)
+    c = _client(app)
     r = c.get("/?token=t")
     assert r.status_code == 200
     assert c.cookies.get(TOKEN_COOKIE) == "t"
@@ -58,17 +63,18 @@ def test_token_bootstrap_sets_the_cookie(app):
 
 
 def test_no_credentials_is_forbidden(app):
-    assert TestClient(app).get("/users").status_code == 403
+    assert _client(app).get("/users").status_code == 403
 
 
 # --- cross-origin (the port-blind cookie problem) ----------------------------------------
 
 @pytest.mark.parametrize("origin", [
-    "http://127.0.0.1:9999",   # another local process — same *site*, so the cookie would be sent
+    "http://127.0.0.1:9999",       # another local process — same *site*, so the cookie would be sent
     "http://localhost:8080",
     "http://evil.local",
-    "https://testserver",      # right host, wrong scheme
-    "null",                    # a sandboxed iframe / file:// document
+    f"https://127.0.0.1:{PORT}",   # right host, wrong scheme
+    f"http://localhost:{PORT}",    # our port by name, but the page was loaded by address
+    "null",                        # a sandboxed iframe / file:// document
 ])
 def test_cross_origin_post_is_rejected(client, origin):
     r = client.post("/builder/sequence/clear", headers={"Origin": origin})
@@ -94,7 +100,7 @@ def test_cross_origin_get_is_rejected(client):
 def test_same_origin_get_navigation_and_export_still_work(app):
     st = app.state.gamgui
     st.builder_last_result = {"records": [{"primaryEmail": "alice@example.com"}]}
-    c = TestClient(app)
+    c = _client(app)
     c.get("/?token=t")
     assert c.get("/", headers={"Sec-Fetch-Site": "none"}).status_code == 200
     r = c.get("/builder/export.csv", headers={"Origin": SELF_ORIGIN, "Sec-Fetch-Site": "same-origin"})
@@ -125,16 +131,16 @@ def test_non_ascii_cookie_token_is_forbidden_not_a_crash(app, raw):
     # secrets.compare_digest's str form raises TypeError above U+007F, and starlette decodes raw
     # header bytes as latin-1 — so a garbled cookie must come back 403, never a 500. Sent as raw
     # header bytes because httpx's cookie jar refuses to encode a non-ASCII value at all.
-    r = TestClient(app).get("/users", headers=[(b"cookie", b"gamgui_token=" + raw)])
+    r = _client(app).get("/users", headers=[(b"cookie", b"gamgui_token=" + raw)])
     assert r.status_code == 403
 
 
 def test_non_ascii_query_token_is_forbidden_not_a_crash(app):
-    assert TestClient(app).get("/?token=t%C3%A9").status_code == 403
+    assert _client(app).get("/?token=t%C3%A9").status_code == 403
 
 
 def test_wrong_ascii_token_is_forbidden(app):
-    c = TestClient(app)
+    c = _client(app)
     c.cookies.set(TOKEN_COOKIE, "nope")
     assert c.get("/users").status_code == 403
 
@@ -142,14 +148,64 @@ def test_wrong_ascii_token_is_forbidden(app):
 # --- unauthenticated surface -------------------------------------------------------------
 
 def test_healthz_and_static_stay_reachable(app):
-    c = TestClient(app)
+    c = _client(app)
     assert c.get("/healthz").json() == {"ok": True}
     r = c.get("/static/")  # the mount answers (404 for a missing asset, never the gate's 403)
     assert r.status_code != 403
 
 
+def test_a_path_that_merely_starts_with_static_still_needs_the_token(app):
+    @app.get("/staticfoo")
+    async def staticfoo():
+        return {"reached": True}
+
+    assert _client(app).get("/staticfoo").status_code == 403
+    c = _client(app)
+    c.get("/?token=t")
+    assert c.get("/staticfoo").json() == {"reached": True}
+    # The /static/ exemption only ever reaches the static mount, never a real route behind it.
+    r = _client(app).get("/static/%2e%2e/users")
+    assert r.status_code == 404 and "alice" not in r.text
+
+
+# --- Host (DNS rebinding) ----------------------------------------------------------------
+
+@pytest.mark.parametrize("host", [
+    f"evil.example:{PORT}",   # a rebound name: same-origin with itself, so only Host gives it away
+    "evil.example",
+    "127.0.0.1:9999",         # our address, another port
+    f"127.0.0.1:{PORT}.evil.example",
+    "127.0.0.1",
+    "testserver",             # the other suites' Host is not allowed by the real rule
+    "",
+])
+@pytest.mark.parametrize("path", ["/healthz", "/static/", "/?token=t", "/users"])
+def test_a_foreign_host_is_refused_everywhere(app, host, path):
+    # Even /healthz: a rebound page could otherwise use it as an oracle for our random port.
+    r = _client(app).get(path, headers={"Host": host})
+    assert r.status_code == 403
+    assert r.json() == {"error": "forbidden"}
+    assert r.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_both_loopback_spellings_of_our_port_are_accepted(app):
+    for base in (SELF_ORIGIN, f"http://localhost:{PORT}"):
+        c = _client(app, base)
+        assert c.get("/healthz").json() == {"ok": True}
+        assert c.get("/?token=t").status_code == 200
+        assert c.get("/users").status_code == 200
+
+
+def test_allowed_hosts_is_required_and_never_a_bare_string(app):
+    state = app.state.gamgui
+    with pytest.raises(TypeError):
+        create_app(state)  # no permissive default
+    with pytest.raises(TypeError):
+        create_app(state, allowed_hosts="127.0.0.1:8765")  # would allow "1", "2", "7", ...
+
+
 def test_security_headers_on_the_forbidden_response(app):
-    r = TestClient(app).get("/users", headers={"Origin": "http://evil.local"})
+    r = _client(app).get("/users", headers={"Origin": "http://evil.local"})
     assert r.status_code == 403
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["Referrer-Policy"] == "no-referrer"

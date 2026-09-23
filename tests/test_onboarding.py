@@ -17,6 +17,8 @@ from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.signatures import SignatureStore
 from gamgui.web.server import AppState, create_app
 
+from .helpers import TEST_HOSTS
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
 
@@ -33,7 +35,7 @@ def _client(tmp_path, gam_binary):
     state = AppState(vault=conn.runner.vault, runner=conn.runner, audit_domain=DOMAIN, connector=conn, token="t")
     state.runbooks = RunbookStore(tmp_path / "onboarding.json")   # isolated store, not the real ~/Library file
     state.sig_templates = SignatureStore(tmp_path / "signatures.json")   # isolated; seeds "Classic"/"Modern accent"/"Minimal"
-    return TestClient(create_app(state))
+    return TestClient(create_app(state, allowed_hosts=TEST_HOSTS))
 
 
 @pytest.fixture

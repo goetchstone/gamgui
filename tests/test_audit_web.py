@@ -16,6 +16,8 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
+from .helpers import TEST_HOSTS
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
 
@@ -33,7 +35,7 @@ def client(tmp_path, monkeypatch):
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(audit_path))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t",
                      calendar_index=CalendarIndex(tmp_path / "calendar_index.db"))
-    c = TestClient(create_app(state))
+    c = TestClient(create_app(state, allowed_hosts=TEST_HOSTS))
     c.get("/?token=t")
     c.audit_path = audit_path  # type: ignore[attr-defined]
     return c
@@ -397,7 +399,7 @@ def unconnected_client(tmp_path):
     vault = SecretsVault(InMemoryBackend())
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     state = AppState(vault=vault, runner=runner, audit_domain="", connector=None, token="t")
-    c = TestClient(create_app(state))
+    c = TestClient(create_app(state, allowed_hosts=TEST_HOSTS))
     c.get("/?token=t")
     return c
 

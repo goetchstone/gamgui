@@ -9,6 +9,8 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
+from .helpers import TEST_HOSTS
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -17,7 +19,7 @@ def client(tmp_path) -> TestClient:
     vault = SecretsVault(backend=InMemoryBackend())
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     state = AppState(vault=vault, runner=runner, audit_domain="", connector=None, token="testtoken")
-    return TestClient(create_app(state))
+    return TestClient(create_app(state, allowed_hosts=TEST_HOSTS))
 
 
 def test_healthz_is_open(client):

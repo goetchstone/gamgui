@@ -93,11 +93,20 @@ class AppState:
         )
 
 
-class TokenGateMiddleware(BaseHTTPMiddleware):
-    """Reject cross-origin callers, allow static assets, else require the launch token
-    (cookie, else ?token= which sets it).
+def loopback_hosts(port: int) -> frozenset:
+    """The Host values the real app answers to: its own loopback port, by address or by name."""
+    return frozenset({f"127.0.0.1:{port}", f"localhost:{port}"})
 
-    The origin check comes first because the cookie alone is not enough: cookies are not port-scoped
+
+class TokenGateMiddleware(BaseHTTPMiddleware):
+    """Reject a foreign Host and cross-origin callers, allow static assets, else require the launch
+    token (cookie, else ?token= which sets it).
+
+    The Host check comes first, before even /healthz: a DNS-rebound page (evil.example resolving to
+    127.0.0.1) is same-origin with itself, so the origin check can't see it, but its requests carry
+    its own name in Host. Starlette's TrustedHostMiddleware can't do this — it drops the port.
+
+    The origin check comes next because the cookie alone is not enough: cookies are not port-scoped
     (RFC 6265 §8.5), so SameSite=Strict treats *every* port on 127.0.0.1 as the same site. Without
     this, a page served by any other local process could fire a form POST at us — a simple request,
     so no preflight — and the browser would helpfully attach our token cookie.
@@ -118,9 +127,10 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
     # header, or a value a future browser invents) falls through to the Origin check below.
     CROSS_ORIGIN_FETCH_SITES = frozenset({"cross-site", "same-site"})
 
-    def __init__(self, app, token: str) -> None:
+    def __init__(self, app, token: str, allowed_hosts) -> None:
         super().__init__(app)
         self._token = token
+        self._allowed_hosts = allowed_hosts
 
     def _token_ok(self, candidate: "str | None") -> bool:
         # Constant-time compare (defence-in-depth vs. a local process timing the loopback auth).
@@ -139,7 +149,7 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
             # Browsers always send Origin cross-origin, so absence means a same-origin navigation
             # or a non-browser client (the native WKWebView's initial load, curl, the test client).
             return True
-        # The listening port is picked at runtime, so our own authority is whatever Host says.
+        # Host has already been checked against our own authority, so Origin must match it.
         return origin.casefold() == f"{request.url.scheme}://{request.headers.get('host', '')}".casefold()
 
     def _secure(self, response):
@@ -148,10 +158,14 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
         return response
 
     async def dispatch(self, request: Request, call_next):
+        if request.headers.get("host", "").casefold() not in self._allowed_hosts:
+            return self._secure(JSONResponse({"error": "forbidden"}, status_code=403))
+
         if not self._same_origin(request):
             return self._secure(JSONResponse({"error": "forbidden"}, status_code=403))
 
-        if request.url.path.startswith("/static") or request.url.path == "/healthz":
+        path = request.url.path
+        if path == "/static" or path.startswith("/static/") or path == "/healthz":
             return self._secure(await call_next(request))
 
         if self._token_ok(request.cookies.get(TOKEN_COOKIE)):
@@ -182,10 +196,15 @@ async def _lifespan(app: "FastAPI"):
             task.cancel()
 
 
-def create_app(state: AppState) -> FastAPI:
+def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
+    """``allowed_hosts`` is the exact Host set the gate accepts: ``loopback_hosts(port)`` for the
+    real server; tests pass TestClient's "testserver". Required, so no caller gets a permissive default."""
+    if isinstance(allowed_hosts, str):  # a bare string would allow each of its characters
+        raise TypeError("allowed_hosts must be a collection of exact Host header values")
+    hosts = frozenset(h.casefold() for h in allowed_hosts)
     app = FastAPI(title="GamGUI", docs_url=None, redoc_url=None, lifespan=_lifespan)
     app.state.gamgui = state
-    app.add_middleware(TokenGateMiddleware, token=state.token)
+    app.add_middleware(TokenGateMiddleware, token=state.token, allowed_hosts=hosts)
     # Ensure the dir exists before mounting — a fresh clone or a stripped bundle may lack it,
     # and StaticFiles raises on a missing directory.
     static_dir = _WEB_DIR / "static"

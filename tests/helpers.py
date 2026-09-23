@@ -12,6 +12,10 @@ import re
 from pathlib import Path
 from typing import List
 
+# The Host the gate must accept under TestClient (its default base_url, http://testserver). The real
+# app allows only loopback_hosts(port); test_server_security.py tests that rule itself.
+TEST_HOSTS = frozenset({"testserver"})
+
 # Every error/warning partial (_action_result.html's failure branch, _error.html, the board and job
 # panels) carries this class pair; no success partial does.
 _AMBER = "border-amber-300 bg-amber-50"
