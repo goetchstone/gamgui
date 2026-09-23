@@ -19,7 +19,8 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import guard
-from ...core.connectors.base import RiskLevel
+from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
+from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
@@ -509,15 +510,17 @@ async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTM
 
 
 @router.post("/delete/apply", response_class=HTMLResponse)
-async def delete_apply(request: Request, email: Annotated[str, Form()], confirm: Annotated[str, Form()] = "") -> HTMLResponse:
+async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     conn = _conn(request)
     if conn is None:
         return _err(request, _NOT_CONNECTED)
-    if confirm.strip().lower() != email.strip().lower():
-        return TEMPLATES.TemplateResponse(
-            request, _DELETE_ZONE,
-            {"email": email, "confirming": True, "error": "Type the exact email address to confirm."},
-        )
+    # The exact address typed (and the confirm click): guard.enforce owns that rule for every route
+    # that deletes an account, recognising the delete by the argv conn.delete_user runs.
+    delete = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=email, summary="Delete account",
+                           risk=RiskLevel.DESTRUCTIVE, argv=GAMCommands.delete_user(email))
+    refusal = guard.enforce([delete], await request.form())
+    if refusal:
+        return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal})
     result = await conn.delete_user(email)
     if not result.ok:
         return _err(request, f"Couldn't delete the account: {result.detail}")

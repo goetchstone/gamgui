@@ -92,6 +92,24 @@ def _gam_str(argv) -> str:
     return "gam " + " ".join(argv)
 
 
+async def _pending_transfers(conn, decision) -> list:
+    """Unfinished data transfers from each account the change deletes — deleting one now loses what
+    hasn't moved yet (the Users delete zone warns the same way)."""
+    pending: list = []
+    for address in decision.typed_emails if conn is not None else []:
+        pending += await conn.incomplete_transfers_for(address)
+    return pending
+
+
+async def _preview_page(request: Request, cmd, argv, target, slots, error: str = "") -> HTMLResponse:
+    """The single-command preview: the exact `gam …`, the guard's decision, and its confirm step."""
+    decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
+    return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
+        "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
+        "pending_transfers": await _pending_transfers(_st(request).connector, decision), "error": error,
+    })
+
+
 def _render_read(request: Request, out: str, gam: str) -> HTMLResponse:
     """Render a read command's output as a table when it looks tabular (CSV/JSON), else verbatim.
 
@@ -250,10 +268,7 @@ async def preview(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse
     slots, argv, target, error = await _assemble(request, cmd)
     if error:
         return _err(request, error)
-    decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
-    return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
-        "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
-    })
+    return await _preview_page(request, cmd, argv, target, slots)
 
 
 @router.post("/run", response_class=HTMLResponse)
@@ -285,12 +300,11 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
             return _err(request, _friendly(exc), _details(exc))
         return _render_read(request, out, _gam_str(argv))
     # A mutation that needs confirmation must come back through the preview (the "Confirm & run"
-    # button sends confirmed=1) — a bare POST never silently runs a destructive command.
-    if guard_mod.enforce([preview], await request.form()):
-        return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
-            "cmd": cmd, "gam": _gam_str(argv), "decision": guard_mod.evaluate([preview]), "target": target,
-            "slots": slots,
-        })
+    # button sends confirmed=1, and an account delete its typed address) — a bare POST never silently
+    # runs a destructive command.
+    refusal = guard_mod.enforce([preview], await request.form())
+    if refusal:
+        return await _preview_page(request, cmd, argv, target, slots, error=refusal)
     result = (await conn.apply([preview]))[0]
     return TEMPLATES.TemplateResponse(request, "_action_result.html",
                                       {"ok": result.ok, "message": (cmd.name + " — " + ("done" if result.ok else result.detail))})
@@ -350,8 +364,9 @@ async def seq_preview(request: Request) -> HTMLResponse:
     if not st.builder_sequence:
         return _err(request, "The sequence is empty.")
     decision = guard_mod.evaluate(_seq_previews(st.builder_sequence))
-    return TEMPLATES.TemplateResponse(request, "_sequence_preview.html",
-                                      {"sequence": st.builder_sequence, "decision": decision})
+    return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
+        "sequence": st.builder_sequence, "decision": decision,
+        "pending_transfers": await _pending_transfers(st.connector, decision)})
 
 
 async def _run_sequence(job, conn, previews) -> None:

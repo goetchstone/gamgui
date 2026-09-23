@@ -4,9 +4,20 @@
   <pre class="overflow-auto rounded bg-paper p-2 text-xs text-brand-black">{{ gam }}</pre>
   <p class="text-sm font-medium {{ rc }}">{{ decision.summary }}</p>
   {% for w in decision.warnings %}<p class="text-xs text-red-700">{{ w }}</p>{% endfor %}
+  {% if error %}<p class="text-xs font-medium text-red-700">{{ error }}</p>{% endif %}
+  {% for t in pending_transfers | default([]) %}
+  <p class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">⚠ <strong>Data transfer still in progress</strong> ({{ t.application }}: {{ t.status }}). Deleting now <strong>permanently loses</strong> whatever hasn't transferred yet.</p>
+  {% endfor %}
+  {% if decision.typed_emails %}
+  {# An account delete: the address is typed, not clicked through; the server checks it (guard.enforce). #}
+  <label class="block text-sm text-red-700">Permanently delete <strong>{{ decision.typed_emails[0] }}</strong>? Type the email to confirm:
+    <input id="builder-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ decision.typed_emails[0] }}"
+           class="mt-1 block w-full rounded-lg border border-red-300 bg-brand-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none" />
+  </label>
+  {% endif %}
   <button type="button"
           class="rounded-lg px-3.5 py-2 text-sm font-medium text-white {{ 'bg-red-700 hover:bg-red-800' if decision.requires_confirmation else 'bg-brand-blue hover:bg-brand-blueink' }} transition-colors"
-          hx-post="/builder/run" hx-include="#builder-form" hx-vals='{"confirmed": "1"}' hx-disabled-elt="this"
+          hx-post="/builder/run" hx-include="#builder-form{{ ', #builder-confirm-email' if decision.typed_emails }}" hx-vals='{"confirmed": "1"}' hx-disabled-elt="this"
           hx-target="#builder-result" hx-swap="innerHTML">
     {{ 'Confirm & run' if decision.requires_confirmation else 'Run' }}
   </button>

@@ -20,7 +20,9 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
   Executes the steps as a progress-tracked `BatchJob` (`_run_offboard`); name-resolution helpers.
 - `gamgui/web/routes/users.py` (lines ~425-455) — the **delete** flow: `delete_zone`,
-  `delete_confirm` (warns on pending transfers), `delete_apply` (type-the-exact-email confirm).
+  `delete_confirm` (warns on pending transfers), `delete_apply` (type-the-exact-email confirm —
+  `guard.enforce`'s rule for every account delete, so the Builder's "Delete account" asks for the
+  address and warns on a pending transfer too).
 - `gamgui/core/connectors/gam_connector.py` — the real mutations: `transfer_data`,
   `remove_from_all_calendars`, `reset_password`, `delete_user`, `add_delegate`, `set_vacation`,
   `add_calendar_event`; all via `_run_write` (`tolerate_kinds`). `incomplete_transfers_for` is a
@@ -242,8 +244,9 @@ files): move the leaver's folder back by hand.
 - **Change what the sweep tolerates:** edit `remove_from_all_calendars`'s `tolerate_kinds` and, if a
   new stderr phrase is involved, the regex table in `core/gam/errors.py`; extend
   `tests/test_offboard_safety.py`.
-- **Change the delete gate:** edit `delete_confirm`/`delete_apply` in `web/routes/users.py` and
-  `incomplete_transfers_for` in the connector. Keep the type-the-email confirm and never let a
-  read-error hard-block deletion.
+- **Change the delete gate:** edit `delete_confirm`/`delete_apply` in `web/routes/users.py` (and the
+  Builder's `_pending_transfers`, which warns the same way) and `incomplete_transfers_for` in the
+  connector. The type-the-email confirm lives in `guard.enforce` (`typed_emails`) — keep it there, so
+  every route that deletes an account gets it — and never let a read-error hard-block deletion.
 - **Auto-reply wording/placeholders:** `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE` and `fill_autoreply`
   (`{employee}`, `{manager}`, `{contact}`) in `core/lifecycle.py`.

@@ -1372,18 +1372,22 @@ def test_delete_zone_shows_button_then_typed_confirm(client):
     r = client.get("/users/delete/zone", params={"email": "alice@example.com"})
     assert "Delete account" in r.text
     c = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
-    assert "Permanently delete" in c.text and 'name="confirm"' in c.text
+    assert "Permanently delete" in c.text and 'name="confirm_email"' in c.text
 
 
-def test_delete_requires_exact_email_match(client):
-    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirm": "wrong@example.com"})
-    assert "Type the exact email" in r.text
+def test_delete_requires_exact_email_match(client, gam_calls):
+    for typed in ({}, {"confirm_email": "wrong@example.com"}):
+        r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1", **typed})
+        assert "Type the exact email" in r.text
+    assert gam_writes(gam_calls()) == []
 
 
-def test_delete_applies_with_matching_confirm(client):
-    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirm": "alice@example.com"})
+def test_delete_applies_with_matching_confirm(client, gam_calls):
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
+                                                 "confirm_email": " Alice@example.com "})
     assert r.status_code == 200
     assert "Account deleted" in r.text and "20 days" in r.text
+    assert gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
 
 
 def test_delete_confirm_warns_on_pending_transfer(client):

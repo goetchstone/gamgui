@@ -3,7 +3,8 @@
 :func:`evaluate` decides, from the :class:`ChangePreview` list a mutation would make: destructive →
 a Confirm click; bulk (>= ``DEFAULT_BULK_THRESHOLD``) → a Confirm click; destructive *and* bulk →
 the operator types "confirm"; and, for a route that opts in with ``typed_count_above``, more targets
-than that → the operator types how many. It is pure, and a template renders its decision.
+than that → the operator types how many. It is pure, and a template renders its decision. An account delete — any preview whose argv is
+``GAMCommands.delete_user`` — also needs its exact address typed, on every route that deletes one.
 
 :func:`enforce` is the server-side half, and the one that counts: a mutating route calls it with the
 posted form before its first GAM write and refuses when the form lacks what the decision requires.
@@ -12,7 +13,9 @@ once ran a suspend, an event delete, a company-wide signature overwrite and a wh
 bare POST because only their templates asked (docs/failure-log.md, 2026-09-23).
 
 What does not call it: single-target LOW writes (by this policy they need no confirmation), and
-account/calendar delete, whose routes demand a stronger typed value (the exact email / ``DELETE``).
+calendar delete, whose route demands a stronger typed value (``DELETE``). Account delete does call
+it: the typed-email rule is here, so the Users delete zone, the Builder's "Delete account" and a
+Builder sequence all get it (the Builder once deleted an account on one Confirm click).
 ``tests/test_write_routes_guarded.py`` enumerates every POST route and holds each to one of these.
 """
 
@@ -22,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Mapping, Optional, Sequence
 
 from .connectors.base import ChangePreview, ConnectorID, RiskLevel
+from .gam.commands import GAMCommands
 
 # At/above this count a change is bulk: it needs a Confirm click, and the typed word if destructive.
 DEFAULT_BULK_THRESHOLD = 10
@@ -36,6 +40,7 @@ CONFIRMED_FIELD = "confirmed"   # the Confirm button (hx-vals) or a hidden input
 TYPED_FIELD = "confirm"         # a destructive bulk change: the operator types TYPED_WORD
 TYPED_WORD = "confirm"
 COUNT_FIELD = "confirm_count"   # a large opted-in change: the operator types the affected count
+EMAIL_FIELD = "confirm_email"   # an account delete: the operator types each deleted address (repeatable)
 
 
 @dataclass
@@ -48,10 +53,17 @@ class GuardDecision:
     summary: str
     warnings: List[str] = field(default_factory=list)
     requires_typed_count: bool = False
+    typed_emails: List[str] = field(default_factory=list)   # accounts deleted: each address must be typed
 
     @property
     def affected_count(self) -> int:
         return len(self.affected)
+
+
+def deleted_account(preview: ChangePreview) -> Optional[str]:
+    """The address ``preview`` deletes when its argv is an account delete (``GAMCommands.delete_user``)."""
+    argv = list(preview.argv or [])
+    return argv[-1] if argv and argv == GAMCommands.delete_user(argv[-1]) else None
 
 
 def evaluate(
@@ -107,6 +119,7 @@ def evaluate(
         summary=summary,
         warnings=warnings,
         requires_typed_count=typed_count_above is not None and count > typed_count_above,
+        typed_emails=list(dict.fromkeys(a for a in map(deleted_account, previews) if a)),
     )
 
 
@@ -135,4 +148,16 @@ def enforce(previews: Sequence[ChangePreview], form: Mapping[str, Any], *,
     n = decision.affected_count
     if decision.requires_typed_count and str(form.get(COUNT_FIELD) or "").strip() != str(n):
         return f"This changes {n} accounts: preview again, and type {n} to confirm."
+    typed = {str(v).strip().lower() for v in _values(form, EMAIL_FIELD)}
+    if any(address.strip().lower() not in typed for address in decision.typed_emails):
+        return ("Type the exact email address to confirm." if len(decision.typed_emails) == 1 else
+                "Type the exact email address of each account to delete to confirm.")
     return None
+
+
+def _values(form: Mapping[str, Any], key: str) -> List[Any]:
+    """Every value posted under ``key`` (a form may repeat a field; a plain dict holds one)."""
+    if hasattr(form, "getlist"):
+        return list(form.getlist(key))
+    value = form.get(key)
+    return [] if value is None else list(value) if isinstance(value, (list, tuple)) else [value]

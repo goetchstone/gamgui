@@ -92,7 +92,7 @@ GATED = {
                                  {"email": "alice@example.com"}),
     "/users/bulk/apply": Case({"store": "Downtown", "group": "", "emails": "alice@example.com"}, "/users/bulk/preview"),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
-                                typed={"confirm": "alice@example.com"}),
+                                typed={"confirm_email": "alice@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},
                                     "/calendars/event/preview"),
     "/calendars/delete": Case({"cal": SEC_CAL, "label": "Team Calendar"}, "/calendars/delete/preview",
@@ -106,7 +106,9 @@ GATED = {
                               preview_files={"csv_file": ("hires.csv", HIRES_CSV.encode(), "text/csv")},
                               setup=_sales_role),
     "/builder/run": Case({"cid": "build.suspend_user", "email": "alice@example.com"}, "/builder/preview"),
-    "/builder/sequence/run": Case({}, "/builder/sequence/preview", typed={"confirm": "confirm"}, setup=_ten_deletes),
+    "/builder/sequence/run": Case({}, "/builder/sequence/preview",
+                                  typed={"confirm": "confirm", "confirm_email": "carol@example.com"},
+                                  setup=_ten_deletes),
 }
 
 

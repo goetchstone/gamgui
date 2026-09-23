@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from starlette.datastructures import FormData
+
 from gamgui.core import guard
 from gamgui.core.connectors.base import ChangePreview, ConnectorID, RiskLevel
+from gamgui.core.gam.commands import GAMCommands
 
 
 def _preview(target: str, risk: RiskLevel) -> ChangePreview:
@@ -85,3 +88,34 @@ def test_enforce_typed_count_only_above_the_opted_in_threshold():
     assert guard.enforce(many, {"confirm_count": "4"}, confirm_step=True, typed_count_above=3)  # and the click
     assert guard.enforce(many, {"confirmed": "1", "confirm_count": " 4 "}, confirm_step=True,
                          typed_count_above=3) is None
+
+
+def _delete(addr: str) -> ChangePreview:
+    return ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=addr, summary="Delete account",
+                         risk=RiskLevel.DESTRUCTIVE, argv=GAMCommands.delete_user(addr))
+
+
+def test_enforce_an_account_delete_needs_its_address_typed():
+    # The Users delete zone asked for the exact email; the Builder's "Delete account" row action took
+    # one Confirm click. The rule lives here now, so every route whose previews delete an account
+    # gets it — recognised by the argv GAMCommands.delete_user builds, whatever the route calls it.
+    one = [_delete("alice@example.com")]
+    assert guard.evaluate(one).typed_emails == ["alice@example.com"]
+    assert guard.enforce(one, {"confirmed": "1"})                                   # a click is not enough
+    assert guard.enforce(one, {"confirmed": "1", "confirm_email": "carol@example.com"})
+    assert guard.enforce(one, {"confirm_email": "alice@example.com"})               # nor the typing alone
+    assert guard.enforce(one, {"confirmed": "1", "confirm_email": " Alice@Example.com "}) is None
+    assert guard.evaluate([_preview("a@e.com", RiskLevel.DESTRUCTIVE)]).typed_emails == []   # not a delete
+    undelete = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target="a@e.com", summary="x",
+                             risk=RiskLevel.LOW, argv=GAMCommands.undelete_user("a@e.com"))
+    assert guard.evaluate([undelete]).typed_emails == []
+
+
+def test_enforce_each_deleted_account_is_typed():
+    # A Builder sequence can delete several accounts: each address is typed, once.
+    seq = [_delete("a@example.com"), _preview("x@e.com", RiskLevel.LOW), _delete("b@example.com"),
+           _delete("a@example.com")]
+    assert guard.evaluate(seq).typed_emails == ["a@example.com", "b@example.com"]
+    assert guard.enforce(seq, FormData([("confirmed", "1"), ("confirm_email", "a@example.com")]))
+    assert guard.enforce(seq, FormData([("confirmed", "1"), ("confirm_email", "a@example.com"),
+                                        ("confirm_email", "b@example.com")])) is None
