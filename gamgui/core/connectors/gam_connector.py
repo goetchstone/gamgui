@@ -218,7 +218,7 @@ class GAMConnector(Connector):
         argv = GAMCommands.remove_group_member(group, member)
         return await self._run_write("remove_group_member", member, argv, RiskLevel.LOW, target_extra=group)
 
-    # --- directory profile (title = role, department = store) --------------------------
+    # --- directory profile (title = role, department) -----------------------------------
     async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:
         argv = GAMCommands.update_organization(email, title=title, department=department)
         return await self._run_write("set_organization", email, argv, RiskLevel.LOW)
@@ -238,7 +238,7 @@ class GAMConnector(Connector):
 
     # --- calendars / resources / events ------------------------------------------------
     async def list_resources(self, query: str = "") -> List[ResourceCalendar]:
-        # GAM's resource `query` is a structured filter — freeform text like "House Call Calendar"
+        # GAM's resource `query` is a structured filter — freeform text like "Training Calendar"
         # fails with "Invalid Input: filter". Rooms are a small set, so fetch all and match locally.
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_resources())
         items = [ResourceCalendar.from_json(r) for r in parse_records(out)]

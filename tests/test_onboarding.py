@@ -61,8 +61,8 @@ def echoing_gam(tmp_path):
 def test_runbook_command_argv():
     assert GAMCommands.create_tasklist("a@x.com", "Onboard Jo") == \
         ["user", "a@x.com", "create", "tasklist", "title", "Onboard Jo", "returnidonly"]
-    assert GAMCommands.create_task("a@x.com", "TL1", "Set up Brite", "note") == \
-        ["user", "a@x.com", "create", "task", "TL1", "title", "Set up Brite", "notes", "note"]
+    assert GAMCommands.create_task("a@x.com", "TL1", "Set up the CRM login", "note") == \
+        ["user", "a@x.com", "create", "task", "TL1", "title", "Set up the CRM login", "notes", "note"]
     assert GAMCommands.send_email("new@x.com", "Hi", "Welcome") == \
         ["sendemail", "to", "new@x.com", "subject", "Hi", "message", "Welcome", "html"]
     # a poisoned step lands as ONE argv element
@@ -118,7 +118,7 @@ def test_preview_renders_steps_and_email(client):
     r = client.post("/onboard/preview", data={"role": "Salesperson", "name": "Jordan",
                                               "email": "jordan@example.com", "manager": "mgr@example.com",
                                               "send_welcome": "1"})
-    assert r.status_code == 200 and "Set up Brite for the employee" in r.text
+    assert r.status_code == 200 and "Set up the CRM login" in r.text
     assert "Jordan" in r.text   # welcome email rendered with the name
 
 

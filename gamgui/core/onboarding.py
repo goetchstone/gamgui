@@ -48,9 +48,9 @@ _DEFAULT = {
     "roles": {
         "Salesperson": {
             "steps": [
-                "Set up Brite for the employee",
-                "Create Wesley Hall login",
-                "Set up POS login (salesperson)",
+                "Set up the CRM login",
+                "Order a laptop",
+                "Add to the team channel",
                 "Add to the sales group",
             ],
             "signature": "",

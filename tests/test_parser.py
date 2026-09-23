@@ -52,14 +52,14 @@ def test_csv_sibling_column_not_in_json_is_preserved():
     # calendar-owner detection, so the sibling must survive (JSON still wins on shared keys).
     text = (
         "primaryEmail,calendarId,JSON\n"
-        'achenard@e.com,c_house@group.calendar.google.com,'
-        '"{""accessRole"":""owner"",""id"":""c_house@group.calendar.google.com"",""summary"":""House Call Calendar""}"\n'
+        'alice@e.com,c_train@group.calendar.google.com,'
+        '"{""accessRole"":""owner"",""id"":""c_train@group.calendar.google.com"",""summary"":""Training Calendar""}"\n'
     )
     recs = parse_records(text)
     assert len(recs) == 1
-    assert recs[0]["primaryEmail"] == "achenard@e.com"          # sibling preserved
-    assert recs[0]["id"] == "c_house@group.calendar.google.com"  # from JSON
-    assert recs[0]["summary"] == "House Call Calendar"
+    assert recs[0]["primaryEmail"] == "alice@e.com"          # sibling preserved
+    assert recs[0]["id"] == "c_train@group.calendar.google.com"  # from JSON
+    assert recs[0]["summary"] == "Training Calendar"
     assert recs[0]["accessRole"] == "owner"
 
 

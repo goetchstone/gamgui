@@ -166,13 +166,13 @@ def test_board_members_link_to_user_detail(client):
 def _seed_calendar_index(client):
     """Populate the persistent index as a rebuild would (background build doesn't run under TestClient)."""
     client.app.state.gamgui.calendar_index.replace_all(DOMAIN, [
-        IndexedCalendar("c_house123@group.calendar.google.com", "House Call Calendar", "alice@example.com", "secondary", 2),
+        IndexedCalendar("c_train123@group.calendar.google.com", "Training Calendar", "alice@example.com", "secondary", 2),
     ])
 
 
 def test_calendar_search_owner_links_to_user_detail(client):
     _seed_calendar_index(client)
-    r = client.get("/calendars/search", params={"q": "house"})
+    r = client.get("/calendars/search", params={"q": "training"})
     assert r.status_code == 200
     assert "/users/detail?email=" in r.text
 

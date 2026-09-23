@@ -157,7 +157,7 @@ class GAMCommands:
 
     @staticmethod
     def update_organization(email: str, title: str = "", department: str = "") -> List[str]:
-        """Set the primary organization's title + department (here, department holds the store).
+        """Set the primary organization's title + department.
 
         GAM's ``organization`` replaces the primary org, so we always pass both fields together (the
         editor pre-fills the current values) to avoid clearing one while changing the other.

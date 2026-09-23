@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Bulk: assign store — GamGUI Console{% endblock %}
+{% block title %}Bulk: set department — GamGUI Console{% endblock %}
 {% block content %}
 {% if not connected %}
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
@@ -13,15 +13,15 @@
   <div>
     <a href="/users" class="text-sm text-brand-blueink/70 hover:text-brand-black">← Users</a>
     <p class="eyebrow text-brand-blue mt-2">Directory</p>
-    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Bulk: assign store</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Set the <strong>Department</strong> (store) on many users at once — each person's <strong>title is preserved</strong>. Pick a group or paste emails, preview, then apply.</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Bulk: set department</h1>
+    <p class="text-brand-blueink/80 mt-1 text-sm">Set the <strong>Department</strong> on many users at once — each person's <strong>title is preserved</strong>. Pick a group or paste emails, preview, then apply.</p>
   </div>
   {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
 
   <form id="bulk-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
     <label class="block">
-      <span class="text-sm text-brand-blueink">Store (Department value)</span>
-      <input name="store" placeholder="e.g. Old Saybrook" class="{{ fld }}" />
+      <span class="text-sm text-brand-blueink">Department</span>
+      <input name="store" placeholder="e.g. Sales" class="{{ fld }}" />
     </label>
     <label class="block">
       <span class="text-sm text-brand-blueink">Target a group</span>
@@ -32,7 +32,7 @@
     </label>
     <label class="block">
       <span class="text-sm text-brand-blueink">…or paste emails (one per line)</span>
-      <textarea name="emails" rows="3" placeholder="person@saybrookhome.com&#10;another@saybrookhome.com" class="{{ fld }} font-mono text-[12.5px]"></textarea>
+      <textarea name="emails" rows="3" placeholder="person@example.com&#10;another@example.com" class="{{ fld }} font-mono text-[12.5px]"></textarea>
     </label>
     <button type="button"
             class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"

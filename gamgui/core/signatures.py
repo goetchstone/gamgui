@@ -62,7 +62,7 @@ VARIABLES: Dict[str, str] = {
     "{role}": "Job title (alias)",
     "{phone}": "Work phone",
     "{department}": "Department",
-    "{location}": "Location / store",
+    "{location}": "Location",
     "{ou}": "Org unit path",
 }
 

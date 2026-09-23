@@ -352,15 +352,15 @@ def test_suspended_user_detail_shows_unsuspend(client):
 
 def test_detail_has_role_store_editor(client):
     r = client.get("/users/detail", params={"email": "alice@example.com"})
-    assert 'name="department"' in r.text and 'name="title"' in r.text  # editable role/store form
-    assert "Save role" in r.text
+    assert 'name="department"' in r.text and 'name="title"' in r.text  # editable title/department form
+    assert "Save title" in r.text
 
 
 def test_set_organization_saves(client):
-    r = client.post("/users/organization", data={"email": "alice@example.com", "title": "Design Lead", "department": "Old Saybrook"})
+    r = client.post("/users/organization", data={"email": "alice@example.com", "title": "Design Lead", "department": "Marketing"})
     assert r.status_code == 200
     assert "Saved" in r.text
-    assert "Old Saybrook" in r.text  # the new value is echoed back into the form
+    assert "Marketing" in r.text  # the new value is echoed back into the form
 
 
 def test_set_organization_refreshes_the_displayed_role(client):
@@ -368,32 +368,32 @@ def test_set_organization_refreshes_the_displayed_role(client):
     # pre-save value until a full reload — which looked like the title didn't save. The save must
     # carry hx-swap-oob refreshes for both spots that show the role.
     r = client.post("/users/organization",
-                    data={"email": "alice@example.com", "title": "Showroom Manager", "department": "Old Saybrook"})
+                    data={"email": "alice@example.com", "title": "Account Manager", "department": "Marketing"})
     assert r.status_code == 200
     assert 'id="dtl-subtitle" hx-swap-oob="true"' in r.text
     assert 'id="dtl-title" hx-swap-oob="true"' in r.text
     # both OOB elements carry the just-saved value
-    assert r.text.count("Showroom Manager") >= 2
+    assert r.text.count("Account Manager") >= 2
 
 
 def test_bulk_store_page_renders(client):
     r = client.get("/users/bulk")
     assert r.status_code == 200
-    assert "Bulk: assign store" in r.text
+    assert "Bulk: set department" in r.text
     assert 'name="store"' in r.text and 'name="emails"' in r.text
 
 
 def test_bulk_store_preview_by_emails(client):
-    r = client.post("/users/bulk/preview", data={"store": "Old Saybrook", "group": "", "emails": "alice@example.com"})
+    r = client.post("/users/bulk/preview", data={"store": "Marketing", "group": "", "emails": "alice@example.com"})
     assert r.status_code == 200
-    assert "Old Saybrook" in r.text
+    assert "Marketing" in r.text
     assert "alice@example.com" in r.text
     assert "Apply to 1" in r.text
 
 
 def test_bulk_store_apply_requires_store_value(client):
     r = client.post("/users/bulk/apply", data={"store": "   ", "group": "", "emails": "alice@example.com"})
-    assert "Enter a store/department value" in r.text
+    assert "Enter a department first" in r.text
 
 
 def test_bulk_store_apply_runs_as_job(client, gam_calls):
@@ -441,10 +441,10 @@ async def test_run_bulk_store_preserves_title_and_sets_department():
     ]
     st = _FakeState()
     job = BatchJob(id="t", total=len(targets))
-    await _run_bulk_store(job, st, _FakeConn(), targets, "Old Saybrook")
+    await _run_bulk_store(job, st, _FakeConn(), targets, "Marketing")
 
     assert job.finished and job.applied == 2 and job.failed == []
-    assert calls == [("a@e.com", "Design Lead", "Old Saybrook"), ("b@e.com", "", "Old Saybrook")]
+    assert calls == [("a@e.com", "Design Lead", "Marketing"), ("b@e.com", "", "Marketing")]
     assert st.invalidated  # cache invalidated so the new departments show
 
 
@@ -478,7 +478,7 @@ def test_calendar_access_add_requires_target(client):
 
 @pytest.mark.parametrize("path,data", [
     ("/users/calendar/add", {"email": "alice@example.com", "target": "carol@example.com"}),
-    ("/calendars/share", {"cal": "c_house123@group.calendar.google.com", "target": "carol@example.com"}),
+    ("/calendars/share", {"cal": "c_train123@group.calendar.google.com", "target": "carol@example.com"}),
 ])
 def test_calendar_share_refuses_a_role_outside_the_grammar(client, gam_calls, path, data):
     # Both share paths: the builder's <CalendarACLRole> check surfaces as a friendly error, no gam write.
@@ -510,7 +510,7 @@ def test_calendars_user_list(client):
 def _seed_index(client):
     """Populate the persistent index as a rebuild would (background build doesn't run under TestClient)."""
     client.app.state.gamgui.calendar_index.replace_all(DOMAIN, [
-        IndexedCalendar("c_house123@group.calendar.google.com", "House Call Calendar", "alice@example.com", "secondary", 2),
+        IndexedCalendar("c_train123@group.calendar.google.com", "Training Calendar", "alice@example.com", "secondary", 2),
         IndexedCalendar("c_ops999@group.calendar.google.com", "Operations", "carol@example.com", "secondary", 1),
         IndexedCalendar("aspen@resource.calendar.google.com", "Aspen Conference Room", "", "room", 0),
     ])
@@ -518,9 +518,9 @@ def _seed_index(client):
 
 def test_calendars_search_by_name_finds_secondary_and_owner(client):
     _seed_index(client)
-    r = client.get("/calendars/search", params={"q": "house"})
+    r = client.get("/calendars/search", params={"q": "training"})
     assert r.status_code == 200
-    assert "House Call Calendar" in r.text
+    assert "Training Calendar" in r.text
     assert "owned by alice@example.com" in r.text   # owner identified from the index
     assert "Operations" not in r.text                # filtered out by the name query
     assert "View access" in r.text                   # click-through to details
@@ -534,9 +534,9 @@ def test_calendars_search_also_matches_rooms(client):
 
 def test_calendars_search_empty_index_prompts_build(client):
     # Nothing indexed yet -> guide the user to build it, don't silently return nothing.
-    r = client.get("/calendars/search", params={"q": "house"})
+    r = client.get("/calendars/search", params={"q": "training"})
     assert r.status_code == 200
-    assert "House Call Calendar" not in r.text
+    assert "Training Calendar" not in r.text
     assert "No calendar index yet" in r.text
 
 
@@ -597,12 +597,12 @@ def test_calendars_event_delete_applies(client):
     assert "Event deleted." in r.text
 
 
-SEC_CAL = "c_house123@group.calendar.google.com"      # secondary; owner alice (active) per fixtures
+SEC_CAL = "c_train123@group.calendar.google.com"      # secondary; owner alice (active) per fixtures
 ORPHAN_CAL = "c_orphan@group.calendar.google.com"     # secondary; sole owner bob (suspended)
 
 
 def test_calendars_detail_shows_delete_zone_for_secondary(client):
-    r = client.get("/calendars/detail", params={"cal": SEC_CAL, "label": "House Call Calendar"})
+    r = client.get("/calendars/detail", params={"cal": SEC_CAL, "label": "Training Calendar"})
     assert r.status_code == 200
     assert "Danger zone" in r.text
     assert "Delete this calendar" in r.text                 # delete button present (active owner found)
@@ -626,7 +626,7 @@ def test_calendars_detail_blocks_delete_when_owner_suspended(client):
 
 
 def test_calendars_delete_preview_shows_owner_and_confirm(client):
-    r = client.post("/calendars/delete/preview", data={"cal": SEC_CAL, "label": "House Call Calendar", "acl_count": 3})
+    r = client.post("/calendars/delete/preview", data={"cal": SEC_CAL, "label": "Training Calendar", "acl_count": 3})
     assert r.status_code == 200
     assert "Type" in r.text and "DELETE" in r.text
     assert "cannot be undone" in r.text
@@ -641,7 +641,7 @@ def test_calendars_delete_requires_exact_case_confirm(client):
 
 
 def test_calendars_delete_applies_with_confirm(client):
-    r = client.post("/calendars/delete", data={"cal": SEC_CAL, "confirm": "DELETE", "label": "House Call Calendar"})
+    r = client.post("/calendars/delete", data={"cal": SEC_CAL, "confirm": "DELETE", "label": "Training Calendar"})
     assert r.status_code == 200
     assert "Calendar deleted" in r.text
 
@@ -667,7 +667,7 @@ def test_calendars_delete_refuses_when_owner_suspended(client):
 
 def test_calendars_share_adds_acl_and_subscribes(client):
     r = client.post("/calendars/share",
-                    data={"cal": SEC_CAL, "target": "assistant@example.com", "role": "reader", "label": "House Call Calendar"})
+                    data={"cal": SEC_CAL, "target": "assistant@example.com", "role": "reader", "label": "Training Calendar"})
     assert r.status_code == 200
     assert "assistant@example.com" in r.text               # ACL list re-rendered
     assert "appear in their Google Calendar" in r.text      # subscribed -> emerald notice
@@ -851,13 +851,13 @@ def test_calendars_share_partial_when_subscribe_fails(client):
 
 def test_calendars_unshare_removes_access(client):
     r = client.post("/calendars/unshare",
-                    data={"cal": SEC_CAL, "scope": "assistant@example.com", "label": "House Call Calendar"})
+                    data={"cal": SEC_CAL, "scope": "assistant@example.com", "label": "Training Calendar"})
     assert r.status_code == 200
     assert "Removed access for assistant@example.com" in r.text
 
 
 def test_calendars_detail_has_share_form_and_row_remove(client):
-    r = client.get("/calendars/detail", params={"cal": SEC_CAL, "label": "House Call Calendar"})
+    r = client.get("/calendars/detail", params={"cal": SEC_CAL, "label": "Training Calendar"})
     assert r.status_code == 200
     assert 'hx-post="/calendars/share"' in r.text and 'name="role"' in r.text
     # Owner row has NO Remove button; the two non-owner rules (reader + default) each get one.

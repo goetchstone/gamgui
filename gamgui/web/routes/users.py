@@ -249,7 +249,7 @@ async def remove_delegate(request: Request, email: Annotated[str, Form()], deleg
 async def set_organization(
     request: Request, email: Annotated[str, Form()], title: Annotated[str, Form()] = "", department: Annotated[str, Form()] = ""
 ) -> HTMLResponse:
-    """Set a user's title (role) + department (store). Guarded write; invalidates the cache."""
+    """Set a user's title (role) + department. Guarded write; invalidates the cache."""
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
@@ -257,14 +257,14 @@ async def set_organization(
     title, department = title.strip(), department.strip()
     result = await conn.set_organization(email, title=title, department=department)
     if not result.ok:
-        return _err(request, f"Couldn't update role/store: {result.detail}")
+        return _err(request, f"Couldn't update title/department: {result.detail}")
     st.invalidate_users()  # title/department changed -> cached directory is stale
     return TEMPLATES.TemplateResponse(
         request, "_org_form.html", {"email": email, "title": title, "department": department, "saved": True}
     )
 
 
-# --- bulk: assign a store (department) to many users, preserving each person's title ----
+# --- bulk: set the department on many users, preserving each person's title ----
 async def _bulk_targets(st, group: str, emails_raw: str):
     """Resolve target ACTIVE users from a group OR a pasted email list (matched against the cache)."""
     users = await st.users()
@@ -277,7 +277,7 @@ async def _bulk_targets(st, group: str, emails_raw: str):
 
 
 async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
-    """Background task: set department=store per user, KEEPING each existing title."""
+    """Background task: set the department per user, KEEPING each existing title."""
     try:
         for u in targets:
             job.current = u.primary_email
@@ -333,7 +333,7 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
         return _err(request, _NOT_CONNECTED)
     store = store.strip()
     if not store:
-        return _err(request, "Enter a store/department value first.")
+        return _err(request, "Enter a department first.")
     try:
         targets = await _bulk_targets(st, group.strip(), emails)
     except Exception as exc:

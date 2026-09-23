@@ -26,7 +26,7 @@ def test_own_acl_deletion_is_permission_denied():
     # The departing user's own primary-calendar owner ACL cannot be removed. GAM's line here carries
     # no "403"/"forbidden" token, so a dedicated pattern maps it (case-insensitively) to a permission
     # refusal — which the all-users calendar sweep tolerates.
-    line = ("    Calendar: achenard@saybrookhome.com, Calendar ACL: (Scope: user:achenard@saybrookhome.com), "
+    line = ("    Calendar: alice@example.com, Calendar ACL: (Scope: user:alice@example.com), "
             "Delete Failed: Cannot change your own access level.")
     assert classify_stderr(line) == GAMErrorKind.PERMISSION_DENIED
     assert classify_stderr("CANNOT CHANGE YOUR OWN ACCESS LEVEL") == GAMErrorKind.PERMISSION_DENIED

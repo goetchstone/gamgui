@@ -64,7 +64,7 @@ LOW_WRITES = {
 }
 EXEMPT = PREVIEWS | LOCAL_ONLY | LOW_WRITES
 
-SEC_CAL = "c_house123@group.calendar.google.com"   # a secondary calendar; owner alice (active) per fixtures
+SEC_CAL = "c_train123@group.calendar.google.com"   # a secondary calendar; owner alice (active) per fixtures
 HIRES_CSV = "role,name,email,assignee\nSales,Ada Byte,ada@example.com,it@example.com\n"
 
 

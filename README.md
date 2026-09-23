@@ -25,7 +25,7 @@ Actively developed and used against live Google Workspace tenants. Working today
   the Keychain) or follow the guided fresh GAM project / OAuth flow; then the manual
   domain-wide-delegation step and a verify.
 - **Users** — fast list/search/detail (cached + paginated), profile editing (title/department —
-  location is shown but not editable) with a bulk "assign store" tool, mailbox **delegates**,
+  location is shown but not editable) with a bulk "set department" tool, mailbox **delegates**,
   **vacation responders**, group membership, per-user calendar sharing (grant/revoke access to that
   person's own calendar), **sign out everywhere**, and a guarded **suspend**.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and

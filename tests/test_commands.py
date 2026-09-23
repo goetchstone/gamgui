@@ -27,9 +27,9 @@ def test_info_user():
 
 
 def test_update_organization_sets_title_and_department():
-    argv = GAMCommands.update_organization("a@e.com", title="Design Lead", department="Old Saybrook")
+    argv = GAMCommands.update_organization("a@e.com", title="Design Lead", department="Marketing")
     assert argv == ["update", "user", "a@e.com", "organization",
-                    "title", "Design Lead", "department", "Old Saybrook", "primary"]
+                    "title", "Design Lead", "department", "Marketing", "primary"]
 
 
 def test_calendar_acl_commands():

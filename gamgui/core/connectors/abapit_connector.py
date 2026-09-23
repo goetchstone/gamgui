@@ -1,6 +1,6 @@
 """Adapter that exposes abapit's Apple Business Manager / Mosyle clients as gamgui connectors.
 
-abapit (``/Users/goetch/abapit``) already implements ABM and Mosyle as duck-typed, synchronous
+abapit already implements ABM and Mosyle as duck-typed, synchronous
 ``httpx`` clients (``devices()``, ``users()``, ``ping()`` …) returning JSON:API-shaped dicts. Rather
 than reimplement any of that, we *wrap* an abapit client: each gamgui ``Connector`` method calls the
 corresponding abapit method inside ``asyncio.to_thread`` (the only seam needed, since abapit is sync

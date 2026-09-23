@@ -10,7 +10,7 @@
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
     <span class="spinner"></span>
-    <span>Setting store… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-gray">{{ job.current }}</span>{% endif %}</span>
+    <span>Setting department… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-gray">{{ job.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
@@ -22,7 +22,7 @@
 {% set _failed = job.failed if job else [] %}
 {% set _failed_total = job.failed_total if job else 0 %}
 <div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not _failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  Set store on {{ _applied }} of {{ _total }} user{{ "s" if _total != 1 }}.
+  Set department on {{ _applied }} of {{ _total }} user{{ "s" if _total != 1 }}.
   {% if _failed_total %}<div class="mt-1 max-h-24 overflow-y-auto text-xs">Failed ({{ _failed_total }}): {{ _failed | join(", ") }}{% if _failed_total > (_failed | length) %} … +{{ _failed_total - (_failed | length) }} more{% endif %}</div>{% endif %}
 </div>
 {% endif %}

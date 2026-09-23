@@ -76,10 +76,10 @@ async def test_scan_all_calendars_filters_and_aggregates(connector):
     cals = await connector.scan_all_calendars()
     by_id = {c.id: c for c in cals}
 
-    house = by_id["c_house123@group.calendar.google.com"]
-    assert house.summary == "House Call Calendar"
-    assert house.owner == "alice@example.com"                 # the accessRole=owner row
-    assert house.subscribers == 2 and house.kind == "secondary"
+    cal = by_id["c_train123@group.calendar.google.com"]
+    assert cal.summary == "Training Calendar"
+    assert cal.owner == "alice@example.com"                 # the accessRole=owner row
+    assert cal.subscribers == 2 and cal.kind == "secondary"
 
     assert "alice@example.com" not in by_id                   # a user's PRIMARY calendar is excluded
     assert any(c.kind == "room" for c in cals)                # rooms folded in

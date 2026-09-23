@@ -7,7 +7,7 @@
 
 ## Files
 - `gamgui/web/jobs.py` — `BatchJob` dataclass (`fail()` records a failure: full `failed_total`, a `failed` sample capped at `FAILED_SAMPLE_CAP`; `skipped` = offboarding steps not run because one they rely on failed) + `start_job(jobs, total, keep=10)`; the shared polled-progress record on `AppState.jobs`.
-- `gamgui/web/routes/users.py` — list/search/detail + actions (signature, delegate, groups, calendar ACLs, org/role, vacation, suspend via guard, delete, bulk-store job).
+- `gamgui/web/routes/users.py` — list/search/detail + actions (signature, delegate, groups, calendar ACLs, org/role, vacation, suspend via guard, delete, bulk set-department job — `_run_bulk_store`, `bulk_store.html` and the `store` form field keep their old internal names).
 - `gamgui/web/routes/calendars.py` — find calendar, ACL detail, event search/delete, secondary-calendar delete, share+subscribe fan-out job, persistent index rebuild job.
 - `gamgui/web/routes/groups.py` — drag-and-drop membership board (`/groups`); add/remove via `members_mutate`.
 - `gamgui/web/templates/_bulk_apply.html`, `_calendar_subscribe_job.html`, `_calendar_index_job.html` — the self-polling HTMX partials.
@@ -25,6 +25,7 @@ Routes read from the cached directory (`request.app.state.gamgui.users()`) so pa
 - **Directory data into attributes (invariant #8):** templates put Google-sourced strings in autoescaped contexts; never `| tojson` in a double-quoted attribute.
 
 ## Gotchas / mock-lies traps
+- **Placeholders and example data stay generic** (`example.com`, "Sales", "Training Calendar") — the public repo was de-branded once and the operator's company names crept back in via form placeholders and the seeded onboarding role. The local pre-commit hook's private-term tripwire (`.claude/private-terms`, gitignored) now blocks that. The UI says *Department*, never "store".
 - **Record a failure with `job.fail(x)`, never `job.failed.append(x)`** — the append bypasses the cap (a source tripwire fails on it). `job.failed` is a *sample*: count with `failed_total`, not `failed | length`, and render "+K more" when `failed_total` exceeds it (`_bulk_apply.html`, `_calendar_subscribe_job.html`, `_sig_apply.html`).
 - **A 200 proves nothing.** Every route answers 200 whether the write worked or not — a failure renders the amber error partial. Assert success with `tests/helpers.py`: `assert_ok_partial(r)` (no amber box), the `gam_calls` fixture + `gam_writes()` (the exact argv the mock received), and the audit record's `ok`. The mock fails any argv it has no handler for, so an unhandled write can no longer "succeed".
 - **Never poll a job's status endpoint in a loop under `TestClient`** (that hung CI for 6h, before the fixtures were context-managed). To assert what a route-started job did, `wait_for_job(client, job)` awaits its task on the client's own loop, then render the status once; the signature apply, bulk store, offboarding and builder-sequence route tests do this. Other job routes (calendar share fan-out, index rebuild, bulk onboarding) still only assert the job started, with completion covered by executor tests.

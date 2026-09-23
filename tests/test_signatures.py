@@ -29,9 +29,9 @@ def test_optional_block_dropped_when_variable_empty():
     titled = _u("a@e.com", name={"givenName": "Al", "familyName": "Ant"},
                 organizations=[{"title": "Director", "primary": True}])
     untitled = _u("b@e.com", name={"givenName": "Bo", "familyName": "Bee"})
-    tmpl = "{name}[[ — {title}]] · Saybrook Home"
-    assert render_signature(tmpl, titled) == "Al Ant — Director · Saybrook Home"
-    assert render_signature(tmpl, untitled) == "Bo Bee · Saybrook Home"  # whole block dropped
+    tmpl = "{name}[[ — {title}]] · Example Co"
+    assert render_signature(tmpl, titled) == "Al Ant — Director · Example Co"
+    assert render_signature(tmpl, untitled) == "Bo Bee · Example Co"  # whole block dropped
 
 
 def test_optional_block_kept_only_if_all_its_vars_present():
