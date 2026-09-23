@@ -60,7 +60,10 @@ guarding them:
 - **Every mutation is guarded and audited.** `guard.evaluate()` classifies risk and resolves the
   concrete affected set for a preview; the route that applies it re-checks the posted confirmation
   with `guard.enforce()` before any write, so a POST that skips the confirm step writes nothing (a
-  tripwire posts to every route to prove it); the write is then appended to a local audit log.
+  tripwire posts to every route to prove it); an account delete needs the exact address typed on
+  every path; a confirm step that posts the page's form runs the values its preview held under a
+  single-use token, so a form edited after the preview writes nothing; and the write is then
+  appended to a local audit log.
 - **Only read-only commands can become runnable automatically.** The Builder promotes
   grammar-derived commands to runnable *only* when they are confidently read-only; every write must
   be hand-curated. Anything uncertain stays inert. The few reads whose output is itself a secret or

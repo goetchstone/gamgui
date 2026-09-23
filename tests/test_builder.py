@@ -508,6 +508,22 @@ def test_builder_delete_needs_the_email_typed(client, gam_calls):
     assert gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
 
 
+def test_a_data_transfer_is_confirmed_like_a_destructive_change(client, gam_calls):
+    # Ownership handed over can't be taken back by a second transfer (the offboarding runbook warns so),
+    # and the README promises a data transfer runs behind a confirmation: a red Confirm & run, and
+    # the typed "confirm" once a sequence holds ten.
+    assert load_catalog().by_id("build.transfer_data").risk == RiskLevel.DESTRUCTIVE
+    form = {"cid": "build.transfer_data", "old_owner": "carol@example.com", "service": "drive",
+            "new_owner": "alice@example.com"}
+    shown, token = _builder_preview(client, **form)
+    assert "DESTRUCTIVE" in shown and "Confirm &amp; run" in shown
+    r = client.post("/builder/run", data={**form, "preview": token})           # the token without the click
+    assert "done" not in r.text and gam_writes(gam_calls()) == []
+    _, token = _builder_preview(client, **form)
+    assert "done" in _builder_run(client, token, **form).text
+    assert gam_writes(gam_calls()) == [["create", "datatransfer", "carol@example.com", "drive", "alice@example.com"]]
+
+
 def test_builder_delete_warns_on_a_pending_data_transfer(client):
     # Deleting before an offboarding's Drive transfer finishes loses the rest: the Builder warns like
     # the Users delete zone does (both read `print datatransfers olduser <address>`).

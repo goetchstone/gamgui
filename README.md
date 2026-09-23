@@ -78,10 +78,13 @@ Actively developed and used against live Google Workspace tenants. Working today
 You build and run it yourself; it is not yet notarized for distribution to other Macs.
 
 > **Destructive actions are guarded — but check what has actually been proven live.** Suspend,
-> account delete, calendar/event delete, data transfer, the offboarding routine, and bulk operations
-> all run behind a *preview → confirmation → audit-logged* path (typed for account and calendar
-> delete, a destructive bulk run, and a signature apply to more than 25 people), and the server
-> refuses a request that skipped the confirmation — the page asking is not enough. That guard is
+> account delete, calendar/event delete, a Builder data transfer, the offboarding routine, and the
+> bulk jobs (department, signatures, onboarding — one hire or a CSV) all run behind a *preview →
+> confirmation → audit-logged* path (typed for account and calendar delete, a destructive bulk run,
+> and a signature apply to more than 25 people). The server refuses a request that skipped the
+> confirmation — the page asking is not enough — and runs what the preview showed: a form edited
+> after its preview has to be previewed again. Single-target changes (a delegate, a group member, a
+> calendar share — to a group, one subscribe per member) run without a confirmation. That guard is
 > well covered by tests; what tests cannot prove is that a given GAM command behaves as expected
 > against a real tenant. See [Live verification status](#live-verification-status) for which writes have been
 > confirmed against a production domain and which have not — and run anything marked *not yet*

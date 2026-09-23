@@ -29,7 +29,7 @@
 
 ## Gotchas / mock-lies traps
 - Guard and `redact_argv` are pure Python over argv/previews — no GAM call — so `tests/fixtures/mock_gam.sh` and the vendored grammar are irrelevant to them. The route tripwire does use the mock, but only as an argv recorder: "zero writes" is trustworthy; its confirmed-path "the write ran" is as good as the mock's handler for that write.
-- But the domain is only as safe as the `RiskLevel` each mutation declares (`DESTRUCTIVE`: `delete_user`, `delete_event`, `delete_calendar`, and `plan_suspend(..., suspend=True)`; almost everything else `LOW`; unsuspend is `LOW`). A mislabeled risk silently downgrades the confirmation the operator sees; that's a curation decision the tests here do NOT check — they assume the label is right.
+- But the domain is only as safe as the `RiskLevel` each mutation declares (`DESTRUCTIVE`: `delete_user`, `delete_event`, `delete_calendar`, `plan_suspend(..., suspend=True)`, and the Builder's `build.transfer_data`; almost everything else `LOW`; unsuspend is `LOW`). A mislabeled risk silently downgrades the confirmation the operator sees; that's a curation decision the tests here do NOT check — they assume the label is right.
 - `redact_argv` is key-driven and positional: a *new* secret-bearing GAM flag not in `_SENSITIVE_KEYS` would be logged in the clear, and a value that spells a key shifts the mask. Adding a mutation that carries a secret means passing the value as `secrets=` **and** adding its key here.
 - `secrets=` masks every occurrence, so a very short or common secret would mask ordinary text too — fail-closed by design. An empty string is ignored.
 

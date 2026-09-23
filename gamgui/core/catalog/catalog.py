@@ -229,7 +229,9 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.undelete_user(s.get("email", "")),
              "gam undelete user <email>",
              "Restore a recently deleted account (within Google's ~20-day recovery window)."),
-        _cmd("build.transfer_data", "Data Transfers", "", "Transfer Drive/Calendar ownership", RiskLevel.LOW,
+        # DESTRUCTIVE: handed-over ownership can't be taken back by a second transfer (see the offboarding
+        # runbook), so the Builder asks for Confirm & run — and the typed word at ten in a sequence.
+        _cmd("build.transfer_data", "Data Transfers", "", "Transfer Drive/Calendar ownership", RiskLevel.DESTRUCTIVE,
              [_slot("old_owner", "From user", U),
               _slot("service", "Service", SlotKind.CHOICE, choices=TRANSFER_SERVICES, default=_SERVICE_DRIVE),
               _slot("new_owner", "To user", SlotKind.USER)],
