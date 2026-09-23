@@ -78,13 +78,23 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     return lifecycle.check_addresses(directory, user, manager)
 
 
-async def _already_delegate(conn, user: str, manager: str) -> bool:
-    """Whether ``manager`` is already ``user``'s mail delegate (GAM fails re-adding one). A read
-    failure is not a block — the delegate step reports its own failure."""
+async def _delegate_warning(conn, user: str, manager: str) -> str:
+    """The preview's warning about the delegate step, or "". Re-adding an existing delegate fails in
+    GAM; and a failed read of ``user``'s delegates means the same Gmail access is broken for the
+    delegate step — which runs after the irreversible reset, and stops the routine when it fails. A
+    warning, not a block: the read may have failed for a transient reason (it was swallowed once, and
+    the preview looked clean)."""
     try:
-        return manager.lower() in {d.lower() for d in await conn.list_delegates(user)}
-    except Exception:  # noqa: BLE001 - only a warning depends on it
-        return False
+        delegates = {d.lower() for d in await conn.list_delegates(user)}
+    except Exception as exc:  # noqa: BLE001 - any failure is reported, whatever it was
+        reason = exc.message if isinstance(exc, GAMError) else _friendly(exc)
+        return (f"Couldn't read {user}'s mail delegates ({reason}). The delegate step uses the same Gmail "
+                f"access, so it will likely fail too — after the password has been reset, and a failed "
+                f"delegate stops the routine. Fix the cause and preview again.")
+    if manager.lower() in delegates:
+        return (f"{manager} already has delegate access to {user}'s mailbox. GAM fails a second add, and a "
+                f"failed delegate stops the routine — tick “Set delegate” as already done.")
+    return ""
 
 
 async def _resolve_name(st, email: str) -> str:
@@ -158,9 +168,8 @@ async def offboard_preview(
     if check.errors:
         return _err(request, " ".join(check.errors))
     user, manager = check.user.primary_email, check.manager.primary_email
-    if "delegate" not in done and await _already_delegate(st.connector, user, manager):
-        check.warnings.append(f"{manager} already has delegate access to {user}'s mailbox. GAM fails a second "
-                              f"add, and a failed delegate stops the routine — tick “Set delegate” as already done.")
+    if "delegate" not in done and (warning := await _delegate_warning(st.connector, user, manager)):
+        check.warnings.append(warning)
     # An emptied field runs the default text — the auto-reply block below shows the default too.
     subject, message = subject or lifecycle.DEFAULT_SUBJECT, message or lifecycle.DEFAULT_MESSAGE
     days_i = _days(days)

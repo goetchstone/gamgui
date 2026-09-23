@@ -1364,6 +1364,25 @@ def test_offboard_preview_warns_when_the_manager_is_already_a_delegate(client, m
     assert "already has delegate access" not in r.text
 
 
+def test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read(client, monkeypatch):
+    # The preview's `print delegates` read uses the same Gmail access as the delegate step. Its failure
+    # (mail service off, a Gmail scope missing) was swallowed and the preview looked clean — then the
+    # irreversible reset ran, the delegate failed and the routine stopped with nothing handed over.
+    import html
+
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+
+    async def unreadable(email):
+        raise GAMError(GAMErrorKind.UNKNOWN, exit_code=1,
+                       stderr="ERROR: 400: failedPrecondition - Mail service not enabled")
+
+    monkeypatch.setattr(client.app.state.gamgui.connector, "list_delegates", unreadable)
+    text = html.unescape(_offboard_preview(client)[0].text)
+    assert f"Couldn't read {LEAVER}'s mail delegates" in text and "Mail service not enabled" in text
+    assert "will likely fail" in text and "Run offboarding" in text     # a warning: the read may be transient
+    assert "Couldn't read" not in html.unescape(_offboard_preview(client, done=["delegate"])[0].text)
+
+
 def test_offboard_with_every_step_ticked_done_has_nothing_to_run(client):
     from gamgui.core.lifecycle import REQUIRES
 

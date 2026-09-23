@@ -38,8 +38,11 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 write: an address not in the directory, an alias (the message names the primary), the same account
 twice, and a directory that can't be read (fails closed). Warned in the preview, not blocked: a
 super-admin or delegated-admin leaver (offboarding doesn't remove the role), an already-suspended
-leaver (mailbox steps may fail), a suspended manager (delegate/transfer/reminder go there) and a
-manager who is already the leaver's delegate (the preview only; see "Re-running after a failure"). The
+leaver (mailbox steps may fail), a suspended manager (delegate/transfer/reminder go there), a
+manager who is already the leaver's delegate (the preview only; see "Re-running after a failure"), and
+a `print delegates` read of the leaver that failed — the delegate step uses the same Gmail access, so
+it will likely fail after the irreversible reset (the warning quotes GAM's error; the read was once
+swallowed and the preview looked clean, failure-log 2026-09-23). The
 steps then act on the directory's primary addresses, whatever case was typed. A typo'd manager used
 to be accepted and half-offboard the account (failure-log 2026-09-23).
 
@@ -99,7 +102,7 @@ the reminder runs without one). What each step does if run again after it succee
 | Reset password | Harmless: `password random` makes a new password each time. | optional |
 | Revoke access & sign out | Harmless: whatever app passwords and tokens are left are deleted, the backup codes are invalidated again, sessions are ended again. | optional |
 | Turn off forwarding | Harmless: `forward off` when it's off changes nothing. **Leave it unticked if "Revoke access" failed** — a session left open could have switched forwarding back on. | optional |
-| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_already_delegate`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
+| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
 | Auto-reply | Harmless: `vacation on …` replaces the settings. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
 | Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist", which the sweep tolerates. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
@@ -211,7 +214,8 @@ sign-out is a `✗` that stops nothing, `test_offboard_failed_sign_out_is_a_fail
 and the panel then isn't "complete", `test_offboard_a_refused_sign_out_is_a_failed_step_not_a_clean_run`;
 forwarding turned off after the revoke, and its failure stopping nothing,
 `test_offboard_turns_off_forwarding_and_a_failure_stops_nothing`), the re-run ticks
-(`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), and the preview's
+(`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), the
+unreadable-delegates warning (`test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read`), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
@@ -230,7 +234,8 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   Show tells you whether auto-forwarding is on now, and to where — note it if so.
 - Every warning is dealt with: a super-admin leaver's role revoked first (and another super admin
   exists; GamGUI isn't connected as the leaver); a manager who is already a delegate → tick
-  "Set delegate".
+  "Set delegate"; "Couldn't read … mail delegates" → fix what it quotes (Gmail off for the leaver, a
+  missing Gmail scope) and preview again, or the delegate step fails after the reset.
 - Each `gam` line: the leaver everywhere, the manager in the delegate, transfer and reminder;
   `drive,calendar` as one argument; the auto-reply text as senders should read it (sent as HTML, so
   line breaks collapse); the reminder date and invitee.
