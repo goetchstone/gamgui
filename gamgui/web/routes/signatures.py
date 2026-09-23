@@ -184,7 +184,8 @@ async def preview(
     matched = await _matched(st, users, scope_type, scope_value)
     sample = matched[0] if matched else None
     decision = guard.evaluate(_previews(matched), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
-    token = st.previews.hold(_FLOW, _form_key(template, scope_type, scope_value), (template, matched)) if matched else ""
+    token = (st.previews.hold(_FLOW, _form_key(template, scope_type, scope_value), (template, matched))
+             if matched else "")
     return TEMPLATES.TemplateResponse(
         request, _PREVIEW_PARTIAL,
         {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),

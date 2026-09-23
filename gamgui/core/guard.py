@@ -3,8 +3,9 @@
 :func:`evaluate` decides, from the :class:`ChangePreview` list a mutation would make: destructive →
 a Confirm click; bulk (>= ``DEFAULT_BULK_THRESHOLD``) → a Confirm click; destructive *and* bulk →
 the operator types "confirm"; and, for a route that opts in with ``typed_count_above``, more targets
-than that → the operator types how many. It is pure, and a template renders its decision. An account delete — any preview whose argv is
+than that → the operator types how many. An account delete — any preview whose argv is
 ``GAMCommands.delete_user`` — also needs its exact address typed, on every route that deletes one.
+It is pure, and a template renders its decision.
 
 :func:`enforce` is the server-side half, and the one that counts: a mutating route calls it with the
 posted form before its first GAM write and refuses when the form lacks what the decision requires.

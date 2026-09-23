@@ -440,7 +440,8 @@ async def seq_run(request: Request) -> HTMLResponse:
     token = str(form.get(TOKEN_FIELD) or "")
     held, refusal = st.previews.take(_SEQ_FLOW, token, _seq_key(seq), again=_AGAIN, what="sequence")
     if refusal:
-        return await _seq_preview_page(request, seq, error=refusal if token else "Check what this will run, then run it.")
+        return await _seq_preview_page(request, seq,
+                                       error=refusal if token else "Check what this will run, then run it.")
     previews = _seq_previews(held)
     # Enforce the full guard server-side (mirrors /run): a bulk-destructive sequence needs typed
     # "confirm"; any other confirmation-requiring sequence needs the Confirm & run click; an account
