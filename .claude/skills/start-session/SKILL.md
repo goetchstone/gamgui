@@ -21,8 +21,8 @@ it.
 ## 2. Is the toolchain sane?
 
 - `.venv/bin/python -m pytest -q` — a green baseline before you change anything,
-  so a later red is yours (~15s). `make setup` if there's no `.venv`; it needs
-  Python 3.10+ and the system `python3` is older.
+  so a later red is yours (~25s on an idle Mac, ~45s under load). `make setup`
+  if there's no `.venv`; it needs Python 3.10+ and the system `python3` is older.
 - **GAM pin drift** (the recurring gotcha): a `git pull` moves
   `EXPECTED_GAM_VERSION` in `core/gam/commands.py` but **not** the gitignored
   vendored binary. If the digest reports DRIFT or a missing grammar, re-vendor:

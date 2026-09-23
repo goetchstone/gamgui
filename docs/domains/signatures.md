@@ -28,7 +28,7 @@
 - `render_signature` substitution is naive `str.replace` over a fixed dict; it does no HTML escaping of directory values (a user whose title contains `<` lands raw in the signature) — acceptable because it's the admin's own directory, but worth knowing.
 
 ## Testing / live-verification status
-Offline suite only: `.venv/bin/python -m pytest -q tests/test_signatures.py tests/test_sig_templates.py`. Covers render/optional-block/scope semantics, the store (seed/round-trip/corrupt-fallback/`0600`/validation), the templates web flow, smart-quote detection, and the two linear-time (ReDoS) bounds. **`set signature` IS confirmed live** per the README "Confirmed live" list (derived from real audit logs). The *bulk apply loop itself* — many mailboxes, failures mid-run, the ✓/✗ feed under load — has no live-tenant proof; test it on a throwaway OU before a domain-wide run.
+Offline suite only: `.venv/bin/python -m pytest -q tests/test_signatures.py tests/test_sig_templates.py`. Covers render/optional-block/scope semantics, the store (seed/round-trip/corrupt-fallback/`0600`/validation), the templates web flow, smart-quote detection, and the two linear-time (ReDoS) bounds. **`set signature` IS confirmed live** per the README's live-verification table (derived from real audit logs). The *bulk apply loop itself* — many mailboxes, failures mid-run, the ✓/✗ feed under load — has no live-tenant proof; test it on a throwaway OU before a domain-wide run.
 
 ## To do common tasks here
 - **Add a template variable:** add it to `VARIABLES` and to the `values` dict in `render_signature` (both in `core/signatures.py`); add a case to `match_scope`/`scope_options` only if it's also scopable (see the Location commit `4a2c274`). Add a render test to `test_signatures.py`.

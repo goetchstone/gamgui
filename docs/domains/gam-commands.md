@@ -73,7 +73,9 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   parser tolerates (`<FalseValues>=` for `::=`, an unopened `<CalendarACLRole>]`).
 - **What the contract can't see:** the order and pairing of options past the leading words
   (`vacation … html` is only checked as "`html` is a grammar word"), field-name validity per command,
-  and anything about GAM's behaviour. That is plan item T7 (a grammar-validating mock) and live runs.
+  and anything about GAM's behaviour. For the writes, the strict `mock_gam.sh` handlers check option
+  order and pairing (hand-written from the grammar); a grammar-validating mock for everything is plan
+  item T7, and GAM's behaviour needs live runs.
 
 ## Gotchas / mock-lies traps
 - **`formatjson` is not universal.** `print messages`, `print delegates`, `show vacation`,

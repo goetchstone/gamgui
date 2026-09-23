@@ -103,8 +103,9 @@ This is the curated path — required for any write, optional for a read (which 
    (and similar) are not interchangeable.
 2. **Add the arg-list builder** to `core/gam/commands.py` as a `@staticmethod` returning `list[str]`.
    Validate constrained args by raising `ValueError`, like `add_group_member`'s role check.
-3. **Add an arg-shape test** (`tests/test_commands.py`, assert the exact list) and a **contract
-   token** — a substring of the command — in `tests/test_command_contract.py`.
+3. **Add an arg-shape test** (`tests/test_commands.py`, assert the exact list). The grammar
+   contract (`tests/test_command_contract.py`) calls every builder by itself; an argument you
+   validate needs its accepted values in `ENUM_ARGS` there.
 4. **Add the `CatalogCommand`** to `_curated()` in `core/catalog/catalog.py`: category/subcategory,
    typed slots (`TARGET_USER`/`USER`/`GROUP` are drag targets; the first becomes the guard's
    `target`), the authoritative `RiskLevel`, and a `build` lambda calling your `GAMCommands` method.

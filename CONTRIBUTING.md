@@ -83,13 +83,14 @@ Write like the surrounding code — a reviewer shouldn't be able to tell which l
 
 Every *write* the Builder (`/builder`) can run is curated by hand. Full recipe + safety invariants in
 [`docs/builder-commands.md`](docs/builder-commands.md). In short: verify the syntax against the
-vendored `GamCommands.txt`; add the arg-list builder to `core/gam/commands.py` (+ an arg-shape test
-+ a contract token); add a `CatalogCommand` with typed slots and an authoritative `RiskLevel` to
-`core/catalog/catalog.py`; add a web test. Two rules hold everywhere: a slot value is always exactly
-one argv element (never shell-spliced, never f-stringed into a token), and only `buildable=True`
-commands run. Anything that can write must be hand-curated in `GAMCommands` — the generic
-grammar-derived builder in `core/catalog/readbuilder.py`, which does assemble argv from the vendored
-grammar line, is attached only to commands confidently classified `RiskLevel.READ_ONLY`.
+vendored `GamCommands.txt`; add the arg-list builder to `core/gam/commands.py` (+ an arg-shape test;
+the grammar contract checks every builder by itself); add a `CatalogCommand` with typed slots and an
+authoritative `RiskLevel` to `core/catalog/catalog.py`; add a web test; give the mock gam a strict
+handler for it. Two rules hold everywhere: a slot value is always exactly one argv element (never
+shell-spliced, never f-stringed into a token), and only `buildable=True` commands run. Anything
+that can write must be hand-curated in `GAMCommands` — the generic grammar-derived builder in
+`core/catalog/readbuilder.py`, which does assemble argv from the vendored grammar line, is attached
+only to commands confidently classified `RiskLevel.READ_ONLY`.
 
 ## Before opening a PR
 
