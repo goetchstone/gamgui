@@ -49,8 +49,14 @@ through a shell. `test_offboard_preview_commands_are_what_runs` holds the previe
 receives, in order. `offboard_run` first refuses a POST without `confirmed=1`
 (`guard.enforce`, the leaver declared `DESTRUCTIVE`: the preview's Run button posts it, and
 `hx-disabled-elt` stops a double-click starting a second run — a bare POST once ran the whole
-routine, failure-log 2026-09-23), then builds the steps, calls `start_job`, and hands them to
-`_run_offboard`, which runs each step in order, appends a `✓/✗` line to `job.log`, and **never aborts
+routine, failure-log 2026-09-23). **Run executes exactly what was previewed**: the preview holds the
+steps it built (`_Preview`, on `AppState.offboard_previews`, at most 8) under a single-use token that
+the Run button posts (`hx-vals`), for `PREVIEW_TTL` (15 min). Run refuses a missing, used or expired
+token, and a live form (`hx-include`) that no longer matches the previewed one (`_form_key`) — edit a
+field after Preview and you must preview again. It then re-checks the previewed addresses against the
+directory and hands the held steps, never rebuilt ones, to `start_job` and `_run_offboard` (once it
+rebuilt them from the live form, failure-log 2026-09-23). An emptied subject/message runs the default
+text, as the auto-reply block shows. `_run_offboard` runs each step in order, appends a `✓/✗` line to `job.log`, and **never aborts
 on a failed step** (every failure is reported). The "timer" is the last step: a calendar reminder
 event on the manager's calendar `days` out — there is no app-side scheduler. The final account
 **delete** is a distinct guarded action on the user detail page (`delete_user`, `RiskLevel.DESTRUCTIVE`).
@@ -135,7 +141,9 @@ argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL and 
 auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
 auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, the directory check
-(unknown/alias/same-account blocked on preview and run, admin/suspended warnings), and the preview's
+(unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
+(Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
+edited form, a used/expired token and a directory change are refused), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the

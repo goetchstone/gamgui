@@ -8,8 +8,11 @@ manager confirms it's safe.
 from __future__ import annotations
 
 import asyncio
+import secrets
+import time
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Annotated
+from typing import Annotated, List
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -40,6 +43,38 @@ def _days(value: str) -> int:
         return max(1, int(value))
     except (TypeError, ValueError):
         return 30
+
+
+# Run executes exactly what the preview showed: the steps built for it are held under a single-use
+# token, and Run refuses a form that no longer matches the one previewed (Run once posted the live
+# form, so a field edited after Preview ran against values nobody had checked).
+PREVIEW_TTL = 15 * 60
+_PREVIEWS_KEPT = 8
+
+
+@dataclass
+class _Preview:
+    form: tuple                # _form_key of the form the preview was built from
+    user: str                  # the directory's primary addresses the steps act on
+    manager: str
+    steps: List[lifecycle.OffboardStep]
+    at: float = field(default_factory=time.monotonic)
+
+
+def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str) -> tuple:
+    return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower())
+
+
+def _hold(previews: dict, preview: _Preview) -> str:
+    """Keep ``preview`` under a fresh token; drop expired ones and cap the rest (oldest first)."""
+    now = time.monotonic()
+    for token in [t for t, p in previews.items() if now - p.at > PREVIEW_TTL]:
+        del previews[token]
+    while len(previews) >= _PREVIEWS_KEPT:
+        del previews[next(iter(previews))]
+    token = secrets.token_urlsafe(16)
+    previews[token] = preview
+    return token
 
 
 async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
@@ -112,6 +147,7 @@ async def offboard_preview(
     st = request.app.state.gamgui
     if st.connector is None:
         return _err(request, "Not connected.")
+    form = _form_key(user, manager, subject, message, days, notify)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return _err(request, "Enter both the departing user and the manager email.")
@@ -119,16 +155,19 @@ async def offboard_preview(
     if check.errors:
         return _err(request, " ".join(check.errors))
     user, manager = check.user.primary_email, check.manager.primary_email
+    # An emptied field runs the default text — the auto-reply block below shows the default too.
+    subject, message = subject or lifecycle.DEFAULT_SUBJECT, message or lifecycle.DEFAULT_MESSAGE
     days_i = _days(days)
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, days_i, date.today(),
         notify=notify.strip(), employee_name=await _employee_name(st, user),
         manager_contact=await _manager_contact(st, manager))
+    token = _hold(st.offboard_previews, _Preview(form, user, manager, steps))
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
         {"steps": steps, "user": user, "manager": manager, "days": days_i, "warnings": check.warnings,
-         "ar_subject": ar_subject, "ar_message": ar_message},
+         "token": token, "ar_subject": ar_subject, "ar_message": ar_message},
     )
 
 
@@ -174,26 +213,26 @@ async def offboard_run(
     user: Annotated[str, Form()], manager: Annotated[str, Form()],
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
+    preview: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
         return _err(request, "Not connected.")
-    user, manager = user.strip(), manager.strip()
-    if not user or not manager:
-        return _err(request, "Enter both the departing user and the manager email.")
     # Destructive for the leaver (locks sign-in, strips calendar access domain-wide): confirmed=1.
-    refusal = guard.enforce(guard.changes([user], RiskLevel.DESTRUCTIVE, "Offboard"), await request.form())
+    refusal = guard.enforce(guard.changes([user.strip()], RiskLevel.DESTRUCTIVE, "Offboard"), await request.form())
     if refusal:
         return _err(request, refusal)
-    check = await _check(st, user, manager)
+    held = st.offboard_previews.pop(preview, None)   # single use: a second Run needs a new preview
+    if held is None or time.monotonic() - held.at > PREVIEW_TTL:
+        return _err(request, "That preview has expired or was already run — click Preview steps again.")
+    if held.form != _form_key(user, manager, subject, message, days, notify):
+        return _err(request, "The form changed after the preview — click Preview steps again, so what runs "
+                             "is what you checked.")
+    check = await _check(st, held.user, held.manager)   # the directory may have changed since
     if check.errors:
         return _err(request, " ".join(check.errors))
-    user, manager = check.user.primary_email, check.manager.primary_email
-    steps = lifecycle.build_offboard_steps(
-        user, manager, subject, message, _days(days), date.today(),
-        notify=notify.strip(), employee_name=await _employee_name(st, user),
-        manager_contact=await _manager_contact(st, manager))
+    user, steps = held.user, held.steps
     job = start_job(st.jobs, len(steps))
     job.task = asyncio.create_task(_run_offboard(job, conn, steps))
     st.invalidate_users()  # password/org/etc. changed

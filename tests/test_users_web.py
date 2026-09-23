@@ -918,14 +918,14 @@ def test_lifecycle_offboard_preview_requires_both_emails(client):
 ])
 def test_offboard_blocks_an_address_the_directory_does_not_confirm(client, gam_calls, user, manager, expected):
     # A typo'd manager meant a half-offboarded account: the password reset ran, then the delegate and
-    # the transfer went to nobody. The preview and the run both refuse before any write.
+    # the transfer went to nobody. Refused at the preview, so there is nothing to Run (the run re-checks
+    # the previewed addresses: test_offboard_run_rechecks_the_directory).
     import html
 
-    form = {"user": user, "manager": manager, "subject": "s", "message": "m", "days": "30"}
-    for route, extra in (("/lifecycle/offboard/preview", {}), ("/lifecycle/offboard/run", {"confirmed": "1"})):
-        r = client.post(route, data={**form, **extra})
-        assert expected in html.unescape(r.text) and "Run offboarding" not in r.text, route
-    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
+    r = client.post("/lifecycle/offboard/preview",
+                    data={"user": user, "manager": manager, "subject": "s", "message": "m", "days": "30"})
+    assert expected in html.unescape(r.text) and "Run offboarding" not in r.text
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.offboard_previews == {}
 
 
 def test_offboard_blocks_when_the_directory_cannot_be_read(client, gam_calls, monkeypatch):
@@ -1031,13 +1031,30 @@ def offboard_writes(user="leaver@example.com", mgr="mgr@example.com"):
     ]
 
 
+OFFBOARD_FORM = {"user": LEAVER, "manager": MGR, "subject": "s", "message": "m", "days": "30", "notify": ""}
+
+
+def _offboard_preview(client, **changes):
+    """Preview an offboarding; return the page and the single-use token its Run button posts."""
+    r = client.post("/lifecycle/offboard/preview", data={**OFFBOARD_FORM, **changes})
+    assert_ok_partial(r)
+    m = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', r.text)
+    assert m, r.text[:300]
+    return r, m.group(1)
+
+
+def _offboard_run(client, token, **changes):
+    """Post Run as the preview's button does: the live form (hx-include) + confirmed + the token."""
+    return client.post("/lifecycle/offboard/run",
+                       data={**OFFBOARD_FORM, **changes, "confirmed": "1", "preview": token})
+
+
 def test_lifecycle_offboard_run_starts(client, gam_calls):
     # The route starts the routine and returns a polling panel. The job is awaited on the client's
     # own loop (not by polling the status endpoint — that hung CI for 6h before the fixtures were
     # context-managed), then the finished panel is rendered once.
-    r = client.post("/lifecycle/offboard/run",
-                    data={"user": LEAVER, "manager": MGR, "subject": "s", "message": "m", "days": "30",
-                          "confirmed": "1"})
+    _, token = _offboard_preview(client)
+    r = _offboard_run(client, token)
     assert_ok_partial(r)
     job = _job(client, r.text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
@@ -1047,6 +1064,69 @@ def test_lifecycle_offboard_run_starts(client, gam_calls):
     done = client.get("/lifecycle/offboard/status", params={"job": job.id})
     assert_ok_partial(done)
     assert "Offboarding complete — 6 of 6 steps succeeded." in done.text
+
+
+def test_offboard_run_executes_exactly_the_previewed_commands(client, gam_calls):
+    # Run once rebuilt the steps from the live form; now it runs the ones built for the preview.
+    import html
+
+    from gamgui.core.lifecycle import command_line
+
+    shown, token = _offboard_preview(client, subject="Away now", notify="it@example.com")
+    previewed = [html.unescape(t) for t in re.findall(r"<pre[^>]*>(.*?)</pre>", shown.text, re.S)]
+    job = _job(client, _offboard_run(client, token, subject="Away now", notify="it@example.com").text,
+               "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    assert [command_line(c) for c in gam_writes(gam_calls())] == previewed
+
+
+@pytest.mark.parametrize("edit", [{"manager": "bob@example.com"}, {"subject": "Changed"}, {"days": "7"}])
+def test_offboard_run_refuses_a_form_edited_after_the_preview(client, gam_calls, edit):
+    _, token = _offboard_preview(client)
+    r = _offboard_run(client, token, **edit)
+    assert "The form changed after the preview" in r.text
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
+
+
+def test_offboard_run_needs_a_fresh_unused_preview(client, gam_calls, monkeypatch):
+    from gamgui.web.routes import lifecycle as route
+
+    assert "expired or was already run" in _offboard_run(client, "").text           # no preview at all
+    _, token = _offboard_preview(client)
+    wait_for_job(client, _job(client, _offboard_run(client, token).text, "/lifecycle/offboard/status"))
+    writes = len(gam_writes(gam_calls()))
+    assert "expired or was already run" in _offboard_run(client, token).text        # single use
+    _, token = _offboard_preview(client)
+    monkeypatch.setattr(route, "PREVIEW_TTL", -1)
+    assert "expired or was already run" in _offboard_run(client, token).text        # expired
+    assert len(gam_writes(gam_calls())) == writes and len(client.app.state.gamgui.jobs) == 1
+
+
+def test_offboard_run_rechecks_the_directory(client, gam_calls, monkeypatch):
+    # The manager's account went away between Preview and Run: nothing runs.
+    _, token = _offboard_preview(client)
+    st = client.app.state.gamgui
+    directory = [u for u in client.portal.call(st.users) if u.primary_email != MGR]
+
+    async def users(force=False):
+        return directory
+
+    monkeypatch.setattr(st, "users", users)
+    r = _offboard_run(client, token)
+    assert f"{MGR} isn&#39;t in the directory" in r.text
+    assert gam_writes(gam_calls()) == [] and st.jobs == {}
+
+
+def test_offboard_preview_runs_the_default_text_for_an_emptied_field(client):
+    # The auto-reply block shows the default subject for an empty field, so the command must send it.
+    r, _ = _offboard_preview(client, subject="")
+    assert "vacation on subject &#39;Carol Clark is no longer with the company&#39;" in r.text
+
+
+def test_offboard_previews_held_are_bounded(client):
+    for _ in range(20):
+        _offboard_preview(client)
+    assert len(client.app.state.gamgui.offboard_previews) <= 8
 
 
 @pytest.mark.asyncio

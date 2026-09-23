@@ -45,6 +45,7 @@ class AppState:
     user_cache: UserCache = field(default_factory=UserCache)
     group_cache: UserCache = field(default_factory=UserCache)  # cached `gam print groups` for the pickers
     jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
+    offboard_previews: dict = field(default_factory=dict)  # single-use token -> the previewed offboarding
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
