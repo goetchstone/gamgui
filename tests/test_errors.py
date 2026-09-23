@@ -99,3 +99,20 @@ def test_no_error_line_is_unknown():
     assert GAMError.from_run(1, "").kinds == {GAMErrorKind.UNKNOWN}
     assert GAMError.from_run(None, "x").kinds == {GAMErrorKind.TIMEOUT}
 
+
+
+@pytest.mark.parametrize("line", [
+    # GAM 7.48.11's handleOAuthTokenError (read from the vendored build): a per-user Gmail/Calendar
+    # command can't get a token for an address that isn't a user, and reports it against that user
+    # via entityActionFailedWarning — the token endpoint's own words, ACTION_FAILED_RC.
+    "User: nobody@example.com, User:, Show Failed: invalid_grant: Invalid email or User ID",
+    "User: nobody@example.com, User:, Print Failed: invalid_grant: Not a valid email",
+    "User: gone@example.com, User:, Show Failed: invalid_grant: The account has been deleted",
+])
+def test_an_address_that_is_not_a_user_is_not_found_not_an_expired_sign_in(line):
+    # The first pattern matched "invalid_grant", so the operator was told "Your sign-in expired.
+    # Re-run setup" about a typo'd or deleted user.
+    assert classify_stderr(line) is GAMErrorKind.NOT_FOUND
+    assert GAMError.from_run(50, line).remediation.startswith("The requested user")
+    assert classify_stderr("ERROR: invalid_grant: Token has been expired or revoked") is GAMErrorKind.AUTH_EXPIRED
+    assert classify_stderr("ERROR: invalid_grant: Bad Request") is GAMErrorKind.AUTH_EXPIRED

@@ -70,6 +70,12 @@ _REMEDIATION = {
 
 # Ordered (first match wins, per line) stderr patterns → kind. Order matters: more specific first.
 _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
+    # A per-user Gmail/Calendar command for an address that isn't a user: the token request for THAT
+    # user fails, and GAM reports the token endpoint's words against it (handleOAuthTokenError →
+    # entityActionFailedWarning, read from the vendored 7.48.11 build). Before the expired-sign-in
+    # pattern, whose "invalid_grant" it also says — the admin's sign-in is fine.
+    (re.compile(r"invalid_grant: (?:Invalid email or User ID|Not a valid email|The account has been deleted)",
+                re.I), GAMErrorKind.NOT_FOUND),
     (re.compile(r"invalid_grant|token has been expired or revoked", re.I), GAMErrorKind.AUTH_EXPIRED),
     (re.compile(r"insufficient.*scope|access_denied.*scope|not authorized to access", re.I), GAMErrorKind.SCOPE_MISSING),
     (re.compile(r"rate.?limit|quota|userRateLimitExceeded|too many requests|\b429\b", re.I), GAMErrorKind.RATE_LIMITED),

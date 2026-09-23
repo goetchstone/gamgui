@@ -76,7 +76,12 @@ and `version` (no credentials).
   GAM's account-wide "Calendar not enabled. Please run "gam update project"…" stays `UNKNOWN`. A
   missing or unreadable credentials file ("Client OAuth2 File: …/oauth2.txt, Does not exist", GAM's
   `exitIfNoOauth2Txt`/`invalidOauth2TxtExit`) is matched *before* the not-found pattern, whose words it
-  also contains, so it is `NOT_AUTHENTICATED` ("complete setup"), not `NOT_FOUND`.
+  also contains, so it is `NOT_AUTHENTICATED` ("complete setup"), not `NOT_FOUND`. The reverse for a
+  per-user Gmail/Calendar command naming an address that isn't a user: GAM can't get a token for it
+  and reports "User: x, User:, Show Failed: invalid_grant: Invalid email or User ID" (also "Not a
+  valid email", "The account has been deleted"; `handleOAuthTokenError` → `entityActionFailedWarning`,
+  exit 50, read from the vendored build). That pattern sits *before* the `invalid_grant` one, so it is
+  `NOT_FOUND`, not `AUTH_EXPIRED` ("your sign-in expired, re-run setup") — the admin's sign-in is fine.
 - **Classified per line, not per stderr** (2026-09-23). A multi-entity command (`all users ...`)
   prints one stderr line per entity, and the whole text used to be classified by the first pattern
   matching *anywhere* — so one "Does not exist" line made a stderr that also held a real failure
