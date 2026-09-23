@@ -270,6 +270,67 @@ def test_sweep_continues_past_an_entry_that_vanishes_mid_sweep(tmp_path, monkeyp
     assert not stale.exists() and not racing.exists()
 
 
+# --- symlinks: the sweep and the shred act only on what is really inside the runtime dir ----------
+
+def _victim(factory) -> tuple[Path, Path]:
+    """A directory outside the runtime dir holding a file the sweep must never touch."""
+    victim = factory.mktemp("victim")
+    sentinel = victim / "keep.txt"
+    sentinel.write_text("precious", encoding="utf-8")
+    return victim, sentinel
+
+
+def test_shutdown_sweep_never_follows_a_symlinked_gamcfg_entry(tmp_path, tmp_path_factory):
+    victim, sentinel = _victim(tmp_path_factory)
+    link = tmp_path / "gamcfg-planted"
+    link.symlink_to(victim, target_is_directory=True)
+
+    assert sweep_stale_configs(base_dir=tmp_path, max_age_seconds=0) == 0
+    assert sentinel.read_text(encoding="utf-8") == "precious"    # not zeroed through the link
+    assert victim.is_dir() and link.is_symlink()                  # the link is ignored, not traversed
+
+
+def test_shred_dir_does_not_zero_a_symlinked_file_inside_the_dir(tmp_path, tmp_path_factory):
+    _, sentinel = _victim(tmp_path_factory)
+    d = _make_cfgdir(tmp_path, "gamcfg-mixed")
+    (d / FILENAMES["oauth2"]).write_text("secret", encoding="utf-8")
+    (d / FILENAMES["oauth2service"]).symlink_to(sentinel)
+
+    _shred_dir(d)
+    assert not d.exists()                                         # the dir itself still goes
+    assert sentinel.read_text(encoding="utf-8") == "precious"
+
+
+def test_shred_dir_leaves_a_symlink_given_as_the_dir_alone(tmp_path, tmp_path_factory):
+    victim, sentinel = _victim(tmp_path_factory)
+    link = tmp_path / "gamcfg-link"
+    link.symlink_to(victim, target_is_directory=True)
+
+    _shred_dir(link)
+    assert sentinel.read_text(encoding="utf-8") == "precious" and victim.is_dir()
+
+
+def test_sweep_does_not_follow_a_symlinked_pid_marker(tmp_path):
+    # A marker that is a link to a file naming a live PID must not buy the dir a reprieve.
+    elsewhere = tmp_path / "not-a-marker"
+    elsewhere.write_text(str(os.getpid()), encoding="utf-8")
+    d = _make_cfgdir(tmp_path, "gamcfg-linked-marker")
+    (d / _PID_FILENAME).symlink_to(elsewhere)
+    _backdate(d, 60)                                  # no usable marker -> the age rule decides
+
+    assert sweep_stale_configs(base_dir=tmp_path, max_age_seconds=0) == 1
+    assert not d.exists() and elsewhere.read_text(encoding="utf-8") == str(os.getpid())
+
+
+@pytest.mark.timeout(10)    # a regression blocks in open(); the signal timeout turns that into a fail
+def test_sweep_is_not_blocked_by_a_fifo_pid_marker(tmp_path):
+    d = _make_cfgdir(tmp_path, "gamcfg-fifo-marker")
+    os.mkfifo(d / _PID_FILENAME)
+    _backdate(d, 60)
+    assert sweep_stale_configs(base_dir=tmp_path, max_age_seconds=0) == 1
+    assert not d.exists()
+
+
 def test_sweep_never_raises_when_the_runtime_dir_cannot_be_listed(tmp_path, monkeypatch):
     # Runs at startup and at shutdown; an unreadable runtime dir must not crash either.
     def unreadable(self, pattern):

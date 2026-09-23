@@ -23,6 +23,7 @@ import atexit
 import hashlib
 import os
 import shutil
+import stat
 import tempfile
 import time
 from pathlib import Path
@@ -61,21 +62,41 @@ def app_runtime_dir() -> Path:
     return base
 
 
-def _shred_dir(path: Path) -> None:
-    """Best-effort zero every file under *path*, then remove the tree. Never raises."""
+def _zero_file(dir_fd: int, name: str) -> None:
+    # O_NOFOLLOW: a planted symlink can't aim the zeroing at a file outside the dir. O_NONBLOCK: a
+    # FIFO fails fast (ENXIO) instead of blocking the wipe until something opens its other end.
+    fd = os.open(name, os.O_WRONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     try:
-        for child in path.iterdir():
+        st = os.fstat(fd)
+        if stat.S_ISREG(st.st_mode):
+            os.write(fd, b"\x00" * st.st_size)
+            os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _shred_dir(path: Path) -> None:
+    """Best-effort zero every regular file directly under *path*, then remove the tree. Never raises.
+
+    Never follows a symlink. *path* is opened ``O_NOFOLLOW``, so a ``gamcfg-*`` link to another
+    directory is left alone rather than having its target's files zeroed; each file is opened
+    ``O_NOFOLLOW`` relative to that descriptor, so a link inside the dir is skipped; and ``rmtree``
+    refuses a symlinked top level and unlinks (never descends) links below it.
+    """
+    try:
+        dir_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError:
+        return  # gone, not a directory, or a symlink: nothing here is ours to wipe
+    try:
+        for name in os.listdir(dir_fd):
             try:
-                if child.is_file():
-                    size = child.stat().st_size
-                    with open(child, "r+b") as fh:
-                        fh.write(b"\x00" * size)
-                        fh.flush()
-                        os.fsync(fh.fileno())
+                _zero_file(dir_fd, name)
             except OSError:
                 pass  # best-effort overwrite; removal below is what matters
     except OSError:
         pass
+    finally:
+        os.close(dir_fd)
     shutil.rmtree(path, ignore_errors=True)
 
 
@@ -99,11 +120,23 @@ atexit.register(wipe_live_configs)
 
 
 def _owner_pid(child: Path) -> Optional[int]:
-    """PID recorded in *child*'s marker file, or None if absent/unreadable/nonsensical."""
+    """PID recorded in *child*'s marker file, or None if absent/unreadable/nonsensical.
+
+    Only a regular file counts: a symlinked marker is not followed, and a FIFO (``O_NONBLOCK``)
+    can't hang the startup/shutdown sweep waiting for a writer.
+    """
     try:
-        pid = int((child / _PID_FILENAME).read_text(encoding="utf-8").strip())
+        fd = os.open(child / _PID_FILENAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        pid = int(os.read(fd, 64).decode("utf-8").strip())
     except (OSError, ValueError):
         return None
+    finally:
+        os.close(fd)
     return pid if pid > 0 else None  # 0/negative mean "process group" to os.kill — never pass those
 
 
@@ -135,10 +168,12 @@ def sweep_stale_configs(base_dir: Optional[Path] = None, max_age_seconds: float 
     try:
         for child in base.glob("gamcfg-*"):
             try:
-                if not child.is_dir() or _key(child) in _LIVE:
+                # A symlink is never ours (mkdtemp makes real dirs): following one would shred
+                # whatever directory it points at.
+                if child.is_symlink() or not child.is_dir() or _key(child) in _LIVE:
                     continue
                 pid = _owner_pid(child)
-                age = now - child.stat().st_mtime
+                age = now - child.lstat().st_mtime
                 if pid is None:
                     stale = age > max_age_seconds
                 elif not _pid_alive(pid):
