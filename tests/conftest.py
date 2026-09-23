@@ -50,3 +50,13 @@ def runner(vault: SecretsVault, tmp_path: Path, monkeypatch) -> GAMRunner:
 @pytest.fixture
 def connector(runner: GAMRunner, tmp_path: Path) -> GAMConnector:
     return GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
+
+
+@pytest.fixture
+def gam_calls(tmp_path: Path, monkeypatch):
+    """Record every argv the mock `gam` receives; call the fixture to read them (oldest first)."""
+    from .helpers import read_gam_calls
+
+    log = tmp_path / "gam_argv.log"
+    monkeypatch.setenv("GAM_MOCK_ARGV_LOG", str(log))
+    return lambda: read_gam_calls(log)

@@ -21,7 +21,7 @@
 - **Registration order:** `_LIVE.add` happens *before* any secret is written, so the `atexit` backstop can never miss a populated dir.
 
 ## Gotchas / mock-lies traps
-- `tests/fixtures/mock_gam.sh` asserts `GAMCFGDIR` is set for authenticated calls and, with `GAM_MOCK_REFRESH`, rewrites `oauth2.txt` — so the materialization + write-back path *is* exercised offline. But the mock cannot prove real GAM writes `oauth2.txt` on refresh with the same filename/format, or that the Keychain backend prompts/permits as expected. `_KeyringBackend` is **never** touched by the suite (all tests use `InMemoryBackend`); Keychain behavior (prompts, `keyring` availability, item ACLs) is unverified by tests — trust only from real-tenant use.
+- `tests/fixtures/mock_gam.sh` fails any call but `version` unless `GAMCFGDIR` is set and holds non-empty `oauth2service.json` + `oauth2.txt`, and with `GAM_MOCK_REFRESH` rewrites `oauth2.txt` — so the materialization + write-back path *is* exercised offline. (Until 2026-09-23 its header claimed the check but never made it.) But the mock cannot prove real GAM writes `oauth2.txt` on refresh with the same filename/format, or that the Keychain backend prompts/permits as expected. `_KeyringBackend` is **never** touched by the suite (all tests use `InMemoryBackend`); Keychain behavior (prompts, `keyring` availability, item ACLs) is unverified by tests — trust only from real-tenant use.
 - macOS-only: `os.kill(pid, 0)`, `atexit`, APFS realpath/firmlink semantics assumed. Keep platform specifics here in the shell, not `core/` callers.
 - Cache is per-`SecretsVault` instance and in-memory only; not shared across processes. `list_domains` tolerates a corrupt JSON index by returning `[]`.
 

@@ -135,10 +135,25 @@ async def test_second_same_user_transfer_still_409s(connector):
 async def test_offboard_calendar_sweep_tolerates_own_acl(connector):
     # Bug 2 regression: the all-users sweep hits the departing user's OWN primary calendar; GAM exits
     # 50 with "Cannot change your own access level." Now classified PERMISSION_DENIED and tolerated,
-    # so the step still counts as success (audited ok, tolerated).
-    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    # so the step still counts as success (audited ok, tolerated). OWNACL makes the mock refuse it.
+    steps = build_offboard_steps("OWNACL-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     calacls = next(s for s in steps if s.key == "calacls")
     res = await calacls.action(connector)
     assert res.ok and "best-effort" in (res.detail or "")
     rec = next(e for e in connector.audit.tail() if e["action"] == "remove_from_all_calendars")
     assert rec["ok"] and rec.get("extra", {}).get("tolerated") is True
+
+
+@pytest.mark.asyncio
+async def test_offboard_calendar_sweep_clean_success_and_real_failure(connector):
+    # The sweep's exit-0 path (the mock used to fail it unconditionally, so it was never exercised)
+    # and a failure the connector must NOT tolerate (a missing scope is not a per-entity notice).
+    ok = await connector.remove_from_all_calendars("leaver@example.com")
+    assert ok.ok and not ok.detail
+    rec = connector.audit.tail()[-1]
+    assert rec["ok"] is True and rec["argv"] == ["all", "users", "delete", "calendaracls", "primary", "leaver@example.com"]
+    assert "tolerated" not in rec.get("extra", {})
+
+    bad = await connector.remove_from_all_calendars("SWEEPFAIL@example.com")
+    assert not bad.ok and "insufficient authentication scopes" in bad.detail
+    assert connector.audit.tail()[-1]["ok"] is False

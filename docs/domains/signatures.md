@@ -24,7 +24,7 @@
 
 ## Gotchas / mock-lies traps
 - **`show signature` rejects `formatjson`** — it returns indented text, parsed by `_parse_signature`, not JSON (MEMORY `gamgui-gam-formatjson`; grammar `<SignatureContent>` at line 609). The mock returns fixed text, so a formatjson regression here would pass tests and break live.
-- **`mock_gam.sh` is a permissive echo for the write.** There is no `signature ... html` case in the mock — it falls through to the catch-all `echo "ok"; exit 0`. So the mock proves argv is *built and dispatched*, not that GAM accepts the body, the `html` flag, or a huge/odd signature. Signature length limits and HTML acceptance are unverified by tests.
+- **The mock checks the write's shape, not its effect.** `mock_gam.sh`'s `signature` handler accepts only the grammar's form (`user <e> signature <String> [html [<Boolean>]] …`) and fails a missing value or an unknown keyword like GAM's usage error. It cannot prove Gmail accepts the body: signature length limits and HTML acceptance are unverified by tests.
 - `render_signature` substitution is naive `str.replace` over a fixed dict; it does no HTML escaping of directory values (a user whose title contains `<` lands raw in the signature) — acceptable because it's the admin's own directory, but worth knowing.
 
 ## Testing / live-verification status

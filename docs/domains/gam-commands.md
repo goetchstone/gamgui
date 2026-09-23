@@ -34,7 +34,7 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 ## Invariants & the failure history
 - **#1 argv-only.** A value like `"a@x.com; rm -rf /"` is one element, never interpolated — proven by
   `test_slot_value_is_a_single_argv_element` and `test_calendar_share_id_is_single_arg_not_shell`.
-- **`EXPECTED_GAM_VERSION` = the single source of truth** (currently `7.48.07`). `test_pinned_version_consistent`
+- **`EXPECTED_GAM_VERSION` = the single source of truth** (currently `7.48.11`). `test_pinned_version_consistent`
   fails unless `scripts/fetch_gam.sh` (`TAG="v…"`) and `tests/fixtures/mock_gam.sh` agree;
   `test_catalog_matches_grammar` fails if the committed catalog's version/command-count drifts from a
   fresh parse of the vendored grammar. Bump only via the README runbook (step 1 fails by design).
@@ -53,12 +53,15 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 ## Gotchas / mock-lies traps
 - **`formatjson` is not universal.** `print messages`, `print delegates`, `show vacation`,
   `show signature` REJECT `formatjson` (GAM errors "format json is invalid"), so those builders emit
-  CSV/text and the code parses that. `mock_gam.sh` will happily accept `formatjson` on anything, so a
-  mock pass proves nothing here — check `gamgui/resources/gam7/GamCommands.txt`, the source of truth.
+  CSV/text and the code parses that. `mock_gam.sh`'s read handlers are canned and still accept
+  `formatjson` on anything, so a mock pass proves nothing here — check
+  `gamgui/resources/gam7/GamCommands.txt`, the source of truth. (Its *write* handlers are strict:
+  a new mutating builder needs a handler that accepts only its grammar shape, or the mock fails it —
+  and `tests/test_mock_gam.py` fails until the builder is classified there.)
 - The module docstring flags the mutating sub-syntax (group membership, signature flags) as
   needing live re-verification against the pinned GAM each bump — the arg-shape tests only pin *our
   intended* form, not that GAM accepts it.
-- `mock_gam.sh` echoes `GAM 7.48.07 - mock`; `EXPECTED_GAM_VERSION` is matched as a substring against
+- `mock_gam.sh` echoes `GAM 7.48.11 - mock`; `EXPECTED_GAM_VERSION` is matched as a substring against
   live `gam version` for a fail-soft runtime check.
 
 ## Testing / live-verification status
@@ -73,7 +76,8 @@ status. Read-only builders are safe to exercise via `scripts/acceptance.py`.
 ## To do common tasks here
 - **Add a new GAM command:** add a `GAMCommands.<name>()` static method returning an argv list (each
   operator value its own element), add an arg-shape test in `tests/test_commands.py`, then add its GAM
-  token to `REQUIRED_TOKENS` in `tests/test_command_contract.py`. To surface it in the UI, wire a
+  token to `REQUIRED_TOKENS` in `tests/test_command_contract.py`, and classify it in
+  `tests/test_mock_gam.py` (a write also needs a strict `mock_gam.sh` handler). To surface it in the UI, wire a
   curated entry in `core/catalog/catalog.py` (`build.*` → `lambda`) — see the `add-builder-command`
   skill; the connector must route any mutation through `_run_write` (invariant #2). Verify a mutation
   live on a throwaway before relying on it.

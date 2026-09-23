@@ -21,8 +21,9 @@ surrounding code so the change is indistinguishable from the rest.
    category/subcategory, typed slots (`TARGET_USER`/`USER`/`GROUP` are drag targets; the first is the
    guard's `target`), authoritative `RiskLevel`, and a `build` lambda calling the new method.
 5. **Web test** — `tests/test_builder.py`: preview renders the assembled `gam …`; a destructive
-   command requires confirm; a read renders a table (add a `tests/fixtures/mock_gam.sh` branch if the
-   read's output shape is new).
+   command requires confirm; a read renders a table. The mock fails anything unhandled: give a write a
+   strict `tests/fixtures/mock_gam.sh` handler (only the grammar shape passes), a read with a new
+   output shape a canned branch, and classify the builder in `tests/test_mock_gam.py`.
 6. `.venv/bin/python -m pytest -q` green. Regenerate `command_catalog.json` only if the *grammar*
    changed (a curated add does not change it).
 

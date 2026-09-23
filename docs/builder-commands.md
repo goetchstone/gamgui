@@ -107,7 +107,10 @@ This is the curated path — required for any write, optional for a read (which 
    `target`), the authoritative `RiskLevel`, and a `build` lambda calling your `GAMCommands` method.
 5. **Add a web test** (`tests/test_builder.py`): the preview shows the assembled `gam …`; a
    destructive command requires confirmation; a read renders a table.
-6. **Read with a new output shape?** Add a `tests/fixtures/mock_gam.sh` branch so the table renders.
+6. **Teach the mock.** `tests/fixtures/mock_gam.sh` fails any argv it has no handler for. A write
+   needs a strict handler that accepts only the shape your builder emits (per the grammar) and fails
+   a malformed one like GAM; a read with a new output shape needs a canned branch. Classify the
+   builder in `tests/test_mock_gam.py` (`WRITES`/`READS`) — that test fails until you do.
 
 The contract test proves the command's *syntax* exists in the pinned GAM — not that it does what you
 expect. Run a destructive command on a throwaway account before trusting it on a real tenant.

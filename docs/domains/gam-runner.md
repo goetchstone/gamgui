@@ -63,6 +63,17 @@ connector runs it through `parse_records`/`parse_one` and `Model.from_json`. Two
   phrasing change silently degrades a kind to `UNKNOWN`. Only the four `MOCKFAIL` kinds in
   `mock_gam.sh` (notfound/scope/rate/auth, plus a generic catch-all) and the six `test_errors.py`
   cases are exercised — real tenants emit far more.
+- **The mock is strict, and must stay so** (2026-09-23). `tests/fixtures/mock_gam.sh` fails any argv
+  it has no handler for (`ERROR: mock: unhandled argv`, exit 2); every write the app issues has a
+  handler that accepts only its grammar shape and fails a malformed one like GAM's usage error
+  (`Missing argument` / `Invalid choice` / `Invalid argument`, exit 2); every call but `version`
+  must find `oauth2service.json` + `oauth2.txt` in `$GAMCFGDIR`; `info user` is keyed on the
+  address (unknown → `Does not exist`). `tests/test_mock_gam.py` is the tripwire: a new
+  `GAMCommands` builder must be classified there, and its shapes must pass the mock. The stderr
+  wording/exit codes are GAM7's conventions written by hand, not a live capture.
+- **Seeing what GAM received:** the `gam_calls` fixture (`tests/conftest.py`) sets
+  `GAM_MOCK_ARGV_LOG`; the mock appends each argv (NUL-separated) and `tests/helpers.py`
+  `read_gam_calls` parses it. `MOCKSLEEP <secs> [pidfile]` hangs on purpose for the timeout path.
 - **CSV `JSON`-column merge.** `_parse_csv` keeps plain sibling columns (owning user/key) and lets
   the JSON blob win on conflict; multi-entity output (`all users print calendars`) depends on this.
   A mock that returns a bare JSON object per row where GAM returns the `key,JSON` CSV would hide a

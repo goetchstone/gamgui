@@ -57,8 +57,10 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
 ## Gotchas / mock-lies traps
 - **`set_vacation` rejects `formatjson`** (see MEMORY / the formatjson gotcha) — the mock can't catch
   that; verify against the vendored grammar `gamgui/resources/gam7/GamCommands.txt`.
-- The mock only 409s when the old-owner email contains the literal `CONFLICT409`, and only emits the
-  own-ACL stderr for `all users delete calendaracls`. It does **not** model real DTS async timing,
+- The mock only 409s when the old-owner email contains the literal `CONFLICT409`. The
+  `all users delete calendaracls` sweep succeeds by default; `OWNACL` in the address emits the exact
+  own-ACL stderr (exit 50, tolerated) and `SWEEPFAIL` a scope error (not tolerated). Every step's
+  write has a strict handler that fails a malformed argv. It does **not** model real DTS async timing,
   partial multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test
   proves classification/argv, not that a live tenant transfers cleanly.
 - `incomplete_transfers_for` reads `overallTransferStatusCode` (falling back to `status`) and treats
