@@ -15,7 +15,8 @@
 #     does a usage error (echo the command, "ERROR: ...", exit 2);
 #   - anything unhandled FAILS. Add a handler for a new command; never make the catch-all succeed.
 # Failure triggers, by argument substring: *missing*/*nonexistent* -> "Does not exist" for the user,
-# group, calendar, event or delegate; *exists* -> 409 on create; plus SENDFAIL, SUBFAIL, CONFLICT409,
+# group, calendar, event or delegate; *exists* -> 409 on create, and "already exists" on a delegate add;
+# plus SENDFAIL, SUBFAIL, CONFLICT409,
 # FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED, SWEEPSLOW, SIGNOUTFAIL, FWDFAIL (see each handler). The stderr wording
 # and exit codes are GAM7's shape (2 usage error, 50 action failed, 51 action not performed, 56 does
 # not exist) written from its source conventions, not captured from a tenant — only a live capture
@@ -60,7 +61,7 @@ not_a_user() {  # <address> <Show|Print>
 }
 need_user() {  # <address> <Show|Print>: a fixture-directory user, or one the mock keeps state for
   in_directory "$1" && return 0
-  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/vacation/$1" ]; then
+  if [ -n "${GAM_MOCK_STATE:-}" ] && { [ -e "$GAM_MOCK_STATE/vacation/$1" ] || [ -e "$GAM_MOCK_STATE/delegates/$1" ]; }; then
     return 0
   fi
   not_a_user "$1" "$2"
@@ -71,6 +72,14 @@ canned_delegates() {  # <user>: each fixture user's own mail delegates, one per 
     carol@example.com) printf 'helpdesk@example.com\n' ;;
   esac
 }
+delegates_of() {  # <user>: the current list — with GAM_MOCK_STATE, the stored one once a write touched it
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/delegates/$1" ]; then
+    cat "$GAM_MOCK_STATE/delegates/$1"
+  else
+    canned_delegates "$1"
+  fi
+}
+has_delegate() { delegates_of "$1" | grep -qixF -- "$2"; }   # Gmail compares addresses case-insensitively
 # `todrive <ToDriveAttribute>*` (grammar 655) after a print/report read: only the attributes the Builder
 # emits (GAMCommands.todrive_args) — tduser <EmailAddress>, tdtitle <String>.
 todrive_tail() {
@@ -338,7 +347,7 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]
   [ $# -eq 4 ] || invalid_arg "$5"
   need_user "$2" Print
   printf 'User,delegateAddress,delegationStatus\n'
-  canned_delegates "$2" | while IFS= read -r d; do
+  delegates_of "$2" | while IFS= read -r d; do
     if [ -n "$d" ]; then printf '%s,%s,accepted\n' "$2" "$d"; fi
   done
   exit 0
@@ -576,6 +585,26 @@ if [ "${1:-}" = "user" ] && { [ "${4:-}" = "delegate" ] || [ "${4:-}" = "delegat
     *missing*|*nonexistent*)
       printf 'User: %s, Delegate: %s, %s Failed: Does not exist\n' "$2" "$delegate" "$verb" 1>&2; exit 50 ;;
   esac
+  # A delegate the user already has: GAM's processDelegates catches Gmail's alreadyExists and reports it
+  # against the pair (entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build; Google's
+  # wording approximate). *exists* is the trigger; a delegate the user has (delegates_of) fails the same way.
+  if [ "$verb" = "Add" ]; then
+    case "$delegate" in *exists*) already=1 ;; *) already="" ;; esac
+    if has_delegate "$2" "$delegate"; then already=1; fi
+    if [ -n "$already" ]; then
+      printf 'User: %s, Delegate: %s, Add Failed: Delegate already exists.\n' "$2" "$delegate" 1>&2; exit 50
+    fi
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then   # keep the list the way Gmail does, for the next print delegates
+    ddir="$GAM_MOCK_STATE/delegates"; mkdir -p "$ddir"
+    [ -f "$ddir/$2" ] || canned_delegates "$2" > "$ddir/$2"
+    if [ "$verb" = "Add" ]; then
+      printf '%s\n' "$delegate" >> "$ddir/$2"
+    else
+      grep -vixF -- "$delegate" "$ddir/$2" > "$ddir/$2.new" || true
+      mv "$ddir/$2.new" "$ddir/$2"
+    fi
+  fi
   echo "User: $2, Delegate: $delegate, ${verb}ed"
   exit 0
 fi

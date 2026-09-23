@@ -112,7 +112,7 @@ the reminder runs without one). What each step does if run again after it succee
 | Reset password | Harmless: `password random` makes a new password each time. | optional |
 | Revoke access & sign out | Harmless: whatever app passwords and tokens are left are deleted, the backup codes are invalidated again, sessions are ended again. | optional |
 | Turn off forwarding | Harmless: `forward off` when it's off changes nothing. **Leave it unticked if "Revoke access" failed** — a session left open could have switched forwarding back on. | optional |
-| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
+| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. The run's ✗ line quotes GAM ("… Add Failed: Delegate already exists."), and the panel says the routine stopped. The mock refuses an add of a delegate the user already has (and any `*exists*` address) the same way, exit 50; end to end, with nothing patched, in `test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_says_why`. Google's exact wording is not captured. | **yes** |
 | Auto-reply | Harmless: the command names every setting (on, subject, message, every sender, no start or end date), so a re-run writes the same reply. GAM itself *merges* `vacation` into the stored settings — see Gotchas. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
 | Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist" and users without Calendar "Calendar Service/App not enabled", both tolerated. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
@@ -218,7 +218,8 @@ parser was read statically (its bytecode, never run). No mismatch found.
 - **Route tests offboard fixture users** (`carol@` leaves, `alice@` takes over): the directory check
   refuses anyone else. The mock's per-user reads answer for that user (`print delegates`: Alice has
   assistant@/backup@, Carol has helpdesk@, Bob none) and fail for an address that isn't one, as GAM
-  does. The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
+  does; with `GAM_MOCK_STATE` (`gam_state`) a delegate added is listed by the next `print delegates`
+  and a second add of it fails "already exists". The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
   they can use any address — including the mock's trigger substrings above.
 - **The transfer names the Drive privacy level `all`.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
   `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser).
@@ -253,7 +254,9 @@ sign-out is a `✗` that stops nothing, `test_offboard_failed_sign_out_is_a_fail
 and the panel then isn't "complete", `test_offboard_a_refused_sign_out_is_a_failed_step_not_a_clean_run`;
 forwarding turned off after the revoke, and its failure stopping nothing,
 `test_offboard_turns_off_forwarding_and_a_failure_stops_nothing`), the re-run ticks
-(`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), the
+(`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning, and the
+delegate step against GAM's "already exists" end to end: preview warning from the mock's read, the
+run stopping at `✗ Set delegate` with GAM's line, the ticked re-run finishing), the
 unreadable-delegates warning (`test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read`),
 one run per leaver (`test_offboard_refuses_a_second_run_for_a_leaver_whose_offboarding_is_running`),
 and the preview's commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received

@@ -234,3 +234,27 @@ async def test_mock_fails_a_per_user_read_of_an_unknown_address_as_gam_does(runn
                                   C.print_calendar_acls("alice@example.com")], ids=lambda a: " ".join(a[:4]))
 async def test_mock_accepts_the_todrive_shapes_the_builder_emits(runner, domain, read, todrive):
     await runner.run_authenticated(domain, read + todrive)
+
+
+@pytest.mark.parametrize("delegate", ["delegate-exists@example.com", "assistant@example.com"])
+async def test_mock_refuses_a_delegate_that_already_exists(runner, domain, delegate):
+    # GAM's processDelegates catches Gmail's alreadyExists and reports it against the pair
+    # (entityActionFailedWarning, ACTION_FAILED_RC), read from the vendored build. *exists* is the
+    # mock's trigger; a delegate the user already has (the `print delegates` data) fails the same way.
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.add_delegate("alice@example.com", delegate), serialize=True)
+    assert ei.value.exit_code == 50
+    assert f"User: alice@example.com, Delegate: {delegate}, Add Failed: Delegate already exists." in ei.value.stderr
+
+
+async def test_mock_delegates_persist_like_gmail_with_state(connector, gam_state):
+    # With GAM_MOCK_STATE the mock keeps each user's delegates the way Gmail does: an add shows in the
+    # next `print delegates`, a second add of the same address fails, and a removal really removes it.
+    alice = "alice@example.com"
+    assert (await connector.add_delegate(alice, "carol@example.com")).ok
+    assert await connector.list_delegates(alice) == ["assistant@example.com", "backup@example.com", "carol@example.com"]
+    again = await connector.add_delegate(alice, "Carol@Example.com")
+    assert not again.ok and "already exists" in again.detail
+    assert (await connector.remove_delegate(alice, "assistant@example.com")).ok
+    assert await connector.list_delegates(alice) == ["backup@example.com", "carol@example.com"]
+    assert (await connector.add_delegate(alice, "assistant@example.com")).ok

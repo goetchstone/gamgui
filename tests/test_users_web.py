@@ -1404,6 +1404,40 @@ def test_offboard_preview_warns_when_the_manager_is_already_a_delegate(client, m
     assert "already has delegate access" not in r.text
 
 
+def test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_says_why(client, gam_calls,
+                                                                                          gam_state):
+    # End to end through the mock, nothing patched: the manager was given access on the user page
+    # first. GAM refuses the second add ("already exists", exit 50) — the preview must predict it from
+    # its own `print delegates` read, the run must stop there and say why, and the re-run with
+    # "Set delegate" ticked must finish the rest.
+    import html
+
+    added = client.post("/users/delegate/add", data={"email": LEAVER, "delegate": MGR})
+    assert f"Added {MGR}." in added.text
+    shown, token = _offboard_preview(client)
+    assert f"{MGR} already has delegate access to {LEAVER}" in html.unescape(shown.text)
+    job = _job(client, _offboard_run(client, token).text, "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    assert job.failed == ["Set delegate"] and job.applied == 3
+    assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
+                           "Remove from everyone's calendars", "30-day reminder for alice@example.com"]
+    text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
+    assert f"✗ Set delegate — GAM failed (unknown, exit=50): User: {LEAVER}, Delegate: {MGR}, Add Failed: " \
+           "Delegate already exists." in text
+    assert "Offboarding stopped" in text and "Don't delete the account" in text
+    assert [w[:4] for w in gam_writes(gam_calls())][-4:] == [
+        ["update", "user", LEAVER, "password"], ["user", LEAVER, "deprovision", "signout"],
+        ["user", LEAVER, "forward", "off"], ["user", LEAVER, "add", "delegate"]]
+    assert _audited(client, 1) == [("add_delegate", LEAVER, False)]
+
+    done = ["password", "revoke", "forward", "delegate"]
+    shown, token = _offboard_preview(client, done=done)
+    assert "already has delegate access" not in shown.text
+    job = _job(client, _offboard_run(client, token, done=done).text, "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    assert (job.applied, job.failed, job.skipped) == (4, [], [])
+
+
 def test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read(client, monkeypatch):
     # The preview's `print delegates` read uses the same Gmail access as the delegate step. Its failure
     # (mail service off, a Gmail scope missing) was swallowed and the preview looked clean — then the
