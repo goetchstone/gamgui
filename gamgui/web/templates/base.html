@@ -57,6 +57,12 @@
             box-shadow: 0 6px 20px rgba(0,0,0,.18); pointer-events: none; }
     #busy.on { display: inline-flex; }
     #busy .spinner { border-color: rgba(255,255,255,.35); border-top-color: #fff; }
+    /* obPrintSheet in the native window: print this page showing only the marked sheet. */
+    @media print {
+      body.print-one * { visibility: hidden; }
+      body.print-one .print-target, body.print-one .print-target * { visibility: visible; }
+      body.print-one .print-target { position: absolute; left: 0; top: 0; width: 100%; }
+    }
   </style>
 </head>
 <body class="h-full bg-paper text-ink font-sans">
@@ -103,12 +109,12 @@
       try { inp.setSelectionRange(n, n); } catch (e) { /* not a text input that supports selection */ }
     }
 
-    // Copy the text of the code/input inside the clicked button's .copy-wrap.
+    // Copy the text of the code/input/textarea inside the clicked button's .copy-wrap.
     function copyEl(btn) {
       var wrap = btn.closest(".copy-wrap") || btn.parentElement;
-      var src = wrap && wrap.querySelector("code, pre, input");
+      var src = wrap && wrap.querySelector("code, pre, input, textarea");
       if (!src) return;
-      var text = src.tagName === "INPUT" ? src.value : src.innerText;
+      var text = (src.tagName === "INPUT" || src.tagName === "TEXTAREA") ? src.value : src.innerText;
       function done() {
         var prev = btn.textContent;
         btn.textContent = "Copied";
@@ -131,6 +137,42 @@
       ta.select();
       try { document.execCommand("copy"); } catch (e) { /* execCommand unsupported; the async clipboard path already handled it */ }
       ta.remove();
+    }
+
+    // Print a one-time credentials sheet (_sheet_buttons.html) on its own. A browser prints a clean copy
+    // from a hidden iframe; WKWebView can't print an iframe (pywebview replaces only the top-level
+    // window.print), so the native window prints this page with the print CSS above showing only it.
+    function obPrintSheet(id) {
+      var sheet = document.getElementById(id);
+      if (!sheet) return;
+      if (window.pywebview) {
+        document.querySelectorAll(".print-target").forEach(function (el) { el.classList.remove("print-target"); });
+        sheet.classList.add("print-target");
+        document.body.classList.add("print-one");
+        window.print();
+        return;
+      }
+      var f = document.createElement("iframe");
+      f.setAttribute("aria-hidden", "true");
+      f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+      document.body.appendChild(f);
+      var d = f.contentWindow.document;
+      d.open();
+      d.write('<html><head><title>New account credentials</title><style>' +
+        'body{font:13px -apple-system,system-ui,sans-serif;padding:32px;color:#111}h2{font-size:16px}' +
+        'dl{display:grid;grid-template-columns:8rem 1fr;row-gap:8px;column-gap:16px}' +
+        'dt{color:#555}dd{margin:0;font-family:ui-monospace,monospace}p{color:#555;margin-top:20px}' +
+        '.sheet-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
+        '.sheet-cards>div{border:1px solid #ccc;border-radius:8px;padding:10px;line-height:1.6;break-inside:avoid}' +
+        '.sheet-cards>div>div{font-family:ui-monospace,monospace}' +
+        '.sheet-cards>div>div:first-child{font-family:-apple-system,system-ui,sans-serif;font-weight:600}' +
+        '.sheet-cards>div>div:nth-child(3){font-size:15px;font-weight:700}' +
+        '.sheet-cards>div>div:last-child{color:#555;font-size:11px}</style></head>' +
+        '<body><h2>New account credentials</h2>' + sheet.outerHTML + '</body></html>');
+      d.close();
+      f.contentWindow.focus();
+      f.contentWindow.print();
+      setTimeout(function () { f.remove(); }, 1500);
     }
 
     // Global activity indicators: a top bar + a "Working…" pill, shown during HTMX requests and

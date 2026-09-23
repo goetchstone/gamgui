@@ -1,0 +1,10 @@
+{# Copy + Print for a one-time credentials sheet (single and bulk onboarding). Copy is the path that
+   works everywhere — WKWebView may not print, and pywebview disables text selection. The plain-text
+   copy lives in a hidden textarea (element content, autoescaped — never an attribute). #}
+{% macro sheet_buttons(sheet_id, copy_text) -%}
+<span class="copy-wrap flex shrink-0 gap-2">
+  <textarea hidden aria-hidden="true">{{ copy_text }}</textarea>
+  <button type="button" onclick="copyEl(this)" class="rounded-lg border border-brand-blue px-3 py-1.5 text-xs text-brand-blueink hover:bg-brand-blue/10">Copy</button>
+  <button type="button" onclick="obPrintSheet('{{ sheet_id }}')" class="rounded-lg border border-brand-blue px-3 py-1.5 text-xs text-brand-blueink hover:bg-brand-blue/10">Print / Save PDF</button>
+</span>
+{%- endmacro %}

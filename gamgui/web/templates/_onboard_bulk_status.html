@@ -1,3 +1,4 @@
+{% from "_sheet_buttons.html" import sheet_buttons %}
 {% if job is none %}
 <div class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">That bulk job is no longer available.</div>
 {% else %}
@@ -31,16 +32,22 @@
     </details>
     {% endif %}
     {% if credentials %}
+    {% set copy_text %}{% for c in credentials %}Name: {{ c.name }}
+Email: {{ c.email }}
+Temp password: {{ c.password }}
+Org unit: {{ c.org_unit }}
+
+{% endfor %}Sign in at accounts.google.com — Google will require a new password at first login.{% endset %}
     <div id="ob-bulk-creds" class="rounded-xl border-2 border-brand-blue/40 bg-brand-white p-3">
       <div class="flex items-center justify-between gap-3">
         <h4 class="font-medium text-brand-black">Printable credentials — {{ credentials | length }} account{{ '' if credentials | length == 1 else 's' }}</h4>
         <div class="flex shrink-0 gap-2">
-          <button type="button" onclick="obPrintBulkCreds()" class="rounded-lg border border-brand-blue px-3 py-1.5 text-xs text-brand-blueink hover:bg-brand-blue/10">Print / Save PDF</button>
+          {{ sheet_buttons("ob-bulk-creds-sheet", copy_text) }}
           <button type="button" hx-post="/onboard/bulk/done" hx-vals='{"job": "{{ job.id }}"}' hx-target="#onboard-bulk-job" hx-swap="outerHTML" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs text-brand-gray hover:bg-brand-gray/10">Done — I saved it</button>
         </div>
       </div>
-      <p class="mt-1 text-xs text-brand-gray">Print or save now — kept for <strong>15 minutes</strong> or until you click Done, then never shown again. Not emailed or written to the audit log. ({{ job.notified }} with a notify address were emailed their sign-in info by GAM instead.) Each must reset at first login; if lost, reset the password in the Admin console.</p>
-      <div id="ob-bulk-creds-sheet" class="mt-2 grid gap-2 sm:grid-cols-2">
+      <p class="mt-1 text-xs text-brand-gray">Copy, print or save now — kept for <strong>15 minutes</strong> or until you click Done, then never shown again. Not emailed or written to the audit log. ({{ job.notified }} with a notify address were emailed their sign-in info by GAM instead.) Each must reset at first login; if lost, reset the password in the Admin console.</p>
+      <div id="ob-bulk-creds-sheet" class="sheet-cards mt-2 grid gap-2 sm:grid-cols-2">
         {% for c in credentials %}
         <div class="rounded-lg border border-brand-gray/30 p-2 text-xs">
           <div class="text-brand-black">{{ c.name }}</div>
@@ -51,32 +58,6 @@
         {% endfor %}
       </div>
     </div>
-    <script>
-      function obPrintBulkCreds() {
-        var sheet = document.getElementById("ob-bulk-creds-sheet");
-        if (!sheet) return;
-        var f = document.createElement("iframe");
-        f.setAttribute("aria-hidden", "true");
-        f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-        document.body.appendChild(f);
-        var d = f.contentWindow.document;
-        d.open();
-        d.write('<html><head><title>New account credentials</title><style>' +
-          'body{font:13px -apple-system,system-ui,sans-serif;padding:32px;color:#111}' +
-          'h2{font-size:16px}.g{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
-          '.g>div{border:1px solid #ccc;border-radius:8px;padding:10px;line-height:1.6;break-inside:avoid}' +
-          '.g>div>div{font-family:ui-monospace,monospace}' +
-          '.g>div>div:first-child{font-family:-apple-system,system-ui,sans-serif;font-weight:600}' +
-          '.g>div>div:nth-child(3){font-size:15px;font-weight:700}' +
-          '.g>div>div:last-child{color:#555;font-size:11px}</style></head>' +
-          '<body><h2>New account credentials</h2><div class="g">' +
-          sheet.innerHTML + '</div></body></html>');
-        d.close();
-        f.contentWindow.focus();
-        f.contentWindow.print();
-        setTimeout(function () { f.remove(); }, 1500);
-      }
-    </script>
     {% endif %}
   {% endif %}
 </div>
