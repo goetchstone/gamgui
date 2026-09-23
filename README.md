@@ -66,10 +66,10 @@ You build and run it yourself; it is not yet notarized for distribution to other
 > **Destructive actions are guarded — but check what has actually been proven live.** Suspend,
 > account delete, calendar/event delete, data transfer, the offboarding routine, and bulk operations
 > all run behind a *preview → confirmation → audit-logged* path (typed for account and calendar
-> delete and for a destructive bulk run), and the server refuses a request that skipped the
-> confirmation — the page asking is not enough. That guard is well covered by
-> tests; what tests cannot prove is that a given GAM command behaves as expected against a real
-> tenant. See [Live verification status](#live-verification-status) for which writes have been
+> delete, a destructive bulk run, and a signature apply to more than 25 people), and the server
+> refuses a request that skipped the confirmation — the page asking is not enough. That guard is
+> well covered by tests; what tests cannot prove is that a given GAM command behaves as expected
+> against a real tenant. See [Live verification status](#live-verification-status) for which writes have been
 > confirmed against a production domain and which have not — and run anything in the second list
 > once on a **throwaway user/event/calendar** before you rely on it. Account deletion is reversible
 > only within Google's ~20-day window. GamGUI is provided **as-is under the MIT License, with no
@@ -294,8 +294,9 @@ fail-closed runbook, not by a bot.
 
 The **Signatures** screen designs one HTML signature with variables, previews it rendered for a real
 person, and applies it in bulk — scoped to a single user (for testing), a group, an org unit, a
-department, a location, or the whole company. Each user's current signature is also shown *rendered*
-on their detail page.
+department, a location, or the whole company. It opens on a single user, so the first apply is a
+test; applying to more than 25 people asks you to type how many, and the server checks that count
+too. Each user's current signature is also shown *rendered* on their detail page.
 
 **Template variables** (filled per user from the directory):
 `{name}` `{first}` `{last}` `{email}` `{title}` (`{role}` is an alias) `{phone}` `{department}`

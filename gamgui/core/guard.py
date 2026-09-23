@@ -2,7 +2,8 @@
 
 :func:`evaluate` decides, from the :class:`ChangePreview` list a mutation would make: destructive →
 a Confirm click; bulk (>= ``DEFAULT_BULK_THRESHOLD``) → a Confirm click; destructive *and* bulk →
-the operator types "confirm". It is pure, and a template renders its decision.
+the operator types "confirm"; and, for a route that opts in with ``typed_count_above``, more targets
+than that → the operator types how many. It is pure, and a template renders its decision.
 
 :func:`enforce` is the server-side half, and the one that counts: a mutating route calls it with the
 posted form before its first GAM write and refuses when the form lacks what the decision requires.
@@ -26,11 +27,15 @@ from .connectors.base import ChangePreview, ConnectorID, RiskLevel
 DEFAULT_BULK_THRESHOLD = 10
 # Above this count we additionally flag the operation as unusually large.
 DEFAULT_HARD_CAP = 200
+# Above this count, a route that opts in (``typed_count_above=``) makes the operator type the count: a
+# number read off the preview, so a mis-scoped overwrite of many accounts can't be clicked through.
+COUNT_CONFIRM_ABOVE = 25
 
 # What a confirm step posts back — the templates must send exactly these, and `enforce` checks them.
 CONFIRMED_FIELD = "confirmed"   # the Confirm button (hx-vals) or a hidden input: "1"
 TYPED_FIELD = "confirm"         # a destructive bulk change: the operator types TYPED_WORD
 TYPED_WORD = "confirm"
+COUNT_FIELD = "confirm_count"   # a large opted-in change: the operator types the affected count
 
 
 @dataclass
@@ -42,6 +47,7 @@ class GuardDecision:
     over_hard_cap: bool
     summary: str
     warnings: List[str] = field(default_factory=list)
+    requires_typed_count: bool = False
 
     @property
     def affected_count(self) -> int:
@@ -52,6 +58,7 @@ def evaluate(
     previews: Sequence[ChangePreview],
     bulk_threshold: int = DEFAULT_BULK_THRESHOLD,
     hard_cap: int = DEFAULT_HARD_CAP,
+    typed_count_above: Optional[int] = None,
 ) -> GuardDecision:
     """Decide the confirmation policy for a planned set of changes."""
     if not previews:
@@ -99,6 +106,7 @@ def evaluate(
         over_hard_cap=over_hard_cap,
         summary=summary,
         warnings=warnings,
+        requires_typed_count=typed_count_above is not None and count > typed_count_above,
     )
 
 
@@ -110,16 +118,21 @@ def changes(targets: Iterable[str], risk: RiskLevel, summary: str) -> List[Chang
 
 
 def enforce(previews: Sequence[ChangePreview], form: Mapping[str, Any], *,
-            confirm_step: bool = False) -> Optional[str]:
+            confirm_step: bool = False, typed_count_above: Optional[int] = None) -> Optional[str]:
     """Why ``form`` may not run ``previews`` (an operator-facing message), or None when it may.
 
     ``confirm_step`` is for a route whose UI always previews first (a bulk job, a multi-step
-    routine): it needs ``confirmed=1`` whatever the count or risk.
+    routine): it needs ``confirmed=1`` whatever the count or risk. ``typed_count_above`` also asks,
+    above that many targets, for the count typed — the count the server resolved *now*, so a scope
+    that grew since the preview is refused rather than run on the operator's older number.
     """
-    decision = evaluate(previews)
+    decision = evaluate(previews, typed_count_above=typed_count_above)
     if decision.requires_typed_confirmation:
         if str(form.get(TYPED_FIELD) or "").strip().lower() != TYPED_WORD:
             return "Type confirm to run this destructive bulk change."
     elif (decision.requires_confirmation or confirm_step) and form.get(CONFIRMED_FIELD) != "1":
         return "This change needs confirmation — preview it, then confirm."
+    n = decision.affected_count
+    if decision.requires_typed_count and str(form.get(COUNT_FIELD) or "").strip() != str(n):
+        return f"This changes {n} accounts: preview again, and type {n} to confirm."
     return None

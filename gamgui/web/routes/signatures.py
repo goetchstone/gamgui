@@ -103,6 +103,11 @@ async def _matched(st, users, scope_type: str, scope_value: str):
     return sig.match_scope(users, scope_type, scope_value)
 
 
+def _previews(matched):
+    """What an apply changes, for the guard: it overwrites each matched signature (no backup)."""
+    return guard.changes([u.primary_email for u in matched], RiskLevel.LOW, "Set signature")
+
+
 def _prune_jobs(st, keep: int = 10) -> None:
     """Drop the oldest finished jobs so the registry can't grow without bound."""
     finished = [jid for jid, j in st.jobs.items() if j.finished]
@@ -151,7 +156,7 @@ async def page(request: Request) -> HTMLResponse:
 async def preview(
     request: Request,
     template: Annotated[str, Form()] = "",
-    scope_type: Annotated[str, Form()] = "company",
+    scope_type: Annotated[str, Form()] = "user",
     scope_value: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
@@ -163,10 +168,12 @@ async def preview(
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": _friendly(exc)})
     matched = await _matched(st, users, scope_type, scope_value)
     sample = matched[0] if matched else None
+    decision = guard.evaluate(_previews(matched), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
     return TEMPLATES.TemplateResponse(
         request, _PREVIEW_PARTIAL,
         {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),
-         "sample": sample, "warning": sig.smart_quote_warning(template)},
+         "sample": sample, "warning": sig.smart_quote_warning(template),
+         "typed_count": decision.requires_typed_count},
     )
 
 
@@ -174,7 +181,7 @@ async def preview(
 async def apply(
     request: Request,
     template: Annotated[str, Form()] = "",
-    scope_type: Annotated[str, Form()] = "company",
+    scope_type: Annotated[str, Form()] = "user",
     scope_value: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
@@ -187,9 +194,9 @@ async def apply(
     matched = await _matched(st, users, scope_type, scope_value)
     if not matched:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "No active users match this scope."})
-    # Overwrites every matched signature (no backup): only via the preview's Apply button.
-    previews = guard.changes([u.primary_email for u in matched], RiskLevel.LOW, "Set signature")
-    refusal = guard.enforce(previews, await request.form(), confirm_step=True)
+    # Only via the preview's Apply button, and over COUNT_CONFIRM_ABOVE people with the count typed.
+    refusal = guard.enforce(_previews(matched), await request.form(), confirm_step=True,
+                            typed_count_above=guard.COUNT_CONFIRM_ABOVE)
     if refusal:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
 

@@ -229,6 +229,44 @@ def test_signatures_apply_empty_scope_is_friendly(client):
     assert "apply/status" not in r.text
 
 
+def test_signatures_designer_defaults_to_one_user(client, gam_calls):
+    # The designer once opened on "Whole company": Preview → Apply overwrote everyone. Now it opens on
+    # a single test user, and a POST that names no scope reaches nobody.
+    r = client.get("/signatures")
+    first = re.search(r'<select name="scope_type"[^>]*>\s*<option value="(\w+)"', r.text)
+    assert first and first.group(1) == "user", r.text[:300]
+    r = client.post("/signatures/preview", data={"template": "{name}"})
+    assert "Applies to <strong>0</strong>" in r.text
+    r = client.post("/signatures/apply", data={"template": "{name}", "confirmed": "1"})
+    assert "No active users match this scope." in r.text and "apply/status" not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_signatures_apply_over_the_threshold_needs_the_count_typed(client, gam_calls, monkeypatch):
+    from gamgui.core import guard
+
+    monkeypatch.setattr(guard, "COUNT_CONFIRM_ABOVE", 1)     # the fixture tenant has two active users
+    body = {"template": "{name}", "scope_type": "company", "scope_value": ""}
+    shown = client.post("/signatures/preview", data=body).text
+    button = re.search(r'<button id="sig-apply-btn"[^>]*>', shown).group(0)
+    assert 'name="confirm_count"' in shown and "Type <strong>2</strong>" in shown
+    assert re.search(r"\sdisabled[\s>]", button) and "hx-confirm" not in button and "#sig-confirm-count" in button
+    for typed in ({}, {"confirm_count": "3"}, {"confirm_count": "all"}):   # the click alone is not enough
+        r = client.post("/signatures/apply", data={**body, "confirmed": "1", **typed})
+        assert "type 2 to confirm" in r.text and "apply/status" not in r.text, r.text[:300]
+    assert gam_writes(gam_calls()) == []
+    r = client.post("/signatures/apply", data={**body, "confirmed": "1", "confirm_count": "2"})
+    wait_for_job(client, _job(client, r.text, "/signatures/apply/status"))
+    assert [c[1] for c in gam_writes(gam_calls())] == ["alice@example.com", "carol@example.com"]
+
+
+def test_signatures_apply_under_the_threshold_keeps_the_click_confirm(client):
+    shown = client.post("/signatures/preview", data={"template": "{name}", "scope_type": "company"}).text
+    button = re.search(r'<button id="sig-apply-btn"[^>]*>', shown).group(0)
+    assert 'name="confirm_count"' not in shown and "hx-confirm=" in button
+    assert not re.search(r"\sdisabled[\s>]", button)
+
+
 def test_signatures_apply_status_unknown_job(client):
     r = client.get("/signatures/apply/status", params={"job": "nope"})
     assert r.status_code == 200

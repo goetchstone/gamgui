@@ -69,3 +69,19 @@ def test_enforce_single_low_write_needs_nothing_unless_it_has_a_confirm_step():
     assert guard.enforce(one, {}) is None
     assert guard.enforce(one, {}, confirm_step=True)      # a bulk job / routine always previews first
     assert guard.enforce(one, {"confirmed": "1"}, confirm_step=True) is None
+
+
+def test_enforce_typed_count_only_above_the_opted_in_threshold():
+    # A large signature overwrite: the operator types how many people it changes, on top of the click.
+    few = guard.changes([f"u{i}@e.com" for i in range(3)], RiskLevel.LOW, "Set signature")
+    many = guard.changes([f"u{i}@e.com" for i in range(4)], RiskLevel.LOW, "Set signature")
+    assert not guard.evaluate(few, typed_count_above=3).requires_typed_count
+    assert guard.evaluate(many, typed_count_above=3).requires_typed_count
+    assert not guard.evaluate(many).requires_typed_count                # opt-in only
+    assert guard.enforce(few, {"confirmed": "1"}, confirm_step=True, typed_count_above=3) is None
+    assert guard.enforce(many, {"confirmed": "1"}, confirm_step=True, typed_count_above=3)
+    assert guard.enforce(many, {"confirmed": "1", "confirm_count": "3"}, confirm_step=True,
+                         typed_count_above=3)                           # a stale or wrong count
+    assert guard.enforce(many, {"confirm_count": "4"}, confirm_step=True, typed_count_above=3)  # and the click
+    assert guard.enforce(many, {"confirmed": "1", "confirm_count": " 4 "}, confirm_step=True,
+                         typed_count_above=3) is None
