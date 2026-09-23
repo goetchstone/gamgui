@@ -16,6 +16,8 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
+from .helpers import assert_ok_partial, gam_writes, wait_for_job
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
 
@@ -352,10 +354,16 @@ def test_destructive_run_requires_confirmed_flag(client):
     assert "Delete account" in ok.text and "done" in ok.text
 
 
-def test_run_mutation_goes_through_guard_and_audit(client):
+def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
     r = client.post("/builder/run", data={"cid": "build.set_signature",
                                           "email": "alice@example.com", "signature": "Hi"})
-    assert r.status_code == 200 and "Set Gmail signature" in r.text
+    assert_ok_partial(r)
+    assert "Set Gmail signature — done" in r.text
+    argv = ["user", "alice@example.com", "signature", "Hi", "html"]
+    assert gam_writes(gam_calls()) == [argv]
+    rec = client.app.state.gamgui.connector.audit.tail()[-1]
+    assert (rec["action"], rec["target"], rec["ok"]) == ("apply", "alice@example.com", True)
+    assert rec["argv"] == ["user", "alice@example.com", "signature", "***redacted***", "html"]  # body kept out of the log
 
 
 def test_run_read_command_renders_table(client):
@@ -408,17 +416,28 @@ def test_browse_only_command_cannot_run(client):
     assert "run it in GAM" in r.text          # refused (apostrophe in "can't" is HTML-escaped)
 
 
-def test_sequence_add_remove_and_run(client):
+def test_sequence_add_remove_and_run(client, gam_calls):
     client.post("/builder/sequence/add", data={"cid": "build.set_signature",
                                                "email": "alice@example.com", "signature": "Hi"})
     r = client.post("/builder/sequence/add", data={"cid": "build.add_delegate",
                                                    "email": "alice@example.com", "delegate": "bob@example.com"})
     assert "Set Gmail signature" in r.text and "Add mailbox delegate" in r.text
     run = client.post("/builder/sequence/run")
-    # Assert the run STARTED (a polling panel). We don't poll the bg job to completion under
-    # TestClient — that task + subprocess can deadlock; per-step execution is covered deterministically
-    # by test_run_sequence_executor_applies_each below.
-    assert re.search(r"/builder/sequence/status\?job=[A-Za-z0-9_\-]+", run.text), run.text[:200]
+    m = re.search(r"/builder/sequence/status\?job=([A-Za-z0-9_\-]+)", run.text)
+    assert m, run.text[:200]
+    # Await the job on the client's own loop (never poll the status endpoint), then check each step
+    # really ran and was accepted — a failed step also advances `done`.
+    job = client.app.state.gamgui.jobs[m.group(1)]
+    wait_for_job(client, job)
+    assert (job.applied, job.failed) == (2, [])
+    assert gam_writes(gam_calls()) == [
+        ["user", "alice@example.com", "signature", "Hi", "html"],
+        ["user", "alice@example.com", "add", "delegate", "bob@example.com"],
+    ]
+    assert [e["ok"] for e in client.app.state.gamgui.connector.audit.tail()[-2:]] == [True, True]
+    done = client.get("/builder/sequence/status", params={"job": job.id})
+    assert_ok_partial(done)
+    assert "Sequence complete — 2 of 2 steps succeeded." in done.text
 
 
 @pytest.mark.asyncio

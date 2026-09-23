@@ -14,8 +14,22 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
+from .helpers import assert_ok_partial, gam_writes, wait_for_job
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
+
+
+def _audited(client, n):
+    """The last ``n`` audit records as (action, target, ok) — what the chokepoint says happened."""
+    return [(e["action"], e["target"], e["ok"]) for e in client.app.state.gamgui.connector.audit.tail()[-n:]]
+
+
+def _job(client, html, path):
+    """The background job a route just started, found by the status URL in its polling panel."""
+    m = re.search(path + r"\?job=([A-Za-z0-9_\-]+)", html)
+    assert m, html[:300]
+    return client.app.state.gamgui.jobs[m.group(1)]
 
 
 @pytest.fixture
@@ -95,11 +109,18 @@ def test_vacation_get_renders_current_state(client):
     assert "Save auto-reply" in r.text
 
 
-def test_vacation_set_and_off(client):
+def test_vacation_set_and_off(client, gam_calls):
     r = client.post("/users/vacation/set", data={"email": "alice@example.com", "subject": "OOO", "message": "away"})
-    assert r.status_code == 200
+    assert_ok_partial(r)
+    assert "Save auto-reply" in r.text                # the refreshed vacation form, not an error
     r2 = client.post("/users/vacation/off", data={"email": "alice@example.com"})
-    assert r2.status_code == 200
+    assert_ok_partial(r2)
+    assert gam_writes(gam_calls()) == [
+        ["user", "alice@example.com", "vacation", "on", "subject", "OOO", "message", "away", "html"],
+        ["user", "alice@example.com", "vacation", "off"],
+    ]
+    assert _audited(client, 2) == [("set_vacation", "alice@example.com", True),
+                                   ("clear_vacation", "alice@example.com", True)]
 
 
 def test_users_list_has_title_column(client):
@@ -127,14 +148,27 @@ def test_groups_board_renders(client):
     assert "sales@example.com" in r.text        # group option
 
 
-def test_groups_board_members_view_and_mutate(client):
+def test_groups_board_members_view_and_mutate(client, gam_calls):
     r = client.get("/groups/members", params={"group": "sales@example.com"})
     assert r.status_code == 200
     assert "alice@example.com" in r.text        # member from the group-members fixture
     add = client.post("/groups/members", data={"group": "sales@example.com", "email": "carol@example.com", "op": "add"})
-    assert add.status_code == 200
+    assert_ok_partial(add)
     rem = client.post("/groups/members", data={"group": "sales@example.com", "email": "alice@example.com", "op": "remove"})
-    assert rem.status_code == 200
+    assert_ok_partial(rem)
+    assert gam_writes(gam_calls()) == [
+        ["update", "group", "sales@example.com", "add", "member", "carol@example.com"],
+        ["update", "group", "sales@example.com", "remove", "alice@example.com"],
+    ]
+    assert _audited(client, 2) == [("add_group_member", "carol@example.com", True),
+                                   ("remove_group_member", "alice@example.com", True)]
+
+
+def test_groups_board_mutate_failure_shows_the_error(client):
+    # A typo'd group 404s in GAM; the board must say so rather than re-render as if it worked.
+    r = client.post("/groups/members", data={"group": "missing@example.com", "email": "carol@example.com", "op": "add"})
+    assert "border-amber-300 bg-amber-50" in r.text and "not found" in r.text
+    assert _audited(client, 1) == [("add_group_member", "carol@example.com", False)]
 
 
 def test_usage_report_renders(client):
@@ -169,9 +203,22 @@ def _start_apply(client, body):
     return r
 
 
-def test_signatures_apply(client):
+def test_signatures_apply(client, gam_calls):
     r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
     assert "Applying signature" in r.text
+    job = _job(client, r.text, "/signatures/apply/status")
+    wait_for_job(client, job)
+    # Every active user (bob is suspended) got their own rendered signature, and GAM accepted each.
+    assert (job.applied, job.failed_total, job.error) == (2, 0, None)
+    assert gam_writes(gam_calls()) == [
+        ["user", "alice@example.com", "signature", "Alice Anders", "html"],
+        ["user", "carol@example.com", "signature", "Carol Clark", "html"],
+    ]
+    assert _audited(client, 2) == [("set_signature", "alice@example.com", True),
+                                   ("set_signature", "carol@example.com", True)]
+    done = client.get("/signatures/apply/status", params={"job": job.id})
+    assert_ok_partial(done)
+    assert "Applied to 2 of 2 users." in done.text
 
 
 def test_signatures_apply_empty_scope_is_friendly(client):
@@ -278,15 +325,21 @@ def test_signature_current_renders(client):
     assert "copy-wrap" in r.text and 'onclick="copyEl(this)"' in r.text and "Copy HTML" in r.text
 
 
-def test_user_groups_view_add_remove(client):
+def test_user_groups_view_add_remove(client, gam_calls):
     r = client.get("/users/groups", params={"email": "alice@example.com"})
     assert r.status_code == 200
     assert "sales@example.com" in r.text            # current membership
     assert "it@example.com" in r.text               # available group in the add picker
     add = client.post("/users/groups/add", data={"email": "alice@example.com", "group": "it@example.com"})
-    assert add.status_code == 200
+    assert_ok_partial(add)
     rem = client.post("/users/groups/remove", data={"email": "alice@example.com", "group": "sales@example.com"})
-    assert rem.status_code == 200
+    assert_ok_partial(rem)
+    assert gam_writes(gam_calls()) == [
+        ["update", "group", "it@example.com", "add", "member", "alice@example.com"],
+        ["update", "group", "sales@example.com", "remove", "alice@example.com"],
+    ]
+    assert _audited(client, 2) == [("add_group_member", "alice@example.com", True),
+                                   ("remove_group_member", "alice@example.com", True)]
 
 
 def test_suspended_user_detail_shows_unsuspend(client):
@@ -343,14 +396,19 @@ def test_bulk_store_apply_requires_store_value(client):
     assert "Enter a store/department value" in r.text
 
 
-def test_bulk_store_apply_runs_as_job(client):
-    import re
-
-    r = client.post("/users/bulk/apply", data={"store": "Old Saybrook", "group": "", "emails": "alice@example.com"})
-    assert r.status_code == 200
-    # Assert the run STARTED (a polling panel). We don't poll the bg job to completion under
-    # TestClient — it can deadlock; completion is covered by the deterministic executor test below.
-    assert re.search(r"/users/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
+def test_bulk_store_apply_runs_as_job(client, gam_calls):
+    r = client.post("/users/bulk/apply", data={"store": "Downtown", "group": "", "emails": "alice@example.com"})
+    assert_ok_partial(r)
+    job = _job(client, r.text, "/users/bulk/status")
+    wait_for_job(client, job)
+    # Department set to the store, alice's existing title kept — and GAM accepted it.
+    assert (job.applied, job.failed, job.error) == (1, [], None)
+    assert gam_writes(gam_calls()) == [
+        ["update", "user", "alice@example.com", "organization", "title", "IT Director",
+         "department", "Downtown", "primary"],
+    ]
+    assert _audited(client, 1) == [("set_organization", "alice@example.com", True)]
+    assert_ok_partial(client.get("/users/bulk/status", params={"job": job.id}))
 
 
 async def test_run_bulk_store_preserves_title_and_sets_department():
@@ -815,22 +873,47 @@ def test_lifecycle_preview_shows_autoreply_block(client):
     assert "Alice Anders is no longer with the company" in r.text
 
 
-def test_lifecycle_offboard_run_starts(client):
-    # The route starts the routine and returns a polling panel. We do NOT poll the background job to
-    # completion under TestClient — that bg task + subprocess can deadlock intermittently (it hung CI
-    # for 6h). Step execution is covered deterministically by the executor test below.
-    import re
+OFFBOARD_AUDIT = ["reset_password", "add_delegate", "set_vacation", "transfer_data",
+                  "remove_from_all_calendars", "add_calendar_event"]
 
+
+def _offboard_writes(calls):
+    """The offboarding writes, trimmed to their command heads (the long texts are checked elsewhere)."""
+    return [c[:5] for c in gam_writes(calls)]
+
+
+OFFBOARD_WRITES = [
+    ["update", "user", "leaver@example.com", "password", "random"],
+    ["user", "leaver@example.com", "signout"],                       # reset_password's follow-up
+    ["user", "leaver@example.com", "add", "delegate", "mgr@example.com"],
+    ["user", "leaver@example.com", "vacation", "on", "subject"],
+    ["create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com"],
+    ["all", "users", "delete", "calendaracls", "primary"],
+    ["user", "mgr@example.com", "add", "event", "primary"],
+]
+
+
+def test_lifecycle_offboard_run_starts(client, gam_calls):
+    # The route starts the routine and returns a polling panel. The job is awaited on the client's
+    # own loop (not by polling the status endpoint — that hung CI for 6h before the fixtures were
+    # context-managed), then the finished panel is rendered once.
     r = client.post("/lifecycle/offboard/run",
                     data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
-    assert r.status_code == 200
-    assert re.search(r"/lifecycle/offboard/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
+    assert_ok_partial(r)
+    job = _job(client, r.text, "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    assert (job.applied, job.failed) == (6, [])
+    assert _offboard_writes(gam_calls()) == OFFBOARD_WRITES
+    assert [(a, ok) for a, _, ok in _audited(client, 6)] == [(a, True) for a in OFFBOARD_AUDIT]
+    done = client.get("/lifecycle/offboard/status", params={"job": job.id})
+    assert_ok_partial(done)
+    assert "Offboarding complete — 6 of 6 steps succeeded." in done.text
 
 
 @pytest.mark.asyncio
-async def test_offboard_executor_runs_every_step(connector):
-    # Run the offboard step-runner directly (the reliable path) and confirm it drives all steps to
-    # completion — the coverage the flaky polling loop used to give, without the deadlock risk.
+async def test_offboard_executor_runs_every_step(connector, gam_calls):
+    # Run the offboard step-runner directly and confirm every step SUCCEEDED — not just that the loop
+    # reached the end (a step that fails still counts toward `done`).
     from datetime import date
 
     from gamgui.core import lifecycle
@@ -841,6 +924,11 @@ async def test_offboard_executor_runs_every_step(connector):
     job = start_job({}, len(steps))
     await _run_offboard(job, connector, steps)
     assert job.finished and job.done == len(steps)
+    assert (job.applied, job.failed) == (len(steps), [])
+    assert all(line.startswith("✓ ") for line in job.log), job.log
+    assert _offboard_writes(gam_calls()) == OFFBOARD_WRITES
+    audit = connector.audit.tail()
+    assert [e["action"] for e in audit] == OFFBOARD_AUDIT and all(e["ok"] for e in audit)
 
 
 def test_delete_zone_shows_button_then_typed_confirm(client):
@@ -873,6 +961,20 @@ def test_delete_confirm_no_warning_when_transfers_done(client):
     r = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
     assert "Data transfer still in progress" not in r.text
     assert "Permanently delete" in r.text   # the confirm form still renders
+
+
+def test_remove_delegate_returns_list(client, gam_calls):
+    r = client.post("/users/delegate/remove", data={"email": "alice@example.com", "delegate": " assistant@example.com "})
+    assert_ok_partial(r)
+    assert "Remove" in r.text                         # the refreshed delegate list
+    assert gam_writes(gam_calls()) == [["user", "alice@example.com", "delete", "delegate", "assistant@example.com"]]
+    assert _audited(client, 1) == [("remove_delegate", "alice@example.com", True)]
+
+
+def test_remove_delegate_failure_is_reported(client):
+    r = client.post("/users/delegate/remove", data={"email": "alice@example.com", "delegate": "missing@example.com"})
+    assert "remove delegate: GAM failed (not_found" in r.text   # "Couldn't" — apostrophe is escaped
+    assert _audited(client, 1) == [("remove_delegate", "alice@example.com", False)]
 
 
 def test_set_signature(client):

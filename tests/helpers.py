@@ -39,6 +39,15 @@ def read_gam_calls(log: Path) -> List[List[str]]:
     return [c for c in calls if c != ["version"]]
 
 
+_READ_VERBS = {"print", "show", "info", "report", "check"}
+
+
+def gam_writes(calls: List[List[str]]) -> List[List[str]]:
+    """Just the mutating calls: a read names its verb in the first three tokens (`print users`,
+    `user x show vacation`, `calendars x print events`, `all users print calendars`)."""
+    return [c for c in calls if not _READ_VERBS & set(c[:3])]
+
+
 def wait_for_job(client, job, timeout: float = 10.0) -> None:
     """Await a route-started background job on the TestClient's own event loop.
 

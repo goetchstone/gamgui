@@ -54,7 +54,7 @@ def connector(runner: GAMRunner, tmp_path: Path) -> GAMConnector:
 
 @pytest.fixture
 def gam_calls(tmp_path: Path, monkeypatch):
-    """Record every argv the mock `gam` receives; call the fixture to read them (oldest first)."""
+    """Record every argv the mock `gam` receives from here on; call the fixture to read them."""
     from .helpers import read_gam_calls
 
     log = tmp_path / "gam_argv.log"

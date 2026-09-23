@@ -40,8 +40,12 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
   materialized `oauth2service.json`/`oauth2.txt`; the sweep succeeds unless `OWNACL`/`SWEEPFAIL`.
 - **Prevention:** `tests/test_mock_gam.py` — every `GAMCommands` builder must be classified, each
   emitted shape must pass the mock, and malformed shapes (no `doit`, bad role, missing value,
-  unhandled argv) must fail. Still not proof GAM accepts a write — the handlers' stderr/exit codes
-  are GAM7's conventions written by hand; only Phase 8 live captures prove them.
+  unhandled argv) must fail. The nine web tests that passed on a failed write now assert real
+  success — `tests/helpers.py` `assert_ok_partial` (no amber error box), the argv the mock received
+  (`gam_calls`), the audit `ok`, and route-started jobs awaited with `wait_for_job` — and were
+  checked by failing every write in the mock: all went red. Still not proof GAM accepts a write —
+  the handlers' stderr/exit codes are GAM7's conventions written by hand; only Phase 8 live
+  captures prove them.
 
 ## 2026-09-23 — The framework's hooks were talking to nobody
 
