@@ -10,12 +10,14 @@ owned by `core/secrets/`) and #2 (the mutation chokepoint runs *through* this ru
 `gam_connector.py`).
 **Enforcement home:** `tests/test_runner.py`, `tests/test_errors.py`, `tests/test_parser.py`,
 `tests/test_models.py` — all offline against `tests/fixtures/mock_gam.sh`. No drift guard beyond
-those; the argv-only property is structural (single `_exec`), not asserted by a lint.
+those; the argv-only property is structural (single `_exec`), not asserted by a lint. The env
+allowlist and the frozen-app binary lock are tripwired in `test_runner.py`
+(`test_gam_inherits_only_the_allowlisted_environment`, `test_binary_override_is_ignored_in_the_packaged_app`).
 
 ## Files
 - `gamgui/core/gam/runner.py` — `GAMRunner`; `_exec` is the only `create_subprocess_exec`. Locates
-  the binary, builds env, enforces timeout, holds `_write_lock`. `strip_cfgdir_noise` scrubs GAM's
-  per-call config banner.
+  the binary, builds the allowlisted env (`ENV_ALLOWLIST`, plus `MOCK_ENV` outside the `.app`),
+  enforces timeout, holds `_write_lock`. `strip_cfgdir_noise` scrubs GAM's per-call config banner.
 - `gamgui/core/gam/errors.py` — `GAMError`, `GAMErrorKind`, `classify_stderr`, ordered `_PATTERNS`,
   `_REMEDIATION` map.
 - `gamgui/core/gam/parser.py` — `parse_records`/`parse_one`; tolerant JSON/NDJSON/CSV normalizer.
@@ -28,7 +30,7 @@ Callers (mostly `core/connectors/gam_connector.py`) build an argv list with a `G
 method and call `runner.run_authenticated(domain, argv, serialize=...)`. That opens an
 `EphemeralConfig` context (vault → `0700` dir with `0600` credential files), runs `_exec`, and on
 exit writes any refreshed `oauth2.txt` back to the vault and wipes the dir. `_exec` spawns via
-`create_subprocess_exec(str(gam_binary), *argv, ...)` with a captured env carrying `GAMCFGDIR`; a
+`create_subprocess_exec(str(gam_binary), *argv, ...)` with an allowlisted env carrying `GAMCFGDIR`; a
 `wait_for` timeout kills the process and raises a `TIMEOUT` `GAMError`. Non-zero exit →
 `GAMError.from_run` (stderr classified by first-match regex). Success stdout is de-noised, then the
 connector runs it through `parse_records`/`parse_one` and `Model.from_json`. Two side paths:
@@ -38,6 +40,16 @@ connector runs it through `parse_records`/`parse_one` and `Model.from_json`. Two
 ## Invariants & the failure history
 - **argv-only (#1).** Every operator value is one argv element; `_exec` never joins a string or
   invokes a shell. This is the whole point of the single boundary — don't add a second spawn.
+- **`gam` gets an allowlisted environment, and the `.app` ignores `GAMGUI_GAM_BINARY`** (2026-09-23).
+  `gam` holds all three plaintext credentials, so the launch environment must not steer it. Until
+  then `_build_env` copied all of `os.environ` (`DYLD_*`, `PYTHON*`, a parent PyInstaller's `_PYI_*`,
+  GAM's own `GAM_CSV_*`/`GAMCFGSECTION` output switches) and the override was honored even when
+  frozen — a same-user `launchctl setenv GAMGUI_GAM_BINARY ~/x` would have handed the credentials to
+  any binary on the next launch, with no Keychain prompt. Now only `PATH HOME LANG LC_ALL LC_CTYPE
+  TMPDIR USER` and the proxy variables (GAM's httplib2 takes its proxy only from the environment)
+  pass; `GAMCFGDIR` and `GAM_NO_UPDATE_CHECK` are set by us. The mock's `GAM_MOCK_FIXTURES/REFRESH/
+  ARGV_LOG` pass only in a source checkout (`sys.frozen` unset); real GAM ignores them anyway. A new
+  variable GAM genuinely needs goes into `ENV_ALLOWLIST` deliberately, never a prefix match.
 - **`serialize=True` write-lock.** Mutations pass `serialize=True`, taking `_write_lock` so two
   writes can't race the *same* ephemeral `GAMCFGDIR` — and, critically, can't race the oauth2.txt
   refresh write-back into the vault (GAM rewrites `oauth2.txt` on token refresh; `EphemeralConfig`
@@ -87,7 +99,9 @@ tests/test_models.py` — fully offline (mock `gam` + in-memory Keychain). Cover
 binary, the four classified failure kinds, banner stripping, the oauth2 write-back
 (`GAM_MOCK_REFRESH` → vault value changes) under `serialize=True`, and the timeout path
 (`MOCKSLEEP`: `TIMEOUT` raised, the process killed and reaped, the `GAMCFGDIR` still wiped, the write
-lock released — `test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`). Untrusted until run live: the
+lock released — `test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`), and the env
+allowlist (a real child, `/usr/bin/env`, reports exactly what it received, frozen and not). Untrusted
+until run live: whether real GAM needs any variable outside the allowlist (none known), the
 real stderr wording behind each `GAMErrorKind` (only 6 lines mocked), and every `formatjson`/text
 output shape against an actual tenant — passing tests here do **not** prove a real GAM write worked.
 

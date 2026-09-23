@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- GamGUI.app under the hardened runtime (scripts/sign_app.sh explains; tests/test_build_signing.py
+     pins this set). A self-signed or ad-hoc signature has no Team ID, so library validation would
+     refuse every bundled dylib, the frozen Python included. Nothing else is needed. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

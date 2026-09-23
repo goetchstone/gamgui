@@ -53,6 +53,10 @@ guarding them:
   an `atexit` hook and an owner-PID marker, so quitting mid-call does not strand them on disk.
 - **`gam` is never invoked through a shell.** Every invocation is an explicit argv list; operator
   input is always a single list element and is never string-interpolated into a command.
+- **The launch environment can't steer `gam`.** It inherits only an allowlisted set of variables
+  (no `DYLD_*`, no `PYTHON*`); the packaged app always runs its bundled `gam`, ignoring the
+  `GAMGUI_GAM_BINARY` development override; and the app and `gam` are signed with the hardened
+  runtime, so dyld ignores injected `DYLD_*` variables.
 - **Every mutation is guarded and audited.** `guard.evaluate()` classifies risk and resolves the
   concrete affected set for a preview; the write is then appended to a local audit log.
 - **Only read-only commands can become runnable automatically.** The Builder promotes

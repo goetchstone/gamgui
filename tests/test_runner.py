@@ -63,6 +63,58 @@ async def test_oauth_token_write_back_through_a_real_run(runner, vault, domain, 
     assert "refreshed" in after
 
 
+# Launch-environment variables that must never reach the process holding the plaintext credentials.
+HOSTILE_ENV = {
+    "DYLD_INSERT_LIBRARIES": "/tmp/evil.dylib",
+    "PYTHONPATH": "/tmp/evil",
+    "PYTHONHOME": "/tmp/evil",
+    "_MEIPASS2": "/tmp/evil",
+    "GAMGUI_GAM_BINARY": "/tmp/evil-gam",
+    "GAMCFGSECTION": "other",
+    "GAM_CSV_OUTPUT_QUOTE_CHAR": "'",
+    "SSL_CERT_FILE": "/tmp/evil.pem",
+    "GAMCFGDIR": "/tmp/not-the-ephemeral-dir",
+}
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+async def test_gam_inherits_only_the_allowlisted_environment(vault, tmp_path, monkeypatch, frozen):
+    # A real child process reports what it received: /usr/bin/env stands in for gam.
+    import sys
+    from pathlib import Path
+
+    from gamgui.core.gam.runner import ENV_ALLOWLIST, MOCK_ENV
+
+    for k, v in HOSTILE_ENV.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+    monkeypatch.setenv("GAM_MOCK_FIXTURES", "/tmp/fixtures")
+    if frozen:
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+    env_runner = GAMRunner(vault=vault, gam_binary=Path("/usr/bin/env"), base_dir=tmp_path, timeout=15)
+    res = await env_runner.run_in_cfgdir(tmp_path, ["-0"])
+    env = dict(kv.split("=", 1) for kv in res.stdout.split("\0") if kv)
+
+    allowed = ENV_ALLOWLIST | {"GAMCFGDIR", "GAM_NO_UPDATE_CHECK"} | (set() if frozen else MOCK_ENV)
+    assert set(env) <= allowed, set(env) - allowed
+    assert env["GAMCFGDIR"] == str(tmp_path)  # ours, never the launch environment's
+    assert env["LANG"] == "en_US.UTF-8" and "PATH" in env
+    assert ("GAM_MOCK_FIXTURES" in env) is not frozen  # test-only variables never reach the .app's gam
+
+
+def test_binary_override_is_ignored_in_the_packaged_app(tmp_path, monkeypatch):
+    import sys
+    from pathlib import Path
+
+    from gamgui.core.gam.runner import GAM_BINARY_ENV, locate_gam_binary
+
+    monkeypatch.setenv(GAM_BINARY_ENV, "/tmp/evil-gam")
+    assert locate_gam_binary() == Path("/tmp/evil-gam")  # a source checkout honors it
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert locate_gam_binary() == tmp_path / "resources" / "gam7" / "gam"
+
+
 def test_strip_cfgdir_noise_removes_gam_init_banner():
     from pathlib import Path
 

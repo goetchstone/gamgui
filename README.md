@@ -187,7 +187,9 @@ binary); running it yourself needs no signing.
 
 ### Stop the Keychain prompts
 
-By default the app is **ad-hoc signed**, so macOS treats each rebuild as a new identity and
+Every build is signed with the **hardened runtime** (`scripts/sign_app.sh`), so launch-time `DYLD_*`
+variables can't inject code into the app or its bundled `gam`. Without a stable identity, though, the
+signature is **ad-hoc**, so macOS treats each rebuild as a new identity and
 re-prompts for the Keychain on every launch — and "Always Allow" never sticks. The fix (no Apple
 Developer account needed — that's only for shipping the app to *other* people's Macs) is a **stable
 self-signed code-signing cert** named `GamGUI Local`. Once it exists in your login keychain,
@@ -230,7 +232,8 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
   command fails CI rather than your tenant. A non-blocking `gam-latest-preview` job runs the same check
   against the *newest* GAM as an early warning.
 - **Runtime self-check** — if the running `gam` differs from the tested version (e.g. a
-  `GAMGUI_GAM_BINARY` override), the setup screen shows a soft warning. It never blocks.
+  `GAMGUI_GAM_BINARY` override in a source checkout; the packaged `.app` ignores it), the setup
+  screen shows a soft warning. It never blocks.
 
 **To bump GAM:** the weekly workflow usually opens the PR for you. To do it by hand — or to understand
 what that PR contains — `python scripts/bump_gam.py vX.Y.Z` runs steps 1–4 below as one command

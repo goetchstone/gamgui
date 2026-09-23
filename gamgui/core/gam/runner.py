@@ -18,8 +18,20 @@ from ..secrets.ephemeral import EphemeralConfig
 from ..secrets.vault import SecretsVault
 from .errors import GAMError, GAMErrorKind
 
-# Env var that overrides binary discovery (used by tests with a mock gam, and power users).
+# Env var that overrides binary discovery in a source checkout. The packaged .app ignores it: a
+# same-user `launchctl setenv` would otherwise hand the plaintext credentials to any binary it names.
 GAM_BINARY_ENV = "GAMGUI_GAM_BINARY"
+
+# The only launch-environment variables `gam` inherits. It holds the plaintext credentials, so nothing
+# else may steer it: no DYLD_*/PYTHON*, no parent PyInstaller _PYI_*/_MEIPASS2, no GAM_CSV_*/
+# GAMCFGSECTION output switches. The proxy variables stay because GAM (httplib2) takes its proxy only
+# from the environment; TLS is still verified against GAM's own cacerts.pem.
+ENV_ALLOWLIST = frozenset({
+    "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "USER",
+    "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy",
+})
+# Read only by tests/fixtures/mock_gam.sh (real GAM ignores them), so passed only in a source checkout.
+MOCK_ENV = frozenset({"GAM_MOCK_FIXTURES", "GAM_MOCK_REFRESH", "GAM_MOCK_ARGV_LOG"})
 
 DEFAULT_TIMEOUT = 120.0
 
@@ -38,6 +50,10 @@ def strip_cfgdir_noise(stdout: str, cfgdir: Path) -> str:
     return "\n".join(line for line in stdout.splitlines() if needle not in line)
 
 
+def _frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
 @dataclass
 class RunResult:
     stdout: str
@@ -48,10 +64,11 @@ class RunResult:
 def locate_gam_binary() -> Path:
     """Resolve the bundled ``gam`` executable.
 
-    Order: explicit env override → PyInstaller bundle (``sys._MEIPASS``) → repo source tree.
+    Order: env override (source checkout only) → PyInstaller bundle (``sys._MEIPASS``) → repo source
+    tree.
     """
     override = os.environ.get(GAM_BINARY_ENV)
-    if override:
+    if override and not _frozen():
         return Path(override)
 
     meipass = getattr(sys, "_MEIPASS", None)
@@ -87,10 +104,11 @@ class GAMRunner:
             )
 
     def _build_env(self, cfgdir: Path) -> dict:
-        env = os.environ.copy()
+        passthrough = ENV_ALLOWLIST if _frozen() else ENV_ALLOWLIST | MOCK_ENV
+        env = {k: v for k, v in os.environ.items() if k in passthrough}
         env["GAMCFGDIR"] = str(cfgdir)
         # Keep GAM quiet/non-interactive where possible.
-        env.setdefault("GAM_NO_UPDATE_CHECK", "1")
+        env["GAM_NO_UPDATE_CHECK"] = "1"
         return env
 
     async def _exec(self, argv: Sequence[str], cfgdir: Path, timeout: float) -> RunResult:
