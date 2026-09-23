@@ -91,12 +91,17 @@ class Vacation:
     message: str = ""
     contacts_only: bool = False
     domain_only: bool = False
+    # YYYY-MM-DD, or "" for none (GAM shows "Started" / "NotSpecified"): the form shows what is stored,
+    # so saving it sends back the dates it had — GAM keeps any setting a command leaves out.
+    start: str = ""
+    end: str = ""
 
     @classmethod
     def from_show_text(cls, text: str) -> "Vacation":
         """Parse the text output of ``gam user X show vacation`` (formatjson isn't supported)."""
         enabled = contacts = domain = False
         subject = ""
+        dates = {"Start Date:": "", "End Date:": ""}
         msg_lines: List[str] = []
         in_message = False
         for line in (text or "").splitlines():
@@ -117,6 +122,10 @@ class Vacation:
                 domain = "true" in s.lower()
             elif s.startswith(_SUBJECT_PREFIX):
                 subject = s[len(_SUBJECT_PREFIX):].strip()
+            elif s.startswith(tuple(dates)):
+                key, value = s.split(":", 1)
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()):
+                    dates[key + ":"] = value.strip()
             elif s.startswith("Message:"):
                 in_message = True
         return cls(
@@ -125,6 +134,8 @@ class Vacation:
             message="\n".join(msg_lines).strip(),
             contacts_only=contacts,
             domain_only=domain,
+            start=dates["Start Date:"],
+            end=dates["End Date:"],
         )
 
 

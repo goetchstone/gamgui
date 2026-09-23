@@ -223,6 +223,20 @@ def test_vacation_commands():
     assert "formatjson" not in argv  # vacation/show don't take formatjson
 
 
+def test_set_vacation_names_every_setting_gam_would_otherwise_keep():
+    # GAM's `vacation` merges into the stored settings (setVacation: getVacation, update, write back):
+    # a flag or date the command leaves out keeps its old value — a leaver's old "only people in my
+    # organization" or past last day would survive the offboarding auto-reply. So every one is sent
+    # (GamCommands.txt 8286-8288: `contactsonly [<Boolean>]`, `domainonly [<Boolean>]`,
+    # `start <Date>|Started`, `end <Date>|NotSpecified`).
+    assert GAMCommands.set_vacation("a@e.com", "S", "M") == [
+        "user", "a@e.com", "vacation", "on", "subject", "S", "message", "M", "html",
+        "contactsonly", "false", "domainonly", "false", "start", "Started", "end", "NotSpecified"]
+    chosen = GAMCommands.set_vacation("a@e.com", "S", "M", html=False, start="2026-07-01", end="2026-07-10",
+                                      contacts_only=True, domain_only=True)
+    assert chosen[8:] == ["contactsonly", "true", "domainonly", "true", "start", "2026-07-01", "end", "2026-07-10"]
+
+
 def test_list_fields_include_organizations():
     from gamgui.core.gam.commands import USER_LIST_FIELDS
 

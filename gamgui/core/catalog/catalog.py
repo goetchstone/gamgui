@@ -108,8 +108,10 @@ def _curated() -> List[CatalogCommand]:
              [_slot("email", "User", U), _slot("subject", "Subject", SlotKind.TEXT),
               _slot("message", "Message", SlotKind.TEXT)],
              lambda s: GAMCommands.set_vacation(s["email"], s.get("subject", ""), s.get("message", ""), html=True),
-             "gam user <email> vacation on subject <s> message <m>",
-             "Turn on the user's vacation auto-responder with a subject and message."),
+             "gam user <email> vacation on subject <s> message <m> html contactsonly false domainonly false "
+             "start Started end NotSpecified",
+             "Turn on the user's vacation auto-responder with a subject and message, for every sender and "
+             "no end date (GAM would otherwise keep any earlier restriction or date)."),
         _cmd("build.vacation_off", "Users", "Gmail - Vacation", "Turn off vacation auto-reply", RiskLevel.LOW,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.vacation_off(s["email"]),

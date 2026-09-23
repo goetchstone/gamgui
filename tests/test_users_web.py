@@ -116,11 +116,27 @@ def test_vacation_set_and_off(client, gam_calls):
     r2 = client.post("/users/vacation/off", data={"email": "alice@example.com"})
     assert_ok_partial(r2)
     assert gam_writes(gam_calls()) == [
-        ["user", "alice@example.com", "vacation", "on", "subject", "OOO", "message", "away", "html"],
+        ["user", "alice@example.com", "vacation", "on", "subject", "OOO", "message", "away", "html",
+         "contactsonly", "false", "domainonly", "false", "start", "Started", "end", "NotSpecified"],
         ["user", "alice@example.com", "vacation", "off"],
     ]
     assert _audited(client, 2) == [("set_vacation", "alice@example.com", True),
                                    ("clear_vacation", "alice@example.com", True)]
+
+
+def test_vacation_form_unticks_and_round_trips_its_dates(client, gam_state):
+    # GAM merges `vacation` into the stored settings, so unticking "Domain only" used to send nothing
+    # and the box came back ticked; the dates were never shown, so a blank box kept a hidden date.
+    email = "alice@example.com"
+    r = client.post("/users/vacation/set", data={"email": email, "subject": "OOO", "message": "away",
+                                                 "domainonly": "on", "start": "2026-07-01", "end": "2026-07-10"})
+    assert_ok_partial(r)
+    assert re.search(r'name="domainonly" value="on"\s+checked', r.text)
+    assert 'value="2026-07-01"' in r.text and 'value="2026-07-10"' in r.text   # the stored dates, shown
+    r = client.post("/users/vacation/set", data={"email": email, "subject": "OOO", "message": "away"})
+    assert_ok_partial(r)
+    assert not re.search(r'name="domainonly" value="on"\s+checked', r.text)
+    assert 'value="2026-07-01"' not in r.text and 'value="2026-07-10"' not in r.text
 
 
 def test_users_list_has_title_column(client):

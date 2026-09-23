@@ -112,7 +112,7 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Remove group member | Groups, Users, Builder | **confirmed** |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
 | Remove delegate | Users, Builder | not yet |
-| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed** |
+| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed** without the explicit `contactsonly false domainonly false start Started end NotSpecified` it now sends (so an earlier restriction or date can't survive); with them, not yet |
 | Clear vacation | Users, Builder | not yet |
 | Reset password | Offboarding, Builder | **confirmed** |
 | Sign out everywhere | Users, Builder | not yet |

@@ -31,7 +31,7 @@ ENV_ALLOWLIST = frozenset({
     "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy",
 })
 # Read only by tests/fixtures/mock_gam.sh (real GAM ignores them), so passed only in a source checkout.
-MOCK_ENV = frozenset({"GAM_MOCK_FIXTURES", "GAM_MOCK_REFRESH", "GAM_MOCK_ARGV_LOG"})
+MOCK_ENV = frozenset({"GAM_MOCK_FIXTURES", "GAM_MOCK_REFRESH", "GAM_MOCK_ARGV_LOG", "GAM_MOCK_STATE"})
 
 DEFAULT_TIMEOUT = 120.0
 # One `all users …` call: GAM visits every user in turn (~0.5–1 s each, one process), so the default

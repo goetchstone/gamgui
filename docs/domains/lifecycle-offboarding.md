@@ -112,7 +112,7 @@ the reminder runs without one). What each step does if run again after it succee
 | Revoke access & sign out | Harmless: whatever app passwords and tokens are left are deleted, the backup codes are invalidated again, sessions are ended again. | optional |
 | Turn off forwarding | Harmless: `forward off` when it's off changes nothing. **Leave it unticked if "Revoke access" failed** — a session left open could have switched forwarding back on. | optional |
 | Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
-| Auto-reply | Harmless: `vacation on …` replaces the settings. | optional |
+| Auto-reply | Harmless: the command names every setting (on, subject, message, every sender, no start or end date), so a re-run writes the same reply. GAM itself *merges* `vacation` into the stored settings — see Gotchas. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
 | Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist" and users without Calendar "Calendar Service/App not enabled", both tolerated. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
 | Manager reminder | **Duplicates**: `add event` without an `id` creates a second event. | **yes** |
@@ -130,7 +130,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
 | Revoke access & sign out | `user <leaver> deprovision signout` | `gam <UserTypeEntity> deprovision\|deprov [popimap] [signout] [turnoff2sv]` (7899) | Match. Per user, GAM (`deprovisionUser`, read statically) deletes every app password, invalidates the backup codes, deletes every OAuth token, then with `signout` calls `users.signOut` (as `gam <UserTypeEntity> signout`, 8938, does). A failed listing or sign-out is reported against the user (exit 50) and ends that user's remaining parts; one app password or token that fails to delete is reported and the rest go on. **Not** `turnoff2sv` — it would weaken a locked account, and nobody needs to sign in as the leaver (the manager gets delegation). **Not** `popimap` — POP/IMAP need the password, an app password or a token, all revoked here; it would add two Gmail settings writes for nothing. |
 | Turn off forwarding | `user <leaver> forward off` | `gam <UserTypeEntity> forward <FalseValues>` (7998); `<FalseValues>= false\|off\|no\|disabled\|0` (22) | Match. GAM (`setForward`) sends `updateAutoForwarding` with `enabled: false` and shows the result; a user without Gmail is "Service/App not enabled", exit 73. The same builder as the Builder's "Turn off forwarding". |
 | Delegate | `user <leaver> add delegate <manager>` | `gam <UserTypeEntity> create\|add delegate\|delegates [convertalias] <UserEntity>` (7910) | Match; `convertalias` optional, unused. |
-| Auto-reply | `user <leaver> vacation on subject <S> message <M> html` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly …] [domainonly …] [start …] [end …]` (8283); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. `html`: see Gotchas. |
+| Auto-reply | `user <leaver> vacation on subject <S> message <M> html contactsonly false domainonly false start Started end NotSpecified` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly [<Boolean>]] [domainonly [<Boolean>]] [start\|startdate <Date>\|Started] [end\|enddate <Date>\|NotSpecified]` (8283-8288); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. GAM's `getYYYYMMDD` compares `Started`/`NotSpecified` case-insensitively and returns no date for them, which clears a stored one. Why every setting is named, and `html`: see Gotchas. |
 | Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager>` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598) | Match; the service list is ONE element. No privacy keyword: see Gotchas. |
 | Calendar sweep | `all users delete calendaracls primary <leaver>` | `gam <UserTypeEntity> delete calendaracls <UserCalendarEntity> <CalendarACLRole>] <CalendarACLScopeEntity>` (6327) | Match. The grammar line lost its `[`: the role is optional, as in `calendars … delete acls [<CalendarACLRole>]` (1689) and in GAM's parser (`getChoice(…, defaultChoice=None)`, then the scope, then no extra arguments). `all users` = `<UserTypeEntity>`, `primary` = `<UserCalendarEntity>`, a bare address = `<CalendarACLScope>` (a user). |
 | Manager reminder | `user <manager> add event primary summary <S> start allday <D> end allday <D+1> [description <T>] [attendee <E>]` | `gam <UserTypeEntity> create\|add event <UserCalendarEntity> [id <String>] <EventAttribute>+ [<EventNotificationAttribute>]` (6469); `<EventAttribute>` (6391): `summary`, `start\|starttime (allday <Date>)`, `end\|endtime (allday <Date>)`, `description`, `attendee <EmailAddress>` | Match. The end date is exclusive, so a one-day event on D. |
@@ -185,6 +185,17 @@ parser was read statically (its bytecode, never run). No mismatch found.
 ## Gotchas / mock-lies traps
 - **`set_vacation` rejects `formatjson`** (see MEMORY / the formatjson gotcha) — the mock can't catch
   that; verify against the vendored grammar `gamgui/resources/gam7/GamCommands.txt`.
+- **GAM's `vacation` merges, it does not replace.** `setVacation` (read statically from the vendored
+  build) reads the stored settings (`getVacation`), overwrites only the fields the command names and
+  writes the result back. The auto-reply once named only on/subject/message, so a leaver who had ever
+  answered only people in their organization (`restrictToDomain`) or only their contacts, or set a
+  last day that is now past, kept it: customers got no auto-reply, or nobody did, and the step
+  showed ✓ (failure-log 2026-09-23). `GAMCommands.set_vacation` now always sends `contactsonly
+  <bool> domainonly <bool> start <date>|Started end <date>|NotSpecified` — which also fixed the user
+  page's Vacation form, where unticking "Domain only" sent nothing. That form now shows the stored
+  dates (`Vacation.start`/`.end`), so a blank box means "no date", not "keep a hidden one". The mock
+  merges the same way when `GAM_MOCK_STATE` is set (the `gam_state` fixture), and `show vacation`
+  then prints the stored settings with GAM's Start/End Date lines.
 - **What the routine does not cut off.** Sign-in through a third-party identity provider (SSO)
   doesn't use the Google password: disable the user there too. Gmail filters that forward mail are
   not touched (`forward off` is the account's auto-forward setting only): look at them before the run (Builder → Users → Gmail - Filters → Show filters, a
@@ -222,7 +233,8 @@ gam + in-memory Keychain). Covered: step order/keys, the single combined-service
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL, not-found, a user
 without Calendar) vs. real auth errors and a per-user 403, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
-auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, the directory check
+auto-reply substitution, the auto-reply not inheriting the leaver's old vacation settings (stateful
+mock, `test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings`), reminder invitee, `incomplete_transfers_for` filtering, the directory check
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
 edited form, a used/expired token and a directory change are refused), the dependency rules (a failed
@@ -269,8 +281,10 @@ Audit shows eight `ok` records, one per step. Then check in Google, not just in 
   in through a third-party identity provider, disable them there.
 - Forwarding: Builder → Users → Gmail - Forwarding → Show says forwarding is off.
 - Mailbox: the manager's Gmail account switcher offers the leaver's mailbox (delegation can take a
-  while to appear); an email to the leaver from another account gets the auto-reply (or GamGUI →
-  the user → Vacation responder shows it on).
+  while to appear); an email to the leaver from an account **outside your domain** (a personal
+  address) gets the auto-reply — outside, because a reply limited to the organization would still
+  answer a colleague. GamGUI → the user → Vacation responder shows it on, "Domain only" and
+  "Contacts only" unticked and no dates.
 - Transfer: the Builder's Data Transfers → Print (a read, `gam print datatransfers`, every transfer)
   shows it `completed` after ~10–25 min; the manager's My Drive then has a folder of the leaver's files. Check whether files the
   leaver had **shared** moved too (the privacy-level gotcha above) and whether their secondary

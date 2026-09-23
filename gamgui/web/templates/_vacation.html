@@ -21,10 +21,12 @@
       <label class="flex items-center gap-2"><input type="checkbox" name="contactsonly" value="on" {{ "checked" if vac.contacts_only }} /> Contacts only</label>
       <label class="flex items-center gap-2"><input type="checkbox" name="domainonly" value="on" {{ "checked" if vac.domain_only }} /> Domain only</label>
     </div>
+    {# The stored dates, so Save sends back what is set; a blank box means no start/end date. #}
     <div class="grid grid-cols-2 gap-3">
-      <label class="text-sm text-brand-blueink">Start<input type="date" name="start" class="{{ input_cls }} mt-1" /></label>
-      <label class="text-sm text-brand-blueink">End<input type="date" name="end" class="{{ input_cls }} mt-1" /></label>
+      <label class="text-sm text-brand-blueink">Start<input type="date" name="start" value="{{ vac.start }}" class="{{ input_cls }} mt-1" /></label>
+      <label class="text-sm text-brand-blueink">End<input type="date" name="end" value="{{ vac.end }}" class="{{ input_cls }} mt-1" /></label>
     </div>
+    <p class="text-xs text-brand-gray">Leave a date blank for none. Every setting here is saved as shown.</p>
     <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Save auto-reply</button>
   </form>
 </div>

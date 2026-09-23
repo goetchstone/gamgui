@@ -64,6 +64,17 @@ def gam_calls(tmp_path: Path, monkeypatch):
     return lambda: read_gam_calls(log)
 
 
+@pytest.fixture
+def gam_state(tmp_path: Path, monkeypatch) -> Path:
+    """Let the mock `gam` keep, between calls, the settings real GAM merges into (GAM_MOCK_STATE):
+    `vacation` then updates only the fields it names, as GAM does, and `show vacation` shows what
+    survived. Opt-in — without it the mock is stateless and `show vacation` is canned."""
+    state = tmp_path / "gam_state"
+    state.mkdir()
+    monkeypatch.setenv("GAM_MOCK_STATE", str(state))
+    return state
+
+
 FIFO_WATCHDOG_SECONDS = 3.0
 
 

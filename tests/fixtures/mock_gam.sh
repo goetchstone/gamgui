@@ -4,6 +4,8 @@
 #   GAM_MOCK_FIXTURES  - directory holding the *.json fixtures to echo back
 #   GAM_MOCK_REFRESH   - if set, simulate an OAuth token refresh by rewriting oauth2.txt in GAMCFGDIR
 #   GAM_MOCK_ARGV_LOG  - if set, append every invocation's argv to this file (tests/helpers.py reads it)
+#   GAM_MOCK_STATE     - if set, a directory where the mock keeps settings between calls the way GAM
+#                        merges into them (`vacation`; the `gam_state` fixture)
 #
 # The mock must fail the way real GAM fails: one more permissive than GAM turns a live break into a
 # green test (CLAUDE.md, "the mock lies"). So:
@@ -44,6 +46,7 @@ check_exists() {  # <entity> <name>: the *missing*/*nonexistent* trigger
 }
 
 is_bool() { case "${1:-}" in true|on|yes|enabled|1|false|off|no|disabled|0) return 0 ;; esac; return 1; }
+bool_word() { case "$1" in true|on|yes|enabled|1) echo True ;; *) echo False ;; esac; }   # as GAM shows it
 need_bool() {
   [ -n "${1:-}" ] || missing_arg "Boolean"
   is_bool "$1" || invalid_choice "$1" "true|on|yes|enabled|1|false|off|no|disabled|0"
@@ -149,8 +152,24 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   exit 0
 fi
 
-# `gam user <email> show vacation` (no formatjson) -> parseable text, like real GAM.
+# `gam user <email> show vacation` (no formatjson) -> parseable text, like real GAM. With GAM_MOCK_STATE
+# and a stored setting for the user, the stored one in GAM's _showVacation shape (a date, else
+# Started/NotSpecified while it is on); otherwise canned.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "vacation" ]; then
+  vdir="${GAM_MOCK_STATE:-}/vacation/$2"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -d "$vdir" ]; then
+    stored() { if [ -f "$vdir/$1" ]; then cat "$vdir/$1"; else printf '%s' "$2"; fi; }
+    on="$(stored enabled False)"
+    printf 'User: %s, Vacation:\n  Enabled: %s\n  Contacts Only: %s\n  Domain Only: %s\n' \
+      "$2" "$on" "$(stored contactsonly False)" "$(stored domainonly False)"
+    if [ -f "$vdir/start" ]; then printf '  Start Date: %s\n' "$(cat "$vdir/start")"
+    elif [ "$on" = True ]; then echo "  Start Date: Started"; fi
+    if [ -f "$vdir/end" ]; then printf '  End Date: %s\n' "$(cat "$vdir/end")"
+    elif [ "$on" = True ]; then echo "  End Date: NotSpecified"; fi
+    printf '  Subject: %s\n  Message:\n' "$(stored subject None)"
+    stored message None | sed 's/^/    /'; echo
+    exit 0
+  fi
   cat <<'EOF'
 User: someone@example.com, Vacation:
   Enabled: True
@@ -479,19 +498,36 @@ fi
 
 # `gam user <email> vacation [<Boolean>] [subject <S>] [message <S>] [html [<B>]] [contactsonly [<B>]]
 #  [domainonly [<B>]] [start|startdate <Date>|Started] [end|enddate <Date>|NotSpecified]`
+# GAM (setVacation, read from the vendored build) does NOT replace the settings: it reads them
+# (getVacation), overwrites only the fields the command names and writes the result back — a flag or
+# date left out keeps its old value. With GAM_MOCK_STATE the mock keeps them the same way.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "vacation" ]; then
   user="$2"; shift 3
-  if is_bool "${1:-}"; then shift; fi
+  v_on=""; v_co=""; v_do=""; v_start=""; v_end=""; v_subject=""; v_message=""; has_subject=""; has_message=""
+  if is_bool "${1:-}"; then v_on="$(bool_word "$1")"; shift; fi
   while [ $# -gt 0 ]; do
     case "$1" in
-      subject|message|textmessage|htmlmessage) need_value $# "String"; shift 2 ;;
-      html|contactsonly|domainonly) shift; if is_bool "${1:-}"; then shift; fi ;;
-      start|startdate) need_value $# "Date"; [ "$2" = "Started" ] || need_date "$2"; shift 2 ;;
-      end|enddate) need_value $# "Date"; [ "$2" = "NotSpecified" ] || need_date "$2"; shift 2 ;;
+      subject) need_value $# "String"; v_subject="$2"; has_subject=1; shift 2 ;;
+      message|textmessage|htmlmessage) need_value $# "String"; v_message="$2"; has_message=1; shift 2 ;;
+      html) shift; if is_bool "${1:-}"; then shift; fi ;;
+      contactsonly) shift; v_co=True; if is_bool "${1:-}"; then v_co="$(bool_word "$1")"; shift; fi ;;
+      domainonly) shift; v_do=True; if is_bool "${1:-}"; then v_do="$(bool_word "$1")"; shift; fi ;;
+      start|startdate) need_value $# "Date"; [ "$2" = "Started" ] || need_date "$2"; v_start="$2"; shift 2 ;;
+      end|enddate) need_value $# "Date"; [ "$2" = "NotSpecified" ] || need_date "$2"; v_end="$2"; shift 2 ;;
       *) invalid_arg "$1" ;;
     esac
   done
   check_exists "User" "$user"
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    vdir="$GAM_MOCK_STATE/vacation/$user"; mkdir -p "$vdir"
+    [ -z "$v_on" ] || printf '%s' "$v_on" > "$vdir/enabled"
+    [ -z "$v_co" ] || printf '%s' "$v_co" > "$vdir/contactsonly"
+    [ -z "$v_do" ] || printf '%s' "$v_do" > "$vdir/domainonly"
+    [ -z "$has_subject" ] || printf '%s' "$v_subject" > "$vdir/subject"
+    [ -z "$has_message" ] || printf '%s' "$v_message" > "$vdir/message"
+    case "$v_start" in "") ;; Started) rm -f "$vdir/start" ;; *) printf '%s' "$v_start" > "$vdir/start" ;; esac
+    case "$v_end" in "") ;; NotSpecified) rm -f "$vdir/end" ;; *) printf '%s' "$v_end" > "$vdir/end" ;; esac
+  fi
   echo "User: $user, Vacation: Updated"
   exit 0
 fi

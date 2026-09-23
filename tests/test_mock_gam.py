@@ -114,6 +114,21 @@ async def test_mock_accepts_every_shape_the_app_emits(runner, domain, argv):
     await runner.run_authenticated(domain, argv, serialize=True)
 
 
+async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
+    # GAM's setVacation updates only the fields the command names; a stateless mock (or one that
+    # replaced the settings) would hide a leftover "domain only" or end date behind a green test.
+    await runner.run_authenticated(domain, ["user", "a@example.com", "vacation", "on", "domainonly", "true",
+                                            "end", "2025-08-15"], serialize=True)
+    await runner.run_authenticated(domain, ["user", "a@example.com", "vacation", "on", "subject", "S"],
+                                   serialize=True)
+    shown = await runner.run_authenticated(domain, C.show_vacation("a@example.com"))
+    assert "Domain Only: True" in shown and "End Date: 2025-08-15" in shown and "Subject: S" in shown
+    await runner.run_authenticated(domain, ["user", "a@example.com", "vacation", "on", "domainonly", "false",
+                                            "end", "NotSpecified"], serialize=True)
+    shown = await runner.run_authenticated(domain, C.show_vacation("a@example.com"))
+    assert "Domain Only: False" in shown and "End Date: NotSpecified" in shown
+
+
 @pytest.mark.parametrize("argv,needle", [
     # Without doit GAM only reports what it would delete — "Event deleted." would be a lie.
     (["calendars", CAL, "delete", "events", "eventid", "evt-1", "sendupdates", "none"], "Use doit"),

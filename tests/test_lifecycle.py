@@ -112,6 +112,25 @@ async def test_offboard_autoreply_substitutes_employee_and_manager():
 
 
 @pytest.mark.asyncio
+async def test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings(connector, gam_state):
+    # GAM merges `vacation` into the stored settings. A leaver who once answered only people in their
+    # organization, only their contacts, or set a last day (now past) kept all three: customers got
+    # no auto-reply, or nobody did — and the step showed ✓. The auto-reply now names every setting.
+    from gamgui.core.gam.models import Vacation
+
+    leaver = "leaver@example.com"
+    await connector.runner.run_authenticated("example.com", [   # the leaver's own earlier holiday reply
+        "user", leaver, "vacation", "off", "contactsonly", "true", "domainonly", "true",
+        "start", "2025-08-08", "end", "2025-08-15"], serialize=True)
+    steps = build_offboard_steps(leaver, "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    assert (await next(s for s in steps if s.key == "vacation").action(connector)).ok
+    shown = await connector.runner.run_authenticated("example.com", GAMCommands.show_vacation(leaver))
+    vac = Vacation.from_show_text(shown)
+    assert vac.enabled and not vac.contacts_only and not vac.domain_only
+    assert "Start Date: Started" in shown and "End Date: NotSpecified" in shown   # no dates left over
+
+
+@pytest.mark.asyncio
 async def test_offboard_transfer_step_invokes_combined_service_list(connector):
     # Bug 1 regression: the single transfer step must audit ONE `create datatransfer` whose service
     # element is the "drive,calendar" list — proving we no longer fire two overlapping same-user

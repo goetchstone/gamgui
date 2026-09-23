@@ -73,6 +73,15 @@ def test_vacation_from_show_text():
     assert "Back next week." in v.message
 
 
+def test_vacation_dates_parse():
+    # GAM's _showVacation prints a date, or Started / NotSpecified (no date) while the reply is on.
+    text = ("User: x@e.com, Vacation:\n  Enabled: True\n  Contacts Only: False\n  Domain Only: True\n"
+            "  Start Date: 2026-07-01\n  End Date: NotSpecified\n  Subject: OOO\n  Message:\n    Away.\n")
+    v = Vacation.from_show_text(text)
+    assert (v.start, v.end, v.domain_only, v.message) == ("2026-07-01", "", True, "Away.")
+    assert Vacation.from_show_text(text.replace("NotSpecified", "2026-07-10")).end == "2026-07-10"
+
+
 def test_vacation_disabled_parse():
     v = Vacation.from_show_text("User: x, Vacation:\n  Enabled: False\n  Subject:\n")
     assert v.enabled is False

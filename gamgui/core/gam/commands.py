@@ -390,17 +390,16 @@ class GAMCommands:
         contacts_only: bool = False,
         domain_only: bool = False,
     ) -> List[str]:
+        # GAM's `vacation` does not replace the settings: it reads them, overwrites only the fields the
+        # command names, and writes the result back (setVacation, read from the vendored build). So every
+        # setting is named — each flag as an explicit Boolean, a missing date as `Started`/`NotSpecified`
+        # (no date; GamCommands.txt 8286-8288) — or a leftover "domain only" or past end date survives.
         argv = ["user", email, "vacation", "on", "subject", subject, "message", message]
         if html:
             argv.append("html")
-        if contacts_only:
-            argv.append("contactsonly")
-        if domain_only:
-            argv.append("domainonly")
-        if start:
-            argv += ["start", start]
-        if end:
-            argv += ["end", end]
+        argv += ["contactsonly", "true" if contacts_only else "false",
+                 "domainonly", "true" if domain_only else "false",
+                 "start", start or "Started", "end", end or "NotSpecified"]
         return argv
 
     @staticmethod
