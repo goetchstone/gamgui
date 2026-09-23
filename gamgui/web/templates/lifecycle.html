@@ -40,6 +40,15 @@
       <label class="block"><span class="text-sm text-brand-blueink">Also invite to the reminder (IT/HR) — optional</span>
         <input class="{{ fld }}" type="email" name="notify" placeholder="it@domain.com" /></label>
     </div>
+    <fieldset>
+      <legend class="text-sm text-brand-blueink">Re-running after a failure? Tick the steps that already succeeded</legend>
+      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {% for key, name in step_names.items() %}
+        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="done" value="{{ key }}" /> {{ name }}</label>
+        {% endfor %}
+      </div>
+      <span class="text-xs text-brand-gray">A ticked step is not run and counts as done. Don't re-run one that succeeded: GAM refuses a delegate that already exists and a second transfer while the first is running, and the reminder would be added twice.</span>
+    </fieldset>
     <button type="button"
             class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
             hx-post="/lifecycle/offboard/preview" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML">Preview steps</button>

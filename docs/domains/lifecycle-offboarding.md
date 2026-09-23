@@ -34,7 +34,8 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 write: an address not in the directory, an alias (the message names the primary), the same account
 twice, and a directory that can't be read (fails closed). Warned in the preview, not blocked: a
 super-admin or delegated-admin leaver (offboarding doesn't remove the role), an already-suspended
-leaver (mailbox steps may fail) and a suspended manager (delegate/transfer/reminder go there). The
+leaver (mailbox steps may fail), a suspended manager (delegate/transfer/reminder go there) and a
+manager who is already the leaver's delegate (the preview only; see "Re-running after a failure"). The
 steps then act on the directory's primary addresses, whatever case was typed. A typo'd manager used
 to be accepted and half-offboard the account (failure-log 2026-09-23).
 
@@ -76,6 +77,25 @@ step (failure-log).
 | Transfer Drive & Calendar | continue, **but no reminder** | The reminder asks the manager to approve deletion, and deleting before the transfer loses the files for good. A transfer that was never created leaves nothing for the delete screen's pending-transfer warning to find. |
 | Remove from everyone's calendars | continue | The account is locked, so a leftover share grants nothing; the reminder doesn't depend on it. |
 | Manager reminder | (last) | — |
+
+### Re-running after a failure
+The form has one "already done" box per step (`lifecycle.STEP_NAMES`, posted as `done`). A ticked
+step is not run and **counts as succeeded** for the steps that require it; the preview shows it
+struck through, without a command, and the ticks are part of the frozen form (tick one after Preview
+and Run refuses). All six ticked is refused ("nothing to run"). **Tick exactly the `✓` lines of the
+failed run** — ticking a step that did not succeed tells the routine it did (tick the transfer and
+the reminder runs without one). What each step does if run again after it succeeded (GAM 7.48.11):
+
+| Step | Run again after it succeeded | Tick it? |
+|---|---|---|
+| Reset password (+ sign-out) | Harmless: `password random` makes a new password each time; sessions are ended again. | optional |
+| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_already_delegate`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
+| Auto-reply | Harmless: `vacation on …` replaces the settings. | optional |
+| Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
+| Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist", which the sweep tolerates. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
+| Manager reminder | **Duplicates**: `add event` without an `id` creates a second event. | **yes** |
+
+A failed step changed nothing, except a sweep stopped by its timeout (partly done — run it again).
 
 ## Grammar check of every step (GAM 7.48.11, re-verified 2026-09-23)
 Each argv our builder emits, next to its line in the vendored `gamgui/resources/gam7/GamCommands.txt`
@@ -160,7 +180,8 @@ auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering,
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
 edited form, a used/expired token and a directory change are refused), the dependency rules (a failed
-reset / delegate / transfer against the mock's `missing` and `CONFLICT409` triggers), and the preview's
+reset / delegate / transfer against the mock's `missing` and `CONFLICT409` triggers), the re-run ticks
+(`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the

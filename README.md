@@ -44,7 +44,9 @@ Actively developed and used against live Google Workspace tenants. Working today
   and remove a stray event or an entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
   transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
-  live preview of the generated auto-reply and the exact `gam` command each step will run.
+  live preview of the generated auto-reply and the exact `gam` command each step will run. Both
+  addresses are checked against the directory, Run executes exactly what was previewed, a failed step
+  stops the steps that rely on it, and a re-run can skip the steps that already succeeded.
 - **Onboarding** — role → task-list runbooks (persisted, editable) that become a Google Tasks
   checklist on the new hire, plus a templated welcome email.
 - **Command Builder** — browse/search the full categorized GAM catalog (~1,040 commands); curated

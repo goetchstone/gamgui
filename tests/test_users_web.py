@@ -873,6 +873,7 @@ def test_lifecycle_page_renders(client):
     r = client.get("/lifecycle")
     assert r.status_code == 200
     assert "Offboard a user" in r.text and 'name="manager"' in r.text
+    assert r.text.count('name="done"') == 6            # the re-run's "already done" boxes, one per step
 
 
 def test_lifecycle_offboard_preview_lists_steps(client):
@@ -1093,7 +1094,8 @@ def test_offboard_run_executes_exactly_the_previewed_commands(client, gam_calls)
     assert [command_line(c) for c in gam_writes(gam_calls())] == previewed
 
 
-@pytest.mark.parametrize("edit", [{"manager": "bob@example.com"}, {"subject": "Changed"}, {"days": "7"}])
+@pytest.mark.parametrize("edit", [{"manager": "bob@example.com"}, {"subject": "Changed"}, {"days": "7"},
+                                  {"done": ["password"]}])
 def test_offboard_run_refuses_a_form_edited_after_the_preview(client, gam_calls, edit):
     _, token = _offboard_preview(client)
     r = _offboard_run(client, token, **edit)
@@ -1134,6 +1136,39 @@ def test_offboard_preview_runs_the_default_text_for_an_emptied_field(client):
     # The auto-reply block shows the default subject for an empty field, so the command must send it.
     r, _ = _offboard_preview(client, subject="")
     assert "vacation on subject &#39;Carol Clark is no longer with the company&#39;" in r.text
+
+
+def test_offboard_rerun_runs_only_the_steps_not_ticked_done(client, gam_calls):
+    # A run stopped at the transfer: tick what succeeded, and only the transfer and the reminder run
+    # (re-adding the delegate would fail; the reset and sweep would just repeat). Ticked steps count as
+    # succeeded, so the reminder's dependency on the reset and the delegate is met.
+    done = ["password", "delegate", "vacation", "calacls"]
+    r, token = _offboard_preview(client, done=done)
+    assert "2 of 6 steps (4 ticked as already done)" in r.text and r.text.count("<pre") == 2
+    assert "Run 2 offboarding steps for" in r.text
+    job = _job(client, _offboard_run(client, token, done=done).text, "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    assert (job.total, job.applied, job.failed, job.skipped) == (2, 2, [], [])
+    assert [w[:3] for w in gam_writes(gam_calls())] == [["create", "datatransfer", LEAVER], ["user", MGR, "add"]]
+
+
+def test_offboard_preview_warns_when_the_manager_is_already_a_delegate(client, monkeypatch):
+    # GAM fails re-adding an existing delegate (Gmail alreadyExists), which would stop the routine.
+    async def delegates(email):
+        return ["Alice@example.com"] if email == LEAVER else []
+
+    monkeypatch.setattr(client.app.state.gamgui.connector, "list_delegates", delegates)
+    r, _ = _offboard_preview(client)
+    assert f"{MGR} already has delegate access" in r.text
+    r, _ = _offboard_preview(client, done=["delegate"])
+    assert "already has delegate access" not in r.text
+
+
+def test_offboard_with_every_step_ticked_done_has_nothing_to_run(client):
+    from gamgui.core.lifecycle import REQUIRES
+
+    r = client.post("/lifecycle/offboard/preview", data={**OFFBOARD_FORM, "done": list(REQUIRES)})
+    assert "nothing to run" in r.text and "Run offboarding" not in r.text
 
 
 def test_offboard_previews_held_are_bounded(client):

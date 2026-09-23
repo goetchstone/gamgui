@@ -12,7 +12,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Annotated, List
+from typing import Annotated, FrozenSet, List
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -57,12 +57,20 @@ class _Preview:
     form: tuple                # _form_key of the form the preview was built from
     user: str                  # the directory's primary addresses the steps act on
     manager: str
-    steps: List[lifecycle.OffboardStep]
+    steps: List[lifecycle.OffboardStep]   # the steps to run — the previewed ones not ticked done
+    done: FrozenSet[str]                  # keys ticked "already done": not run, and count as succeeded
     at: float = field(default_factory=time.monotonic)
 
 
-def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str) -> tuple:
-    return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower())
+def _done(form) -> FrozenSet[str]:
+    """The steps the operator ticked as already done (a re-run after a failure)."""
+    return frozenset(form.getlist("done")).intersection(lifecycle.REQUIRES)
+
+
+def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str,
+              done: FrozenSet[str]) -> tuple:
+    return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
+            tuple(sorted(done)))
 
 
 def _hold(previews: dict, preview: _Preview) -> str:
@@ -85,6 +93,15 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why
         return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {_friendly(exc)}"])
     return lifecycle.check_addresses(directory, user, manager)
+
+
+async def _already_delegate(conn, user: str, manager: str) -> bool:
+    """Whether ``manager`` is already ``user``'s mail delegate (GAM fails re-adding one). A read
+    failure is not a block — the delegate step reports its own failure."""
+    try:
+        return manager.lower() in {d.lower() for d in await conn.list_delegates(user)}
+    except Exception:  # noqa: BLE001 - only a warning depends on it
+        return False
 
 
 async def _resolve_name(st, email: str) -> str:
@@ -133,7 +150,7 @@ async def page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(
         request, "lifecycle.html",
         {"connected": _conn(request) is not None, "subject": lifecycle.DEFAULT_SUBJECT,
-         "message": lifecycle.DEFAULT_MESSAGE, "days": 30},
+         "message": lifecycle.DEFAULT_MESSAGE, "days": 30, "step_names": lifecycle.STEP_NAMES},
     )
 
 
@@ -147,14 +164,20 @@ async def offboard_preview(
     st = request.app.state.gamgui
     if st.connector is None:
         return _err(request, "Not connected.")
-    form = _form_key(user, manager, subject, message, days, notify)
+    done = _done(await request.form())
+    form = _form_key(user, manager, subject, message, days, notify, done)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return _err(request, "Enter both the departing user and the manager email.")
+    if done == frozenset(lifecycle.REQUIRES):
+        return _err(request, "Every step is ticked as already done — there is nothing to run.")
     check = await _check(st, user, manager)
     if check.errors:
         return _err(request, " ".join(check.errors))
     user, manager = check.user.primary_email, check.manager.primary_email
+    if "delegate" not in done and await _already_delegate(st.connector, user, manager):
+        check.warnings.append(f"{manager} already has delegate access to {user}'s mailbox. GAM fails a second "
+                              f"add, and a failed delegate stops the routine — tick “Set delegate” as already done.")
     # An emptied field runs the default text — the auto-reply block below shows the default too.
     subject, message = subject or lifecycle.DEFAULT_SUBJECT, message or lifecycle.DEFAULT_MESSAGE
     days_i = _days(days)
@@ -162,12 +185,14 @@ async def offboard_preview(
         user, manager, subject, message, days_i, date.today(),
         notify=notify.strip(), employee_name=await _employee_name(st, user),
         manager_contact=await _manager_contact(st, manager))
-    token = _hold(st.offboard_previews, _Preview(form, user, manager, steps))
+    to_run = [s for s in steps if s.key not in done]
+    token = _hold(st.offboard_previews, _Preview(form, user, manager, to_run, done))
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
-        {"steps": steps, "user": user, "manager": manager, "days": days_i, "warnings": check.warnings,
-         "token": token, "ar_subject": ar_subject, "ar_message": ar_message},
+        {"steps": steps, "done": done, "run_count": len(to_run), "user": user, "manager": manager,
+         "days": days_i, "warnings": check.warnings, "token": token,
+         "ar_subject": ar_subject, "ar_message": ar_message},
     )
 
 
@@ -185,10 +210,11 @@ async def offboard_autoreply(
         request, "_offboard_autoreply.html", {"subject": ar_subject, "message": ar_message})
 
 
-async def _run_offboard(job, conn, steps) -> None:
+async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) -> None:
     """Run the steps in order. A step whose ``requires`` did not all succeed is not run (logged "–"),
-    so a failed reset or delegate stops the routine instead of half-offboarding the account."""
-    succeeded = set()
+    so a failed reset or delegate stops the routine instead of half-offboarding the account. ``done``
+    are the steps ticked as already done by an earlier run: they satisfy ``requires``."""
+    succeeded = set(done)
     labels = {s.key: s.label for s in steps}
     try:
         for step in steps:
@@ -231,13 +257,14 @@ async def offboard_run(
     if conn is None:
         return _err(request, "Not connected.")
     # Destructive for the leaver (locks sign-in, strips calendar access domain-wide): confirmed=1.
-    refusal = guard.enforce(guard.changes([user.strip()], RiskLevel.DESTRUCTIVE, "Offboard"), await request.form())
+    form = await request.form()
+    refusal = guard.enforce(guard.changes([user.strip()], RiskLevel.DESTRUCTIVE, "Offboard"), form)
     if refusal:
         return _err(request, refusal)
     held = st.offboard_previews.pop(preview, None)   # single use: a second Run needs a new preview
     if held is None or time.monotonic() - held.at > PREVIEW_TTL:
         return _err(request, "That preview has expired or was already run — click Preview steps again.")
-    if held.form != _form_key(user, manager, subject, message, days, notify):
+    if held.form != _form_key(user, manager, subject, message, days, notify, _done(form)):
         return _err(request, "The form changed after the preview — click Preview steps again, so what runs "
                              "is what you checked.")
     check = await _check(st, held.user, held.manager)   # the directory may have changed since
@@ -245,7 +272,7 @@ async def offboard_run(
         return _err(request, " ".join(check.errors))
     user, steps = held.user, held.steps
     job = start_job(st.jobs, len(steps))
-    job.task = asyncio.create_task(_run_offboard(job, conn, steps))
+    job.task = asyncio.create_task(_run_offboard(job, conn, steps, done=held.done))
     st.invalidate_users()  # password/org/etc. changed
     return TEMPLATES.TemplateResponse(request, "_offboard_run.html", {"job": job, "user": user})
 

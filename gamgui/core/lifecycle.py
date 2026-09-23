@@ -46,6 +46,10 @@ REQUIRES: Dict[str, Tuple[str, ...]] = {
     "calacls": ("password", "delegate"),
     "reminder": ("password", "delegate", "transfer"),
 }
+# The steps as the form's "already done" boxes name them (a re-run skips a ticked step).
+STEP_NAMES = {"password": "Reset password", "delegate": "Set delegate", "vacation": "Auto-reply",
+              "transfer": "Transfer Drive & Calendar", "calacls": "Remove from everyone's calendars",
+              "reminder": "Manager reminder"}
 
 # GAM's own password generators (grammar <UserBasicAttribute>): keywords, not secrets, so shown as-is.
 _PASSWORD_KEYWORDS = frozenset({"random", "uniquerandom", "blocklogin", "prompt", "uniqueprompt"})
