@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.signatures import SignatureStore
 from gamgui.web.server import AppState, create_app
 
-from .helpers import TEST_HOSTS
+from .helpers import TEST_HOSTS, gam_writes
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
@@ -123,9 +124,8 @@ def test_preview_renders_steps_and_email(client):
 
 
 def test_run_creates_google_tasks_list(client):
-    r = client.post("/onboard/run", data={"role": "Salesperson", "name": "Jordan",
-                                          "email": "jordan@example.com", "assignee": "it@example.com",
-                                          "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Salesperson", "name": "Jordan",
+                                    "email": "jordan@example.com", "assignee": "it@example.com"})
     assert r.status_code == 200
     assert "Created" in r.text and "it@example.com" in r.text   # tasklist made on the assignee
 
@@ -230,13 +230,69 @@ def test_run_refuses_account_without_confirmation(client):
     assert "confirm" in r.text.lower()   # gated behind the preview's confirmation
 
 
+def _preview_token(client, **form):
+    """Preview a hire; return the page and the single-use token its Run form carries ("" if none)."""
+    r = client.post("/onboard/preview", data=form)
+    m = re.search(r'name="preview" value="([A-Za-z0-9_\-]+)"', r.text)
+    return r.text, (m.group(1) if m else "")
+
+
+def _run(client, token, **form):
+    """Post Run as the preview's form does: the live form (hx-include) + its hidden inputs."""
+    return client.post("/onboard/run", data={**form, "confirmed": "1", "preview": token})
+
+
+def _preview_and_run(client, **form):
+    """What the operator does: Preview, then click the preview's Run."""
+    _, token = _preview_token(client, **form)
+    return _run(client, token, **form)
+
+
+JORDAN = {"role": "Sales", "name": "Jordan Lee", "email": "jordan@example.com", "assignee": "it@example.com"}
+
+
+@pytest.mark.parametrize("edit", [{"create_account": "1", "first": "Jordan", "last": "Lee"},   # never previewed
+                                  {"email": "zed@example.com"}, {"assignee": "boss@example.com"},
+                                  {"send_welcome": "1"}])
+def test_run_executes_only_the_previewed_hire(client, gam_calls, edit):
+    # Run posts the live form. A tasks-only preview, then "Create the Google account" ticked, and the
+    # stale "Create the task list" button created a real account nobody had previewed.
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
+    shown, token = _preview_token(client, **JORDAN)
+    assert "Create the task list" in shown and "Creates the account" not in shown
+    r = _run(client, token, **{**JORDAN, **edit})
+    assert "The form changed after the preview" in r.text
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.connector.audit.tail() == []
+
+
+def test_run_uses_the_role_as_previewed(client, gam_calls):
+    # The role's steps (and OU, groups, calendars, signature) are the preview's, even if the role
+    # template is saved again before Run.
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    _, token = _preview_token(client, **JORDAN)
+    client.post("/onboard/role", data={"name": "Sales", "steps": "A\nB\nC", "groups": "sales@example.com"})
+    r = _run(client, token, **JORDAN)
+    assert "<strong>1</strong> of 1 task" in r.text
+    tasks = [c[c.index("title") + 1] for c in gam_writes(gam_calls()) if c[2:4] == ["create", "task"]]
+    assert tasks == ["Set up POS"] and not [c for c in gam_writes(gam_calls()) if c[:2] == ["update", "group"]]
+
+
+def test_run_is_single_use(client, gam_calls):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    _, token = _preview_token(client, **JORDAN)
+    assert "Created" in _run(client, token, **JORDAN).text
+    writes = len(gam_writes(gam_calls()))
+    r = _run(client, token, **JORDAN)                                  # a replayed click
+    assert "expired or was already run" in r.text and len(gam_writes(gam_calls())) == writes
+
+
 def test_run_creates_account_and_returns_sheet(client, tmp_path, monkeypatch):
     monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "SENTINELpw-1234-5678")
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
                                         "signature": "Classic", "org_unit": "/Sales"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte",
-                                          "email": "ada@example.com", "assignee": "it@example.com",
-                                          "create_account": "1", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada Byte",
+                                    "email": "ada@example.com", "assignee": "it@example.com",
+                                    "create_account": "1"})
     assert r.status_code == 200
     assert "Account created" in r.text and "SENTINELpw-1234-5678" in r.text   # the printable sheet shows the temp pw
     assert "Classic applied" in r.text                                        # the role's signature was applied
@@ -266,9 +322,9 @@ def test_credentials_sheets_share_one_print_helper_and_escape_the_copy_text(clie
 
 def test_run_account_duplicate_fails_gracefully(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Al Ready",
-                                          "email": "exists@example.com", "assignee": "it@example.com",
-                                          "create_account": "1", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Al Ready",
+                                    "email": "exists@example.com", "assignee": "it@example.com",
+                                    "create_account": "1"})
     assert "create the account" in r.text and "409" in r.text   # the 409 is surfaced, not swallowed
 
 
@@ -277,9 +333,9 @@ def test_run_account_failure_error_partial_never_shows_password(tmp_path, echoin
     with _client(tmp_path, echoing_gam) as c:
         c.get("/?token=t")
         c.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
-        r = c.post("/onboard/run", data={"role": "Sales", "name": "Ada Password",
-                                         "email": "ada@example.com", "assignee": "it@example.com",
-                                         "create_account": "1", "confirmed": "1"})
+        r = _preview_and_run(c, **{"role": "Sales", "name": "Ada Password",
+                                   "email": "ada@example.com", "assignee": "it@example.com",
+                                   "create_account": "1"})
     assert "Couldn&#39;t create the account" in r.text or "Couldn't create the account" in r.text
     assert "SENTINELpw-1234-5678" not in r.text and "***redacted***" in r.text
     assert "SENTINELpw-1234-5678" not in (tmp_path / "audit.jsonl").read_text()
@@ -314,8 +370,8 @@ def test_run_adds_groups_and_subscribes_calendars(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
                                         "groups": "sales@example.com\nstaff@example.com",
                                         "calendars": "team@group.calendar.google.com"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada",
-                                          "email": "ada@example.com", "assignee": "it@example.com", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada",
+                                    "email": "ada@example.com", "assignee": "it@example.com"})
     assert r.status_code == 200
     assert "2 of 2 groups" in r.text and "1 of 1 shared calendar" in r.text
     assert "Created" in r.text   # the tasklist still ran
@@ -326,8 +382,8 @@ def test_run_reports_failed_group_and_calendar_non_fatal(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
                                         "groups": "sales@example.com\nmissing-group@example.com",
                                         "calendars": "SUBFAIL-cal@x"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada",
-                                          "email": "ada@example.com", "assignee": "it@example.com", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada",
+                                    "email": "ada@example.com", "assignee": "it@example.com"})
     assert r.status_code == 200
     assert "1 of 2 groups" in r.text and "missing-group@example.com" in r.text   # bad group reported
     assert "0 of 1 shared calendar" in r.text and "SUBFAIL-cal@x" in r.text      # bad calendar reported
@@ -533,8 +589,8 @@ async def test_run_keeps_credentials_when_tasklist_fails(client, monkeypatch):
     monkeypatch.setattr(
         "gamgui.core.connectors.gam_connector.GAMConnector.create_onboarding_runbook", boom)
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
-                                          "assignee": "it@example.com", "create_account": "1", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
+                                    "assignee": "it@example.com", "create_account": "1"})
     assert r.status_code == 200
     assert "KEEPpw-1234-5678" in r.text                 # temp password still shown
     assert "Couldn't create the task list" in r.text    # failure surfaced, not swallowed
@@ -592,8 +648,8 @@ def test_split_name_single_word_has_no_fabricated_surname():
 
 def test_run_single_word_name_requires_last(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada", "email": "ada@example.com",
-                                          "assignee": "it@example.com", "create_account": "1", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada", "email": "ada@example.com",
+                                    "assignee": "it@example.com", "create_account": "1"})
     assert "first and last name" in r.text.lower()   # single-word name no longer becomes "Ada Ada"
 
 
@@ -623,18 +679,18 @@ def test_parse_hire_csv_flags_duplicate_emails():
 def test_run_reports_actual_task_count(client):
     # The mock now 404s create-task on a wrong tasklist id, so "Created N of N" proves real creation.
     client.post("/onboard/role", data={"name": "Cashier", "steps": "A\nB\nC"})
-    r = client.post("/onboard/run", data={"role": "Cashier", "name": "Jo",
-                                          "email": "jo@example.com", "assignee": "it@example.com", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Cashier", "name": "Jo",
+                                    "email": "jo@example.com", "assignee": "it@example.com"})
     assert "<strong>3</strong> of 3 tasks" in r.text
 
 
 def test_run_welcome_email_sent_and_failed(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
-    ok = client.post("/onboard/run", data={"role": "Sales", "name": "Jo", "email": "jo@example.com",
-                                           "assignee": "it@example.com", "send_welcome": "1", "confirmed": "1"})
+    ok = _preview_and_run(client, **{"role": "Sales", "name": "Jo", "email": "jo@example.com",
+                                     "assignee": "it@example.com", "send_welcome": "1"})
     assert "sent" in ok.text and "✓" in ok.text                     # sent ✓
-    bad = client.post("/onboard/run", data={"role": "Sales", "name": "Jo", "email": "jo-SENDFAIL@example.com",
-                                            "assignee": "it@example.com", "send_welcome": "1", "confirmed": "1"})
+    bad = _preview_and_run(client, **{"role": "Sales", "name": "Jo", "email": "jo-SENDFAIL@example.com",
+                                      "assignee": "it@example.com", "send_welcome": "1"})
     assert "failed to send" in bad.text
 
 
@@ -642,8 +698,8 @@ def test_run_create_account_with_groups_calendars_and_signature(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "signature": "Classic",
                                         "org_unit": "/Sales", "groups": "sales@example.com\nstaff@example.com",
                                         "calendars": "team@group.calendar.google.com"})
-    r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
-                                          "assignee": "it@example.com", "create_account": "1", "confirmed": "1"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
+                                    "assignee": "it@example.com", "create_account": "1"})
     assert "Account created" in r.text and "Classic applied" in r.text
     assert "2 of 2 group" in r.text and "1 of 1 shared calendar" in r.text and "of 1 task" in r.text
 

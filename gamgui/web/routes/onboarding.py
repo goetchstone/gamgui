@@ -27,6 +27,7 @@ from ...core.gam.models import GAMUser
 from ...core.onboarding import RunbookStore
 from ...core.signatures import SignatureStore
 from ..jobs import register_job
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/onboard")
@@ -189,7 +190,8 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             res["errors"].append("tasks: " + str(getattr(exc, "remediation", exc)))
 
     if hire.get("send_welcome") and email:
-        w, ctx = store.welcome(), _ctx(name, email, hire["role"], hire.get("manager", ""))
+        # The single flow holds the welcome template its preview rendered; a bulk row uses the store's.
+        w, ctx = hire.get("welcome") or store.welcome(), _ctx(name, email, hire["role"], hire.get("manager", ""))
         try:
             we = await conn.send_welcome_email(email, onboarding.render(w["subject"], ctx),
                                                onboarding.render(w["body"], ctx))
@@ -302,6 +304,19 @@ async def save_welcome(request: Request, subject: Annotated[str, Form()] = "", b
                                       {"welcome": store.welcome(), "vars": onboarding.WELCOME_VARS, "saved": True})
 
 
+# Run executes the hire its preview showed: the form's values, the role template and the welcome email
+# as they were at Preview, held under a single-use token (web/previews.py). Run once posted the live
+# form, so ticking "Create the Google account" after a tasks-only preview created an account nobody
+# had previewed (failure-log 2026-09-23).
+_FLOW = "onboard"
+
+
+def _form_key(role: str, name: str, email: str, manager: str, assignee: str, send_welcome: str,
+              create_account: str, first: str, last: str) -> tuple:
+    return (role, name.strip(), email.strip().lower(), manager.strip().lower(), assignee.strip().lower(),
+            bool(send_welcome), bool(create_account), first.strip(), last.strip())
+
+
 @router.post("/preview", response_class=HTMLResponse)
 async def preview(request: Request, role: Annotated[str, Form()], name: Annotated[str, Form()] = "",
                   email: Annotated[str, Form()] = "", manager: Annotated[str, Form()] = "",
@@ -316,7 +331,14 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
         return _err(request, "That role has no steps yet — add some in Role templates.")
     w, ctx = store.welcome(), _ctx(name, email, role, manager)
     f, l = _split_name(name, first, last)
+    hire = {"role": role, "name": name, "email": email.strip(), "manager": manager, "assignee": assignee,
+            "create_account": bool(create_account), "first": first, "last": last,
+            "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
+    token = _st(request).previews.hold(
+        _FLOW, _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last),
+        (hire, cfg))
     return TEMPLATES.TemplateResponse(request, "_onboard_preview.html", {
+        "token": token,
         "role": role, "steps": cfg.steps, "assignee": (assignee or email).strip(), "name": name, "email": email,
         "manager": manager, "send_welcome": bool(send_welcome),
         "create_account": bool(create_account), "first": f, "last": l,
@@ -336,6 +358,7 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     conn = st.connector
     if conn is None:
         return _err(request, "Not connected.")
+    previewed = _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last)
     store = _store(request)
     cfg = store.role(role)
     if cfg is None or not cfg.steps:
@@ -360,8 +383,13 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if not onboarding.looks_like_email(assignee):
         return _err(request, "The assignee does not look like a valid email address.")
     # Every run writes (a task list at least; maybe an account): only via the preview's Run button.
-    refusal = guard.enforce(guard.changes([email or assignee], RiskLevel.LOW, "Onboard"), await request.form(),
-                            confirm_step=True)
+    form = await request.form()
+    refusal = guard.enforce(guard.changes([email or assignee], RiskLevel.LOW, "Onboard"), form, confirm_step=True)
+    if refusal:
+        return _err(request, refusal)
+    # ...and only the hire that preview showed: a used or expired preview, or a form edited since
+    # (an account ticked, an address retyped), is refused rather than run.
+    held, refusal = st.previews.take(_FLOW, str(form.get(TOKEN_FIELD) or ""), previewed, again="click Preview again")
     if refusal:
         return _err(request, refusal)
 
@@ -369,9 +397,7 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     # and bulk flows (their divergence is exactly what stranded a temp password before). The single
     # flow never uses `notify` (always the printable sheet) and turns a hard failure into an error page
     # while the bulk feed shows it as a per-hire row.
-    hire = {"role": role, "name": name, "email": email, "manager": manager, "assignee": assignee,
-            "create_account": make_account, "first": first, "last": last,
-            "send_welcome": bool(send_welcome), "notify": ""}
+    hire, cfg = held   # the previewed hire, role template and welcome email — never re-read from the store
     res = await _provision_hire(conn, _sig_store(request), store, cfg, hire)
     if make_account and not res["account_created"]:
         detail = next((e[len("create: "):] for e in res["errors"] if e.startswith("create:")), "unknown error")
