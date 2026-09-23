@@ -33,8 +33,8 @@
     <pre class="mt-1 whitespace-pre-wrap break-words text-xs text-brand-blueink/90">{{ body }}</pre>
   </div>
   {% endif %}
-  <form hx-post="/onboard/run" hx-include="#onboard-form" hx-target="#onboard-result" hx-swap="innerHTML">
-    {% if create_account %}<input type="hidden" name="confirm" value="1" />{% endif %}
+  <form hx-post="/onboard/run" hx-include="#onboard-form" hx-target="#onboard-result" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="confirmed" value="1" />
     <button class="rounded-lg {{ 'bg-amber-600 hover:bg-amber-700' if create_account else 'bg-brand-blue hover:bg-brand-blueink' }} px-3.5 py-2 text-sm font-medium text-brand-white transition-colors" type="submit">
       {% if create_account %}Create account &amp; run onboarding{% else %}Create the task list{% if send_welcome %} &amp; send the email{% endif %}{% endif %}</button>
   </form>

@@ -1,22 +1,36 @@
-"""The destructive-operation guard.
+"""The destructive-operation guard: what confirmation a mutation needs, and the check that it got it.
 
-Every mutation passes through here before it runs. Given the list of :class:`ChangePreview`
-objects a connector produced (its dry-run), the guard decides what confirmation the UI must
-require. This is the single chokepoint that makes "show exactly which accounts will be affected,
-and make me confirm" a property of the whole app rather than something each screen reimplements.
+:func:`evaluate` decides, from the :class:`ChangePreview` list a mutation would make: destructive →
+a Confirm click; bulk (>= ``DEFAULT_BULK_THRESHOLD``) → a Confirm click; destructive *and* bulk →
+the operator types "confirm". It is pure, and a template renders its decision.
+
+:func:`enforce` is the server-side half, and the one that counts: a mutating route calls it with the
+posted form before its first GAM write and refuses when the form lacks what the decision requires.
+A template showing a Confirm button proves nothing about the POST that comes back — five routes
+once ran a suspend, an event delete, a company-wide signature overwrite and a whole offboarding on a
+bare POST because only their templates asked (docs/failure-log.md, 2026-09-23).
+
+What does not call it: single-target LOW writes (by this policy they need no confirmation), and
+account/calendar delete, whose routes demand a stronger typed value (the exact email / ``DELETE``).
+``tests/test_write_routes_guarded.py`` enumerates every POST route and holds each to one of these.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Sequence
+from typing import Any, Iterable, List, Mapping, Optional, Sequence
 
-from .connectors.base import ChangePreview, RiskLevel
+from .connectors.base import ChangePreview, ConnectorID, RiskLevel
 
-# A bulk action at/above this count needs typed confirmation, not just a click.
+# At/above this count a change is bulk: it needs a Confirm click, and the typed word if destructive.
 DEFAULT_BULK_THRESHOLD = 10
 # Above this count we additionally flag the operation as unusually large.
 DEFAULT_HARD_CAP = 200
+
+# What a confirm step posts back — the templates must send exactly these, and `enforce` checks them.
+CONFIRMED_FIELD = "confirmed"   # the Confirm button (hx-vals) or a hidden input: "1"
+TYPED_FIELD = "confirm"         # a destructive bulk change: the operator types TYPED_WORD
+TYPED_WORD = "confirm"
 
 
 @dataclass
@@ -86,3 +100,26 @@ def evaluate(
         summary=summary,
         warnings=warnings,
     )
+
+
+def changes(targets: Iterable[str], risk: RiskLevel, summary: str) -> List[ChangePreview]:
+    """Previews for a route whose connector call builds its own argv. Only ``evaluate``/``enforce``
+    read them (target + risk); they are never applied."""
+    return [ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=t, summary=summary, risk=risk)
+            for t in targets]
+
+
+def enforce(previews: Sequence[ChangePreview], form: Mapping[str, Any], *,
+            confirm_step: bool = False) -> Optional[str]:
+    """Why ``form`` may not run ``previews`` (an operator-facing message), or None when it may.
+
+    ``confirm_step`` is for a route whose UI always previews first (a bulk job, a multi-step
+    routine): it needs ``confirmed=1`` whatever the count or risk.
+    """
+    decision = evaluate(previews)
+    if decision.requires_typed_confirmation:
+        if str(form.get(TYPED_FIELD) or "").strip().lower() != TYPED_WORD:
+            return "Type confirm to run this destructive bulk change."
+    elif (decision.requires_confirmation or confirm_step) and form.get(CONFIRMED_FIELD) != "1":
+        return "This change needs confirmation — preview it, then confirm."
+    return None

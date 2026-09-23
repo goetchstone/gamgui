@@ -8,8 +8,8 @@
   {% if event.is_recurring %}<p class="mt-1 text-red-700">⚠ Recurring event — deleting removes the entire series (all occurrences).</p>{% endif %}
   <div class="mt-3 flex gap-2">
     <button class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors"
-            hx-post="/calendars/event/delete" hx-target="#event-action" hx-swap="innerHTML"
-            hx-vals='{"cal": {{ cal | tojson }}, "event_id": {{ event.id | tojson }} }'>Yes, delete</button>
+            hx-post="/calendars/event/delete" hx-target="#event-action" hx-swap="innerHTML" hx-disabled-elt="this"
+            hx-vals='{"cal": {{ cal | tojson }}, "event_id": {{ event.id | tojson }}, "confirmed": "1"}'>Yes, delete</button>
     <button type="button" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
             onclick="document.getElementById('event-action').innerHTML=''">Cancel</button>
   </div>

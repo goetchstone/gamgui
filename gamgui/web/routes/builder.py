@@ -287,11 +287,10 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
         return _render_read(request, out, _gam_str(argv))
     # A mutation that needs confirmation must come back through the preview (the "Confirm & run"
     # button sends confirmed=1) — a bare POST never silently runs a destructive command.
-    decision = guard_mod.evaluate([preview])
-    form = await request.form()
-    if decision.requires_confirmation and not form.get("confirmed"):
+    if guard_mod.enforce([preview], await request.form()):
         return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
-            "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
+            "cmd": cmd, "gam": _gam_str(argv), "decision": guard_mod.evaluate([preview]), "target": target,
+            "slots": slots,
         })
     result = (await conn.apply([preview]))[0]
     return TEMPLATES.TemplateResponse(request, "_action_result.html",
@@ -375,7 +374,7 @@ async def _run_sequence(job, conn, previews) -> None:
 
 
 @router.post("/sequence/run", response_class=HTMLResponse)
-async def seq_run(request: Request, confirm: Annotated[str, Form()] = "", confirmed: Annotated[str, Form()] = "") -> HTMLResponse:
+async def seq_run(request: Request) -> HTMLResponse:
     st = _st(request)
     conn = st.connector
     if conn is None:
@@ -384,17 +383,12 @@ async def seq_run(request: Request, confirm: Annotated[str, Form()] = "", confir
     if not seq:
         return _err(request, "The sequence is empty.")
     previews = _seq_previews(seq)
-    decision = guard_mod.evaluate(previews)
     # Enforce the full guard server-side (mirrors /run): a bulk-destructive sequence needs typed
     # "confirm"; any other confirmation-requiring sequence needs the Confirm & run click.
-    def _needs_confirm(msg: str = "") -> HTMLResponse:
-        return TEMPLATES.TemplateResponse(request, "_sequence_preview.html",
-                                          {"sequence": seq, "decision": decision, "error": msg})
-    if decision.requires_typed_confirmation:
-        if confirm.strip().lower() != "confirm":
-            return _needs_confirm("Type confirm to run this destructive bulk sequence.")
-    elif decision.requires_confirmation and not confirmed:
-        return _needs_confirm()
+    refusal = guard_mod.enforce(previews, await request.form())
+    if refusal:
+        return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
+            "sequence": seq, "decision": guard_mod.evaluate(previews), "error": refusal})
     job = start_job(st.jobs, len(previews))
     job.task = asyncio.create_task(_run_sequence(job, conn, previews))
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": job})

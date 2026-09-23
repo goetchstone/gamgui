@@ -15,6 +15,8 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from ...core import guard
+from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ..jobs import start_job
 from ..server import TEMPLATES
@@ -507,6 +509,9 @@ async def event_delete(request: Request, cal: Annotated[str, Form()], event_id: 
     conn = _conn(request)
     if conn is None:
         return _err(request, _NOT_CONNECTED)
+    refusal = guard.enforce(guard.changes([event_id], RiskLevel.DESTRUCTIVE, "Delete event"), await request.form())
+    if refusal:
+        return _err(request, refusal)
     result = await conn.delete_event(cal, event_id)
     if not result.ok:
         return _err(request, f"Couldn't delete the event: {result.detail}")

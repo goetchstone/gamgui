@@ -63,7 +63,9 @@ You build and run it yourself; it is not yet notarized for distribution to other
 
 > **Destructive actions are guarded — but check what has actually been proven live.** Suspend,
 > account delete, calendar/event delete, data transfer, the offboarding routine, and bulk operations
-> all run behind a *preview → typed confirmation → audit-logged* path. That guard is well covered by
+> all run behind a *preview → confirmation → audit-logged* path (typed for account and calendar
+> delete and for a destructive bulk run), and the server refuses a request that skipped the
+> confirmation — the page asking is not enough. That guard is well covered by
 > tests; what tests cannot prove is that a given GAM command behaves as expected against a real
 > tenant. See [Live verification status](#live-verification-status) for which writes have been
 > confirmed against a production domain and which have not — and run anything in the second list
@@ -143,7 +145,8 @@ Beyond the credentials themselves:
 - **GAM is never invoked through a shell.** Every command is an explicit argv list built by
   `GAMCommands`; user input is always a single list element, never string-interpolated.
 - **Every mutation is guarded and audited** — `guard.evaluate()` classifies risk and resolves the
-  concrete affected set for a preview, and the write is appended to a local audit log.
+  concrete affected set for a preview, `guard.enforce()` re-checks the confirmation server-side
+  before the write, and the write is appended to a local audit log.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** A release asset with no
   committed pin is refused rather than installed, since a swapped binary would inherit
   domain-wide impersonation.

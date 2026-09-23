@@ -204,7 +204,7 @@ def _start_apply(client, body):
 
 
 def test_signatures_apply(client, gam_calls):
-    r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
+    r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": "", "confirmed": "1"})
     assert "Applying signature" in r.text
     job = _job(client, r.text, "/signatures/apply/status")
     wait_for_job(client, job)
@@ -397,7 +397,8 @@ def test_bulk_store_apply_requires_store_value(client):
 
 
 def test_bulk_store_apply_runs_as_job(client, gam_calls):
-    r = client.post("/users/bulk/apply", data={"store": "Downtown", "group": "", "emails": "alice@example.com"})
+    r = client.post("/users/bulk/apply", data={"store": "Downtown", "group": "", "emails": "alice@example.com",
+                                               "confirmed": "1"})
     assert_ok_partial(r)
     job = _job(client, r.text, "/users/bulk/status")
     wait_for_job(client, job)
@@ -577,7 +578,8 @@ def test_calendars_event_delete_preview_warns_on_recurring(client):
 
 def test_calendars_event_delete_applies(client):
     r = client.post("/calendars/event/delete",
-                    data={"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"})
+                    data={"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup",
+                          "confirmed": "1"})
     assert r.status_code == 200
     assert "Event deleted." in r.text
 
@@ -898,7 +900,8 @@ def test_lifecycle_offboard_run_starts(client, gam_calls):
     # own loop (not by polling the status endpoint — that hung CI for 6h before the fixtures were
     # context-managed), then the finished panel is rendered once.
     r = client.post("/lifecycle/offboard/run",
-                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
+                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30",
+                          "confirmed": "1"})
     assert_ok_partial(r)
     job = _job(client, r.text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
@@ -1012,7 +1015,7 @@ def test_suspend_preview_is_guarded(client):
 
 
 def test_suspend_apply_toggles_zone(client):
-    r = client.post("/users/suspend/apply", data={"email": "alice@example.com", "suspend": "on"})
+    r = client.post("/users/suspend/apply", data={"email": "alice@example.com", "suspend": "on", "confirmed": "1"})
     assert r.status_code == 200
     assert "Unsuspend" in r.text  # now shows the suspended-state control
 

@@ -28,7 +28,10 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 ## How it works
 `build_offboard_steps` returns 6 ordered `OffboardStep`s (`password`, `delegate`, `vacation`,
 `transfer`, `calacls`, `reminder`), each a `lambda conn: conn.<method>(...)`. It is pure and
-testable; the route runs it. `offboard_run` builds the steps, calls `start_job`, and hands them to
+testable; the route runs it. `offboard_run` first refuses a POST without `confirmed=1`
+(`guard.enforce`, the leaver declared `DESTRUCTIVE`: the preview's Run button posts it, and
+`hx-disabled-elt` stops a double-click starting a second run — a bare POST once ran the whole
+routine, failure-log 2026-09-23), then builds the steps, calls `start_job`, and hands them to
 `_run_offboard`, which runs each step in order, appends a `✓/✗` line to `job.log`, and **never aborts
 on a failed step** (every failure is reported). The "timer" is the last step: a calendar reminder
 event on the manager's calendar `days` out — there is no app-side scheduler. The final account

@@ -124,7 +124,8 @@ def test_preview_renders_steps_and_email(client):
 
 def test_run_creates_google_tasks_list(client):
     r = client.post("/onboard/run", data={"role": "Salesperson", "name": "Jordan",
-                                          "email": "jordan@example.com", "assignee": "it@example.com"})
+                                          "email": "jordan@example.com", "assignee": "it@example.com",
+                                          "confirmed": "1"})
     assert r.status_code == 200
     assert "Created" in r.text and "it@example.com" in r.text   # tasklist made on the assignee
 
@@ -225,7 +226,7 @@ def test_preview_shows_create_account_block(client):
 def test_run_refuses_account_without_confirmation(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte",
-                                          "email": "ada@example.com", "create_account": "1"})   # no confirm=1
+                                          "email": "ada@example.com", "create_account": "1"})   # no confirmed=1
     assert "confirm" in r.text.lower()   # gated behind the preview's confirmation
 
 
@@ -235,7 +236,7 @@ def test_run_creates_account_and_returns_sheet(client, tmp_path, monkeypatch):
                                         "signature": "Classic", "org_unit": "/Sales"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte",
                                           "email": "ada@example.com", "assignee": "it@example.com",
-                                          "create_account": "1", "confirm": "1"})
+                                          "create_account": "1", "confirmed": "1"})
     assert r.status_code == 200
     assert "Account created" in r.text and "SENTINELpw-1234-5678" in r.text   # the printable sheet shows the temp pw
     assert "Classic applied" in r.text                                        # the role's signature was applied
@@ -247,7 +248,7 @@ def test_run_account_duplicate_fails_gracefully(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Al Ready",
                                           "email": "exists@example.com", "assignee": "it@example.com",
-                                          "create_account": "1", "confirm": "1"})
+                                          "create_account": "1", "confirmed": "1"})
     assert "create the account" in r.text and "409" in r.text   # the 409 is surfaced, not swallowed
 
 
@@ -258,7 +259,7 @@ def test_run_account_failure_error_partial_never_shows_password(tmp_path, echoin
         c.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
         r = c.post("/onboard/run", data={"role": "Sales", "name": "Ada Password",
                                          "email": "ada@example.com", "assignee": "it@example.com",
-                                         "create_account": "1", "confirm": "1"})
+                                         "create_account": "1", "confirmed": "1"})
     assert "Couldn&#39;t create the account" in r.text or "Couldn't create the account" in r.text
     assert "SENTINELpw-1234-5678" not in r.text and "***redacted***" in r.text
     assert "SENTINELpw-1234-5678" not in (tmp_path / "audit.jsonl").read_text()
@@ -294,7 +295,7 @@ def test_run_adds_groups_and_subscribes_calendars(client):
                                         "groups": "sales@example.com\nstaff@example.com",
                                         "calendars": "team@group.calendar.google.com"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada",
-                                          "email": "ada@example.com", "assignee": "it@example.com"})
+                                          "email": "ada@example.com", "assignee": "it@example.com", "confirmed": "1"})
     assert r.status_code == 200
     assert "2 of 2 groups" in r.text and "1 of 1 shared calendar" in r.text
     assert "Created" in r.text   # the tasklist still ran
@@ -306,7 +307,7 @@ def test_run_reports_failed_group_and_calendar_non_fatal(client):
                                         "groups": "sales@example.com\nmissing-group@example.com",
                                         "calendars": "SUBFAIL-cal@x"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada",
-                                          "email": "ada@example.com", "assignee": "it@example.com"})
+                                          "email": "ada@example.com", "assignee": "it@example.com", "confirmed": "1"})
     assert r.status_code == 200
     assert "1 of 2 groups" in r.text and "missing-group@example.com" in r.text   # bad group reported
     assert "0 of 1 shared calendar" in r.text and "SUBFAIL-cal@x" in r.text      # bad calendar reported
@@ -429,7 +430,7 @@ def test_bulk_run_starts_a_job(client):
     import re
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     csv = "role,name,email,assignee\nSales,Ada,ada@example.com,it@example.com\n"
-    r = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirm": "1"})
+    r = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirmed": "1"})
     assert r.status_code == 200
     assert re.search(r"/onboard/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
 
@@ -513,7 +514,7 @@ async def test_run_keeps_credentials_when_tasklist_fails(client, monkeypatch):
         "gamgui.core.connectors.gam_connector.GAMConnector.create_onboarding_runbook", boom)
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
-                                          "assignee": "it@example.com", "create_account": "1", "confirm": "1"})
+                                          "assignee": "it@example.com", "create_account": "1", "confirmed": "1"})
     assert r.status_code == 200
     assert "KEEPpw-1234-5678" in r.text                 # temp password still shown
     assert "Couldn't create the task list" in r.text    # failure surfaced, not swallowed
@@ -572,7 +573,7 @@ def test_split_name_single_word_has_no_fabricated_surname():
 def test_run_single_word_name_requires_last(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada", "email": "ada@example.com",
-                                          "assignee": "it@example.com", "create_account": "1", "confirm": "1"})
+                                          "assignee": "it@example.com", "create_account": "1", "confirmed": "1"})
     assert "first and last name" in r.text.lower()   # single-word name no longer becomes "Ada Ada"
 
 
@@ -603,17 +604,17 @@ def test_run_reports_actual_task_count(client):
     # The mock now 404s create-task on a wrong tasklist id, so "Created N of N" proves real creation.
     client.post("/onboard/role", data={"name": "Cashier", "steps": "A\nB\nC"})
     r = client.post("/onboard/run", data={"role": "Cashier", "name": "Jo",
-                                          "email": "jo@example.com", "assignee": "it@example.com"})
+                                          "email": "jo@example.com", "assignee": "it@example.com", "confirmed": "1"})
     assert "<strong>3</strong> of 3 tasks" in r.text
 
 
 def test_run_welcome_email_sent_and_failed(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     ok = client.post("/onboard/run", data={"role": "Sales", "name": "Jo", "email": "jo@example.com",
-                                           "assignee": "it@example.com", "send_welcome": "1"})
+                                           "assignee": "it@example.com", "send_welcome": "1", "confirmed": "1"})
     assert "sent" in ok.text and "✓" in ok.text                     # sent ✓
     bad = client.post("/onboard/run", data={"role": "Sales", "name": "Jo", "email": "jo-SENDFAIL@example.com",
-                                            "assignee": "it@example.com", "send_welcome": "1"})
+                                            "assignee": "it@example.com", "send_welcome": "1", "confirmed": "1"})
     assert "failed to send" in bad.text
 
 
@@ -622,7 +623,7 @@ def test_run_create_account_with_groups_calendars_and_signature(client):
                                         "org_unit": "/Sales", "groups": "sales@example.com\nstaff@example.com",
                                         "calendars": "team@group.calendar.google.com"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",
-                                          "assignee": "it@example.com", "create_account": "1", "confirm": "1"})
+                                          "assignee": "it@example.com", "create_account": "1", "confirmed": "1"})
     assert "Account created" in r.text and "Classic applied" in r.text
     assert "2 of 2 group" in r.text and "1 of 1 shared calendar" in r.text and "of 1 task" in r.text
 

@@ -14,7 +14,8 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import lifecycle
+from ...core import guard, lifecycle
+from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ..jobs import start_job
 from ..server import TEMPLATES
@@ -167,6 +168,10 @@ async def offboard_run(
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return _err(request, "Enter both the departing user and the manager email.")
+    # Destructive for the leaver (locks sign-in, strips calendar access domain-wide): confirmed=1.
+    refusal = guard.enforce(guard.changes([user], RiskLevel.DESTRUCTIVE, "Offboard"), await request.form())
+    if refusal:
+        return _err(request, refusal)
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, _days(days), date.today(),
         notify=notify.strip(), employee_name=await _employee_name(st, user),

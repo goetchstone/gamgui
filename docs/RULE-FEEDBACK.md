@@ -30,6 +30,25 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-09-23 — Invariant #2 said "every mutation goes through guard.evaluate()"; five routes only rendered it
+- **What happened:** suspend, bulk department, event delete, offboarding and signature apply ran on a
+  bare POST (failure-log 2026-09-23, "Five write routes ran on a bare POST"). They did call
+  `guard.evaluate()` — in the *preview* route, to draw the Confirm button. The apply route never
+  checked that the POST carried the confirmation.
+- **Invariant in force:** #2 (every mutation goes through the chokepoint: builder → `ChangePreview` →
+  `guard.evaluate()` → `_run_write`).
+- **Why it didn't hold:** wrong layer, and wording that permits the bad reading. `evaluate` only
+  decides; "goes through guard.evaluate()" was satisfied by a template rendering its decision. The
+  enforcement that matters is server-side at apply time, and each route reimplemented it (Builder,
+  delete) or didn't.
+- **Would a rule have caught it?** Only if enforced differently — now a tripwire
+  (`tests/test_write_routes_guarded.py`) enumerates every POST route and fails on any that writes
+  without the confirmation, and `guard.enforce` is the one server-side check. A wording candidate for
+  the observer pass: "…→ `guard.enforce()` against the posted form, in the apply route, before the
+  first write →…", and noting that single-target LOW writes and the typed-exact deletes are the
+  documented exceptions.
+- **Enforcement home if changed:** tripwire test (done); the #2 wording is for improve-rules.
+
 ## 2026-09-15 — Secret redaction covers `argv` but not the audit record's `extra.error`
 - **What happened:** An adversarial review of the onboarding `notify` change noted that `_run_write`'s
   failure path records `extra={"error": str(exc), …}` (`gamgui/core/connectors/gam_connector.py`), and

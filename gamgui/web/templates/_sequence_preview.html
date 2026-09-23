@@ -3,7 +3,7 @@
   <p class="text-sm font-medium {{ 'text-red-700' if destructive else 'text-brand-blueink' }}">{{ decision.summary }} across {{ sequence | length }} step{{ '' if sequence | length == 1 else 's' }}.</p>
   {% for w in decision.warnings %}<p class="text-xs text-red-700">{{ w }}</p>{% endfor %}
   {% if error %}<p class="text-xs font-medium text-red-700">{{ error }}</p>{% endif %}
-  <form hx-post="/builder/sequence/run" hx-target="#sequence-action" hx-swap="innerHTML" class="flex items-center gap-2">
+  <form hx-post="/builder/sequence/run" hx-target="#sequence-action" hx-swap="innerHTML" hx-disabled-elt="find button" class="flex items-center gap-2">
     {% if decision.requires_typed_confirmation %}
     <input name="confirm" autocomplete="off" placeholder="type: confirm"
            class="rounded-lg border border-red-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none" />

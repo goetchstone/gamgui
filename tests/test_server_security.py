@@ -119,7 +119,8 @@ def test_cross_site_fetch_metadata_is_rejected_without_origin(client):
 
 
 def test_cross_origin_cannot_reach_a_mutating_route(client):
-    r = client.post("/users/suspend/apply", data={"email": "alice@example.com", "suspend": "on"},
+    # Fully confirmed, so only the Origin check stands between this POST and a suspend.
+    r = client.post("/users/suspend/apply", data={"email": "alice@example.com", "suspend": "on", "confirmed": "1"},
                     headers={"Origin": "http://127.0.0.1:9999"})
     assert r.status_code == 403
 

@@ -46,3 +46,26 @@ def test_over_hard_cap_warns():
     d = guard.evaluate(previews, hard_cap=3)
     assert d.over_hard_cap is True
     assert d.warnings
+
+
+# --- enforce: the server-side half, against the posted form -------------------------------------
+
+def test_enforce_destructive_needs_exactly_confirmed_1():
+    one = guard.changes(["a@e.com"], RiskLevel.DESTRUCTIVE, "Suspend")
+    assert guard.enforce(one, {}) and guard.enforce(one, {"confirmed": "yes"})
+    assert guard.enforce(one, {"confirm": "1"})           # the typed field is not the Confirm click
+    assert guard.enforce(one, {"confirmed": "1"}) is None
+
+
+def test_enforce_bulk_destructive_needs_the_typed_word():
+    many = guard.changes([f"u{i}@e.com" for i in range(10)], RiskLevel.DESTRUCTIVE, "Delete")
+    assert guard.enforce(many, {"confirmed": "1"})        # a click is not enough at bulk scale
+    assert guard.enforce(many, {"confirm": "nope"})
+    assert guard.enforce(many, {"confirm": " Confirm "}) is None
+
+
+def test_enforce_single_low_write_needs_nothing_unless_it_has_a_confirm_step():
+    one = guard.changes(["a@e.com"], RiskLevel.LOW, "Set signature")
+    assert guard.enforce(one, {}) is None
+    assert guard.enforce(one, {}, confirm_step=True)      # a bulk job / routine always previews first
+    assert guard.enforce(one, {"confirmed": "1"}, confirm_step=True) is None

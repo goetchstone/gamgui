@@ -16,8 +16,8 @@
   <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
     Runs all {{ summary.total }} now — creates <strong>{{ summary.creates }}</strong> real account{{ '' if summary.creates == 1 else 's' }} and applies each role's signature, groups, calendars and task list. This isn't undoable from here.
   </div>
-  <form hx-post="/onboard/bulk/run" hx-target="#onboard-bulk-result" hx-swap="innerHTML">
-    <input type="hidden" name="confirm" value="1" />
+  <form hx-post="/onboard/bulk/run" hx-target="#onboard-bulk-result" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="confirmed" value="1" />
     <textarea name="csv_text" class="hidden" aria-hidden="true">{{ csv_text }}</textarea>
     <button type="submit" class="rounded-lg bg-amber-600 hover:bg-amber-700 px-3.5 py-2 text-sm font-medium text-brand-white transition-colors">Run onboarding for {{ summary.total }} hire{{ '' if summary.total == 1 else 's' }}</button>
   </form>

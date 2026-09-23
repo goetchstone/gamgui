@@ -17,7 +17,7 @@
         <span><span class="text-brand-black">{{ a.who }}</span> <span class="text-brand-gray">— {{ a.role_label }}</span></span>
         {% if a.role != "owner" %}
         <button class="text-xs text-red-700 hover:underline shrink-0"
-                hx-post="/calendars/unshare" hx-target="#cal-detail" hx-swap="innerHTML"
+                hx-post="/calendars/unshare" hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="this"
                 hx-vals='{"cal": {{ cal | tojson }}, "scope": {{ a.scope_token | tojson }}, "label": {{ label | tojson }} }'
                 hx-confirm="Remove access for {{ a.who }}?">Remove</button>
         {% endif %}
@@ -27,7 +27,7 @@
     {% else %}
     <p class="mt-2 text-sm text-brand-gray">No access rules returned.</p>
     {% endif %}
-    <form class="mt-3 flex flex-wrap gap-2" hx-post="/calendars/share" hx-target="#cal-detail" hx-swap="innerHTML">
+    <form class="mt-3 flex flex-wrap gap-2" hx-post="/calendars/share" hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="find button">
       <input type="hidden" name="cal" value="{{ cal }}" />
       <input type="hidden" name="label" value="{{ label }}" />
       <input type="email" name="target" required placeholder="share with person@domain.com"

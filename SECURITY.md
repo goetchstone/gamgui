@@ -58,7 +58,9 @@ guarding them:
   `GAMGUI_GAM_BINARY` development override; and the app and `gam` are signed with the hardened
   runtime, so dyld ignores injected `DYLD_*` variables.
 - **Every mutation is guarded and audited.** `guard.evaluate()` classifies risk and resolves the
-  concrete affected set for a preview; the write is then appended to a local audit log.
+  concrete affected set for a preview; the route that applies it re-checks the posted confirmation
+  with `guard.enforce()` before any write, so a POST that skips the confirm step writes nothing (a
+  tripwire posts to every route to prove it); the write is then appended to a local audit log.
 - **Only read-only commands can become runnable automatically.** The Builder promotes
   grammar-derived commands to runnable *only* when they are confidently read-only; every write must
   be hand-curated. Anything uncertain stays inert.

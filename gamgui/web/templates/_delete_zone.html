@@ -3,7 +3,7 @@
   Account deleted. Recoverable for ~20 days (Admin Console, or <code>gam undelete user {{ email }}</code>).
 </div>
 {% elif confirming %}
-<form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" class="space-y-2">
+<form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" class="space-y-2">
   <input type="hidden" name="email" value="{{ email }}" />
   {% if pending_transfers %}
   <div class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">
@@ -20,7 +20,8 @@
   <div class="flex gap-2">
     <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Permanently delete</button>
     <button type="button" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/users/delete/zone?email={{ email | urlencode }}" hx-target="#delete-zone" hx-swap="innerHTML">Cancel</button>
+            hx-get="/users/delete/zone?email={{ email | urlencode }}" hx-target="#delete-zone" hx-swap="innerHTML"
+            hx-disabled-elt="this">Cancel</button>
   </div>
 </form>
 {% else %}

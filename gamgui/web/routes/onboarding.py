@@ -20,8 +20,9 @@ from typing import Annotated, List, Optional
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from ...core import onboarding
+from ...core import guard, onboarding
 from ...core import signatures as sig
+from ...core.connectors.base import RiskLevel
 from ...core.gam.models import GAMUser
 from ...core.onboarding import RunbookStore
 from ...core.signatures import SignatureStore
@@ -329,7 +330,7 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
               email: Annotated[str, Form()] = "", manager: Annotated[str, Form()] = "",
               assignee: Annotated[str, Form()] = "", send_welcome: Annotated[str, Form()] = "",
               create_account: Annotated[str, Form()] = "", first: Annotated[str, Form()] = "",
-              last: Annotated[str, Form()] = "", confirm: Annotated[str, Form()] = "") -> HTMLResponse:
+              last: Annotated[str, Form()] = "") -> HTMLResponse:
     st = _st(request)
     conn = st.connector
     if conn is None:
@@ -347,9 +348,6 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     # step) can't strand a just-created account's one-time password (it exists nowhere else).
     f = l = ""
     if make_account:
-        # Creating a real account is gated behind the preview: its Run button posts confirm=1.
-        if confirm != "1":
-            return _err(request, "Preview first — creating an account needs confirmation.")
         if not email:
             return _err(request, "Enter the new hire's email to create the account.")
         f, l = _split_name(name, first, last)
@@ -360,6 +358,11 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
         return _err(request, "Enter the assignee (who does the setup) or the new hire's email.")
     if not onboarding.looks_like_email(assignee):
         return _err(request, "The assignee does not look like a valid email address.")
+    # Every run writes (a task list at least; maybe an account): only via the preview's Run button.
+    refusal = guard.enforce(guard.changes([email or assignee], RiskLevel.LOW, "Onboard"), await request.form(),
+                            confirm_step=True)
+    if refusal:
+        return _err(request, refusal)
 
     # Delegate the actual provisioning to the shared per-hire path — ONE implementation for the single
     # and bulk flows (their divergence is exactly what stranded a temp password before). The single
@@ -452,16 +455,18 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
 
 
 @router.post("/bulk/run", response_class=HTMLResponse)
-async def bulk_run(request: Request, csv_text: Annotated[str, Form()],
-                   confirm: Annotated[str, Form()] = "") -> HTMLResponse:
+async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLResponse:
     st = _st(request)
     conn = st.connector
     if conn is None:
         return _err(request, "Not connected.")
-    if confirm != "1":  # bulk creation is gated behind the preview, like the single flow
-        return _err(request, "Preview first — a bulk run needs confirmation.")
     rows, _errs = onboarding.parse_hire_csv(csv_text)
     valid, cfgs, _summary, _row_errors = _bulk_summary(rows, _store(request))
+    # Bulk creation is gated behind the preview, like the single flow.
+    previews = guard.changes([h.get("email") or h.get("name") or "" for h in valid], RiskLevel.LOW, "Onboard")
+    refusal = guard.enforce(previews, await request.form(), confirm_step=True)
+    if refusal:
+        return _err(request, refusal)
     if not valid:
         return _err(request, "Nothing to run — every row had an unknown role or was invalid.")
     job = register_job(st.jobs, OnboardJob(id=secrets.token_urlsafe(8), total=len(valid)))

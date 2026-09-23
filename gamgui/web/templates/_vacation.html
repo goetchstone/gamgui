@@ -5,7 +5,7 @@
       <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
       <span class="text-brand-black">On{% if vac.subject %} — “{{ vac.subject }}”{% endif %}</span>
       <button class="ml-auto text-xs text-red-700 hover:underline"
-              hx-post="/users/vacation/off" hx-target="#vacation" hx-swap="innerHTML"
+              hx-post="/users/vacation/off" hx-target="#vacation" hx-swap="innerHTML" hx-disabled-elt="this"
               hx-vals='{"email": {{ email | tojson }} }'>Turn off</button>
     {% else %}
       <span class="inline-block h-2.5 w-2.5 rounded-full bg-brand-gray"></span>
@@ -13,7 +13,7 @@
     {% endif %}
   </div>
 
-  <form class="space-y-3" hx-post="/users/vacation/set" hx-target="#vacation" hx-swap="innerHTML">
+  <form class="space-y-3" hx-post="/users/vacation/set" hx-target="#vacation" hx-swap="innerHTML" hx-disabled-elt="find button">
     <input type="hidden" name="email" value="{{ email }}" />
     <input type="text" name="subject" value="{{ vac.subject }}" placeholder="Subject" class="{{ input_cls }}" />
     <textarea name="message" rows="3" placeholder="Auto-reply message" class="{{ input_cls }}">{% if vac.enabled %}{{ vac.message }}{% endif %}</textarea>

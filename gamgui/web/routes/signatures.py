@@ -10,7 +10,9 @@ from typing import Annotated, List, Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from ...core import guard
 from ...core import signatures as sig
+from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
 from ..server import TEMPLATES
@@ -185,6 +187,11 @@ async def apply(
     matched = await _matched(st, users, scope_type, scope_value)
     if not matched:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "No active users match this scope."})
+    # Overwrites every matched signature (no backup): only via the preview's Apply button.
+    previews = guard.changes([u.primary_email for u in matched], RiskLevel.LOW, "Set signature")
+    refusal = guard.enforce(previews, await request.form(), confirm_step=True)
+    if refusal:
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
 
     # Run the (potentially minutes-long) per-user loop in the background and report progress by polling,
     # so the UI never looks frozen on a large apply.

@@ -1,7 +1,8 @@
 """User management routes: list/search, detail, and the actions (signature, delegate, suspend).
 
-Reads render full pages; actions are HTMX posts that swap a small result region. Suspend goes
-through the destructive-op guard: preview (resolve + confirm) then apply.
+Reads render full pages; actions are HTMX posts that swap a small result region. Suspend and the
+bulk department job go through the guard: preview (resolve + confirm) then apply, and the apply
+route itself refuses a POST without the confirmation (``guard.enforce``).
 
 GAM reads can raise ``GAMError`` (auth expired, rate limited, not found, …); every connector call
 is wrapped so the user sees a friendly message instead of a 500. Mutations return a ``ChangeResult``
@@ -18,6 +19,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import guard
+from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ...core.signatures import smart_quote_warning
 from ..jobs import start_job
@@ -338,6 +340,10 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
         return _err(request, _friendly(exc))
     if not targets:
         return _err(request, "No matching active users to update.")
+    previews = guard.changes([u.primary_email for u in targets], RiskLevel.LOW, "Set department")
+    refusal = guard.enforce(previews, await request.form(), confirm_step=True)
+    if refusal:
+        return _err(request, refusal)
     job = start_job(st.jobs, len(targets))
     job.task = asyncio.create_task(_run_bulk_store(job, st, conn, targets, store))
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": job})
@@ -524,8 +530,12 @@ async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend
     if conn is None:
         return _err(request, _NOT_CONNECTED)
     want_suspend = suspend == "on"
+    previews = conn.plan_suspend([email], suspend=want_suspend)
+    refusal = guard.enforce(previews, await request.form())   # suspend is destructive: confirmed=1
+    if refusal:
+        return _err(request, refusal)
     try:
-        results = await conn.apply(conn.plan_suspend([email], suspend=want_suspend))
+        results = await conn.apply(previews)
     except Exception as exc:
         return _err(request, _friendly(exc))
     if not (results and all(r.ok for r in results)):
