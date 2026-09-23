@@ -38,9 +38,9 @@ Match the lesson to its enforcement home (see
 - **A coding pattern to avoid** → add it to
   [pre-commit](../pre-commit/SKILL.md) (soft).
 - **A permissive-mock or missing-command-syntax gap** → tighten
-  `tests/fixtures/mock_gam.sh` to reject what GAM rejects, and/or add a token to
-  `REQUIRED_TOKENS` in `tests/test_command_contract.py` (tripwire — this is the
-  same family as the drift guards).
+  `tests/fixtures/mock_gam.sh` to reject what GAM rejects, and/or tighten the
+  generated grammar contract in `tests/test_command_contract.py` (tripwire — this
+  is the same family as the drift guards).
 - **A cross-cutting invariant issue** (an invariant was in the wrong layer, or
   none covered the shape) → append one entry to
   [RULE-FEEDBACK.md](../../../docs/RULE-FEEDBACK.md). Do **not** edit CLAUDE.md

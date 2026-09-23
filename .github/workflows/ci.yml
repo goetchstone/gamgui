@@ -88,4 +88,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # authenticate api.github.com -> avoid the 60/hr 403
       - name: Command-token contract against latest (early warning)
-        run: pytest -q tests/test_command_contract.py -k tokens
+        run: pytest -q tests/test_command_contract.py -k "tokens or grammar_line"

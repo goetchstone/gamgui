@@ -18,8 +18,8 @@ Always:
    — never guess GAM syntax. Note entity prefixes and `remove`/`delete` distinctions.
 2. Add the builder to `gamgui/core/gam/commands.py` as a `list[str]` `@staticmethod`; validate enums
    with `ValueError`.
-3. Add an arg-shape test (`tests/test_commands.py`) and a contract token
-   (`tests/test_command_contract.py`).
+3. Add an arg-shape test (`tests/test_commands.py`); list any validated argument's
+   values in `ENUM_ARGS` (`tests/test_command_contract.py` checks every builder against the grammar).
 4. If UI-facing, add a curated `CatalogCommand` (`gamgui/core/catalog/catalog.py`) with typed slots +
    authoritative `RiskLevel`, and a `tests/test_builder.py` web test.
 5. Run `pytest`; report exactly what changed and any command you could **not** verify in the grammar.

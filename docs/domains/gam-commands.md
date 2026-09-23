@@ -7,7 +7,8 @@ a shell.
 **Owns invariant(s):** #1 (argv-only, one list element per value). Also the single-source-of-truth
 `EXPECTED_GAM_VERSION` pin that invariant #7 (fail-closed vendor) and the three drift guards key off.
 **Enforcement home:** `tests/test_commands.py` (per-builder arg-shape + injection assertions),
-`tests/test_command_contract.py` (`test_required_command_tokens_present`, `test_catalog_matches_grammar`,
+`tests/test_command_contract.py` (`test_required_command_tokens_present`,
+`test_builder_commands_match_a_grammar_line`, `test_catalog_matches_grammar`,
 `test_pinned_version_consistent`), and `tests/test_builder.py` (slot value → one argv element at the
 Builder layer). No runtime hook — the shape is frozen by tests, not asserted in prod.
 
@@ -17,8 +18,8 @@ Builder layer). No runtime hook — the shape is frozen by tests, not asserted i
   (`USER_LIST_FIELDS`, `CACHE_FIELDS`, …), the role sets `GROUP_ROLES` / `CALENDAR_ACL_ROLES`, and three
   helpers: `_validate_role`, `_validate_calendar_role`, `build_user_query`.
 - `tests/test_commands.py` — asserts each builder's exact argv, including "poison stays one element."
-- `tests/test_command_contract.py` — no-credential drift guards (token contract, version consistency,
-  catalog↔grammar count).
+- `tests/test_command_contract.py` — no-credential drift guards (the generated grammar contract,
+  version consistency, catalog↔grammar count).
 - `tests/test_builder.py` — the Builder/catalog flow; relevant here for the injection guarantee that a
   slot value lands as exactly one argv element (e.g. `test_slot_value_is_a_single_argv_element`).
 
@@ -41,9 +42,20 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   fails unless `scripts/fetch_gam.sh` (`TAG="v…"`) and `tests/fixtures/mock_gam.sh` agree;
   `test_catalog_matches_grammar` fails if the committed catalog's version/command-count drifts from a
   fresh parse of the vendored grammar. Bump only via the README runbook (step 1 fails by design).
+- **The grammar contract is generated, not a hand list.** It used to be `REQUIRED_TOKENS`: bare
+  substrings anywhere in a 391 KB grammar, with 60 of ~99 builder keywords (`doit`, `eventid`,
+  `returnidonly`, `notifypassword`, `sendupdates`, …) never tracked. Now the two contract tests call
+  every `GAMCommands` static method with `<param>` placeholders — both sides of each bool, each
+  optional value given and omitted, every value of a validated enum (`ENUM_ARGS`) — and assert (a)
+  every keyword it emits is a whole word in `GamCommands.txt` (a comma field list: each field,
+  case-insensitively) and (b) its leading words (entity prefix + the next two) match the head of a real
+  `gam …` line, honouring `create|add` alternations, `<UserTypeEntity>` = `user <x>`/`all users`, and
+  choice-of-words slots like `[<Boolean>]`. The second test first proves it bites on renamed words.
+  A new builder is covered automatically; a new *validated* argument fails with `ValueError` until
+  its values go in `ENUM_ARGS`.
 - **`create svcacct` vs `check serviceaccount`** — GAM's nouns are *not* symmetric; `check_svcacct`
-  deliberately uses `serviceaccount` (see the `check_svcacct` builder). Only `serviceaccount` is
-  tracked in `REQUIRED_TOKENS`; the `svcacct` setup command is not.
+  deliberately uses `serviceaccount` (see the `check_svcacct` builder); the grammar contract checks
+  both spellings against their own `gam …` lines.
 - **`remove calendars` ≠ `delete calendars`** (footgun, verified against GAM7 source): `remove_calendar`
   PERMANENTLY deletes a secondary calendar (impersonating an owner); `unsubscribe_calendar`
   (`delete calendars`) only drops it from one user's list. No `doit` on `remove calendars` — GAM7
@@ -56,8 +68,12 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   2026-09-23). `test_calendar_acl_role_is_validated_in_the_builder`; and
   `test_calendar_acl_roles_match_grammar_and_mock` pins `CALENDAR_ACL_ROLES` to the mock's
   `ACL_ROLES` and (when vendored) to every `<CalendarACLRole>` definition in the grammar.
-- **Grammar spelling** — the reference reads `create|add user` / `create|add group`, so those are the
-  `REQUIRED_TOKENS`, not `create user` / `create group`.
+- **Grammar spelling** — the reference reads `create|add user` / `create|add group`; the leading-words
+  match reads each `|` as a choice, so `create user` matches it. The grammar also has typos the
+  parser tolerates (`<FalseValues>=` for `::=`, an unopened `<CalendarACLRole>]`).
+- **What the contract can't see:** the order and pairing of options past the leading words
+  (`vacation … html` is only checked as "`html` is a grammar word"), field-name validity per command,
+  and anything about GAM's behaviour. That is plan item T7 (a grammar-validating mock) and live runs.
 
 ## Gotchas / mock-lies traps
 - **`formatjson` is not universal.** `print messages`, `print delegates`, `show vacation`,
@@ -75,18 +91,20 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_commands.py tests/test_command_contract.py tests/test_builder.py`
-runs fully offline (mock GAM + in-memory Keychain). `test_required_command_tokens_present` and
-`test_catalog_matches_grammar` **skip** when the grammar isn't vendored — they only truly run in the
-`gam-compat` CI job that fetches the real binary. Passing tests do NOT prove a GAM write works: every
+runs fully offline (mock GAM + in-memory Keychain). The grammar contract tests and
+`test_catalog_matches_grammar` **skip** when the grammar isn't vendored (a clean clone) — locally they
+run once `make gam` has vendored it, and in CI in the `gam-compat` job that fetches the real binary
+(the non-blocking latest-GAM preview runs the two contract tests too). Passing tests do NOT prove a GAM write works: every
 mutating builder (delete_user, datatransfer, remove_calendar, group membership, signature/forward/
 vacation flags) is unproven until run against a **throwaway** tenant per the README live-verification
 status. Read-only builders are safe to exercise via `scripts/acceptance.py`.
 
 ## To do common tasks here
 - **Add a new GAM command:** add a `GAMCommands.<name>()` static method returning an argv list (each
-  operator value its own element), add an arg-shape test in `tests/test_commands.py`, then add its GAM
-  token to `REQUIRED_TOKENS` in `tests/test_command_contract.py`, and classify it in
-  `tests/test_mock_gam.py` (a write also needs a strict `mock_gam.sh` handler). To surface it in the UI, wire a
+  operator value its own element), add an arg-shape test in `tests/test_commands.py`, list any
+  argument it validates in `ENUM_ARGS` (`tests/test_command_contract.py` — the grammar contract picks
+  the builder up by itself), and classify it in `tests/test_mock_gam.py` (a write also needs a strict
+  `mock_gam.sh` handler). To surface it in the UI, wire a
   curated entry in `core/catalog/catalog.py` (`build.*` → `lambda`) — see the `add-builder-command`
   skill; the connector must route any mutation through `_run_write` (invariant #2). Verify a mutation
   live on a throwaway before relying on it.

@@ -15,8 +15,9 @@ surrounding code so the change is indistinguishable from the rest.
    (`gam <UserTypeEntity> …`) and required/optional args; mind `remove` vs `delete` distinctions.
 2. **Builder** — add a `@staticmethod` to `gamgui/core/gam/commands.py` returning a `list[str]`.
    Validate enums with `ValueError` (see `add_group_member`).
-3. **Builder tests** — exact arg-list assertion in `tests/test_commands.py`; a contract token (a
-   substring of the command) in `REQUIRED_TOKENS` (`tests/test_command_contract.py`).
+3. **Builder tests** — exact arg-list assertion in `tests/test_commands.py`. The grammar contract
+   (`tests/test_command_contract.py`) calls every builder by itself; an argument you validate needs
+   its accepted values in `ENUM_ARGS` there.
 4. **Catalog entry** — add a `CatalogCommand` in `_curated()` (`gamgui/core/catalog/catalog.py`):
    category/subcategory, typed slots (`TARGET_USER`/`USER`/`GROUP` are drag targets; the first is the
    guard's `target`), authoritative `RiskLevel`, and a `build` lambda calling the new method.

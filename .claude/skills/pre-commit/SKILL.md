@@ -38,8 +38,8 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    live break into a green test. Check every command/flag against the vendored
    grammar `gamgui/resources/gam7/GamCommands.txt`, not memory. Passing tests
    do **not** mean a GAM write works — say so if it's unproven on a tenant.
-7. **Keep the drift guards true.** New GAM token/builder → add it to
-   `REQUIRED_TOKENS` in `tests/test_command_contract.py`. Bumped GAM → regen
+7. **Keep the drift guards true.** New builder → the grammar contract in
+   `tests/test_command_contract.py` covers it; a validated argument goes in `ENUM_ARGS`. Bumped GAM → regen
    `command_catalog.json` (`scripts/build_command_catalog.py`) and keep the
    catalog counts in CLAUDE.md accurate. Only confidently READ_ONLY commands
    may auto-promote to runnable (invariant 3) — adding write coverage is
