@@ -24,15 +24,30 @@ def _conn(runner, tmp_path) -> GAMConnector:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", [GAMErrorKind.NOT_FOUND, GAMErrorKind.PERMISSION_DENIED])
-async def test_remove_from_all_calendars_tolerates_benign(kind, tmp_path):
-    # NOT_FOUND (user never shared with X) and PERMISSION_DENIED (cannotChangeOwnAcl on X's own
-    # primary calendar) are expected per-entity outcomes — the sweep still succeeds overall.
-    exc = GAMError(kind=kind, exit_code=50,
-                   stderr="ERROR: 403: Cannot change your own access level. - cannotChangeOwnAcl")
+@pytest.mark.parametrize("line", [
+    "User: bob@example.com, Service not applicable/Does not exist",               # never shared: NOT_FOUND
+    "    Calendar: x@example.com, Calendar ACL: (Scope: user:x@example.com), "
+    "Delete Failed: Cannot change your own access level.",                        # X's own calendar: OWN_ACL
+    "User: dave@example.com, Calendar Service/App not enabled (4/120)",            # no Calendar: SERVICE_NOT_ENABLED
+])
+async def test_remove_from_all_calendars_tolerates_benign(line, tmp_path):
+    # Expected per-user outcomes of a domain-wide sweep — it still succeeds overall. A user without
+    # Calendar (a Calendar-off OU, a licence without it) used to fail the step on every run.
+    exc = GAMError.from_run(50, line)
     res = await _conn(_RaisingRunner(exc), tmp_path).remove_from_all_calendars("x@example.com")
     assert res.ok
     assert "best-effort" in (res.detail or "")
+
+
+@pytest.mark.asyncio
+async def test_remove_from_all_calendars_does_not_tolerate_a_permission_refusal(tmp_path):
+    # Only the leaver's OWN-ACL refusal is benign. Every PERMISSION_DENIED line used to be tolerated,
+    # so a real 403 removing the leaver from someone's calendar counted as a clean sweep.
+    stderr = ("User: bob@example.com, Service not applicable/Does not exist\n"
+              "    Calendar: carol@example.com, Calendar ACL: (Scope: user:x@example.com), "
+              "Delete Failed: 403: Forbidden - insufficientPermissions\n")
+    res = await _conn(_RaisingRunner(GAMError.from_run(50, stderr)), tmp_path).remove_from_all_calendars("x@example.com")
+    assert not res.ok and "insufficientPermissions" in res.detail
 
 
 @pytest.mark.asyncio
@@ -47,8 +62,8 @@ async def test_remove_from_all_calendars_still_fails_on_real_errors(kind, tmp_pa
 @pytest.mark.asyncio
 async def test_remove_from_all_calendars_needs_every_line_tolerable(tmp_path):
     # The reported kind is tolerable, but one error line is not: a partial failure, never a success.
-    exc = GAMError(kind=GAMErrorKind.PERMISSION_DENIED, exit_code=50,
-                   kinds=frozenset({GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.UNKNOWN}))
+    exc = GAMError(kind=GAMErrorKind.OWN_ACL, exit_code=50,
+                   kinds=frozenset({GAMErrorKind.OWN_ACL, GAMErrorKind.UNKNOWN}))
     res = await _conn(_RaisingRunner(exc), tmp_path).remove_from_all_calendars("x@example.com")
     assert not res.ok
 

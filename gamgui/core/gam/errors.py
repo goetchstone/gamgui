@@ -31,6 +31,12 @@ class GAMErrorKind(enum.Enum):
     RATE_LIMITED = "rate_limited"
     NOT_FOUND = "not_found"
     PERMISSION_DENIED = "permission_denied"
+    # Google refused to remove a calendar owner's OWN access ("Cannot change your own access level") —
+    # the one refusal the offboarding sweep expects (the leaver's own calendar), unlike a real 403.
+    OWN_ACL = "own_acl"
+    # A user for whom a Google service (Calendar, Gmail…) is off: GAM's "<Service> Service/App not
+    # enabled" per-user warning — not the account-wide "<API> not enabled. Please run …" failure.
+    SERVICE_NOT_ENABLED = "service_not_enabled"
     NOT_AUTHENTICATED = "not_authenticated"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
@@ -48,6 +54,14 @@ _REMEDIATION = {
     GAMErrorKind.PERMISSION_DENIED: (
         "The authorized account lacks permission for this action. Check the admin role and scopes."
     ),
+    GAMErrorKind.OWN_ACL: (
+        "Google doesn't let a calendar's owner remove their own access — expected for the departing "
+        "user's own calendar."
+    ),
+    GAMErrorKind.SERVICE_NOT_ENABLED: (
+        "That Google service is turned off for this user — check their licence, or the service's "
+        "on/off setting for their organizational unit in the Admin console."
+    ),
     GAMErrorKind.NOT_AUTHENTICATED: "GAM is not configured yet. Complete the setup wizard first.",
     GAMErrorKind.TIMEOUT: "The command timed out. Check connectivity and retry.",
     GAMErrorKind.UNKNOWN: "GAM reported an error. See details below.",
@@ -60,10 +74,14 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     (re.compile(r"insufficient.*scope|access_denied.*scope|not authorized to access", re.I), GAMErrorKind.SCOPE_MISSING),
     (re.compile(r"rate.?limit|quota|userRateLimitExceeded|too many requests|\b429\b", re.I), GAMErrorKind.RATE_LIMITED),
     (re.compile(r"does not exist|not found|notFound|resource.*not found|\b404\b", re.I), GAMErrorKind.NOT_FOUND),
-    # Deleting your OWN owner ACL is refused ("Cannot change your own access level" / cannotChangeOwnAcl)
-    # — semantically a permission refusal. Placed before the generic 403 pattern because GAM's line
-    # here carries no "403"/"forbidden" token. Tolerated by the all-users calendar-ACL offboard sweep.
-    (re.compile(r"cannot change your own access level|cannotChangeOwnAcl", re.I), GAMErrorKind.PERMISSION_DENIED),
+    # A user without the service (GAM's userServiceNotEnabledWarning: "User: x, Calendar Service/App
+    # not enabled"). Narrow on purpose: GAM's account-wide "Calendar not enabled. Please run "gam update
+    # project"…" is a real failure and must stay UNKNOWN. Tolerated by the offboarding calendar sweep.
+    (re.compile(r"Service/App not enabled", re.I), GAMErrorKind.SERVICE_NOT_ENABLED),
+    # Deleting your OWN owner ACL is refused ("Cannot change your own access level" / cannotChangeOwnAcl).
+    # Its own kind, before the generic 403 pattern (GAM's line carries no "403"/"forbidden" token): the
+    # offboarding sweep tolerates exactly this refusal, never a real permission failure.
+    (re.compile(r"cannot change your own access level|cannotChangeOwnAcl", re.I), GAMErrorKind.OWN_ACL),
     (re.compile(r"forbidden|permission denied|insufficientPermissions|\b403\b", re.I), GAMErrorKind.PERMISSION_DENIED),
     (re.compile(r"please run.*oauth|no.*credentials|oauth2\.txt.*not found|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
 ]
@@ -79,7 +97,8 @@ _PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting all |Got \d+ )")
 _SEVERITY: List[GAMErrorKind] = [
     GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTHENTICATED, GAMErrorKind.SCOPE_MISSING,
     GAMErrorKind.RATE_LIMITED, GAMErrorKind.TIMEOUT, GAMErrorKind.UNKNOWN,
-    GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.NOT_FOUND,
+    GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.OWN_ACL, GAMErrorKind.SERVICE_NOT_ENABLED,
+    GAMErrorKind.NOT_FOUND,
 ]
 
 

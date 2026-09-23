@@ -7,7 +7,7 @@ separate, gated account **delete** that IT runs later.
 
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on
 data-transfer completion** (advisory) and **the all-users calendar-ACL sweep is best-effort**
-(tolerates own-calendar / not-shared). Both flow through the write chokepoint (CLAUDE.md #2) and the
+(tolerates own-calendar / not-shared / no-Calendar, nothing else). Both flow through the write chokepoint (CLAUDE.md #2) and the
 combined transfer service list is one argv element (CLAUDE.md #1).
 **Enforcement home:** `tests/test_offboard_safety.py`, `tests/test_lifecycle.py`; the mock
 `tests/fixtures/mock_gam.sh` reproduces the real 409 and cannotChangeOwnAcl stderr.
@@ -114,7 +114,7 @@ the reminder runs without one). What each step does if run again after it succee
 | Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
 | Auto-reply | Harmless: `vacation on …` replaces the settings. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
-| Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist", which the sweep tolerates. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
+| Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist" and users without Calendar "Calendar Service/App not enabled", both tolerated. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |
 | Manager reminder | **Duplicates**: `add event` without an `id` creates a second event. | **yes** |
 
 A failed step changed nothing, except a sweep stopped by its timeout (partly done — run it again).
@@ -145,10 +145,15 @@ parser was read statically (its bytecode, never run). No mismatch found.
   **not a hard block**; `incomplete_transfers_for` returns `[]` on any read error, so an inability to
   check never blocks deletion (it just can't warn). Added in `b26da7e`.
 - **Calendar sweep is best-effort.** `remove_from_all_calendars` runs `all users delete calendaracls
-  primary <email>` and passes `tolerate_kinds=(NOT_FOUND, PERMISSION_DENIED)` to `_run_write`.
-  NOT_FOUND = that user never shared with the leaver; PERMISSION_DENIED = the leaver's OWN primary
-  calendar (`cannotChangeOwnAcl`, exit 50) — both expected, so the step still counts as success and
-  is audited `ok=True, tolerated=True`. A real SCOPE_MISSING/AUTH_EXPIRED still fails it. The sweep
+  primary <email>` and passes `tolerate_kinds=SWEEP_TOLERATED` to `_run_write`: NOT_FOUND = that
+  user never shared with the leaver; SERVICE_NOT_ENABLED = a user without Calendar ("User: x,
+  Calendar Service/App not enabled", exit 73 — `all users` is every active user, so a Calendar-off
+  OU or a licence without Calendar is enough); OWN_ACL = the leaver's OWN primary calendar
+  (`cannotChangeOwnAcl`, exit 50). All expected, so the step still counts as success and is audited
+  `ok=True, tolerated=True`. Anything else fails it: a real SCOPE_MISSING/AUTH_EXPIRED, a 403 for
+  some user (PERMISSION_DENIED), an unrecognized line. Until 2026-09-23 a user without Calendar
+  failed the step on every run, and every PERMISSION_DENIED line was tolerated, so a real 403 read
+  as a clean sweep (failure-log). The sweep
   prints one stderr line per user, so tolerance needs **every** error line to be tolerable
   (`GAMError.kinds`, 2026-09-23): one unrecognized per-user failure among the benign lines fails the
   step and is the detail shown. Before that, the first "Does not exist" line classified the whole
@@ -174,7 +179,8 @@ parser was read statically (its bytecode, never run). No mismatch found.
   step; `reset_password` runs only the reset.
 - The one-transfer commit also fixed the sweep misclassification: `classify_stderr` mapped "Cannot
   change your own access level" to UNKNOWN (no 403 token), so the already-present PERMISSION_DENIED tolerance never
-  fired. `errors.py` now maps `cannotChangeOwnAcl` → `PERMISSION_DENIED`.
+  fired. `errors.py` mapped `cannotChangeOwnAcl` → `PERMISSION_DENIED`; since 2026-09-23 it is its own
+  kind, `OWN_ACL`, and the sweep no longer tolerates PERMISSION_DENIED.
 
 ## Gotchas / mock-lies traps
 - **`set_vacation` rejects `formatjson`** (see MEMORY / the formatjson gotcha) — the mock can't catch
@@ -191,7 +197,8 @@ parser was read statically (its bytecode, never run). No mismatch found.
 - The mock only 409s when the old-owner email contains the literal `CONFLICT409`. The `all users
   delete calendaracls` sweep succeeds by default; `OWNACL` in the address emits the exact own-ACL
   stderr (exit 50, tolerated) and `SWEEPFAIL` a scope error (not tolerated); `SWEEPBENIGN` a
-  multi-user stderr where every line is tolerable and `SWEEPMIXED` the same plus one real per-user
+  multi-user stderr where every line is tolerable (not-shared, a user without Calendar, the own ACL)
+  and `SWEEPMIXED` the same plus one real per-user
   failure (not tolerated); `SWEEPSLOW` sleeps so the timeout fires. Every step's write has a strict
   handler that fails a malformed argv. It does **not** model real DTS async timing, partial
   multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test proves
@@ -212,8 +219,8 @@ parser was read statically (its bytecode, never run). No mismatch found.
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_lifecycle.py tests/test_offboard_safety.py` (offline: mock
 gam + in-memory Keychain). Covered: step order/keys, the single combined-service transfer + audit
-argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL and not-found) vs. real
-auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
+argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL, not-found, a user
+without Calendar) vs. real auth errors and a per-user 403, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
 auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, the directory check
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
@@ -295,7 +302,7 @@ files): move the leaver's folder back by hand.
   `OffboardStep` whose lambda calls a connector method), add the connector method + its
   `GAMCommands` argv builder if new, then update `tests/test_lifecycle.py` (order + right-method
   assertions).
-- **Change what the sweep tolerates:** edit `remove_from_all_calendars`'s `tolerate_kinds` and, if a
+- **Change what the sweep tolerates:** edit `SWEEP_TOLERATED` in `gam_connector.py` and, if a
   new stderr phrase is involved, the regex table in `core/gam/errors.py`; extend
   `tests/test_offboard_safety.py`.
 - **Change the delete gate:** edit `delete_confirm`/`delete_apply` in `web/routes/users.py` (and the

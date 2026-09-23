@@ -146,7 +146,7 @@ async def test_second_same_user_transfer_still_409s(connector):
 @pytest.mark.asyncio
 async def test_offboard_calendar_sweep_tolerates_own_acl(connector):
     # Bug 2 regression: the all-users sweep hits the departing user's OWN primary calendar; GAM exits
-    # 50 with "Cannot change your own access level." Now classified PERMISSION_DENIED and tolerated,
+    # 50 with "Cannot change your own access level." Now classified OWN_ACL and tolerated,
     # so the step still counts as success (audited ok, tolerated). OWNACL makes the mock refuse it.
     steps = build_offboard_steps("OWNACL-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     calacls = next(s for s in steps if s.key == "calacls")
@@ -173,12 +173,18 @@ async def test_offboard_calendar_sweep_clean_success_and_real_failure(connector)
 
 @pytest.mark.asyncio
 async def test_offboard_calendar_sweep_multi_user_stderr(connector):
-    # Q8: a real sweep prints one stderr line per entity. All tolerable (not-applicable user + the
-    # leaver's own ACL, amid GAM's "Getting all/Got N" chatter) -> best-effort success; one real per-user
-    # failure among them -> the step fails and shows that failure, not the benign tail line.
+    # Q8: a real sweep prints one stderr line per entity. All tolerable (not-applicable user, a user
+    # without Calendar, the leaver's own ACL, amid GAM's "Getting all/Got N" chatter) -> best-effort
+    # success; one real per-user failure among them -> the step fails and shows that failure, not the
+    # benign tail line.
     ok = await connector.remove_from_all_calendars("SWEEPBENIGN-leaver@example.com")
     assert ok.ok and "best-effort" in (ok.detail or "")
     assert connector.audit.tail()[-1]["extra"]["tolerated"] is True
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+    with pytest.raises(GAMError) as ei:                     # what that stderr held: every tolerated kind
+        await connector.runner.run_authenticated(
+            "example.com", GAMCommands.remove_all_calendar_acls("SWEEPBENIGN-leaver@example.com"), serialize=True)
+    assert ei.value.kinds == {GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAMErrorKind.OWN_ACL}
 
     bad = await connector.remove_from_all_calendars("SWEEPMIXED-leaver@example.com")
     assert not bad.ok and "Internal error encountered" in bad.detail

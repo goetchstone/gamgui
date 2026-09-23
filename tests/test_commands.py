@@ -125,12 +125,12 @@ def test_lifecycle_commands():
     assert "start" in ev and "allday" in ev and "2026-07-23" in ev and "description" in ev and "attendee" in ev
 
 
-def test_own_acl_error_classifies_as_permission_denied():
+def test_own_acl_error_classifies_as_its_own_kind():
     # The all-users calendar sweep hits the departing user's OWN primary calendar; GAM's line carries
     # no 403/forbidden token, so this must match its own pattern (before the generic 403 entry).
     real = "Calendar: x@e.com, Calendar ACL: (Scope: user:x@e.com), Delete Failed: Cannot change your own access level."
-    assert classify_stderr(real) is GAMErrorKind.PERMISSION_DENIED
-    assert classify_stderr("cannotChangeOwnAcl") is GAMErrorKind.PERMISSION_DENIED
+    assert classify_stderr(real) is GAMErrorKind.OWN_ACL
+    assert classify_stderr("cannotChangeOwnAcl") is GAMErrorKind.OWN_ACL
 
 
 def test_signout_and_undelete_user():

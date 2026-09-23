@@ -661,8 +661,11 @@ if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && 
     *SWEEPFAIL*)
       echo "ERROR: 403: Request had insufficient authentication scopes" 1>&2; exit 1 ;;
     *SWEEPBENIGN*|*SWEEPMIXED*)
-      printf 'Getting all Users, may take some time on a large Google Workspace Account...\nGot 3 Users: alice@example.com - %s\n' "$scope" 1>&2
+      printf 'Getting all Users, may take some time on a large Google Workspace Account...\nGot 4 Users: alice@example.com - %s\n' "$scope" 1>&2
       echo "User: bob@example.com, Service not applicable/Does not exist" 1>&2
+      # A user without Calendar: GAM's userCalServiceNotEnabledWarning (calendars.get primary →
+      # notACalendarUser), SERVICE_NOT_APPLICABLE_RC — `all users` includes every active user.
+      echo "User: dave@example.com, Calendar Service/App not enabled (3/4)" 1>&2
       case "$scope" in *SWEEPMIXED*)
         printf '    Calendar: carol@example.com, Calendar ACL: (Scope: user:%s), Delete Failed: Internal error encountered.\n' "$scope" 1>&2 ;;
       esac

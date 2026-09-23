@@ -22,14 +22,28 @@ def test_classify_stderr(stderr, expected):
     assert classify_stderr(stderr) == expected
 
 
-def test_own_acl_deletion_is_permission_denied():
+def test_own_acl_deletion_is_its_own_kind_not_a_generic_permission_refusal():
     # The departing user's own primary-calendar owner ACL cannot be removed. GAM's line here carries
-    # no "403"/"forbidden" token, so a dedicated pattern maps it (case-insensitively) to a permission
-    # refusal — which the all-users calendar sweep tolerates.
+    # no "403"/"forbidden" token. It is its own kind — the only refusal the all-users calendar sweep
+    # tolerates — so a real 403 for some other user is never swept up with it.
     line = ("    Calendar: alice@example.com, Calendar ACL: (Scope: user:alice@example.com), "
             "Delete Failed: Cannot change your own access level.")
-    assert classify_stderr(line) == GAMErrorKind.PERMISSION_DENIED
-    assert classify_stderr("CANNOT CHANGE YOUR OWN ACCESS LEVEL") == GAMErrorKind.PERMISSION_DENIED
+    assert classify_stderr(line) is GAMErrorKind.OWN_ACL
+    assert classify_stderr("CANNOT CHANGE YOUR OWN ACCESS LEVEL") is GAMErrorKind.OWN_ACL
+    assert classify_stderr("cannotChangeOwnAcl") is GAMErrorKind.OWN_ACL
+    assert classify_stderr("ERROR: 403: forbidden - insufficientPermissions") is GAMErrorKind.PERMISSION_DENIED
+
+
+def test_a_user_without_the_service_is_its_own_kind():
+    # GAM's userServiceNotEnabledWarning (read from the vendored 7.48.11 build): a user whose Calendar
+    # (or Gmail…) is off. Per user, so the calendar sweep can tolerate it — unlike GAM's account-wide
+    # "<API> not enabled. Please run "gam update project"…", a real failure the regex must not catch.
+    line = "User: dave@example.com, Calendar Service/App not enabled (4/120)"
+    assert classify_stderr(line) is GAMErrorKind.SERVICE_NOT_ENABLED
+    assert "turned off for this user" in GAMError.from_run(73, line).remediation
+    api = ('ERROR: Calendar not enabled. Please run "gam update project" and '
+           '"gam user user@domain.com update serviceaccount"')
+    assert classify_stderr(api) is GAMErrorKind.UNKNOWN
 
 
 # A multi-entity run (`all users delete calendaracls ...`) prints GAM's progress chatter and one line per
@@ -41,12 +55,14 @@ _OWN_ACL = ("    Calendar: carol@example.com, Calendar ACL: (Scope: user:carol@e
             "Delete Failed: Cannot change your own access level.\n")
 _REAL = ("    Calendar: alice@example.com, Calendar ACL: (Scope: user:carol@example.com), "
          "Delete Failed: Internal error encountered.\n")
+_NO_CALENDAR = "User: dave@example.com, Calendar Service/App not enabled (3/3)\n"
 
 
 def test_every_line_tolerable_keeps_only_tolerable_kinds():
-    err = GAMError.from_run(50, _PROGRESS + _NOT_APPLICABLE + _OWN_ACL)
-    assert err.kinds == {GAMErrorKind.NOT_FOUND, GAMErrorKind.PERMISSION_DENIED}   # progress lines skipped
-    assert err.kind is GAMErrorKind.PERMISSION_DENIED
+    err = GAMError.from_run(50, _PROGRESS + _NOT_APPLICABLE + _NO_CALENDAR + _OWN_ACL)
+    assert err.kinds == {GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED,
+                         GAMErrorKind.OWN_ACL}                                   # progress lines skipped
+    assert err.kind is GAMErrorKind.OWN_ACL
 
 
 def test_a_real_error_among_tolerable_lines_wins():

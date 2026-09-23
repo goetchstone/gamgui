@@ -41,6 +41,10 @@ from .person import ConnectorAccount, Person
 # The remediation for a write that failed before GAM could say why (no binary, a Keychain error).
 _WRITE_FAILED = "Something went wrong talking to GAM. See details below."
 
+# The per-user lines the offboarding calendar sweep expects (remove_from_all_calendars): a user who
+# never shared with the leaver, a user without Calendar, the leaver's own calendar. Nothing else.
+SWEEP_TOLERATED = (GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAMErrorKind.OWN_ACL)
+
 
 def _csv_from(out: str) -> str:
     """Drop GAM progress lines before the CSV header (`gam report` prints status text first)."""
@@ -390,15 +394,16 @@ class GAMConnector(Connector):
             "send_welcome_email", to, GAMCommands.send_email(to, subject, body), RiskLevel.LOW)
 
     async def remove_from_all_calendars(self, email: str) -> ChangeResult:
-        # Best-effort sweep across every user. Expected, harmless per-entity outcomes: NOT_FOUND
-        # (that user never shared with the departing user) and PERMISSION_DENIED / cannotChangeOwnAcl
-        # (the departing user's OWN primary calendar — you can't delete your own owner ACL, and it's
-        # going away with the account anyway). Only a real auth/scope failure should fail this step —
-        # and a timeout, which stopped it partway (never tolerated: it is neither benign kind).
+        # Best-effort sweep across every user. Expected, harmless per-user outcomes: NOT_FOUND (that
+        # user never shared with the departing user), SERVICE_NOT_ENABLED (a user without Calendar —
+        # `all users` is every active user) and OWN_ACL / cannotChangeOwnAcl (the departing user's OWN
+        # primary calendar — you can't delete your own owner ACL, and it's going away with the account
+        # anyway). Anything else fails the step: a real 403 for some user (PERMISSION_DENIED), an
+        # auth/scope failure, an unrecognized line, a timeout that stopped it partway.
         argv = GAMCommands.remove_all_calendar_acls(email)
         return await self._run_write(
             "remove_from_all_calendars", email, argv, RiskLevel.LOW,
-            tolerate_kinds=(GAMErrorKind.NOT_FOUND, GAMErrorKind.PERMISSION_DENIED),
+            tolerate_kinds=SWEEP_TOLERATED,
             timeout=DOMAIN_WIDE_TIMEOUT,
         )
 
@@ -537,8 +542,8 @@ class GAMConnector(Connector):
             )
             if tolerated:
                 return ChangeResult(preview=preview, ok=True,
-                                    detail="Completed (best-effort — per-entity 'not shared' / "
-                                           "own-calendar notices are expected and were skipped).")
+                                    detail="Completed (best-effort — per-user 'not shared', 'no Calendar' "
+                                           "and own-calendar notices are expected and were skipped).")
             remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
             return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation)
         self.audit.record(

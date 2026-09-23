@@ -63,8 +63,12 @@ and `version` (no credentials).
   banner prefixes as defense-in-depth.
 - **Error ordering.** Within a line, `_PATTERNS` is first-match-wins, specific→generic. The
   `cannot change your own access level | cannotChangeOwnAcl` pattern sits *before* the generic 403
-  because GAM's own-ACL-deletion refusal carries no 403/forbidden token; the all-users calendar
-  offboard sweep relies on it mapping to `PERMISSION_DENIED`.
+  because GAM's own-ACL-deletion refusal carries no 403/forbidden token; it maps to its own kind,
+  `OWN_ACL`, so the all-users calendar offboard sweep can tolerate exactly that refusal and not a
+  real 403 (`PERMISSION_DENIED`, which it used to tolerate wholesale — failure-log 2026-09-23).
+  `SERVICE_NOT_ENABLED` is GAM's per-user "User: x, Calendar Service/App not enabled"
+  (`userServiceNotEnabledWarning`, exit 73); the regex is `Service/App not enabled` on purpose, so
+  GAM's account-wide "Calendar not enabled. Please run "gam update project"…" stays `UNKNOWN`.
 - **Classified per line, not per stderr** (2026-09-23). A multi-entity command (`all users ...`)
   prints one stderr line per entity, and the whole text used to be classified by the first pattern
   matching *anywhere* — so one "Does not exist" line made a stderr that also held a real failure
@@ -72,7 +76,8 @@ and `version` (no credentials).
   as success. Now every non-blank line is classified (an unmatched one is `UNKNOWN`), GAM's
   `Getting all …`/`Got N …` progress chatter (`show_gettings`, on stderr) is skipped, `GAMError.kinds`
   holds every line's kind and `kind` the most severe by `_SEVERITY` (account-wide failures, then
-  `UNKNOWN`, then the per-entity `PERMISSION_DENIED`, `NOT_FOUND`). `_run_write` tolerates only when
+  `UNKNOWN`, then the per-entity `PERMISSION_DENIED`, `OWN_ACL`, `SERVICE_NOT_ENABLED`, `NOT_FOUND`).
+  `_run_write` tolerates only when
   `kinds ⊆ tolerate_kinds` — never test `.kind` for tolerance. `.message` shows the last line of the
   reported kind, not the stderr's tail (which can be a benign notice). Fail-closed on purpose: a
   benign stderr line we don't recognize makes a best-effort step fail visibly, not pass silently.
