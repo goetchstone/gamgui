@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -42,3 +43,14 @@ def test_root_with_token_renders_and_sets_cookie(client):
 
 def test_wrong_token_forbidden(client):
     assert client.get("/?token=nope").status_code == 403
+
+
+def test_home_describes_every_screen_in_the_nav(client):
+    # Home once said the shipped screens "come next"; tie its list to the nav so it can't go stale again.
+    html = client.get("/?token=testtoken").text
+    nav, body = html.split("</nav>", 1)
+    screens = set(re.findall(r'href="(/[a-z]+)"', nav[nav.index("<nav"):]))
+    assert screens >= {"/users", "/onboard", "/lifecycle", "/audit"}
+    assert all(f'href="{s}"' in body for s in screens), screens - {s for s in screens if f'href="{s}"' in body}
+    assert "come next" not in html
+    assert 'href="/setup"' in body      # unconfigured: points at setup first

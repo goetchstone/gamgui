@@ -50,12 +50,29 @@
     </div>
   </div>
 
-  <div class="rounded-2xl border border-dashed border-brand-gray/60 p-6 text-sm text-brand-blueink/80">
-    <p class="eyebrow text-brand-blue">What's ready</p>
-    <p class="mt-2 leading-relaxed">
-      The secure engine and the <a href="/setup" class="text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">setup wizard</a>
-      are in place. Connect a domain to begin; the user, group, signature, and delegate screens come next.
-    </p>
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm text-sm text-brand-blueink/80">
+    <h2 class="eyebrow text-brand-gray">Screens</h2>
+    {% if not configured %}
+      <p class="mt-2">Every screen reads from a connected domain — run <a href="/setup" class="text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">setup</a> first.</p>
+    {% endif %}
+    <dl class="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+      {% for href, name, what in [
+        ("/users", "Users", "Search the directory; title and department, delegates, vacation, groups, calendar sharing; sign out, suspend, delete."),
+        ("/groups", "Groups", "Group membership on a drag-and-drop board."),
+        ("/signatures", "Signatures", "Design one signature with variables, preview it for a real person, apply it in bulk."),
+        ("/calendars", "Calendars", "Find any shared calendar by name, grant or revoke access, remove a stray event or an orphaned calendar."),
+        ("/builder", "Builder", "Browse the GAM command catalog; run reads, and the curated writes behind a preview."),
+        ("/onboard", "Onboard", "Set up a new hire from a role: account, OU, signature, groups, calendars, checklist, welcome email — one person or a CSV."),
+        ("/lifecycle", "Lifecycle", "Offboard a leaver: each step's gam command is previewed before it runs."),
+        ("/reports", "Reports", "2SV gaps, inactive accounts, admins, directory completeness, storage and mail usage."),
+        ("/audit", "Audit", "Every write this app made, searchable, with a failures-only filter."),
+      ] %}
+        <div>
+          <dt><a href="{{ href }}" class="font-medium text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">{{ name }}</a></dt>
+          <dd class="mt-0.5 leading-relaxed">{{ what }}</dd>
+        </div>
+      {% endfor %}
+    </dl>
   </div>
 </div>
 {% endblock %}
