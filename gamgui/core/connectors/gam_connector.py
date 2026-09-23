@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Sequence
 
-from ..audit import AuditLog
+from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, build_user_query
 from ..gam.errors import GAMErrorKind
 from ..gam.models import (
@@ -146,7 +146,8 @@ class GAMConnector(Connector):
         argv = GAMCommands.create_user(email, first_name, last_name, password, change_password, org_unit, notify)
         # "********" lands in both the password and notifypassword positions of the redacted copy.
         redacted = GAMCommands.create_user(email, first_name, last_name, "********", change_password, org_unit, notify)
-        return await self._run_write("create_user", email, argv, RiskLevel.LOW, audit_argv=redacted)
+        return await self._run_write("create_user", email, argv, RiskLevel.LOW, audit_argv=redacted,
+                                     secrets=[password])
 
     async def get_signature(self, email: str) -> str:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.show_signature(email))
@@ -458,30 +459,37 @@ class GAMConnector(Connector):
         target_extra: Optional[str] = None,
         tolerate_kinds: tuple = (),
         audit_argv: Optional[List[str]] = None,
+        secrets: Sequence[str] = (),
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
         a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected).
 
         ``audit_argv`` is what gets recorded and surfaced in the preview when the real ``argv`` carries
-        a secret that must never touch the audit log or the UI — e.g. a create-user temp password."""
-        shown = audit_argv if audit_argv is not None else argv   # never the raw secret
+        a secret that must never touch the audit log or the UI — e.g. a create-user temp password.
+        ``secrets`` are those values themselves: every occurrence is masked in the shown argv, the error
+        text (GAM echoes the command line on a usage error) and the audit record. By value, so no
+        neighbouring token can shift it; the positional masks in audit/errors are the second layer."""
+        shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
         try:
             await self.runner.run_authenticated(self.domain, argv, serialize=True)
         except Exception as exc:
             tolerated = bool(tolerate_kinds) and getattr(exc, "kind", None) in tolerate_kinds
+            error = redact_secrets(str(exc), secrets)
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,
-                extra={"error": str(exc), "tolerated": tolerated,
+                extra={"error": error, "tolerated": tolerated,
                        **({"group": target_extra} if target_extra else {})},
+                secrets=secrets,
             )
             if tolerated:
                 return ChangeResult(preview=preview, ok=True,
                                     detail="Completed (best-effort — per-entity 'not shared' / "
                                            "own-calendar notices are expected and were skipped).")
-            return ChangeResult(preview=preview, ok=False, detail=str(exc))
+            return ChangeResult(preview=preview, ok=False, detail=error)
         self.audit.record(
             action, target=target, argv=shown, ok=True,
             extra={"group": target_extra} if target_extra else None,
+            secrets=secrets,
         )
         return ChangeResult(preview=preview, ok=True)

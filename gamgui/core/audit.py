@@ -1,14 +1,16 @@
 """Append-only local audit log (JSONL).
 
 Every mutation (and optionally reads) is recorded with a redacted copy of the gam argument vector
-so there is a durable, reviewable record of what the tool did. Secrets are never written — values
-following sensitive keys (e.g. ``password``) are masked.
+so there is a durable, reviewable record of what the tool did. Secrets are never written: a caller
+that knows the secret it sent passes it as ``secrets=`` and every occurrence is masked by value;
+values following sensitive keys (e.g. ``password``) are masked positionally as a second layer.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +49,28 @@ def redact_argv(argv: Optional[Sequence[str]]) -> Optional[List[str]]:
         if tok.lower() in _SENSITIVE_KEYS:
             mask_next = True
     return out
+
+
+def redact_secrets(value: Any, secrets: Sequence[str]) -> Any:
+    """Return ``value`` (a str, or lists/tuples/dicts of them) with every occurrence of each secret
+    masked. Unlike ``redact_argv`` this can't be shifted: a hire surnamed "Password" moves the
+    positional mask onto the ``password`` keyword and leaves the value after it — including in the
+    command line GAM echoes on a usage error."""
+    needles = sorted({s for s in secrets if s}, key=len, reverse=True)
+    if not needles:
+        return value
+    pattern = re.compile("|".join(map(re.escape, needles)))
+
+    def walk(v: Any) -> Any:
+        if isinstance(v, str):
+            return pattern.sub(_MASK, v)
+        if isinstance(v, (list, tuple)):
+            return type(v)(walk(x) for x in v)
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        return v
+
+    return walk(value)
 
 
 def default_audit_path() -> Path:
@@ -89,6 +113,7 @@ class AuditLog:
         ok: Optional[bool] = None,
         actor: Optional[str] = None,
         extra: Optional[Dict[str, Any]] = None,
+        secrets: Sequence[str] = (),
     ) -> Dict[str, Any]:
         entry: Dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -102,6 +127,7 @@ class AuditLog:
         }
         if extra:
             entry["extra"] = extra
+        entry = redact_secrets(entry, secrets)
         line = json.dumps(entry, ensure_ascii=False)
         with self._lock:
             self._roll_if_large()

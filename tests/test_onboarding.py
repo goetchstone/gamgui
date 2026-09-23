@@ -21,19 +21,37 @@ FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
 
 
+def _connector(tmp_path, gam_binary):
+    vault = SecretsVault(InMemoryBackend())
+    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
+    runner = GAMRunner(vault=vault, gam_binary=gam_binary, base_dir=tmp_path)
+    return GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
+
+
+def _client(tmp_path, gam_binary):
+    conn = _connector(tmp_path, gam_binary)
+    state = AppState(vault=conn.runner.vault, runner=conn.runner, audit_domain=DOMAIN, connector=conn, token="t")
+    state.runbooks = RunbookStore(tmp_path / "onboarding.json")   # isolated store, not the real ~/Library file
+    state.sig_templates = SignatureStore(tmp_path / "signatures.json")   # isolated; seeds "Classic"/"Modern accent"/"Minimal"
+    return TestClient(create_app(state))
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("GAM_MOCK_FIXTURES", str(FIXTURES))
-    vault = SecretsVault(InMemoryBackend())
-    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
-    runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
-    conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
-    state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t")
-    state.runbooks = RunbookStore(tmp_path / "onboarding.json")   # isolated store, not the real ~/Library file
-    state.sig_templates = SignatureStore(tmp_path / "signatures.json")   # isolated; seeds "Classic"/"Modern accent"/"Minimal"
-    with TestClient(create_app(state)) as c:
+    with _client(tmp_path, FIXTURES / "mock_gam.sh") as c:
         c.get("/?token=t")
         yield c
+
+
+@pytest.fixture
+def echoing_gam(tmp_path):
+    """A gam that fails every call by echoing its command line, as GAM does on a usage error — here as
+    the LAST stderr line, the one GAMError.message (so the audit's extra.error and the UI) carries."""
+    path = tmp_path / "echoing_gam.sh"
+    path.write_text("#!/bin/sh\nprintf 'ERROR: Invalid argument\\nCommand: gam %s\\n' \"$*\" 1>&2\nexit 2\n")
+    path.chmod(0o755)
+    return path
 
 
 # --- GAM argv (injection-safe single elements) ---
@@ -174,6 +192,21 @@ async def test_create_user_fails_on_duplicate(connector):
     assert not res.ok   # the mock mirrors GAM's 409 on an account that already exists
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("surname", ["Password", "NotifyPassword"])
+async def test_create_user_failure_redacts_password_by_value(tmp_path, echoing_gam, surname):
+    # A surname that IS a sensitive key shifts the positional mask onto the `password` keyword, so the
+    # echoed temp password survived it into extra.error and the result detail. Redaction by value holds.
+    secret = "Xk7m-Qp9r-2Tzv"
+    conn = _connector(tmp_path, echoing_gam)
+    res = await conn.create_user("new@example.com", "Ada", surname, secret, notify="it@example.com")
+    assert not res.ok
+    audit = (tmp_path / "audit.jsonl").read_text()
+    assert "create_user" in audit and secret not in audit
+    assert secret not in (res.detail or "") and "***redacted***" in res.detail   # echoed, then masked
+    assert secret not in " ".join(res.preview.argv or [])
+
+
 # --- web flow: create the account, print the sheet, keep the password out of the log ---
 
 def test_preview_shows_create_account_block(client):
@@ -214,6 +247,19 @@ def test_run_account_duplicate_fails_gracefully(client):
                                           "email": "exists@example.com", "assignee": "it@example.com",
                                           "create_account": "1", "confirm": "1"})
     assert "create the account" in r.text and "409" in r.text   # the 409 is surfaced, not swallowed
+
+
+def test_run_account_failure_error_partial_never_shows_password(tmp_path, echoing_gam, monkeypatch):
+    monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "SENTINELpw-1234-5678")
+    with _client(tmp_path, echoing_gam) as c:
+        c.get("/?token=t")
+        c.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
+        r = c.post("/onboard/run", data={"role": "Sales", "name": "Ada Password",
+                                         "email": "ada@example.com", "assignee": "it@example.com",
+                                         "create_account": "1", "confirm": "1"})
+    assert "Couldn&#39;t create the account" in r.text or "Couldn't create the account" in r.text
+    assert "SENTINELpw-1234-5678" not in r.text and "***redacted***" in r.text
+    assert "SENTINELpw-1234-5678" not in (tmp_path / "audit.jsonl").read_text()
 
 
 # --- per-role group membership + shared calendars ---
