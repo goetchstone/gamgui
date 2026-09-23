@@ -1,13 +1,15 @@
 """Application entry point.
 
 Starts the local FastAPI server on a random loopback port and opens it in a native WKWebView
-window via pywebview. If pywebview isn't installed (e.g. headless dev), it prints the tokenized URL
-and keeps serving so you can open it in a browser.
+window via pywebview. If pywebview isn't installed (e.g. headless dev), it prints a warning and the
+tokenized URL and keeps serving so you can open it in a browser — a developer fallback only (the
+browser shares the session cookie with every other 127.0.0.1 port); the packaged app refuses it.
 """
 
 from __future__ import annotations
 
 import socket
+import sys
 import threading
 import time
 
@@ -71,6 +73,30 @@ def _fit_size(screen_w: int, screen_h: int) -> "tuple[int, int]":
     return min(w, screen_w), min(h, screen_h)
 
 
+BROWSER_MODE_WARNING = (
+    "[GamGUI] WARNING: browser mode is a developer fallback. Cookies are not port-scoped, so while\n"
+    "[GamGUI] this runs, any other web server on 127.0.0.1 that your browser visits receives GamGUI's\n"
+    "[GamGUI] session cookie and can drive it. Use the native window for real work."
+)
+
+
+def _serve_in_browser(server: "_BackgroundServer", url: str) -> None:
+    """The no-pywebview fallback: print the tokenized URL and serve until Ctrl-C."""
+    try:
+        if getattr(sys, "frozen", False):
+            # The .app bundles pywebview; if it failed to load, don't silently serve headless.
+            raise SystemExit("[GamGUI] the native window failed to load; refusing browser mode in the app")
+        print(BROWSER_MODE_WARNING)
+        print(f"[GamGUI] pywebview not installed — open this URL in a browser:\n  {url}")
+        print("[GamGUI] (install the native window with: pip install '.[desktop]')  Ctrl-C to quit.")
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+
+
 def main() -> None:
     state = AppState.create()
     host, port = "127.0.0.1", _free_loopback_port()
@@ -82,15 +108,7 @@ def main() -> None:
     try:
         import webview  # pywebview (optional 'desktop' extra)
     except ImportError:
-        print(f"[GamGUI] pywebview not installed — open this URL in a browser:\n  {url}")
-        print("[GamGUI] (install the native window with: pip install '.[desktop]')  Ctrl-C to quit.")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            server.stop()
+        _serve_in_browser(server, url)
         return
 
     # WKWebView drops Content-Disposition downloads unless this is on — without it the CSV export

@@ -137,7 +137,9 @@ Beyond the credentials themselves:
 - **The local server is not open to other local processes.** It binds loopback on a random port and
   requires a per-launch token — and because cookies are *not* port-scoped (so `SameSite` alone would
   treat every port on `127.0.0.1` as the same site), it also rejects cross-origin callers outright,
-  and any request whose `Host` is not its own loopback port (DNS rebinding).
+  and any request whose `Host` is not its own loopback port (DNS rebinding). The browser fallback
+  and the length of a `gam` call have limits — see
+  [SECURITY.md → Known limitations](SECURITY.md#known-limitations).
 - **GAM is never invoked through a shell.** Every command is an explicit argv list built by
   `GAMCommands`; user input is always a single list element, never string-interpolated.
 - **Every mutation is guarded and audited** — `guard.evaluate()` classifies risk and resolves the
@@ -156,7 +158,7 @@ git clone <repo-url> && cd gamgui
 make setup     # create .venv, install dev + native-window deps
 make gam       # vendor the pinned GAM7 binary into gamgui/resources/gam7 (needs network)
 make test      # offline test suite — uses a mock gam, no binary/credentials required
-make run       # launch the app (native window; prints a browser URL if pywebview is absent)
+make run       # launch the app (native window; without pywebview, a browser URL — dev only)
 ```
 
 `make setup` builds the venv with whatever `python3` is first on your PATH — macOS's bundled

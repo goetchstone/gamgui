@@ -16,9 +16,10 @@ This is a small volunteer project: expect a reply in days, not hours.
 ## What GamGUI is, for threat-modelling purposes
 
 GamGUI is a **local, single-operator desktop app**. It runs a FastAPI server bound to `127.0.0.1`
-on a random port, gated by a per-launch token, and displays it in a native WKWebView window. There
-is no hosted service, no multi-tenancy, and no remote users. Nothing is sent anywhere except to
-Google, by the bundled `gam` binary.
+on a random port, gated by a per-launch token, and displays it in a native WKWebView window. (Without
+pywebview it can instead be opened in a normal browser — a developer fallback with a known weakness,
+below; the packaged `.app` never uses it.) There is no hosted service, no multi-tenancy, and no
+remote users. Nothing is sent anywhere except to Google, by the bundled `gam` binary.
 
 The stakes are nonetheless high, because of what the app can reach:
 
@@ -28,13 +29,12 @@ The stakes are nonetheless high, because of what the app can reach:
 
 **In scope** — the adversaries this project actually defends against:
 
-- another **local process** running as the same user, reading credentials off disk or reaching the
-  loopback server;
+- another **local process** running as the same user, reading credentials at rest or reaching the
+  loopback server (within the limits under *Known limitations*);
 - **hostile or malformed data returned by Google** (display names, signatures, calendar summaries,
   event titles, group descriptions) flowing into HTML, CSV, or a `gam` argument list;
 - **supply chain** — a tampered `gam` binary, or a malicious dependency;
-- **another page in the operator's browser** reaching `127.0.0.1` (CSRF / DNS rebinding), since the
-  app can also be opened in a normal browser.
+- **another page in the operator's browser** reaching `127.0.0.1` (CSRF / DNS rebinding).
 
 **Out of scope** — these are not defects here, and reports about them will be closed:
 
@@ -68,6 +68,22 @@ guarding them:
   `localhost:<port>`, so a DNS-rebound page can't reach it.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed.
+
+## Known limitations
+
+Accepted and documented rather than fixed; reports that only restate these will be closed.
+
+- **Browser mode shares the session cookie with every other `127.0.0.1` port.** Cookies are not
+  port-scoped, so while GamGUI runs in a normal browser, any other local web server that browser
+  visits receives the token cookie and can then drive GamGUI from outside the browser. Browser mode is
+  a developer fallback for when pywebview is not installed, and it prints a warning saying so; the
+  packaged `.app` bundles pywebview and refuses to fall back. Use the native window for real work —
+  its WKWebView keeps a cookie store of its own.
+- **During a `gam` call, the credentials are readable by your other processes.** The `0700`
+  directory keeps other *users* out, not other processes running as you: for the length of the call,
+  any same-user process can read the plaintext files. The wipe keeps that window short; it does not
+  close it. The real boundary against same-user code is the Keychain item's access control, which
+  asks before any other app reads the credentials at rest.
 
 ## Using it safely
 
