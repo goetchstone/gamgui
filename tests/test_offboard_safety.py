@@ -43,6 +43,15 @@ async def test_remove_from_all_calendars_still_fails_on_real_errors(kind, tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_remove_from_all_calendars_needs_every_line_tolerable(tmp_path):
+    # The reported kind is tolerable, but one error line is not: a partial failure, never a success.
+    exc = GAMError(kind=GAMErrorKind.PERMISSION_DENIED, exit_code=50,
+                   kinds=frozenset({GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.UNKNOWN}))
+    res = await _conn(_RaisingRunner(exc), tmp_path).remove_from_all_calendars("x@example.com")
+    assert not res.ok
+
+
+@pytest.mark.asyncio
 async def test_incomplete_transfers_for(connector):
     pending = await connector.incomplete_transfers_for("xferpending@example.com")
     assert pending and pending[0]["application"] == "Drive and Docs"

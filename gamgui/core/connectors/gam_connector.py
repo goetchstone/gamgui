@@ -462,7 +462,8 @@ class GAMConnector(Connector):
         secrets: Sequence[str] = (),
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
-        a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected).
+        a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)
+        — only when every error line GAM printed is one of them.
 
         ``audit_argv`` is what gets recorded and surfaced in the preview when the real ``argv`` carries
         a secret that must never touch the audit log or the UI — e.g. a create-user temp password.
@@ -474,7 +475,10 @@ class GAMConnector(Connector):
         try:
             await self.runner.run_authenticated(self.domain, argv, serialize=True)
         except Exception as exc:
-            tolerated = bool(tolerate_kinds) and getattr(exc, "kind", None) in tolerate_kinds
+            # Every error line must be tolerable: a sweep's stderr holds one line per entity, and one
+            # real failure among the benign notices is a failure (GAMError.kinds, not just .kind).
+            kinds = getattr(exc, "kinds", None)
+            tolerated = bool(tolerate_kinds) and bool(kinds) and kinds <= set(tolerate_kinds)
             error = redact_secrets(str(exc), secrets)
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,

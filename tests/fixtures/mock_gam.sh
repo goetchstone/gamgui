@@ -14,7 +14,7 @@
 #   - anything unhandled FAILS. Add a handler for a new command; never make the catch-all succeed.
 # Failure triggers, by argument substring: *missing*/*nonexistent* -> "Does not exist" for the user,
 # group, calendar, event or delegate; *exists* -> 409 on create; plus SENDFAIL, SUBFAIL, CONFLICT409,
-# FAILME, OWNACL, SWEEPFAIL (see each handler). The stderr wording and exit codes are GAM7's shape
+# FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED (see each handler). The stderr wording and exit codes are GAM7's shape
 # (2 usage error, 50 action failed, 51 action not performed, 56 does not exist) written from its
 # source conventions, not captured from a tenant — only a live capture (plan Phase 8) proves them.
 
@@ -596,7 +596,9 @@ fi
 # `gam all users delete calendaracls <UserCalendarEntity> [<CalendarACLRole>] <scope>` -> the offboarding
 # sweep. Succeeds by default. OWNACL: the sweep also hits the departing user's OWN primary calendar and
 # Google refuses to remove their owner ACL — the EXACT real stderr (leading spaces preserved), exit 50,
-# which the connector tolerates. SWEEPFAIL: a real failure it must not tolerate.
+# which the connector tolerates. SWEEPFAIL: a real failure it must not tolerate. SWEEPBENIGN: a multi-user
+# stderr (GAM's "Getting all/Got N" chatter, as in GamUpdate.txt, then one line per entity) where every
+# line is tolerable; SWEEPMIXED: the same with one real per-user failure among them, exit 50 either way.
 if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && [ "${4:-}" = "calendaracls" ]; then
   [ -n "${5:-}" ] || missing_arg "UserCalendarEntity"
   shift 5
@@ -610,6 +612,14 @@ if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && 
       exit 50 ;;
     *SWEEPFAIL*)
       echo "ERROR: 403: Request had insufficient authentication scopes" 1>&2; exit 1 ;;
+    *SWEEPBENIGN*|*SWEEPMIXED*)
+      printf 'Getting all Users, may take some time on a large Google Workspace Account...\nGot 3 Users: alice@example.com - %s\n' "$scope" 1>&2
+      echo "User: bob@example.com, Service not applicable/Does not exist" 1>&2
+      case "$scope" in *SWEEPMIXED*)
+        printf '    Calendar: carol@example.com, Calendar ACL: (Scope: user:%s), Delete Failed: Internal error encountered.\n' "$scope" 1>&2 ;;
+      esac
+      printf '    Calendar: %s, Calendar ACL: (Scope: user:%s), Delete Failed: Cannot change your own access level.\n' "$scope" "$scope" 1>&2
+      exit 50 ;;
   esac
   printf 'User: alice@example.com, Calendar: alice@example.com, Calendar ACL: (Scope: user:%s), Deleted\n' "$scope"
   exit 0

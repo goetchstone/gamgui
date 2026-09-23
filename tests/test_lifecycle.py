@@ -157,3 +157,18 @@ async def test_offboard_calendar_sweep_clean_success_and_real_failure(connector)
     bad = await connector.remove_from_all_calendars("SWEEPFAIL@example.com")
     assert not bad.ok and "insufficient authentication scopes" in bad.detail
     assert connector.audit.tail()[-1]["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_offboard_calendar_sweep_multi_user_stderr(connector):
+    # Q8: a real sweep prints one stderr line per entity. All tolerable (not-applicable user + the
+    # leaver's own ACL, amid GAM's "Getting all/Got N" chatter) -> best-effort success; one real per-user
+    # failure among them -> the step fails and shows that failure, not the benign tail line.
+    ok = await connector.remove_from_all_calendars("SWEEPBENIGN-leaver@example.com")
+    assert ok.ok and "best-effort" in (ok.detail or "")
+    assert connector.audit.tail()[-1]["extra"]["tolerated"] is True
+
+    bad = await connector.remove_from_all_calendars("SWEEPMIXED-leaver@example.com")
+    assert not bad.ok and "Internal error encountered" in bad.detail
+    rec = connector.audit.tail()[-1]
+    assert rec["ok"] is False and rec["extra"]["tolerated"] is False

@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Pattern, Tuple
+from typing import FrozenSet, Iterable, List, Optional, Pattern, Tuple
 
 from ..audit import redact_argv
 
@@ -54,7 +54,7 @@ _REMEDIATION = {
 }
 
 
-# Ordered (first match wins) stderr patterns → kind. Order matters: more specific first.
+# Ordered (first match wins, per line) stderr patterns → kind. Order matters: more specific first.
 _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     (re.compile(r"invalid_grant|token has been expired or revoked", re.I), GAMErrorKind.AUTH_EXPIRED),
     (re.compile(r"insufficient.*scope|access_denied.*scope|not authorized to access", re.I), GAMErrorKind.SCOPE_MISSING),
@@ -69,13 +69,42 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
 ]
 
 
-def classify_stderr(stderr: str) -> GAMErrorKind:
-    """Map GAM stderr text to a :class:`GAMErrorKind`."""
-    text = stderr or ""
+# GAM's own progress chatter on stderr (gam.cfg show_gettings, on by default): "Getting all Users, may
+# take some time on a large Google Workspace Account..." / "Got 150 Users: a@x - z@x". Not an error line.
+_PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting all |Got \d+ )")
+
+# Most severe first, for a stderr whose lines disagree. An account-wide failure outranks a per-entity
+# one, and an unrecognized error outranks the per-entity refusals a best-effort sweep prints beside it,
+# so a real failure is never reported as the benign kind next to it.
+_SEVERITY: List[GAMErrorKind] = [
+    GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTHENTICATED, GAMErrorKind.SCOPE_MISSING,
+    GAMErrorKind.RATE_LIMITED, GAMErrorKind.TIMEOUT, GAMErrorKind.UNKNOWN,
+    GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.NOT_FOUND,
+]
+
+
+def _classify_line(line: str) -> GAMErrorKind:
     for pattern, kind in _PATTERNS:
-        if pattern.search(text):
+        if pattern.search(line):
             return kind
     return GAMErrorKind.UNKNOWN
+
+
+def _error_lines(stderr: str) -> List[Tuple[GAMErrorKind, str]]:
+    """Each stderr line that reports something, with its kind. A multi-entity command (``all users
+    ...``) prints one line per entity, so a stderr can hold benign and real failures side by side —
+    classifying the whole text by its first match let one "not found" mask the rest."""
+    lines = (raw.strip() for raw in (stderr or "").splitlines())
+    return [(_classify_line(line), line) for line in lines if line and not _PROGRESS_LINE.match(line)]
+
+
+def _worst(kinds: Iterable[GAMErrorKind]) -> GAMErrorKind:
+    return min(kinds, key=_SEVERITY.index, default=GAMErrorKind.UNKNOWN)
+
+
+def classify_stderr(stderr: str) -> GAMErrorKind:
+    """Map GAM stderr text to its most severe :class:`GAMErrorKind`, line by line."""
+    return _worst(kind for kind, _ in _error_lines(stderr))
 
 
 @dataclass
@@ -89,18 +118,22 @@ class GAMError(Exception):
     stderr: GAM's stderr, scrubbed of secrets in __post_init__ (GAM echoes the command line — incl.
         a submitted password — on a usage error, so this must not be trusted raw).
     argv: the gam argument list that was run (binary path excluded), for diagnostics.
+    kinds: the kind of EVERY error line (``kind`` is the most severe of them) — what a best-effort
+        caller checks, so one real failure among benign per-entity notices is never tolerated.
     """
 
     kind: GAMErrorKind
     exit_code: Optional[int]
     stderr: str = ""
     argv: Optional[List[str]] = None
+    kinds: FrozenSet[GAMErrorKind] = frozenset()
 
     def __post_init__(self) -> None:
         # Redact any secret the failed command carried BEFORE this exception is logged, shown, or its
         # .message is built — GAM echoes the command line (incl. the password) on a usage error.
         self.argv = redact_argv(self.argv)
         self.stderr = _scrub_stderr(self.stderr)
+        self.kinds = frozenset(self.kinds) or frozenset({self.kind})
         super().__init__(self.message)
 
     @property
@@ -109,12 +142,16 @@ class GAMError(Exception):
 
     @property
     def message(self) -> str:
-        tail = (self.stderr or "").strip().splitlines()
-        detail = tail[-1] if tail else ""
+        # The last line of the reported kind: in a mixed stderr the tail can be a benign notice.
+        lines = _error_lines(self.stderr)
+        shown = [line for kind, line in lines if kind is self.kind] or [line for _, line in lines]
+        detail = shown[-1] if shown else ""
         base = f"GAM failed ({self.kind.value}, exit={self.exit_code})"
         return f"{base}: {detail}" if detail else base
 
     @classmethod
     def from_run(cls, exit_code: Optional[int], stderr: str, argv: Optional[List[str]] = None) -> "GAMError":
-        kind = GAMErrorKind.TIMEOUT if exit_code is None else classify_stderr(stderr)
-        return cls(kind=kind, exit_code=exit_code, stderr=stderr, argv=argv)
+        if exit_code is None:
+            return cls(kind=GAMErrorKind.TIMEOUT, exit_code=None, stderr=stderr, argv=argv)
+        kinds = frozenset(kind for kind, _ in _error_lines(stderr))
+        return cls(kind=_worst(kinds), exit_code=exit_code, stderr=stderr, argv=argv, kinds=kinds)

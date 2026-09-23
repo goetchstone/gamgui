@@ -44,7 +44,11 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
   primary <email>` and passes `tolerate_kinds=(NOT_FOUND, PERMISSION_DENIED)` to `_run_write`.
   NOT_FOUND = that user never shared with the leaver; PERMISSION_DENIED = the leaver's OWN primary
   calendar (`cannotChangeOwnAcl`, exit 50) — both expected, so the step still counts as success and
-  is audited `ok=True, tolerated=True`. A real SCOPE_MISSING/AUTH_EXPIRED still fails it.
+  is audited `ok=True, tolerated=True`. A real SCOPE_MISSING/AUTH_EXPIRED still fails it. The sweep
+  prints one stderr line per user, so tolerance needs **every** error line to be tolerable
+  (`GAMError.kinds`, 2026-09-23): one unrecognized per-user failure among the benign lines fails the
+  step and is the detail shown. Before that, the first "Does not exist" line classified the whole
+  stderr `NOT_FOUND` and a partial failure was reported as success.
 - **One transfer, not two (CLAUDE.md #1 + #2).** `26eee5b` (post-mortem from a real audit log):
   offboarding fired two `create datatransfer` calls (drive, then calendar); Google DTS allows one
   in-flight transfer per user, so the second returned "409: already in progress" and was silently
@@ -57,12 +61,14 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
 ## Gotchas / mock-lies traps
 - **`set_vacation` rejects `formatjson`** (see MEMORY / the formatjson gotcha) — the mock can't catch
   that; verify against the vendored grammar `gamgui/resources/gam7/GamCommands.txt`.
-- The mock only 409s when the old-owner email contains the literal `CONFLICT409`. The
-  `all users delete calendaracls` sweep succeeds by default; `OWNACL` in the address emits the exact
-  own-ACL stderr (exit 50, tolerated) and `SWEEPFAIL` a scope error (not tolerated). Every step's
-  write has a strict handler that fails a malformed argv. It does **not** model real DTS async timing,
-  partial multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test
-  proves classification/argv, not that a live tenant transfers cleanly.
+- The mock only 409s when the old-owner email contains the literal `CONFLICT409`. The `all users
+  delete calendaracls` sweep succeeds by default; `OWNACL` in the address emits the exact own-ACL
+  stderr (exit 50, tolerated) and `SWEEPFAIL` a scope error (not tolerated); `SWEEPBENIGN` a
+  multi-user stderr where every line is tolerable and `SWEEPMIXED` the same plus one real per-user
+  failure (not tolerated). Every step's write has a strict handler that fails a malformed argv. It
+  does **not** model real DTS async timing, partial multi-app transfer failures, or per-user
+  calendar iteration — a green sweep/transfer test proves classification/argv, not that a live
+  tenant transfers cleanly.
 - `incomplete_transfers_for` reads `overallTransferStatusCode` (falling back to `status`) and treats
   anything not `"completed"` as pending; a real tenant's status vocabulary is the source of truth.
 
@@ -70,7 +76,8 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
 `.venv/bin/python -m pytest -q tests/test_lifecycle.py tests/test_offboard_safety.py` (offline: mock
 gam + in-memory Keychain). Covered: step order/keys, the single combined-service transfer + audit
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL and not-found) vs. real
-auth errors, auto-reply substitution, reminder invitee, and `incomplete_transfers_for` filtering.
+auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), auto-reply
+substitution, reminder invitee, and `incomplete_transfers_for` filtering.
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
 actual per-user calendar sweep at domain scale, and `delete_user` itself. Per CLAUDE.md, these must
 be run against a **throwaway** account before being trusted.
