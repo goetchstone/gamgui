@@ -39,6 +39,21 @@ async def test_missing_binary_raises(vault, tmp_path):
         await r.version()
 
 
+async def test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock(runner, domain, tmp_path):
+    # A stalled API call: the runner must kill the process (not leave it holding plaintext
+    # credentials), still wipe the ephemeral GAMCFGDIR, and not strand the serialize lock.
+    import os
+
+    pidfile = tmp_path / "gam.pid"
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, ["MOCKSLEEP", "30", str(pidfile)], timeout=0.5, serialize=True)
+    assert ei.value.kind is GAMErrorKind.TIMEOUT and ei.value.exit_code is None
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pidfile.read_text()), 0)          # killed and reaped
+    assert list(tmp_path.glob("gamcfg-*")) == []       # credentials wiped despite the timeout
+    await runner.run_authenticated(domain, GAMCommands.signout_user("a@e.com"), serialize=True)
+
+
 async def test_oauth_token_write_back_through_a_real_run(runner, vault, domain, monkeypatch):
     monkeypatch.setenv("GAM_MOCK_REFRESH", "1")
     before = vault.get(domain, "oauth2")

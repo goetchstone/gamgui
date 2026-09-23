@@ -84,8 +84,10 @@ connector runs it through `parse_records`/`parse_one` and `Model.from_json`. Two
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_runner.py tests/test_errors.py tests/test_parser.py
 tests/test_models.py` — fully offline (mock `gam` + in-memory Keychain). Coverage: argv reaches the
-binary, the four classified failure kinds, banner stripping, and the oauth2 write-back
-(`GAM_MOCK_REFRESH` → vault value changes) under `serialize=True`. Untrusted until run live: the
+binary, the four classified failure kinds, banner stripping, the oauth2 write-back
+(`GAM_MOCK_REFRESH` → vault value changes) under `serialize=True`, and the timeout path
+(`MOCKSLEEP`: `TIMEOUT` raised, the process killed and reaped, the `GAMCFGDIR` still wiped, the write
+lock released — `test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`). Untrusted until run live: the
 real stderr wording behind each `GAMErrorKind` (only 6 lines mocked), and every `formatjson`/text
 output shape against an actual tenant — passing tests here do **not** prove a real GAM write worked.
 

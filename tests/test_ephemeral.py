@@ -8,11 +8,13 @@ from pathlib import Path
 
 import pytest
 
+from gamgui.core.secrets import ephemeral
 from gamgui.core.secrets.ephemeral import (
     _LIVE,
     _LIVE_PID_TRUST_SECONDS,
     _PID_FILENAME,
     EphemeralConfig,
+    _shred_dir,
     sweep_stale_configs,
     wipe_live_configs,
 )
@@ -215,3 +217,63 @@ def test_dir_wiped_even_on_exception(vault, domain, tmp_path):
             assert cfgdir.exists()
             raise RuntimeError("boom")
     assert not captured["path"].exists()
+
+
+# --- error paths: a cleanup step that fails must never stop the rest of the wipe ---------------------
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can open a read-only file for writing")
+def test_shred_dir_still_removes_a_file_it_cannot_overwrite(tmp_path):
+    d = _make_cfgdir(tmp_path, "gamcfg-ro")
+    secret = d / FILENAMES["oauth2"]
+    secret.write_text("secret", encoding="utf-8")
+    secret.chmod(0o400)                      # the zero-overwrite fails; removal must still happen
+    _shred_dir(d)
+    assert not d.exists()
+
+
+def test_shred_dir_tolerates_a_dir_that_is_already_gone(tmp_path):
+    _shred_dir(tmp_path / "gamcfg-gone")     # listing it raises; the wipe must not
+
+
+def test_wipe_live_configs_keeps_going_past_a_failed_wipe(vault, domain, tmp_path, monkeypatch):
+    first = EphemeralConfig(vault, domain, base_dir=tmp_path).__enter__()
+    second = EphemeralConfig(vault, domain, base_dir=tmp_path).__enter__()
+    real, seen = _shred_dir, []
+
+    def flaky(path):
+        seen.append(path)
+        if len(seen) == 1:
+            raise RuntimeError("disk error")
+        real(path)
+
+    monkeypatch.setattr(ephemeral, "_shred_dir", flaky)
+    wipe_live_configs()                      # atexit runs this; it must not raise
+    assert {os.path.realpath(p) for p in seen} >= {os.path.realpath(first), os.path.realpath(second)}
+    assert sum(p.exists() for p in (first, second)) == 1   # the other dir was still wiped
+    assert not (_LIVE & {os.path.realpath(first), os.path.realpath(second)})
+    for p in (first, second):                # the failed one is left for a later launch's sweep
+        real(p)
+
+
+def test_sweep_continues_past_an_entry_that_vanishes_mid_sweep(tmp_path, monkeypatch):
+    racing = _make_cfgdir(tmp_path, "gamcfg-racing", pid=_dead_pid())
+    stale = _make_cfgdir(tmp_path, "gamcfg-stale", pid=_dead_pid())
+    real = ephemeral._owner_pid
+
+    def owner(child):
+        if child.name == racing.name:
+            _shred_dir(child)                # another instance's sweep got there first -> stat() fails
+        return real(child)
+
+    monkeypatch.setattr(ephemeral, "_owner_pid", owner)
+    assert sweep_stale_configs(base_dir=tmp_path) == 1
+    assert not stale.exists() and not racing.exists()
+
+
+def test_sweep_never_raises_when_the_runtime_dir_cannot_be_listed(tmp_path, monkeypatch):
+    # Runs at startup and at shutdown; an unreadable runtime dir must not crash either.
+    def unreadable(self, pattern):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(ephemeral.Path, "glob", unreadable)
+    assert sweep_stale_configs(base_dir=tmp_path) == 0

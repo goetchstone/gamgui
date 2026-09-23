@@ -26,7 +26,7 @@
 - Cache is per-`SecretsVault` instance and in-memory only; not shared across processes. `list_domains` tolerates a corrupt JSON index by returning `[]`.
 
 ## Testing / live-verification status
-`.venv/bin/python -m pytest -q tests/test_vault.py tests/test_ephemeral.py` — fully offline. `test_ephemeral.py` covers perms, wipe-on-exception, missing-cred raise, token write-back, all sweep branches (dead/live/recycled-PID/corrupt-marker/in-use), `wipe_live_configs`, and an out-of-process `test_atexit_hook_wipes_dir_on_interpreter_exit` proving credentials don't survive interpreter exit. **Untested against a real tenant:** the Keychain backend itself and GAM's actual `oauth2.txt` refresh contract.
+`.venv/bin/python -m pytest -q tests/test_vault.py tests/test_ephemeral.py` — fully offline. `test_ephemeral.py` covers perms, wipe-on-exception, missing-cred raise, token write-back, all sweep branches (dead/live/recycled-PID/corrupt-marker/in-use), `wipe_live_configs`, an out-of-process `test_atexit_hook_wipes_dir_on_interpreter_exit` proving credentials don't survive interpreter exit, and the error paths: a file that can't be overwritten is still removed, a vanished dir, one failed wipe not stopping `wipe_live_configs`, an entry vanishing mid-sweep, an unlistable runtime dir. The runner's timeout path wiping the dir is in `test_runner.py`. **Untested against a real tenant:** the Keychain backend itself and GAM's actual `oauth2.txt` refresh contract.
 
 ## To do common tasks here
 - **Add a credential type:** extend `FILENAMES` in `vault.py` (and `_REQUIRED` in *both* `vault.py` and `ephemeral.py` if it gates auth); `_check_name`/`CREDENTIAL_NAMES` follow automatically. Update `tests/conftest.py`'s `vault` fixture.
