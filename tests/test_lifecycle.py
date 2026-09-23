@@ -111,6 +111,22 @@ async def test_offboard_autoreply_substitutes_employee_and_manager():
     assert "Jane Doe" in vac.summary and "bob@e.com" in vac.summary             # preview shows it filled
 
 
+def test_offboard_autoreply_is_sent_as_the_text_the_preview_shows():
+    # The preview block shows the message with its line breaks (whitespace-pre-line); the reply is sent
+    # as HTML, where a raw newline is just a space — and GAM only turns the two characters `\n` into
+    # `<br/>` (setVacation). So the text is escaped and each line break sent as <br/>; a `<` or `&` the
+    # operator typed is text, and a typed backslash can't become a line break.
+    steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "Subj",
+                                 "Line one.\r\n\r\nAsk {manager} <IT> & co.\nC:\\new", 30, date(2026, 6, 23),
+                                 manager_contact="Mo Gr (mgr@e.com)")
+    vac = next(s for s in steps if s.key == "vacation")
+    [argv] = vac.commands
+    assert argv[argv.index("message") + 1] == (
+        "Line one.<br/><br/>Ask Mo Gr (mgr@e.com) &lt;IT&gt; &amp; co.<br/>C:&#92;new")
+    assert argv[argv.index("message") + 2] == "html"
+    assert "Line one.\r\n\r\nAsk Mo Gr (mgr@e.com) <IT> & co." in vac.summary       # the preview: the text
+
+
 @pytest.mark.asyncio
 async def test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings(connector, gam_state):
     # GAM merges `vacation` into the stored settings. A leaver who once answered only people in their

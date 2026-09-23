@@ -7,6 +7,7 @@ is pure (and testable); the web route executes it as a guarded, progress-tracked
 
 from __future__ import annotations
 
+import html
 import re
 import shlex
 from dataclasses import dataclass, field
@@ -85,6 +86,16 @@ def fill_autoreply(text: str, employee: str, manager: str) -> str:
             .replace("{employee}", employee)
             .replace("{manager}", manager)
             .replace("{contact}", manager))
+
+
+def autoreply_html(text: str) -> str:
+    """The auto-reply text as the HTML body GAM sends (`html`), so senders read what the preview shows.
+
+    In HTML a raw line break is only a space, and GAM turns just the two characters ``\\n`` into
+    ``<br/>`` (setVacation) — so each line break becomes ``<br/>``, ``&``/``<``/``>`` are escaped (the
+    operator typed text, not markup) and a backslash is ``&#92;`` (a typed ``\\n`` stays text)."""
+    lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return "<br/>".join(html.escape(line, quote=False).replace("\\", "&#92;") for line in lines)
 
 
 @dataclass
@@ -170,6 +181,7 @@ def build_offboard_steps(
     contact = manager_contact or manager
     subject = fill_autoreply(subject, employee, contact)
     message = fill_autoreply(message, employee, contact)
+    body = autoreply_html(message)   # what's sent; the preview and the step summary show `message`
     due = today + timedelta(days=days)
     reminder_summary = f"Offboarding {user}: confirm with IT whether to delete the account"
     reminder_desc = (
@@ -201,8 +213,8 @@ def build_offboard_steps(
                      [GAMCommands.add_delegate(user, manager)]),
         OffboardStep("vacation", "Set auto-responder",
                      f"Auto-reply — “{subject}”: {message}",
-                     lambda c: c.set_vacation(user, subject, message),
-                     [GAMCommands.set_vacation(user, subject, message)]),
+                     lambda c: c.set_vacation(user, subject, body),
+                     [GAMCommands.set_vacation(user, subject, body)]),
         OffboardStep("transfer", "Transfer Drive & Calendar ownership",
                      f"Transfer {user}'s Drive/Docs and calendars to {manager}",
                      lambda c: c.transfer_data(user, TRANSFER_SERVICES, manager),

@@ -14,6 +14,7 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 
 ## Files
 - `gamgui/core/lifecycle.py` — pure step builder. `build_offboard_steps(...)`, `fill_autoreply`,
+  `autoreply_html` (the text → the HTML body sent),
   `OffboardStep` dataclass (its `commands` = the exact argv(s) it runs), `command_line` (argv → the
   quoted, redacted `gam …` line the preview shows), `check_addresses` (both addresses against the
   directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No scheduler,
@@ -222,8 +223,12 @@ parser was read statically (its bytecode, never run). No mismatch found.
   without one, the Data Transfer API's own default decides whether files the leaver *shared* move to
   the manager. Unverified which; check the manager's Drive after the first live run, before the
   account is deleted. GAM also refuses a transfer to the same user (the step fails with a usage error).
-- **The auto-reply is sent as HTML** (`html`): line breaks typed into the message collapse and `<`/`&`
-  are markup, while the preview block shows the line breaks. A one-paragraph message is unaffected.
+- **The auto-reply is sent as HTML** (`html`), built from the text by `lifecycle.autoreply_html`: each
+  line break becomes `<br/>`, `&`/`<`/`>` are escaped and a backslash is `&#92;`, so senders read
+  what the preview block ("Auto-reply senders will receive") shows. Before 2026-09-23 the raw text
+  went out: HTML collapsed its line breaks into one paragraph (GAM turns only the two characters `\n`
+  into `<br/>`, `setVacation`) and a typed `<`/`&` was markup (failure-log). The step's `gam` line
+  shows the HTML that is sent; the step summary and the auto-reply block show the text.
 - `incomplete_transfers_for` reads `overallTransferStatusCode` (falling back to `status`) and treats
   anything not `"completed"` as pending; a real tenant's status vocabulary is the source of truth.
 
@@ -233,7 +238,7 @@ gam + in-memory Keychain). Covered: step order/keys, the single combined-service
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL, not-found, a user
 without Calendar) vs. real auth errors and a per-user 403, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
-auto-reply substitution, the auto-reply not inheriting the leaver's old vacation settings (stateful
+auto-reply substitution, the auto-reply sent as the previewed text (`test_offboard_autoreply_is_sent_as_the_text_the_preview_shows`), the auto-reply not inheriting the leaver's old vacation settings (stateful
 mock, `test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings`), reminder invitee, `incomplete_transfers_for` filtering, the directory check
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
@@ -267,8 +272,8 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   "Set delegate"; "Couldn't read … mail delegates" → fix what it quotes (Gmail off for the leaver, a
   missing Gmail scope) and preview again, or the delegate step fails after the reset.
 - Each `gam` line: the leaver everywhere, the manager in the delegate, transfer and reminder;
-  `drive,calendar` as one argument; the auto-reply text as senders should read it (sent as HTML, so
-  line breaks collapse); the reminder date and invitee.
+  `drive,calendar` as one argument; the auto-reply block reads as senders should see it (its `gam`
+  line carries the same text as HTML: `<br/>` for each line break); the reminder date and invitee.
 - Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
   writes in the app waiting behind it. Don't close the app mid-run. Left the page or reloaded? Enter
   the same two addresses and Preview: it shows the running offboarding's progress instead.
@@ -324,4 +329,5 @@ files): move the leaver's folder back by hand.
   connector. The type-the-email confirm lives in `guard.enforce` (`typed_emails`) — keep it there, so
   every route that deletes an account gets it — and never let a read-error hard-block deletion.
 - **Auto-reply wording/placeholders:** `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE` and `fill_autoreply`
-  (`{employee}`, `{manager}`, `{contact}`) in `core/lifecycle.py`.
+  (`{employee}`, `{manager}`, `{contact}`) in `core/lifecycle.py`; the text is sent through
+  `autoreply_html`, so keep it plain text (markup typed there is shown, not rendered).
