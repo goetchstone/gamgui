@@ -17,8 +17,11 @@ mistake and find it. Check concretely:
 - **Guard, server-side:** is it enforced on every run path (single *and* sequence)? Destructive needs
   a posted `confirmed`; bulk-destructive needs the typed `confirm`. Try a direct POST that skips the
   UI and a 1-step sequence wrapping a destructive command.
-- **Audit + errors:** does every mutation go through `apply → _run_write`? Do failures surface as an
-  error partial (never a 500 or silent success)?
+- **Audit + errors:** does every mutation go through `apply → _run_write`? The one accepted exception
+  is `create_onboarding_runbook` (a two-step tasklist create that audits itself); it is allowlisted by
+  `tests/test_command_contract.py::test_audit_record_only_in_run_write_or_allowlist` — flag any *new*
+  `audit.record` outside `_run_write`, not that one. Is a secret-bearing argv redacted via
+  `audit_argv`? Do failures surface as an error partial (never a 500 or silent success)?
 - **Syntax:** is each command actually present in the vendored `GamCommands.txt` for the pinned
   version?
 

@@ -8,6 +8,10 @@ You implement GAM operations in GamGUI to the project's standards (`CONTRIBUTING
 standards; `docs/builder-commands.md`). Terse, KISS; write code indistinguishable from the
 surrounding style. No AI tells, no speculative abstraction, no banner comments.
 
+Read the domain runbooks first: `docs/domains/gam-commands.md` (argv builders),
+`docs/domains/connectors-chokepoint.md` (for a write — the `_run_write` path and secret redaction via
+`audit_argv`), and `docs/domains/catalog-builder.md` (if it surfaces in `/builder`).
+
 Always:
 
 1. **Verify** the exact command in `gamgui/resources/gam7/GamCommands.txt` before writing any builder

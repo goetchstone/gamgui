@@ -1,9 +1,10 @@
 # Handoff plan: onboarding code-review fixes
 
-**Status: APPLIED** (Steps 1–6 landed in the `fix(onboarding)` commit that includes this file; the "Additional suggestions" remain open). Originally: the working tree was clean at `38d1fa4`; none of the steps below had been
-applied, so every "replace this exact block" old-string matches verbatim. Written for any model or
-person with **no prior session context** (e.g. Opus 5 / 4.8). A private copy also lives at
-`~/.claude/plans/ok-so-can-we-clever-moonbeam.md` on the author's machine.
+**Status: APPLIED — do not re-apply.** Steps 1–6 landed in `37b2e22`. Of the "Additional
+suggestions", #1, #2, #4 and #5 have since landed (see the batch-2 plan) and #3 landed for
+`create task` and `sendemail`. Still open: #3 for signature-set (it still falls through the mock's
+permissive catch-all) and #6 (consolidate the three job types). Originally written against `38d1fa4` for a reader with no prior session
+context.
 
 ## Context
 A code review of the 2026-09-15 onboarding work (commits `d78a1ef..38d1fa4`: account creation,

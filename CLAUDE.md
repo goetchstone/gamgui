@@ -65,10 +65,12 @@ unproven until it has run against one — see the live-verification status in th
 - **macOS-only** is deliberate: don't build or pitch Windows/Linux support. But don't *foreclose* it
   either — keep platform specifics in the shell (window, Keychain, codesigning, `.app`), not in
   `core/`. Same framing for a free-text `gam` runner: not planned, not forbidden. See ROADMAP.md.
+- **Commits** happen when the operator asks. It is a solo repo: commits go straight to `main` unless
+  a PR is requested; an `improve-rules` proposal is always a PR.
 
 ## Working here economically
 
-This file loads every session (~1k tokens). Subagent fan-out has cost **millions** in a single
+This file loads every session (~2k tokens). Subagent fan-out has cost **millions** in a single
 session — one security audit ran 31 agents for 2.15M tokens and ended a monthly budget. So the
 efficiency that matters is not shorter instructions, it is fewer and better-aimed agents:
 
@@ -108,8 +110,9 @@ make app                            # build dist/GamGUI.app
 
 GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.11); three drift
 guards (`test_required_command_tokens_present`, `test_catalog_matches_grammar`,
-`test_pinned_version_consistent`) fail if a bump breaks a command we use. The bump runbook is in the README — step 1 **fails by
-design**.
+`test_pinned_version_consistent`) fail if a bump breaks a command we use. Bump with
+`scripts/bump_gam.py vX.Y.Z` — runbook in [build-packaging](docs/domains/build-packaging.md); the
+manual path's step 1 **fails by design**.
 
 ## The layered system — and how this file changes
 
@@ -122,7 +125,12 @@ by design (they cost nothing until needed):
   mock-lies traps.
 - **Skills** — [.claude/skills/](.claude/skills): procedures for a moment
   (`start-session`, `pre-commit`, `post-failure`, `end-of-session`,
-  `improve-rules`).
+  `improve-rules`, `add-builder-command`).
+- **Local hooks** (`.claude/hooks/`, gitignored) inject a short orient digest at session start and
+  the diff-relevant checklist before a commit, and hard-block a `fix:` commit that has no fresh
+  failure-log entry — intended, not a malfunction.
+- **Plans** — [docs/plans/](docs/plans): handoff plans. Each opens with a Status line; never
+  re-apply one marked APPLIED.
 
 Sessions **don't add, reword, or retire the numbered invariants here directly** —
 log the incident in [docs/failure-log.md](docs/failure-log.md), append the

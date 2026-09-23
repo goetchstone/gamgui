@@ -49,6 +49,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   and `exc.stderr` are safe for any consumer; `extra.error` derives from the scrubbed `.message`.
 - **Enforcement home if changed:** tripwire test + a one-line scrub of `extra.error` through the
   redactor in `_run_write`. Low priority (no live exposure today) — for the observer pass.
+- **Resolved (2026-09-22):** `extra.error` is `str(exc)` of an already-scrubbed `GAMError`; tripwire
+  `tests/test_onboarding.py::test_gam_error_scrubs_password_from_stderr_and_argv`.
 
 ## 2026-09-15 — Invariant #2 reads absolute, but audited mutations exist outside `_run_write`
 - **What happened:** While writing the domain runbooks, the adversarial verifiers found that

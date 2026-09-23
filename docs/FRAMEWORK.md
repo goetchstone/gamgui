@@ -44,6 +44,17 @@ forgotten?** Don't file a hard gate as a skill — the model reads it once and
 forgets. The invariant table in CLAUDE.md should, over time, name each
 invariant's enforcement home.
 
+**A hook only counts if its output reaches the model.** Claude Code routes hook
+output by channel: a SessionStart hook's **stdout** becomes context; a
+non-blocking PreToolUse hook must print JSON
+`{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "…"}}`
+on stdout; stderr is fed back only on a blocking **exit 2**. Anything else on
+stderr at exit 0 reaches nobody — these hooks ran that way for weeks unnoticed
+(see [failure-log.md](failure-log.md), 2026-09-23). Test a hook by finding its
+text in the model's context, not by running it in a terminal. Keep what hooks
+inject short and specific: a few lines relevant to *this* diff are read; a
+40-line checklist on every commit is noise.
+
 **Local vs shared.** Per `.gitignore`, `.claude/*` is local **except**
 `skills/` and `agents/`. So the *knowledge* — skills, domain runbooks, this
 file, the ledgers — is committed and benefits any contributor; the *enforcement
@@ -130,9 +141,9 @@ docs/
 ├── settings.json                  # Hook wiring (LOCAL — gitignored)
 ├── .rules-last-run                # improve-rules window stamp (LOCAL)
 ├── hooks/                         # (LOCAL — gitignored)
-│   ├── pre-commit-check.sh        #   surfaces the checklist; blocks fix: w/o failure log
-│   ├── session-start-check.sh     #   ORIENT summary + GAM-pin drift check
-│   └── rules-improver-check.sh    #   nudge to run improve-rules
+│   ├── pre-commit-check.sh        #   injects the diff-relevant checklist; blocks fix: w/o failure log
+│   ├── session-start-check.sh     #   orient digest: git, GAM-pin drift, runbook pointer
+│   └── rules-improver-check.sh    #   nudge to run improve-rules (unresolved evidence only)
 ├── skills/                        # (SHARED — committed)
 │   ├── pre-commit/ · post-failure/
 │   ├── start-session/ · end-of-session/

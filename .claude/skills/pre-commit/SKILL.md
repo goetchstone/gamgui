@@ -1,15 +1,14 @@
 ---
 name: pre-commit
-description: Run before every `git commit` in GamGUI. A checklist that catches the failure classes this repo keeps hitting — the mock lying, a mutation slipping the chokepoint, a secret reaching the log, a stale catalog. The pre-commit hook surfaces the top of this file automatically.
+description: The checklist to apply before a `git commit` in GamGUI — catches the failure classes this repo keeps hitting (the mock lying, a mutation slipping the chokepoint, a secret reaching the log, a stale catalog). The pre-commit hook injects the items relevant to your changed files automatically; read this file for the full list.
 ---
 
 # Pre-commit checklist
 
-Not every item every time — but read the list and act on the ones your diff
-touches. The whole point is that the failure classes below have each bitten
-this repo before. See [FRAMEWORK.md](../../../docs/FRAMEWORK.md) for how this
-skill (soft) relates to the hook (hard) and the drift-guard/mock-lies tests
-(tripwire).
+Not every item every time — act on the ones your diff touches. Each failure
+class below has bitten this repo before. See
+[FRAMEWORK.md](../../../docs/FRAMEWORK.md) for how this skill (soft) relates to
+the hook (hard) and the drift-guard/mock-lies tests (tripwire).
 
 ## Always
 
