@@ -24,7 +24,7 @@ Templates are the only local state: a role is `{steps, signature, org_unit, grou
 
 ## Invariants & the failure history
 - **Temp password never audited or surfaced.** `create_user` builds the real argv but passes a `"********"` copy as `audit_argv` to `_run_write`; `_run_write` records and previews `shown = audit_argv` and only feeds the true argv to the runner. The plaintext appears exactly once, in `_onboard_run.html`'s credentials sheet, and the account is created `changepassword on` so Google forces a reset at first login (`commit d78a1ef`).
-- **argv-only (inv. 1):** every operator string — a runbook step, a name — is one argv element. Tests assert `"evil; rm -rf /"` and `"A; rm -rf /"` land intact as single elements.
+- **argv-only (inv. 1):** every operator string — a runbook step, a name — is one argv element. Tests assert `"evil; rm -rf /"` and `"A; rm -rf /"` land intact as single elements. One element is still a *list* to GAM where the grammar says `<UserList>` (`"<UserItem>(,<UserItem>)*"`), so `looks_like_email` — used for the hire, the assignee and (in `users.py`) a new delegate — refuses a comma as well as a bare name.
 - **Runbook write is serialized + audited but not via `_run_write`:** `create_onboarding_runbook` calls the runner directly (it needs the returned tasklist id and loops), then calls `self.audit.record` itself with the tasklist argv. It is still `serialize=True` and audited — not a rogue second write path, just a shaped one.
 - **`render` substitutes only `WELCOME_VARS`** (`name/role/email/manager`); an unknown `{token}` is left literal, never crashes.
 

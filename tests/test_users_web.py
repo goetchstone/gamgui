@@ -1311,8 +1311,15 @@ def test_remove_delegate_returns_list(client, gam_calls):
 
 def test_remove_delegate_failure_is_reported(client):
     r = client.post("/users/delegate/remove", data={"email": "alice@example.com", "delegate": "missing@example.com"})
-    assert "remove delegate: GAM failed (not_found" in r.text   # "Couldn't" — apostrophe is escaped
+    assert "remove missing@example.com. The requested user, group, or resource was not found." in r.text
+    assert "Does not exist" in r.text and "GAM's error" in r.text   # GAM's own line, one click away
+    assert "assistant@example.com" in r.text and 'name="delegate"' in r.text   # the list + form stay put
     assert _audited(client, 1) == [("remove_delegate", "alice@example.com", False)]
+
+
+def test_delegate_remove_asks_before_it_runs(client):
+    r = client.get("/users/delegates", params={"email": "alice@example.com"})
+    assert 'hx-confirm="Remove assistant@example.com\'s access to alice@example.com\'s mailbox?"' in r.text
 
 
 def test_set_signature(client):
@@ -1321,11 +1328,38 @@ def test_set_signature(client):
     assert "Signature updated." in r.text
 
 
-def test_add_delegate_returns_list(client):
+def test_add_delegate_returns_list(client, gam_calls):
+    r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": " carol@example.com "})
+    assert_ok_partial(r)
+    assert "Added carol@example.com." in r.text and "assistant@example.com" in r.text  # refreshed list
+    assert gam_writes(gam_calls()) == [["user", "alice@example.com", "add", "delegate", "carol@example.com"]]
+
+
+@pytest.mark.parametrize("delegate, says", [
+    ("oauthuser", "isn&#39;t an email address"),            # a GAM keyword / bare name -> name@<domain>
+    ("a,b@example.com", "isn&#39;t an email address"),      # GAM splits a <UserList> on the comma
+    ("alice@example.com", "delegated to its own owner"),
+    ("a.anders@example.com", "an alias of alice@example.com"),
+])
+def test_add_delegate_refuses_a_bad_address_before_gam(client, gam_calls, delegate, says):
+    r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": delegate})
+    assert says in r.text and 'name="delegate"' in r.text   # said in the panel; the form stays
+    assert gam_writes(gam_calls()) == []
+
+
+def test_add_delegate_outside_the_directory_needs_an_ok(client, gam_calls):
     r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "new@example.com"})
-    assert r.status_code == 200
-    assert "assistant@example.com" in r.text  # refreshed delegate list
-    assert "Remove" in r.text
+    assert "new@example.com isn&#39;t in the directory" in r.text and "Add new@example.com anyway" in r.text
+    assert gam_writes(gam_calls()) == []
+    r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "new@example.com",
+                                                 "confirmed": "1"})
+    assert_ok_partial(r)
+    assert gam_writes(gam_calls()) == [["user", "alice@example.com", "add", "delegate", "new@example.com"]]
+
+
+def test_add_delegate_warns_on_a_suspended_account(client, gam_calls):
+    r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "bob@example.com"})
+    assert "bob@example.com is suspended" in r.text and gam_writes(gam_calls()) == []
 
 
 def test_signout_everywhere_succeeds(client):
@@ -1390,11 +1424,13 @@ def test_add_delegate_failure_is_reported(client, monkeypatch):
 
     async def fail(email, delegate):
         preview = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=email, summary="x", risk=RiskLevel.LOW)
-        return ChangeResult(preview=preview, ok=False, detail="permission denied")
+        return ChangeResult(preview=preview, ok=False, detail="403 permission denied",
+                            remediation="Check the admin role.")
 
     monkeypatch.setattr(client.app.state.gamgui.connector, "add_delegate", fail)
-    r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "x@example.com"})
-    assert "add delegate: permission denied" in r.text  # apostrophe is HTML-escaped by Jinja
+    r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "carol@example.com"})
+    assert "add the delegate. Check the admin role." in r.text and "403 permission denied" in r.text
+    assert 'value="carol@example.com"' in r.text        # the typed address stays in the box
 
 
 def test_add_delegate_empty_rejected(client):

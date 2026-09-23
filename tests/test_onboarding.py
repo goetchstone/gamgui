@@ -704,9 +704,9 @@ async def test_bulk_recent_feed_holds_no_plaintext_password(connector, tmp_path,
 
 def test_parse_hire_csv_rejects_invalid_email_targets():
     rows, errors = onboarding.parse_hire_csv(
-        "role,email\nSales,oauthuser\nSales,@example.com\nSales,ok@example.com\n")
-    assert [r["email"] for r in rows] == ["ok@example.com"]                 # the two traps dropped
-    assert sum("not a valid email" in e for e in errors) == 2
+        "role,email\nSales,oauthuser\nSales,@example.com\nSales,ok@example.com\nSales,\"a,b@example.com\"\n")
+    assert [r["email"] for r in rows] == ["ok@example.com"]                 # the traps dropped
+    assert sum("not a valid email" in e for e in errors) == 3               # a comma: GAM's <UserList> splits it
 
 
 def test_parse_hire_csv_refuses_an_unreadable_file_instead_of_raising():

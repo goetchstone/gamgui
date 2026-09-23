@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
+from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
 from ..jobs import start_job
 from ..server import TEMPLATES
@@ -224,18 +225,51 @@ async def groups_remove(request: Request, email: Annotated[str, Form()], group: 
     return await _groups_partial(request, conn, email)
 
 
+async def _check_delegate(st, email: str, delegate: str) -> "tuple[str, str]":
+    """(error, warning) for a new delegate: an error blocks the add, a warning needs the operator's OK.
+    GAM reads the value as a <UserList>, so a bare name becomes name@<domain> and a comma adds several."""
+    if not delegate:
+        return "Enter a delegate email.", ""
+    if not looks_like_email(delegate):
+        return f"“{delegate}” isn't an email address — enter the delegate's full address, like name@example.com.", ""
+    if delegate.lower() == email.strip().lower():
+        return "A mailbox can't be delegated to its own owner.", ""
+    try:
+        directory = await st.users()
+    except Exception as exc:  # noqa: BLE001 — can't check: ask, don't guess
+        return "", f"Couldn't check {delegate} against the directory — {_friendly(exc)}"
+    key = delegate.lower()
+    found = next((u for u in directory if u.primary_email.lower() == key), None)
+    if found is None:
+        owner = next((u for u in directory if key in (a.lower() for a in u.aliases)), None)
+        if owner:
+            return f"{delegate} is an alias of {owner.primary_email} — enter the primary address.", ""
+        return "", (f"{delegate} isn't in the directory. Gmail only accepts a delegate from your own "
+                    f"organization — check for a typo. (An account created in the last few minutes shows "
+                    f"after Users → Refresh.)")
+    if found.suspended:
+        return "", f"{delegate} is suspended — Gmail may refuse the delegation, and the account can't sign in to use it."
+    return "", ""
+
+
 @router.post("/delegate/add", response_class=HTMLResponse)
-async def add_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+async def add_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()],
+                       confirmed: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
     if conn is None:
         return _err(request, _NOT_CONNECTED)
     delegate = delegate.strip()
-    if not delegate:
-        return _err(request, "Enter a delegate email.")
+    error, warning = await _check_delegate(st, email, delegate)
+    if error:
+        return await _delegates_partial(request, conn, email, notice={"ok": False, "message": error}, typed=delegate)
+    if warning and confirmed != "1":
+        return await _delegates_partial(request, conn, email, warning=warning, pending=delegate)
     result = await conn.add_delegate(email, delegate)
     if not result.ok:
-        return _err(request, f"Couldn't add delegate: {result.detail}")
-    return await _delegates_partial(request, conn, email)
+        return await _delegates_partial(request, conn, email, typed=delegate, notice={
+            "ok": False, "message": "Couldn't add the delegate. " + result.remediation, "details": result.detail})
+    return await _delegates_partial(request, conn, email, notice={"ok": True, "message": f"Added {delegate}."})
 
 
 @router.post("/delegate/remove", response_class=HTMLResponse)
@@ -243,10 +277,12 @@ async def remove_delegate(request: Request, email: Annotated[str, Form()], deleg
     conn = _conn(request)
     if conn is None:
         return _err(request, _NOT_CONNECTED)
-    result = await conn.remove_delegate(email, delegate.strip())
+    delegate = delegate.strip()
+    result = await conn.remove_delegate(email, delegate)
     if not result.ok:
-        return _err(request, f"Couldn't remove delegate: {result.detail}")
-    return await _delegates_partial(request, conn, email)
+        return await _delegates_partial(request, conn, email, notice={
+            "ok": False, "message": f"Couldn't remove {delegate}. " + result.remediation, "details": result.detail})
+    return await _delegates_partial(request, conn, email, notice={"ok": True, "message": f"Removed {delegate}."})
 
 
 @router.post("/organization", response_class=HTMLResponse)
@@ -371,12 +407,14 @@ async def delegates_get(request: Request, email: str) -> HTMLResponse:
     return await _delegates_partial(request, conn, email)
 
 
-async def _delegates_partial(request: Request, conn, email: str) -> HTMLResponse:
+async def _delegates_partial(request: Request, conn, email: str, **extra) -> HTMLResponse:
+    """The delegate list + add form. ``extra``: a ``notice`` (ok/message/details) shown above it, a
+    ``warning`` + ``pending`` address awaiting "Add anyway", or the ``typed`` address to keep in the box."""
     try:
         delegates = await conn.list_delegates(email)
     except Exception as exc:
         return _err(request, _friendly(exc))
-    return TEMPLATES.TemplateResponse(request, "_delegates.html", {"delegates": delegates, "email": email})
+    return TEMPLATES.TemplateResponse(request, "_delegates.html", {"delegates": delegates, "email": email, **extra})
 
 
 # --- calendar access (who can see/edit this user's primary calendar) --------------------

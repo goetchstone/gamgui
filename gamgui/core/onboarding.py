@@ -129,13 +129,14 @@ def _truthy(value: str) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "x", "on"}
 
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_RE = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
 
 
 def looks_like_email(value: str) -> bool:
-    """Pragmatic address check: a non-empty local part, one @, a dotted domain. Rejects GAM keyword
-    traps (oauthuser, @domain, a bare name) that would target the authorizing admin instead of the
-    intended hire when passed to update-group / add-calendars."""
+    """Pragmatic address check: a non-empty local part, one @, a dotted domain, no comma. Rejects GAM
+    keyword traps (oauthuser, @domain, a bare name) that would target the authorizing admin instead of
+    the intended hire when passed to update-group / add-calendars, and a comma — GAM splits a
+    <UserList> on it, so ``a,b@example.com`` would target two accounts."""
     return bool(_EMAIL_RE.match((value or "").strip()))
 
 
