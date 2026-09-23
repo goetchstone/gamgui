@@ -96,7 +96,7 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
             if ok:
                 job.applied += 1
             else:
-                job.failed.append(email)
+                job.fail(email)
             job.log.append(f"{'✓' if ok else '✗'} {email}")
             del job.log[:-_SUBSCRIBE_LOG_WINDOW]  # bounded: a big group must not bloat each poll
             job.done += 1

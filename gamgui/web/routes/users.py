@@ -289,7 +289,7 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
             if ok:
                 job.applied += 1
             else:
-                job.failed.append(u.primary_email)
+                job.fail(u.primary_email)
             job.done += 1
     except Exception as exc:
         job.error = _friendly(exc)

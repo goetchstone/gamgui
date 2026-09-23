@@ -11,6 +11,10 @@ import secrets
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+# Invariant #9: a run where thousands genuinely fail keeps the full count but only a sample of names,
+# so the final summary (and each poll) stays small. Same cap as signatures' ApplyJob / OnboardJob.
+FAILED_SAMPLE_CAP = 200
+
 
 @dataclass
 class BatchJob:
@@ -18,12 +22,18 @@ class BatchJob:
     total: int
     done: int = 0
     applied: int = 0
-    failed: List[str] = field(default_factory=list)
+    failed_total: int = 0
+    failed: List[str] = field(default_factory=list)  # capped sample — record with fail(), never .append
     current: str = ""
     finished: bool = False
     error: Optional[str] = None
     log: List[str] = field(default_factory=list)  # per-step outcome lines (multi-step routines)
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
+
+    def fail(self, item: str) -> None:
+        self.failed_total += 1
+        if len(self.failed) < FAILED_SAMPLE_CAP:
+            self.failed.append(item)
 
 
 def register_job(jobs: dict, job, keep: int = 10):

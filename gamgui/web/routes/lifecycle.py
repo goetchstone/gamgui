@@ -147,7 +147,7 @@ async def _run_offboard(job, conn, steps) -> None:
             if ok:
                 job.applied += 1
             else:
-                job.failed.append(step.label)
+                job.fail(step.label)
             job.done += 1
     finally:
         job.current = ""

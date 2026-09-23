@@ -735,7 +735,8 @@ def test_calendars_share_status_reports_progress_then_result(client):
     assert "/calendars/share/status?job=" in r.text          # still polling
 
     done = start_job(st.jobs, 3)
-    done.done, done.applied, done.failed, done.finished = 3, 2, ["carol@example.com"], True
+    done.done, done.applied, done.finished = 3, 2, True
+    done.fail("carol@example.com")
     r = client.get("/calendars/share/status", params={"job": done.id})
     assert "appears in 2 of 3" in r.text
     assert "carol@example.com" in r.text                     # who to tell to add it manually
@@ -763,6 +764,56 @@ async def test_run_subscribe_bounds_its_log_at_scale():
     assert len(job.log) == _SUBSCRIBE_LOG_WINDOW             # bounded window, newest kept
     assert job.log[-1].endswith("u499@example.com")
     assert job.finished and job.current == ""
+
+
+async def test_batch_job_failures_stay_bounded_and_render_the_overflow(client):
+    # Invariant #9: a bulk store where every user fails keeps the full count but only a sample of
+    # names, and the final panel says how many it isn't listing.
+    from gamgui.core.gam.models import GAMUser
+    from gamgui.web.jobs import FAILED_SAMPLE_CAP, BatchJob
+    from gamgui.web.routes.users import _run_bulk_store
+
+    class _Refused:
+        async def set_organization(self, email, title="", department=""):
+            return SimpleNamespace(ok=False)
+
+    n = FAILED_SAMPLE_CAP + 50
+    targets = [GAMUser.from_json({"primaryEmail": f"u{i}@example.com"}) for i in range(n)]
+    job = BatchJob(id="bulkcap", total=n)
+    await _run_bulk_store(job, SimpleNamespace(invalidate_users=lambda: None), _Refused(), targets, "Sales")
+    assert (job.done, job.applied, job.failed_total) == (n, 0, n)
+    assert len(job.failed) == FAILED_SAMPLE_CAP and job.failed[-1] == f"u{FAILED_SAMPLE_CAP - 1}@example.com"
+
+    client.app.state.gamgui.jobs[job.id] = job
+    html = client.get("/users/bulk/status", params={"job": job.id}).text
+    assert f"Failed ({n})" in html and "+50 more" in html
+    assert f"u{FAILED_SAMPLE_CAP}@example.com" not in html   # past the sample: counted, not listed
+
+
+async def test_run_subscribe_caps_its_failed_sample(client):
+    import types
+    from gamgui.web.jobs import FAILED_SAMPLE_CAP, BatchJob
+    from gamgui.web.routes.calendars import _run_subscribe
+
+    async def _refused(email, cal):
+        return types.SimpleNamespace(ok=False)
+
+    n = FAILED_SAMPLE_CAP + 7
+    job = BatchJob(id="subcap", total=n)
+    await _run_subscribe(job, types.SimpleNamespace(subscribe_calendar_for=_refused), SEC_CAL,
+                         [f"u{i}@example.com" for i in range(n)])
+    assert (job.failed_total, len(job.failed)) == (n, FAILED_SAMPLE_CAP)
+
+    client.app.state.gamgui.jobs[job.id] = job
+    html = client.get("/calendars/share/status", params={"job": job.id}).text
+    assert f"Couldn't add it for {n}" in html.replace("&#39;", "'") and "+7 more" in html
+
+
+def test_no_route_appends_to_a_batch_jobs_failed_list_directly():
+    # BatchJob.fail() is what caps the sample; a bare `job.failed.append` would bypass it.
+    routes = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
+    offenders = [p.name for p in routes.glob("*.py") if "job.failed.append(" in p.read_text()]
+    assert offenders == []
 
 
 async def _ok(email: str):

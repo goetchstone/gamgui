@@ -365,7 +365,10 @@ async def _run_sequence(job, conn, previews) -> None:
                 ok, detail = False, str(exc)
             line = f"{p.summary} — {p.target}" + (f": {detail}" if (not ok and detail) else "")
             job.log.append(("✓ " if ok else "✗ ") + line)
-            (job.__setattr__("applied", job.applied + 1) if ok else job.failed.append(f"{p.summary} ({p.target})"))
+            if ok:
+                job.applied += 1
+            else:
+                job.fail(f"{p.summary} ({p.target})")
             job.done += 1
     finally:
         job.current = ""

@@ -11,7 +11,7 @@
   <div class="flex items-center gap-2">
     <span class="spinner"></span>
     <span>Adding to calendars… <strong>{{ j.done }}</strong> of {{ j.total }}
-      · {{ j.applied }} added{% if j.failed %} · <span class="text-rose-600">{{ j.failed | length }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-gray">{{ j.current }}</span>{% endif %}</span>
+      · {{ j.applied }} added{% if j.failed_total %} · <span class="text-rose-600">{{ j.failed_total }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-gray">{{ j.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (j.done * 100 // j.total) if j.total else 100 }}%"></div>
@@ -25,11 +25,11 @@
   {% endif %}
 </div>
 {% elif j %}
-<div class="mt-2 rounded-lg border px-3 py-2 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not j.failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+<div class="mt-2 rounded-lg border px-3 py-2 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not j.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
   It now appears in {{ j.applied }} of {{ j.total }} members' Google Calendars.
-  {% if j.failed %}
+  {% if j.failed_total %}
   <div class="mt-1 max-h-24 overflow-y-auto text-xs">
-    Couldn't add it for {{ j.failed | length }} — they can add it manually: {{ j.failed | join(", ") }}
+    Couldn't add it for {{ j.failed_total }} — they can add it manually: {{ j.failed | join(", ") }}{% if j.failed_total > (j.failed | length) %} … +{{ j.failed_total - (j.failed | length) }} more{% endif %}
   </div>
   {% endif %}
 </div>
