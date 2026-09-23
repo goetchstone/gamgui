@@ -36,6 +36,12 @@ jobs:
         run: |
           PIN=$(python3 -c "import re,pathlib;print(re.search(r'TAG=\"v([0-9.]+)\"',pathlib.Path('scripts/fetch_gam.sh').read_text()).group(1))")
           LATEST=$(gh api repos/GAM-team/GAM/releases/latest --jq .tag_name | sed 's/^v//')
+          # The tag is upstream-controlled and flows into later steps, so admit only a bare
+          # version number — never shell metacharacters or a newline that could forge an output.
+          VERSION_RE='^[0-9]+(\.[0-9]+){2,3}$'  # bash =~ anchors the whole string, newlines included
+          if ! [[ "$LATEST" =~ $VERSION_RE ]]; then
+            echo "Refusing unexpected release tag: $(printf '%q' "$LATEST")"; exit 1
+          fi
           echo "pinned=$PIN latest=$LATEST"
           if [ "$PIN" = "$LATEST" ]; then echo "todo=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           if gh pr list --state open --search "in:title GAM $LATEST" | grep -q "GAM $LATEST"; then
@@ -59,7 +65,9 @@ jobs:
         if: steps.check.outputs.todo == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/bump_gam.py "v${{ steps.check.outputs.latest }}"
+          LATEST: ${{ steps.check.outputs.latest }}
+        # Never expand an expression inside run: — pass it through env so the shell sees data.
+        run: python scripts/bump_gam.py "v$LATEST"
 
       - name: Run the suite (drift guards included)
         if: steps.check.outputs.todo == 'true'
