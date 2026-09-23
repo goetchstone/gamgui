@@ -13,8 +13,12 @@
 </div>
 {% elif job %}
 <div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p class="font-medium">Offboarding complete — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}.</p>
+  <p class="font-medium">Offboarding {{ "stopped" if job.skipped else "complete" }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.</p>
   {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+  {% if job.failed %}
+  <p class="mt-3 text-xs">Fix what the failed step reports, then run the failed and not-run steps again. <strong>Don't delete the account</strong> until the Drive &amp; Calendar transfer has succeeded and finished.</p>
+  {% else %}
   <p class="mt-3 text-xs">The manager now has a calendar reminder. When they confirm it's safe, delete the account from the user's detail page.</p>
+  {% endif %}
 </div>
 {% endif %}

@@ -56,10 +56,26 @@ token, and a live form (`hx-include`) that no longer matches the previewed one (
 field after Preview and you must preview again. It then re-checks the previewed addresses against the
 directory and hands the held steps, never rebuilt ones, to `start_job` and `_run_offboard` (once it
 rebuilt them from the live form, failure-log 2026-09-23). An emptied subject/message runs the default
-text, as the auto-reply block shows. `_run_offboard` runs each step in order, appends a `✓/✗` line to `job.log`, and **never aborts
-on a failed step** (every failure is reported). The "timer" is the last step: a calendar reminder
-event on the manager's calendar `days` out — there is no app-side scheduler. The final account
-**delete** is a distinct guarded action on the user detail page (`delete_user`, `RiskLevel.DESTRUCTIVE`).
+text, as the auto-reply block shows. `_run_offboard` runs each step in order and appends a `✓/✗`
+line to `job.log`; **a step whose `requires` did not all succeed is not run** (a `–` line, listed in
+`job.skipped`, and the panel says "Offboarding stopped"). The "timer" is the last step: a calendar
+reminder event on the manager's calendar `days` out — there is no app-side scheduler. The final
+account **delete** is a distinct guarded action on the user detail page (`delete_user`,
+`RiskLevel.DESTRUCTIVE`).
+
+### When a step fails
+`lifecycle.REQUIRES`, pinned by `test_offboard_step_dependencies_are_the_documented_ones`. Until
+2026-09-23 no failure stopped anything, so a failed reset or a bad manager still ran every later
+step (failure-log).
+
+| Step | If it fails | Why |
+|---|---|---|
+| Reset password (+ sign-out) | **stop** — nothing else runs | The lock is the point. Nothing may announce the departure or move data while the account can still sign in, and a first-step failure (wrong credentials, a missing user) usually fails every step. The sign-out is best-effort: its failure doesn't fail the reset. |
+| Set delegate | **stop** — nothing else runs | The first write to the manager, who also receives the transfer and the reminder. |
+| Auto-reply | continue | Nothing depends on it; senders get no auto-reply until it's re-run. |
+| Transfer Drive & Calendar | continue, **but no reminder** | The reminder asks the manager to approve deletion, and deleting before the transfer loses the files for good. A transfer that was never created leaves nothing for the delete screen's pending-transfer warning to find. |
+| Remove from everyone's calendars | continue | The account is locked, so a leftover share grants nothing; the reminder doesn't depend on it. |
+| Manager reminder | (last) | — |
 
 ## Grammar check of every step (GAM 7.48.11, re-verified 2026-09-23)
 Each argv our builder emits, next to its line in the vendored `gamgui/resources/gam7/GamCommands.txt`
@@ -143,7 +159,8 @@ timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a
 auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, the directory check
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
-edited form, a used/expired token and a directory change are refused), and the preview's
+edited form, a used/expired token and a directory change are refused), the dependency rules (a failed
+reset / delegate / transfer against the mock's `missing` and `CONFLICT409` triggers), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the

@@ -24,6 +24,7 @@ class BatchJob:
     applied: int = 0
     failed_total: int = 0
     failed: List[str] = field(default_factory=list)  # capped sample — record with fail(), never .append
+    skipped: List[str] = field(default_factory=list)  # not run: a step it relies on failed (offboarding's few)
     current: str = ""
     finished: bool = False
     error: Optional[str] = None

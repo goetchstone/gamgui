@@ -186,19 +186,30 @@ async def offboard_autoreply(
 
 
 async def _run_offboard(job, conn, steps) -> None:
+    """Run the steps in order. A step whose ``requires`` did not all succeed is not run (logged "–"),
+    so a failed reset or delegate stops the routine instead of half-offboarding the account."""
+    succeeded = set()
+    labels = {s.key: s.label for s in steps}
     try:
         for step in steps:
+            unmet = [k for k in step.requires if k not in succeeded]
+            if unmet:
+                job.log.append(f"– {step.label} — not run: “{labels.get(unmet[0], unmet[0])}” didn't succeed")
+                job.skipped.append(step.label)
+                job.done += 1
+                continue
             job.current = step.label
             try:
                 res = await step.action(conn)
                 ok = res is None or bool(getattr(res, "ok", True))
                 detail = "" if res is None else getattr(res, "detail", "")
-            except Exception as exc:  # noqa: BLE001 - report every step, never abort the routine
+            except Exception as exc:  # noqa: BLE001 - a raising step is a failed step, reported like one
                 ok, detail = False, str(exc)
             mark = "✓ " if ok else "✗ "
             job.log.append(mark + step.label + (f" — {detail}" if (not ok and detail) else ""))
             if ok:
                 job.applied += 1
+                succeeded.add(step.key)
             else:
                 job.fail(step.label)
             job.done += 1

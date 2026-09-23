@@ -1066,6 +1066,19 @@ def test_lifecycle_offboard_run_starts(client, gam_calls):
     assert "Offboarding complete — 6 of 6 steps succeeded." in done.text
 
 
+def test_offboard_stopped_panel_says_what_did_not_run(client):
+    import html
+
+    from gamgui.web.jobs import start_job
+
+    job = start_job(client.app.state.gamgui.jobs, 3)
+    job.applied, job.done, job.finished, job.skipped = 1, 3, True, ["Set auto-responder"]
+    job.fail("Set delegate")
+    text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
+    assert "Offboarding stopped — 1 of 3 steps succeeded; failed: Set delegate; not run: Set auto-responder." in text
+    assert "Don't delete the account" in text and "now has a calendar reminder" not in text
+
+
 def test_offboard_run_executes_exactly_the_previewed_commands(client, gam_calls):
     # Run once rebuilt the steps from the live form; now it runs the ones built for the preview.
     import html

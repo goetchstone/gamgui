@@ -11,7 +11,7 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Awaitable, Callable, List, Optional, Sequence
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .audit import redact_argv
 from .gam.commands import GAMCommands
@@ -28,6 +28,25 @@ DEFAULT_MESSAGE = (
 
 # The combined <DataTransferServiceList>: ONE transfer, one argv element (a second same-user one 409s).
 TRANSFER_SERVICES = "drive,calendar"
+
+# What each step needs to have succeeded before it runs — a failed step stops the steps that rely on
+# it rather than half-offboarding the account (the runbook's "When a step fails" table):
+#   - the reset gates everything: nothing announces the departure or moves data while the account can
+#     still sign in, and a first-step failure usually means every later step would fail too;
+#   - the delegate is the first write to the manager, who also receives the transfer and the
+#     reminder, so it gates the rest;
+#   - the reminder asks the manager to approve deletion, and deleting before the transfer loses the
+#     leaver's files for good — so no transfer, no reminder.
+# The auto-reply and the calendar sweep gate nothing: their failure is reported and the routine goes on.
+REQUIRES: Dict[str, Tuple[str, ...]] = {
+    "password": (),
+    "delegate": ("password",),
+    "vacation": ("password", "delegate"),
+    "transfer": ("password", "delegate"),
+    "calacls": ("password", "delegate"),
+    "reminder": ("password", "delegate", "transfer"),
+}
+
 # GAM's own password generators (grammar <UserBasicAttribute>): keywords, not secrets, so shown as-is.
 _PASSWORD_KEYWORDS = frozenset({"random", "uniquerandom", "blocklogin", "prompt", "uniqueprompt"})
 
@@ -118,6 +137,8 @@ class OffboardStep:
     # The exact argv(s) ``action`` runs, in order, for the preview. Built from the same GAMCommands
     # builders and values as the connector call (test_offboard_preview_commands_are_what_runs).
     commands: List[List[str]] = field(default_factory=list)
+    # Keys of the steps that must have succeeded first; otherwise this one is not run (REQUIRES).
+    requires: Tuple[str, ...] = ()
 
     @property
     def command_lines(self) -> List[str]:
@@ -144,7 +165,7 @@ def build_offboard_steps(
         f"{manager}). When you're sure it's safe, tell IT to delete the account."
     )
     start, end = due.isoformat(), (due + timedelta(days=1)).isoformat()
-    return [
+    steps = [
         OffboardStep("password", "Reset password",
                      f"Reset {user}'s password and end sessions (locks sign-in; mailbox stays live)",
                      lambda c: c.reset_password(user),
@@ -176,3 +197,6 @@ def build_offboard_steps(
                      [GAMCommands.add_calendar_event(
                          manager, reminder_summary, start, end, description=reminder_desc, attendee=notify)]),
     ]
+    for step in steps:
+        step.requires = REQUIRES[step.key]
+    return steps

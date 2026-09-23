@@ -218,6 +218,58 @@ async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
     assert [len(s.commands) for s in steps] == [2, 1, 1, 1, 1, 1]      # the reset's sign-out follows it
 
 
+def test_offboard_step_dependencies_are_the_documented_ones():
+    # The runbook's "When a step fails" table. Changing a rule is a decision: update both.
+    steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "s", "m", 30, date(2026, 6, 23))
+    assert {s.key: s.requires for s in steps} == {
+        "password": (), "delegate": ("password",), "vacation": ("password", "delegate"),
+        "transfer": ("password", "delegate"), "calacls": ("password", "delegate"),
+        "reminder": ("password", "delegate", "transfer"),
+    }
+
+
+async def _offboard(connector, user, manager="mgr@example.com"):
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.lifecycle import _run_offboard
+
+    steps = build_offboard_steps(user, manager, "s", "m", 30, date(2026, 6, 23))
+    job = start_job({}, len(steps))
+    await _run_offboard(job, connector, steps)
+    assert job.finished and job.done == len(steps)
+    return job
+
+
+@pytest.mark.asyncio
+async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
+    # The account can still sign in: nothing may announce the departure or move data.
+    job = await _offboard(connector, "missing-leaver@example.com")
+    assert (job.applied, job.failed) == (0, ["Reset password"])
+    assert job.skipped == ["Set delegate", "Set auto-responder", "Transfer Drive & Calendar ownership",
+                           "Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
+    assert [w[:3] for w in gam_writes(gam_calls())] == [["update", "user", "missing-leaver@example.com"]]
+    assert job.log[1] == "– Set delegate — not run: “Reset password” didn't succeed"
+
+
+@pytest.mark.asyncio
+async def test_offboard_failed_delegate_stops_before_the_rest(connector, gam_calls):
+    # The first write to the manager failed; the transfer and the reminder go to the same account.
+    job = await _offboard(connector, "leaver@example.com", manager="missing-mgr@example.com")
+    assert (job.applied, job.failed) == (1, ["Set delegate"]) and len(job.skipped) == 4
+    assert [w[:4] for w in gam_writes(gam_calls())] == [
+        ["update", "user", "leaver@example.com", "password"], ["user", "leaver@example.com", "signout"],
+        ["user", "leaver@example.com", "add", "delegate"]]
+
+
+@pytest.mark.asyncio
+async def test_offboard_failed_transfer_skips_only_the_reminder(connector, gam_calls):
+    # The reminder asks the manager to approve deletion — which, without the transfer, loses the files.
+    job = await _offboard(connector, "CONFLICT409-leaver@example.com")
+    assert (job.applied, job.failed) == (4, ["Transfer Drive & Calendar ownership"])
+    assert job.skipped == ["30-day reminder for mgr@example.com"]
+    assert not [w for w in gam_writes(gam_calls()) if "event" in w]
+    assert job.log[-1].startswith("– 30-day reminder") and "Transfer Drive" in job.log[-1]
+
+
 def test_command_line_shows_argument_bounds_and_masks_secrets():
     argv = GAMCommands.set_vacation("a@example.com", "Jane has left", "It's \"done\"\nbye")
     line = command_line(argv)
