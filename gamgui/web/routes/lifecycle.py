@@ -8,9 +8,7 @@ manager confirms it's safe.
 from __future__ import annotations
 
 import asyncio
-import secrets
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, FrozenSet, List
 
@@ -46,20 +44,17 @@ def _days(value: str) -> int:
 
 
 # Run executes exactly what the preview showed: the steps built for it are held under a single-use
-# token, and Run refuses a form that no longer matches the one previewed (Run once posted the live
-# form, so a field edited after Preview ran against values nobody had checked).
-PREVIEW_TTL = 15 * 60
-_PREVIEWS_KEPT = 8
+# token (web/previews.py), and Run refuses a form that no longer matches the one previewed (Run once
+# posted the live form, so a field edited after Preview ran against values nobody had checked).
+_FLOW = "offboard"
 
 
 @dataclass
 class _Preview:
-    form: tuple                # _form_key of the form the preview was built from
     user: str                  # the directory's primary addresses the steps act on
     manager: str
     steps: List[lifecycle.OffboardStep]   # the steps to run — the previewed ones not ticked done
     done: FrozenSet[str]                  # keys ticked "already done": not run, and count as succeeded
-    at: float = field(default_factory=time.monotonic)
 
 
 def _done(form) -> FrozenSet[str]:
@@ -71,18 +66,6 @@ def _form_key(user: str, manager: str, subject: str, message: str, days: str, no
               done: FrozenSet[str]) -> tuple:
     return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
             tuple(sorted(done)))
-
-
-def _hold(previews: dict, preview: _Preview) -> str:
-    """Keep ``preview`` under a fresh token; drop expired ones and cap the rest (oldest first)."""
-    now = time.monotonic()
-    for token in [t for t, p in previews.items() if now - p.at > PREVIEW_TTL]:
-        del previews[token]
-    while len(previews) >= _PREVIEWS_KEPT:
-        del previews[next(iter(previews))]
-    token = secrets.token_urlsafe(16)
-    previews[token] = preview
-    return token
 
 
 async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
@@ -186,7 +169,7 @@ async def offboard_preview(
         notify=notify.strip(), employee_name=await _employee_name(st, user),
         manager_contact=await _manager_contact(st, manager))
     to_run = [s for s in steps if s.key not in done]
-    token = _hold(st.offboard_previews, _Preview(form, user, manager, to_run, done))
+    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done))
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
@@ -261,12 +244,11 @@ async def offboard_run(
     refusal = guard.enforce(guard.changes([user.strip()], RiskLevel.DESTRUCTIVE, "Offboard"), form)
     if refusal:
         return _err(request, refusal)
-    held = st.offboard_previews.pop(preview, None)   # single use: a second Run needs a new preview
-    if held is None or time.monotonic() - held.at > PREVIEW_TTL:
-        return _err(request, "That preview has expired or was already run — click Preview steps again.")
-    if held.form != _form_key(user, manager, subject, message, days, notify, _done(form)):
-        return _err(request, "The form changed after the preview — click Preview steps again, so what runs "
-                             "is what you checked.")
+    # Single use: a second Run, or a Run after the form was edited, needs a new preview.
+    held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
+                                                               _done(form)), again="click Preview steps again")
+    if refusal:
+        return _err(request, refusal)
     check = await _check(st, held.user, held.manager)   # the directory may have changed since
     if check.errors:
         return _err(request, " ".join(check.errors))

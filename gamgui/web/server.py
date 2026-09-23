@@ -29,6 +29,7 @@ from ..core.gam.runner import GAMRunner
 from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
 from ..core.usercache import UserCache
+from .previews import Previews
 
 _WEB_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -45,7 +46,7 @@ class AppState:
     user_cache: UserCache = field(default_factory=UserCache)
     group_cache: UserCache = field(default_factory=UserCache)  # cached `gam print groups` for the pickers
     jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
-    offboard_previews: dict = field(default_factory=dict)  # single-use token -> the previewed offboarding
+    previews: Previews = field(default_factory=Previews)  # per flow: single-use token -> what a preview showed
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)

@@ -7,6 +7,7 @@
 
 ## Files
 - `gamgui/web/jobs.py` — `BatchJob` dataclass (`fail()` records a failure: full `failed_total`, a `failed` sample capped at `FAILED_SAMPLE_CAP`; `skipped` = offboarding steps not run because one they rely on failed) + `start_job(jobs, total, keep=10)`; the shared polled-progress record on `AppState.jobs`.
+- `gamgui/web/previews.py` — `Previews` on `AppState.previews`: what a confirm step may run. A preview route `hold(flow, form_key, value)`s the values it showed and renders the token into its confirm control (`preview` in `hx-vals` or a hidden input); the apply route `take(flow, token, form_key)`s them — single use, refused when expired (`PREVIEW_TTL`, 15 min) or when the live form no longer matches the previewed one — and runs the held values, never ones rebuilt from the live form. At most `PREVIEWS_KEPT` (8) per flow (#9).
 - `gamgui/web/routes/users.py` — list/search/detail + actions (signature, delegate, groups, calendar ACLs, org/role, vacation, suspend via guard, delete, bulk set-department job — `_run_bulk_store`, `bulk_store.html` and the `store` form field keep their old internal names).
 - `gamgui/web/routes/calendars.py` — find calendar, ACL detail, event search/delete, secondary-calendar delete, share+subscribe fan-out job, persistent index rebuild job.
 - `gamgui/web/routes/groups.py` — drag-and-drop membership board (`/groups`); add/remove via `members_mutate`.

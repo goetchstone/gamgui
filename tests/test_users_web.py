@@ -997,7 +997,7 @@ def test_offboard_blocks_an_address_the_directory_does_not_confirm(client, gam_c
     r = client.post("/lifecycle/offboard/preview",
                     data={"user": user, "manager": manager, "subject": "s", "message": "m", "days": "30"})
     assert expected in html.unescape(r.text) and "Run offboarding" not in r.text
-    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.offboard_previews == {}
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.previews.count("offboard") == 0
 
 
 def test_offboard_blocks_when_the_directory_cannot_be_read(client, gam_calls, monkeypatch):
@@ -1175,7 +1175,7 @@ def test_offboard_run_refuses_a_form_edited_after_the_preview(client, gam_calls,
 
 
 def test_offboard_run_needs_a_fresh_unused_preview(client, gam_calls, monkeypatch):
-    from gamgui.web.routes import lifecycle as route
+    from gamgui.web import previews
 
     assert "expired or was already run" in _offboard_run(client, "").text           # no preview at all
     _, token = _offboard_preview(client)
@@ -1183,7 +1183,7 @@ def test_offboard_run_needs_a_fresh_unused_preview(client, gam_calls, monkeypatc
     writes = len(gam_writes(gam_calls()))
     assert "expired or was already run" in _offboard_run(client, token).text        # single use
     _, token = _offboard_preview(client)
-    monkeypatch.setattr(route, "PREVIEW_TTL", -1)
+    monkeypatch.setattr(previews, "PREVIEW_TTL", -1)
     assert "expired or was already run" in _offboard_run(client, token).text        # expired
     assert len(gam_writes(gam_calls())) == writes and len(client.app.state.gamgui.jobs) == 1
 
@@ -1245,7 +1245,7 @@ def test_offboard_with_every_step_ticked_done_has_nothing_to_run(client):
 def test_offboard_previews_held_are_bounded(client):
     for _ in range(20):
         _offboard_preview(client)
-    assert len(client.app.state.gamgui.offboard_previews) <= 8
+    assert client.app.state.gamgui.previews.count("offboard") <= 8
 
 
 @pytest.mark.asyncio

@@ -51,8 +51,9 @@ receives, in order. `offboard_run` first refuses a POST without `confirmed=1`
 (`guard.enforce`, the leaver declared `DESTRUCTIVE`: the preview's Run button posts it, and
 `hx-disabled-elt` stops a double-click starting a second run — a bare POST once ran the whole
 routine, failure-log 2026-09-23). **Run executes exactly what was previewed**: the preview holds the
-steps it built (`_Preview`, on `AppState.offboard_previews`, at most 8) under a single-use token that
-the Run button posts (`hx-vals`), for `PREVIEW_TTL` (15 min). Run refuses a missing, used or expired
+steps it built (`_Preview`) under a single-use token that the Run button posts (`hx-vals`) — the
+shared `AppState.previews` store (`web/previews.py`: at most 8 per flow, for `PREVIEW_TTL`, 15 min),
+which the other confirm steps now use too. Run refuses a missing, used or expired
 token, and a live form (`hx-include`) that no longer matches the previewed one (`_form_key`) — edit a
 field after Preview and you must preview again. It then re-checks the previewed addresses against the
 directory and hands the held steps, never rebuilt ones, to `start_job` and `_run_offboard` (once it
