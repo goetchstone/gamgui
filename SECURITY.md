@@ -50,7 +50,8 @@ guarding them:
 
 - **Credentials live in the macOS Keychain.** GAM's plaintext files are materialized into a `0700`
   directory (files `0600`) only for the duration of a single `gam` call, then wiped — including via
-  an `atexit` hook and an owner-PID marker, so quitting mid-call does not strand them on disk.
+  an `atexit` hook and an owner-PID marker, so quitting mid-call does not strand them on disk; a
+  quit that cancels a call in flight also kills its `gam` process.
 - **`gam` is never invoked through a shell.** Every invocation is an explicit argv list; operator
   input is always a single list element and is never string-interpolated into a command.
 - **The launch environment can't steer `gam`.** It inherits only an allowlisted set of variables
@@ -63,7 +64,7 @@ guarding them:
   tripwire posts to every route to prove it); an account delete needs the exact address typed on
   every path; a confirm step that posts the page's form runs the values its preview held under a
   single-use token, so a form edited after the preview writes nothing; and the write is then
-  appended to a local audit log.
+  appended to a local audit log — as failed and "interrupted" if quitting cut it off mid-call.
 - **Only read-only commands can become runnable automatically.** The Builder promotes
   grammar-derived commands to runnable *only* when they are confidently read-only; every write must
   be hand-curated. Anything uncertain stays inert. The few reads whose output is itself a secret or

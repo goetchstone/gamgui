@@ -254,6 +254,46 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     assert rec["ok"] is False and rec["extra"]["tolerated"] is False
 
 
+def test_quitting_mid_offboard_stops_the_sweep_and_audits_it(connector, gam_calls, tmp_path):
+    # Quitting mid-offboard: the server's lifespan cancels the running job (leaving the TestClient
+    # block is that shutdown). The hour-long sweep may already have deleted some users' ACLs, so the
+    # audit log must say it was interrupted — it used to record nothing at all, not even a failure,
+    # and its gam kept running (review F3). The steps before it stay audited as done.
+    import asyncio
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.lifecycle import _run_offboard
+    from gamgui.web.server import AppState, create_app
+
+    from .helpers import TEST_HOSTS
+
+    state = AppState(vault=connector.runner.vault, runner=connector.runner, audit_domain="example.com",
+                     connector=connector, token="t")
+    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    with TestClient(create_app(state, allowed_hosts=TEST_HOSTS)) as client:
+        job = start_job(state.jobs, len(steps))
+
+        async def _start() -> None:
+            job.task = asyncio.create_task(_run_offboard(job, connector, steps))
+
+        client.portal.call(_start)
+        deadline = time.monotonic() + 10
+        while not any(c[:4] == ["all", "users", "delete", "calendaracls"] for c in gam_calls()):
+            assert time.monotonic() < deadline, "the sweep never started"
+            time.sleep(0.02)
+    assert job.task.cancelled()
+    rec = connector.audit.tail()[-1]
+    assert (rec["action"], rec["target"], rec["ok"]) == ("remove_from_all_calendars", "SWEEPSLOW-leaver@example.com", False)
+    assert rec["argv"] == GAMCommands.remove_all_calendar_acls("SWEEPSLOW-leaver@example.com")
+    assert "interrupted" in rec["extra"]["error"] and "part of its work" in rec["extra"]["error"]
+    assert rec["extra"]["tolerated"] is False
+    assert [e["ok"] for e in connector.audit.tail()[:-1]] == [True] * (len(steps) - 2)  # the steps before it
+    assert list(tmp_path.glob("gamcfg-*")) == []        # the sweep's credentials were wiped too
+
+
 @pytest.mark.asyncio
 async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
     # The preview prints each step's `commands`; the connector builds its own argv. Every write the

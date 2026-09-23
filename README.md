@@ -183,7 +183,8 @@ domain and `oauth2.txt` is effectively an admin password, so GamGUI:
    each `gam` call;
 3. wipes that dir on completion (success or failure) — and, because "the app quit mid-call" is the
    case that actually strands plaintext credentials, also via an `atexit` hook, a graceful-shutdown
-   timeout that lets in-flight calls unwind, and an owner-PID marker so a later run can collect a
+   timeout that lets in-flight calls unwind (stopping their `gam` process, and auditing an
+   interrupted write as such), and an owner-PID marker so a later run can collect a
    directory whose owning process is gone;
 4. writes refreshed OAuth tokens back to the Keychain.
 

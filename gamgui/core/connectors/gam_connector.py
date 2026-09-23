@@ -7,6 +7,7 @@ The rest of the app talks to this object and never sees GAM syntax.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Sequence
 
@@ -40,6 +41,11 @@ from .person import ConnectorAccount, Person
 
 # The remediation for a write that failed before GAM could say why (no binary, a Keychain error).
 _WRITE_FAILED = "Something went wrong talking to GAM. See details below."
+
+# The audit error for a write cut off by the app quitting (its job task cancelled) mid-call.
+# True whether it came during the call (the runner has stopped gam) or while waiting for the write lock.
+INTERRUPTED = ("interrupted (the app quit or the job was cancelled) before GAM reported a result; "
+               "it may have done part of its work")
 
 # The per-user lines the offboarding calendar sweep expects (remove_from_all_calendars): a user who
 # never shared with the leaver, a user without Calendar, the leaver's own calendar. Nothing else.
@@ -528,6 +534,18 @@ class GAMConnector(Connector):
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
         try:
             out = await self.runner.run_authenticated(self.domain, argv, timeout=timeout, serialize=True)
+        except asyncio.CancelledError:
+            # Interrupted — quitting cancels an in-flight job (server._lifespan); the runner has
+            # already stopped gam and wiped its dir. A BaseException, so `except Exception` below
+            # never saw it and the write went unaudited, even an hour-long sweep that may have
+            # changed half the domain. Record it, then let the cancellation finish.
+            self.audit.record(
+                action, target=target, argv=shown, ok=False,
+                extra={"error": INTERRUPTED, "tolerated": False,
+                       **({"group": target_extra} if target_extra else {})},
+                secrets=secrets,
+            )
+            raise
         except Exception as exc:
             # Every error line must be tolerable: a sweep's stderr holds one line per entity, and one
             # real failure among the benign notices is a failure (GAMError.kinds, not just .kind).

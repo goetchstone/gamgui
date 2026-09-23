@@ -57,6 +57,17 @@ def strip_cfgdir_noise(stdout: str, cfgdir: Path) -> str:
     return "\n".join(line for line in stdout.splitlines() if needle not in line)
 
 
+async def _stop(proc: asyncio.subprocess.Process) -> None:
+    """Kill ``gam`` and reap it. The kill is sent first and synchronously, so even if a second
+    cancellation interrupts the wait, the process holding the plaintext credentials is already dying."""
+    if proc.returncode is None:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass  # it exited between the check and the signal
+    await proc.wait()
+
+
 def _frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
@@ -130,12 +141,18 @@ class GAMRunner:
         try:
             out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+            await _stop(proc)
             # Killed mid-run: say so, since a multi-entity command may have done part of its work.
             raise GAMError(GAMErrorKind.TIMEOUT, exit_code=None, argv=list(argv),
                            stderr=f"timed out after {_duration(timeout)} and was stopped; "
                                   "it may have done part of its work")
+        except BaseException:
+            # Cancelled — the app quitting cancels in-flight jobs (server._lifespan). CancelledError
+            # is a BaseException, so without this gam kept running on the credentials it had loaded
+            # while the caller's `with EphemeralConfig` wiped the dir under it. Stop it, then let the
+            # cancellation propagate: the connector audits the interrupted write.
+            await _stop(proc)
+            raise
         return RunResult(
             stdout=(out or b"").decode("utf-8", "replace"),
             stderr=(err or b"").decode("utf-8", "replace"),

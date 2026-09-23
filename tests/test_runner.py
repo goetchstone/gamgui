@@ -55,6 +55,28 @@ async def test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock(runne
     await runner.run_authenticated(domain, GAMCommands.signout_user("a@e.com"), serialize=True)
 
 
+async def test_cancel_kills_gam_wipes_the_config_and_frees_the_write_lock(runner, domain, tmp_path):
+    # Quitting the app cancels an in-flight job task (server._lifespan): CancelledError is a
+    # BaseException, so it skipped the timeout's kill and left gam running with the credentials it
+    # had already loaded while the dir was wiped under it (review F3).
+    import asyncio
+    import os
+
+    from .helpers import wait_until
+
+    pidfile = tmp_path / "gam.pid"
+    task = asyncio.create_task(runner.run_authenticated(
+        domain, ["MOCKSLEEP", "30", str(pidfile)], serialize=True))
+    await wait_until(lambda: pidfile.exists() and pidfile.read_text().strip())
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task                                     # the cancellation still propagates
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(pidfile.read_text()), 0)          # killed and reaped, not left running
+    assert list(tmp_path.glob("gamcfg-*")) == []       # credentials wiped (invariant #4)
+    await runner.run_authenticated(domain, GAMCommands.signout_user("a@e.com"), serialize=True)
+
+
 async def test_oauth_token_write_back_through_a_real_run(runner, vault, domain, monkeypatch):
     monkeypatch.setenv("GAM_MOCK_REFRESH", "1")
     before = vault.get(domain, "oauth2")

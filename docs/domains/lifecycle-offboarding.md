@@ -283,7 +283,9 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   `drive,calendar` as one argument, then `all`; the auto-reply block reads as senders should see it (its `gam`
   line carries the same text as HTML: `<br/>` for each line break); the reminder date and invitee.
 - Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
-  writes in the app waiting behind it. Don't close the app mid-run. Left the page or reloaded? Enter
+  writes in the app waiting behind it. Don't close the app mid-run: quitting stops the step in
+  progress (GamGUI kills its `gam`, and Audit records that step failed, "interrupted … may have done
+  part of its work") and the steps after it never run. Left the page or reloaded? Enter
   the same two addresses and Preview: it shows the running offboarding's progress instead.
 
 **After the run** — the panel should say "Offboarding complete — 8 of 8 steps succeeded"; GamGUI →

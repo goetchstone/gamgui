@@ -63,3 +63,14 @@ def wait_for_job(client, job, timeout: float = 10.0) -> None:
         await asyncio.wait_for(asyncio.shield(job.task), timeout)
 
     client.portal.call(_wait)
+
+
+async def wait_until(cond, timeout: float = 10.0) -> None:
+    """Poll ``cond()`` on the running loop until it is truthy — e.g. until a mock `gam` has started, so
+    a test can cancel it mid-call. Fails the test after ``timeout`` rather than hanging it."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while not cond():
+        if loop.time() > deadline:
+            raise AssertionError(f"condition not met within {timeout}s")
+        await asyncio.sleep(0.02)

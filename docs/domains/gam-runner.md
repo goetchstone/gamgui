@@ -124,6 +124,13 @@ and `version` (no credentials).
   the JSON blob win on conflict; multi-entity output (`all users print calendars`) depends on this.
   A mock that returns a bare JSON object per row where GAM returns the `key,JSON` CSV would hide a
   break.
+- **A cancelled call stops `gam` too** (2026-09-23, review F3). Quitting the app cancels in-flight
+  job tasks (`server._lifespan`); `CancelledError` is a `BaseException`, so it skipped the timeout's
+  `except` and `gam` kept running on the credentials it had loaded while `EphemeralConfig` wiped the
+  dir under it. `_exec` now kills and reaps it (`_stop`: the SIGKILL is sent first, synchronously, so
+  a second cancellation during the reap can't leave it running) and re-raises; the connector audits
+  the interrupted write (see connectors-chokepoint). Don't narrow that `except BaseException` to
+  `Exception`.
 - **Timeout raises `TIMEOUT` directly** in `_exec` (exit_code `None`), never touching
   `classify_stderr`; `from_run` independently also maps a `None` exit_code to `TIMEOUT`. A
   best-effort caller never tolerates it (it is not a per-entity notice). Anything stderr held before
@@ -143,7 +150,8 @@ binary, the four classified failure kinds, per-line classification of a mixed st
 (`GAM_MOCK_REFRESH` → vault value changes) under `serialize=True`, and the timeout path
 (`MOCKSLEEP`: `TIMEOUT` raised with a "stopped after N" message, the process killed and reaped, the
 `GAMCFGDIR` still wiped, the write lock released —
-`test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`; the sweep's own timeout via the
+`test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`; the same for a cancelled call —
+`test_cancel_kills_gam_wipes_the_config_and_frees_the_write_lock`; the sweep's own timeout via the
 mock's `SWEEPSLOW` in `test_lifecycle.py::test_offboard_sweep_timeout_is_a_clear_step_failure`), and the env
 allowlist (pinned as a literal set in the test; a real child, `/usr/bin/env`, reports exactly what it
 received, frozen and not, and the venv's Python reports any `DYLD_*`). Untrusted
