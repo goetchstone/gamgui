@@ -186,20 +186,6 @@ class GAMRunner:
                 return await _do()
         return await _do()
 
-    async def run_in_cfgdir(
-        self,
-        cfgdir: Path,
-        argv: Sequence[str],
-        timeout: Optional[float] = None,
-    ) -> RunResult:
-        """Run a gam command against an explicit, persistent ``GAMCFGDIR``.
-
-        Used by the setup wizard, where credentials don't exist in the vault yet and the files GAM
-        creates must persist long enough to be harvested. Returns the raw :class:`RunResult` (the
-        wizard inspects exit code + output itself).
-        """
-        return await self._exec(list(argv), Path(cfgdir), timeout or self.timeout)
-
     async def version(self) -> str:
         """Return GAM's reported version (no credentials needed)."""
         from ..secrets.ephemeral import app_runtime_dir

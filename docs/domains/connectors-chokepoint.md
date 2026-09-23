@@ -3,7 +3,7 @@
 **One line:** The `GAMConnector` translates high-level operations into `GAMCommands` argv, and every mutation the app makes funnels through its single `_run_write` helper, which serializes, redacts, runs, and audits the call.
 
 **Owns invariant(s):** #2 (every mutation goes through the chokepoint; no second write path; `audit_argv` redaction). Leans on #1 (argv-only builders) and #4 (serialization protects the ephemeral GAMCFGDIR).
-**Enforcement home:** `tests/test_gam_connector.py`, `tests/test_audit.py` (redaction), `tests/test_onboarding.py` (redaction by value on a failed `create_user`), `tests/test_lifecycle.py` (tolerate/serialize), `tests/test_runner.py` (serialize + token write-back). The second-write-path tripwires are in `tests/test_command_contract.py`: `test_audit_record_only_in_run_write_or_allowlist` (every `audit.record(`) and `test_every_run_authenticated_call_is_the_chokepoint_or_a_read` (every `run_authenticated(` in `gamgui/`).
+**Enforcement home:** `tests/test_gam_connector.py`, `tests/test_audit.py` (redaction), `tests/test_onboarding.py` (redaction by value on a failed `create_user`), `tests/test_lifecycle.py` (tolerate/serialize), `tests/test_runner.py` (serialize + token write-back). The second-write-path tripwires are in `tests/test_command_contract.py`: `test_audit_record_only_in_run_write_or_allowlist` (every `audit.record(`) `test_every_run_authenticated_call_is_the_chokepoint_or_a_read` (every `run_authenticated(` in `gamgui/`) and `test_gam_is_spawned_only_through_run_authenticated_or_version` (no side door to the runner's `_exec`).
 
 ## Files
 - `gamgui/core/connectors/gam_connector.py` — the Google Workspace connector; all read/mutation methods + the `_run_write` chokepoint and `apply`/`plan_suspend`.

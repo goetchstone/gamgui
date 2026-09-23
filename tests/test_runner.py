@@ -129,7 +129,7 @@ async def _child_env(vault, tmp_path, monkeypatch, frozen, child, argv):
     if frozen:
         monkeypatch.setattr(sys, "frozen", True, raising=False)
     env_runner = GAMRunner(vault=vault, gam_binary=child, base_dir=tmp_path, timeout=15)
-    res = await env_runner.run_in_cfgdir(tmp_path, argv)
+    res = await env_runner._exec(argv, tmp_path, 15)
     return res, dict(kv.split("=", 1) for kv in res.stdout.split("\0") if kv)
 
 

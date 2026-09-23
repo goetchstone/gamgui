@@ -323,3 +323,29 @@ def test_every_run_authenticated_call_is_the_chokepoint_or_a_read():
     assert not offenders, (
         "run_authenticated() with a write, an untraceable argv or the write lock, outside _run_write and "
         "the named allowlists — route the mutation through _run_write (invariant #2): {}".format(offenders))
+
+
+# The only functions that may spawn gam (`GAMRunner._exec`): `run_authenticated`'s body, which wraps
+# the call in EphemeralConfig and is policed above, and `version`, which needs no credentials.
+SPAWNS_GAM = {("gamgui/core/gam/runner.py", "_do"), ("gamgui/core/gam/runner.py", "version")}
+
+
+def test_gam_is_spawned_only_through_run_authenticated_or_version():
+    """The run_authenticated tripwire above sees only calls to ``run_authenticated``. A side door to
+    ``_exec`` — ``run_in_cfgdir`` ran any argv against any dir, with no caller in the app — would
+    run a write it never sees, and hand gam a dir EphemeralConfig never wipes."""
+    import ast
+
+    offenders, seen, expected = [], 0, 0
+    for path in sorted((ROOT / "gamgui").rglob("*.py")):
+        src, rel = path.read_text(), str(path.relative_to(ROOT))
+        expected += src.count("._exec(")
+        for fn in ast.walk(ast.parse(src)):
+            if isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                for call in _own_calls(fn):
+                    if isinstance(call.func, ast.Attribute) and call.func.attr == "_exec":
+                        seen += 1
+                        if (rel, fn.name) not in SPAWNS_GAM:
+                            offenders.append(f"{rel}::{fn.name}")
+    assert seen == expected, "an _exec( call outside any function body escaped the scan"
+    assert not offenders, f"gam spawned outside run_authenticated/version: {offenders}"

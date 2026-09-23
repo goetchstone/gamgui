@@ -198,13 +198,13 @@ async def test_info_user_is_keyed_on_the_address(connector):
 
 
 async def test_mock_refuses_a_call_without_materialized_credentials(runner, tmp_path):
-    # run_in_cfgdir hands GAM a bare dir, as the setup wizard does before import; an authenticated
-    # command there must fail like GAM with no oauth2service.json, not answer from fixtures.
+    # A GAMCFGDIR with no credentials in it (as `version` gets): an authenticated command there must
+    # fail like GAM with no oauth2service.json, not answer from fixtures.
     bare = tmp_path / "bare"
     bare.mkdir()
-    res = await runner.run_in_cfgdir(bare, C.print_users())
+    res = await runner._exec(C.print_users(), bare, 15)
     assert res.returncode != 0 and "oauth2service.json" in res.stderr
-    assert (await runner.run_in_cfgdir(bare, C.version())).returncode == 0   # needs no credentials
+    assert (await runner._exec(C.version(), bare, 15)).returncode == 0   # needs no credentials
 
 
 async def test_argv_recorder_sees_exactly_what_ran(runner, domain, gam_calls):

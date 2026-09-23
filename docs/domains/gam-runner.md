@@ -10,7 +10,9 @@ owned by `core/secrets/`) and #2 (the mutation chokepoint runs *through* this ru
 `gam_connector.py`).
 **Enforcement home:** `tests/test_runner.py`, `tests/test_errors.py`, `tests/test_parser.py`,
 `tests/test_models.py` — all offline against `tests/fixtures/mock_gam.sh`. No drift guard beyond
-those; the argv-only property is structural (single `_exec`), not asserted by a lint. The env
+those; the argv-only property is structural (single `_exec`), not asserted by a lint — but who may
+call `_exec` is: `test_command_contract.py::test_gam_is_spawned_only_through_run_authenticated_or_version`
+fails on any caller beyond `run_authenticated`'s body and `version`. The env
 allowlist and the frozen-app binary lock are tripwired in `test_runner.py`
 (`test_the_env_allowlist_is_the_reviewed_one`, `test_gam_inherits_only_the_allowlisted_environment`,
 `test_no_dyld_variable_reaches_gam`, `test_binary_override_is_ignored_in_the_packaged_app`).
@@ -38,8 +40,9 @@ caller passes one: a domain-wide `all users …` call (the offboarding calendar 
 scan) passes `DOMAIN_WIDE_TIMEOUT` (1 h), because GAM walks every user in turn. Non-zero exit →
 `GAMError.from_run` (stderr classified line by line; `kind` is the most severe line). Success stdout
 is de-noised, then the connector runs it through `parse_records`/`parse_one` and `Model.from_json`.
-Two side paths: `run_in_cfgdir` (setup wizard, explicit persistent cfgdir, returns raw `RunResult`)
-and `version` (no credentials).
+One side path: `version` (no credentials). `run_in_cfgdir` (any argv against an explicit, persistent
+cfgdir, meant for a setup wizard that never used it) is gone: it had no caller in the app, and it was
+a door to `_exec` that the chokepoint tripwires couldn't see and that `EphemeralConfig` never wiped.
 
 ## Invariants & the failure history
 - **argv-only (#1).** Every operator value is one argv element; `_exec` never joins a string or
