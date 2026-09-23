@@ -4,8 +4,10 @@ The guard once lived only in the templates: five routes ran a suspend, an event 
 company-wide signature overwrite and a full offboarding for any POST that reached them. This file
 enumerates every POST route from the app itself, so a new route fails here until it is classified:
 either exempt below, with a reason, or GATED with a plausible form. For each gated route, a POST
-without the confirmation must reach the mock `gam` with zero writes; and the confirm step the UI
-really renders, posted back as HTMX would post it, must run the write.
+without the confirmation must reach the mock `gam` with zero writes — a bare one, and the confirm step
+the UI renders posted without only its confirmation fields (a bare POST also lacks the preview token,
+which a route may check first); and that step, posted back whole as HTMX would post it, must run the
+write.
 
 A confirm step that posts the page's live form (``hx-include``) proves only that *a* preview was
 confirmed: its ``confirmed=1`` is just as true after the form was edited. Signatures, onboarding, the
@@ -26,6 +28,7 @@ from typing import Callable, Optional, Union
 import pytest
 from fastapi.testclient import TestClient
 
+from gamgui.core import guard
 from gamgui.core.audit import AuditLog
 from gamgui.core.calendar_index import CalendarIndex
 from gamgui.core.connectors.gam_connector import GAMConnector
@@ -217,6 +220,30 @@ def test_bare_post_runs_no_write(route, client, gam_calls):
     started = _finish_jobs(client)
     assert gam_writes(gam_calls()) == [], f"{route} wrote without confirmation"
     assert started == 0
+    assert client.app.state.gamgui.connector.audit.tail() == []
+
+
+# What a confirm step adds to say "yes" (guard.enforce checks these; calendar delete types DELETE into
+# `confirm`). Everything else the step posts — its preview token too — is not a confirmation.
+CONFIRMATION = {guard.CONFIRMED_FIELD, guard.TYPED_FIELD, guard.COUNT_FIELD, guard.EMAIL_FIELD}
+
+
+@pytest.mark.parametrize("route", sorted(GATED))
+def test_the_confirm_step_without_its_confirmation_runs_no_write(route, client, gam_calls):
+    # The bare POST above carries no preview token either, so a route that checks the token before
+    # the guard refuses it for that reason: deleting offboarding's guard.enforce left the whole suite
+    # green, and a Run with a valid token but no confirmed=1 started the job. Here the step is posted
+    # exactly as the UI renders it, minus only the confirmation.
+    case = GATED[route]
+    if case.setup:
+        case.setup(client)
+    step = _confirm_step(client, case, route)
+    unconfirmed = {k: v for k, v in step.fields.items() if k not in CONFIRMATION}
+    assert set(step.fields) - set(unconfirmed) or case.typed, f"{route}'s confirm step posts no confirmation"
+    r = client.post(route, data={**case.bare, **unconfirmed})
+    assert r.status_code == 200 and "confirm" in r.text.lower(), r.text[:300]
+    assert _finish_jobs(client) == 0
+    assert gam_writes(gam_calls()) == [], f"{route} wrote without its confirmation"
     assert client.app.state.gamgui.connector.audit.tail() == []
 
 
