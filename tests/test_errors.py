@@ -46,6 +46,20 @@ def test_a_user_without_the_service_is_its_own_kind():
     assert classify_stderr(api) is GAMErrorKind.UNKNOWN
 
 
+@pytest.mark.parametrize("line", [
+    "ERROR: oauth2.txt file not found",
+    # GAM's own shapes (exitIfNoOauth2Txt / invalidOauth2TxtExit, read from the vendored build).
+    "Client OAuth2 File: /tmp/gamcfg/oauth2.txt, Does not exist",
+    "ERROR: Client OAuth2 File: /tmp/gamcfg/oauth2.txt, Does not exist or has invalid format, bad json",
+    "Service Account OAuth2 File: /tmp/gamcfg/oauth2service.json, Does not exist",
+])
+def test_a_missing_credentials_file_is_not_authenticated_not_a_missing_user(line):
+    # The not-found pattern came first, so its "not found"/"Does not exist" won: the operator was told
+    # the user, group or resource wasn't found instead of to complete setup.
+    assert classify_stderr(line) is GAMErrorKind.NOT_AUTHENTICATED
+    assert GAMError.from_run(1, line).remediation.startswith("GAM is not configured yet")
+
+
 # A multi-entity run (`all users delete calendaracls ...`) prints GAM's progress chatter and one line per
 # entity. Hand-written in GAM's shape (the progress wording is from the vendored GamUpdate.txt).
 _PROGRESS = ("Getting all Users, may take some time on a large Google Workspace Account...\n"

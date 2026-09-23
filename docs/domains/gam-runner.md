@@ -68,7 +68,10 @@ and `version` (no credentials).
   real 403 (`PERMISSION_DENIED`, which it used to tolerate wholesale — failure-log 2026-09-23).
   `SERVICE_NOT_ENABLED` is GAM's per-user "User: x, Calendar Service/App not enabled"
   (`userServiceNotEnabledWarning`, exit 73); the regex is `Service/App not enabled` on purpose, so
-  GAM's account-wide "Calendar not enabled. Please run "gam update project"…" stays `UNKNOWN`.
+  GAM's account-wide "Calendar not enabled. Please run "gam update project"…" stays `UNKNOWN`. A
+  missing or unreadable credentials file ("Client OAuth2 File: …/oauth2.txt, Does not exist", GAM's
+  `exitIfNoOauth2Txt`/`invalidOauth2TxtExit`) is matched *before* the not-found pattern, whose words it
+  also contains, so it is `NOT_AUTHENTICATED` ("complete setup"), not `NOT_FOUND`.
 - **Classified per line, not per stderr** (2026-09-23). A multi-entity command (`all users ...`)
   prints one stderr line per entity, and the whole text used to be classified by the first pattern
   matching *anywhere* — so one "Does not exist" line made a stderr that also held a real failure

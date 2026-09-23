@@ -73,6 +73,11 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     (re.compile(r"invalid_grant|token has been expired or revoked", re.I), GAMErrorKind.AUTH_EXPIRED),
     (re.compile(r"insufficient.*scope|access_denied.*scope|not authorized to access", re.I), GAMErrorKind.SCOPE_MISSING),
     (re.compile(r"rate.?limit|quota|userRateLimitExceeded|too many requests|\b429\b", re.I), GAMErrorKind.RATE_LIMITED),
+    # A missing/unreadable credentials file is setup, not a missing user — before the not-found pattern,
+    # whose "not found"/"Does not exist" it also says. GAM's shapes: "Client OAuth2 File: <dir>/oauth2.txt,
+    # Does not exist" (exitIfNoOauth2Txt), "… Does not exist or has invalid format" (invalidOauth2TxtExit).
+    (re.compile(r"oauth2(?:service)?\.(?:txt|json)\b.*(?:not found|does not exist)|OAuth2 File:.*does not exist",
+                re.I), GAMErrorKind.NOT_AUTHENTICATED),
     (re.compile(r"does not exist|not found|notFound|resource.*not found|\b404\b", re.I), GAMErrorKind.NOT_FOUND),
     # A user without the service (GAM's userServiceNotEnabledWarning: "User: x, Calendar Service/App
     # not enabled"). Narrow on purpose: GAM's account-wide "Calendar not enabled. Please run "gam update
@@ -83,7 +88,7 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     # offboarding sweep tolerates exactly this refusal, never a real permission failure.
     (re.compile(r"cannot change your own access level|cannotChangeOwnAcl", re.I), GAMErrorKind.OWN_ACL),
     (re.compile(r"forbidden|permission denied|insufficientPermissions|\b403\b", re.I), GAMErrorKind.PERMISSION_DENIED),
-    (re.compile(r"please run.*oauth|no.*credentials|oauth2\.txt.*not found|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
+    (re.compile(r"please run.*oauth|no.*credentials|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
 ]
 
 
