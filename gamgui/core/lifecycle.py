@@ -37,14 +37,16 @@ TRANSFER_SERVICES = "drive,calendar"
 #     reminder, so it gates the rest;
 #   - the reminder asks the manager to approve deletion, and deleting before the transfer loses the
 #     leaver's files for good — so no transfer, no reminder.
-# Revoking access (sessions, app passwords, tokens), the auto-reply and the calendar sweep gate
-# nothing: their failure is reported (✗, and the run isn't "complete") and the routine goes on. The
-# revoke runs straight after the reset, before anything is handed over, and a failed delegate can't
-# stop it; it doesn't gate the hand-over either — the reset has already stopped new sign-ins, and the
-# likeliest cause (a missing security scope) would otherwise strand the mailbox with no delegate.
+# Revoking access (sessions, app passwords, tokens), turning off forwarding, the auto-reply and the
+# calendar sweep gate nothing: their failure is reported (✗, and the run isn't "complete") and the
+# routine goes on. The revoke and the forwarding run straight after the reset, before anything is
+# handed over, so a failed delegate can't stop them; they don't gate the hand-over either — the reset
+# has already stopped new sign-ins, and the likeliest cause (a missing scope) would otherwise strand
+# the mailbox with no delegate.
 REQUIRES: Dict[str, Tuple[str, ...]] = {
     "password": (),
     "revoke": ("password",),
+    "forward": ("password",),
     "delegate": ("password",),
     "vacation": ("password", "delegate"),
     "transfer": ("password", "delegate"),
@@ -52,8 +54,8 @@ REQUIRES: Dict[str, Tuple[str, ...]] = {
     "reminder": ("password", "delegate", "transfer"),
 }
 # The steps as the form's "already done" boxes name them (a re-run skips a ticked step).
-STEP_NAMES = {"password": "Reset password", "revoke": "Revoke access & sign out", "delegate": "Set delegate",
-              "vacation": "Auto-reply", "transfer": "Transfer Drive & Calendar",
+STEP_NAMES = {"password": "Reset password", "revoke": "Revoke access & sign out", "forward": "Turn off forwarding",
+              "delegate": "Set delegate", "vacation": "Auto-reply", "transfer": "Transfer Drive & Calendar",
               "calacls": "Remove from everyone's calendars", "reminder": "Manager reminder"}
 
 # GAM's own password generators (grammar <UserBasicAttribute>): keywords, not secrets, so shown as-is.
@@ -124,7 +126,8 @@ def check_addresses(directory: Sequence[GAMUser], user: str, manager: str) -> Ad
     if leaver and leaver.is_admin:
         check.warnings.append(
             f"{leaver.primary_email} is a super admin. Offboarding doesn't remove the role — revoke it in the "
-            f"Admin console, and if GamGUI is connected as this account, the password reset may sign it out.")
+            f"Admin console. If GamGUI is connected as this account, “{STEP_NAMES['revoke']}” deletes GamGUI's "
+            f"own authorization (its OAuth token) and the later steps fail.")
     elif leaver and leaver.is_delegated_admin:
         check.warnings.append(f"{leaver.primary_email} holds a delegated admin role — offboarding doesn't "
                               f"remove it; revoke it in the Admin console.")
@@ -186,6 +189,12 @@ def build_offboard_steps(
                      f"access (OAuth tokens). 2-Step Verification itself is left on",
                      lambda c: c.revoke_access(user),
                      [GAMCommands.deprovision_user(user)]),
+        # Always, not only when the preview saw it on: the leaver can switch it on until the sign-out.
+        OffboardStep("forward", STEP_NAMES["forward"],
+                     f"Turn off automatic forwarding of {user}'s incoming mail (harmless if it's already off). "
+                     f"Gmail filters that forward mail are not changed",
+                     lambda c: c.forward_off(user),
+                     [GAMCommands.forward_off(user)]),
         OffboardStep("delegate", "Set delegate",
                      f"Give {manager} delegate access to {user}'s mailbox",
                      lambda c: c.add_delegate(user, manager),

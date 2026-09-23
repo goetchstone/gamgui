@@ -53,11 +53,11 @@ Actively developed and used against live Google Workspace tenants. Working today
   see it", and you get the list of anyone it couldn't be added for. Also: search a calendar's events,
   and remove a stray event or an entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → revoke access & sign out →
-  delegate → auto-responder → transfer Drive & calendars → remove from everyone's calendars →
-  reminder on the manager), with a live preview of the generated auto-reply and the exact `gam`
-  command each step will run. Both
-  addresses are checked against the directory, Run executes exactly what was previewed, a failed step
-  stops the steps that rely on it, and a re-run can skip the steps that already succeeded.
+  turn off forwarding → delegate → auto-responder → transfer Drive & calendars → remove from
+  everyone's calendars → reminder on the manager), with a live preview of the generated auto-reply
+  and the exact `gam` command each step will run. Both addresses are checked against the directory,
+  Run executes exactly what was previewed, a failed step stops the steps that rely on it, and a
+  re-run can skip the steps that already succeeded.
 - **Onboarding** — editable role templates that set up a new hire: create the account (its one-time
   password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
   OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
@@ -129,7 +129,7 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Unshare a calendar (remove an ACL) | Calendars, Users | not yet |
 | Delete an event | Calendars | not yet |
 | Delete a secondary calendar | Calendars | **confirmed** |
-| Forwarding: add an address, forward on / off | Builder | not yet |
+| Forwarding: add an address, forward on / off | Builder (forward off also Offboarding) | not yet |
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
 | Export a result to a Google Sheet | Builder | not yet |
@@ -140,8 +140,8 @@ fixed, but the fixes have not themselves run live yet: Drive and calendar are no
 everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to abort the sweep.
 That sweep is one domain-wide call, so it runs under a 1-hour timeout instead of the 2-minute
 per-call default; how long it really takes on a large tenant is unmeasured. Revoking the leaver's
-access (app passwords, backup codes, connected apps' tokens, sessions) is a step of its own that has
-never run live. How the routine runs —
+access (app passwords, backup codes, connected apps' tokens, sessions) and turning off mail
+forwarding are steps of their own that have never run live. How the routine runs —
 Run executes exactly the previewed steps, a failed step stops the ones that rely on it, a re-run
 skips the steps ticked as done — is proven offline only. The
 [first live run checklist](docs/domains/lifecycle-offboarding.md#first-live-run-checklist) says

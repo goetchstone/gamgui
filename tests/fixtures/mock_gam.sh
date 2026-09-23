@@ -14,7 +14,7 @@
 #   - anything unhandled FAILS. Add a handler for a new command; never make the catch-all succeed.
 # Failure triggers, by argument substring: *missing*/*nonexistent* -> "Does not exist" for the user,
 # group, calendar, event or delegate; *exists* -> 409 on create; plus SENDFAIL, SUBFAIL, CONFLICT409,
-# FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED, SWEEPSLOW, SIGNOUTFAIL (see each handler). The stderr wording
+# FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED, SWEEPSLOW, SIGNOUTFAIL, FWDFAIL (see each handler). The stderr wording
 # and exit codes are GAM7's shape (2 usage error, 50 action failed, 51 action not performed, 56 does
 # not exist) written from its source conventions, not captured from a tenant — only a live capture
 # (plan Phase 8) proves them.
@@ -521,6 +521,9 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "forward" ]; then
       [ $# -eq 6 ] || invalid_arg "$7" ;;
     *) invalid_choice "$4" "true|on|yes|enabled|1|false|off|no|disabled|0" ;;
   esac
+  check_exists "User" "$2"
+  # FWDFAIL: a user without Gmail — GAM's userServiceNotEnabledWarning, SERVICE_NOT_APPLICABLE_RC (73).
+  case "$2" in *FWDFAIL*) printf 'User: %s, Gmail Service/App not enabled\n' "$2" 1>&2; exit 73 ;; esac
   echo "User: $2, Forward: Updated"
   exit 0
 fi

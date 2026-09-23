@@ -1043,14 +1043,14 @@ def test_lifecycle_page_renders(client):
     r = client.get("/lifecycle")
     assert r.status_code == 200
     assert "Offboard a user" in r.text and 'name="manager"' in r.text
-    assert r.text.count('name="done"') == 7            # the re-run's "already done" boxes, one per step
+    assert r.text.count('name="done"') == 8            # the re-run's "already done" boxes, one per step
 
 
 def test_lifecycle_offboard_preview_lists_steps(client):
     r = client.post("/lifecycle/offboard/preview",
                     data={"user": LEAVER, "manager": MGR, "subject": "s", "message": "m", "days": "30"})
     assert r.status_code == 200
-    assert "7 steps" in r.text  # Drive + Calendar are one combined transfer step (was two); revoke is its own
+    assert "8 steps" in r.text  # Drive + Calendar are one combined transfer step (was two)
     assert "Reset password" in r.text and "Transfer Drive" in r.text and "Run offboarding" in r.text
 
 
@@ -1065,6 +1065,7 @@ def test_lifecycle_offboard_preview_shows_each_exact_command(client):
     for line in [
         "gam update user carol@example.com password random changepassword off",
         "gam user carol@example.com deprovision signout",
+        "gam user carol@example.com forward off",
         "gam user carol@example.com add delegate alice@example.com",
         "gam user carol@example.com vacation on subject 'Away now' message m html",
         "gam create datatransfer carol@example.com drive,calendar alice@example.com",
@@ -1072,7 +1073,7 @@ def test_lifecycle_offboard_preview_shows_each_exact_command(client):
         "gam user alice@example.com add event primary summary 'Offboarding carol@example.com: confirm",
     ]:
         assert line in text, line
-    assert text.count("<pre") == 7
+    assert text.count("<pre") == 8
     assert "stopped and reported failed after 60 min" in text      # the sweep's domain-wide bound
 
 
@@ -1181,7 +1182,7 @@ def test_lifecycle_preview_shows_autoreply_block(client):
     assert "Alice Anders is no longer with the company" in r.text
 
 
-OFFBOARD_AUDIT = ["reset_password", "revoke_access", "add_delegate", "set_vacation", "transfer_data",
+OFFBOARD_AUDIT = ["reset_password", "revoke_access", "forward_off", "add_delegate", "set_vacation", "transfer_data",
                   "remove_from_all_calendars", "add_calendar_event"]   # one audited write per step
 
 
@@ -1194,6 +1195,7 @@ def offboard_writes(user="leaver@example.com", mgr="mgr@example.com"):
     return [
         ["update", "user", user, "password", "random"],
         ["user", user, "deprovision", "signout"],        # revoke access: tokens, app passwords, sessions
+        ["user", user, "forward", "off"],
         ["user", user, "add", "delegate", mgr],
         ["user", user, "vacation", "on", "subject"],
         ["create", "datatransfer", user, "drive,calendar", mgr],
@@ -1229,12 +1231,12 @@ def test_lifecycle_offboard_run_starts(client, gam_calls):
     assert_ok_partial(r)
     job = _job(client, r.text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
-    assert (job.applied, job.failed) == (7, [])
+    assert (job.applied, job.failed) == (8, [])
     assert _offboard_writes(gam_calls()) == offboard_writes(LEAVER, MGR)
-    assert [(a, ok) for a, _, ok in _audited(client, 7)] == [(a, True) for a in OFFBOARD_AUDIT]
+    assert [(a, ok) for a, _, ok in _audited(client, 8)] == [(a, True) for a in OFFBOARD_AUDIT]
     done = client.get("/lifecycle/offboard/status", params={"job": job.id})
     assert_ok_partial(done)
-    assert "Offboarding complete — 7 of 7 steps succeeded." in done.text
+    assert "Offboarding complete — 8 of 8 steps succeeded." in done.text
 
 
 def test_offboard_a_refused_sign_out_is_a_failed_step_not_a_clean_run(client, gam_calls, monkeypatch):
@@ -1340,9 +1342,9 @@ def test_offboard_rerun_runs_only_the_steps_not_ticked_done(client, gam_calls):
     # A run stopped at the transfer: tick what succeeded, and only the transfer and the reminder run
     # (re-adding the delegate would fail; the reset and sweep would just repeat). Ticked steps count as
     # succeeded, so the reminder's dependency on the reset and the delegate is met.
-    done = ["password", "revoke", "delegate", "vacation", "calacls"]
+    done = ["password", "revoke", "forward", "delegate", "vacation", "calacls"]
     r, token = _offboard_preview(client, done=done)
-    assert "2 of 7 steps (5 ticked as already done)" in r.text and r.text.count("<pre") == 2
+    assert "2 of 8 steps (6 ticked as already done)" in r.text and r.text.count("<pre") == 2
     assert "Run 2 offboarding steps for" in r.text
     job = _job(client, _offboard_run(client, token, done=done).text, "/lifecycle/offboard/status")
     wait_for_job(client, job)

@@ -15,8 +15,8 @@ from .helpers import gam_writes
 def test_offboard_steps_order_and_due_date():
     steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "Subj", "Msg", 30, date(2026, 6, 23))
     # Drive + Calendar are ONE transfer step now (a second same-user transfer 409s while the first runs).
-    assert [s.key for s in steps] == ["password", "revoke", "delegate", "vacation", "transfer", "calacls",
-                                      "reminder"]
+    assert [s.key for s in steps] == ["password", "revoke", "forward", "delegate", "vacation", "transfer",
+                                      "calacls", "reminder"]
     transfer = next(s for s in steps if s.key == "transfer")
     assert transfer.label == "Transfer Drive & Calendar ownership"
     assert "30-day" in steps[-1].label
@@ -36,6 +36,9 @@ async def test_offboard_steps_call_the_right_connector_methods():
 
         async def revoke_access(self, e):
             calls.append(("revoke_access", e)); return _R()
+
+        async def forward_off(self, e):
+            calls.append(("forward_off", e)); return _R()
 
         async def add_delegate(self, e, d):
             calls.append(("add_delegate", e, d)); return _R()
@@ -58,7 +61,7 @@ async def test_offboard_steps_call_the_right_connector_methods():
         await s.action(_FakeConn())
 
     assert [c[0] for c in calls] == [
-        "reset_password", "revoke_access", "add_delegate", "set_vacation",
+        "reset_password", "revoke_access", "forward_off", "add_delegate", "set_vacation",
         "transfer_data", "remove_from_all_calendars", "add_calendar_event",
     ]
     transfers = [c for c in calls if c[0] == "transfer_data"]
@@ -226,7 +229,8 @@ def test_offboard_step_dependencies_are_the_documented_ones():
     # The runbook's "When a step fails" table. Changing a rule is a decision: update both.
     steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "s", "m", 30, date(2026, 6, 23))
     assert {s.key: s.requires for s in steps} == {
-        "password": (), "revoke": ("password",), "delegate": ("password",), "vacation": ("password", "delegate"),
+        "password": (), "revoke": ("password",), "forward": ("password",), "delegate": ("password",),
+        "vacation": ("password", "delegate"),
         "transfer": ("password", "delegate"), "calacls": ("password", "delegate"),
         "reminder": ("password", "delegate", "transfer"),
     }
@@ -248,7 +252,7 @@ async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
     # The account can still sign in: nothing may announce the departure or move data.
     job = await _offboard(connector, "missing-leaver@example.com")
     assert (job.applied, job.failed) == (0, ["Reset password"])
-    assert job.skipped == ["Revoke access & sign out", "Set delegate", "Set auto-responder",
+    assert job.skipped == ["Revoke access & sign out", "Turn off forwarding", "Set delegate", "Set auto-responder",
                            "Transfer Drive & Calendar ownership",
                            "Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
     assert [w[:3] for w in gam_writes(gam_calls())] == [["update", "user", "missing-leaver@example.com"]]
@@ -259,10 +263,10 @@ async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
 async def test_offboard_failed_delegate_stops_before_the_rest(connector, gam_calls):
     # The first write to the manager failed; the transfer and the reminder go to the same account.
     job = await _offboard(connector, "leaver@example.com", manager="missing-mgr@example.com")
-    assert (job.applied, job.failed) == (2, ["Set delegate"]) and len(job.skipped) == 4
+    assert (job.applied, job.failed) == (3, ["Set delegate"]) and len(job.skipped) == 4
     assert [w[:4] for w in gam_writes(gam_calls())] == [
         ["update", "user", "leaver@example.com", "password"], ["user", "leaver@example.com", "deprovision", "signout"],
-        ["user", "leaver@example.com", "add", "delegate"]]
+        ["user", "leaver@example.com", "forward", "off"], ["user", "leaver@example.com", "add", "delegate"]]
 
 
 @pytest.mark.asyncio
@@ -281,10 +285,24 @@ async def test_offboard_failed_sign_out_is_a_failed_step_that_stops_nothing(conn
 
 
 @pytest.mark.asyncio
+async def test_offboard_turns_off_forwarding_and_a_failure_stops_nothing(connector, gam_calls):
+    # The mailbox stays live for the delegate, so a leaver's auto-forward to a personal address kept
+    # company mail flowing out until the account was deleted, 30+ days later. It is turned off after the
+    # sign-out (the leaver could switch it on until then), on or not; a failure is a ✗ that stops nothing.
+    await _offboard(connector, "leaver@example.com")
+    writes = gam_writes(gam_calls())
+    assert writes.index(["user", "leaver@example.com", "forward", "off"]) == 2       # after the revoke
+    job = await _offboard(connector, "FWDFAIL-leaver@example.com")
+    assert job.failed == ["Turn off forwarding"] and job.skipped == []
+    [line] = [ln for ln in job.log if ln.startswith("✗ ")]
+    assert "Gmail Service/App not enabled" in line
+
+
+@pytest.mark.asyncio
 async def test_offboard_failed_transfer_skips_only_the_reminder(connector, gam_calls):
     # The reminder asks the manager to approve deletion — which, without the transfer, loses the files.
     job = await _offboard(connector, "CONFLICT409-leaver@example.com")
-    assert (job.applied, job.failed) == (5, ["Transfer Drive & Calendar ownership"])
+    assert (job.applied, job.failed) == (6, ["Transfer Drive & Calendar ownership"])
     assert job.skipped == ["30-day reminder for mgr@example.com"]
     assert not [w for w in gam_writes(gam_calls()) if "event" in w]
     assert job.log[-1].startswith("– 30-day reminder") and "Transfer Drive" in job.log[-1]

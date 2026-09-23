@@ -348,6 +348,10 @@ class GAMConnector(Connector):
         backup codes and every connected app's OAuth token (``deprovision signout``)."""
         return await self._run_write("revoke_access", email, GAMCommands.deprovision_user(email), RiskLevel.LOW)
 
+    async def forward_off(self, email: str) -> ChangeResult:
+        """Turn off automatic forwarding of ``email``'s incoming mail (harmless if it was off)."""
+        return await self._run_write("forward_off", email, GAMCommands.forward_off(email), RiskLevel.LOW)
+
     async def transfer_data(self, old_owner: str, service: str, new_owner: str) -> ChangeResult:
         argv = GAMCommands.create_datatransfer(old_owner, service, new_owner)
         return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, target_extra=new_owner)
