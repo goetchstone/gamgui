@@ -290,8 +290,8 @@ def test_every_run_authenticated_call_is_the_chokepoint_or_a_read():
     each call site must be one of: ``_run_write``; a named, hand-audited path; a function proven a read
     another way (``READ_BY_CONTRACT``); or a read — its argv traced to a builder classified as a read in
     ``tests/test_mock_gam.py`` and not taking the write lock. The audit.record() tripwire above can't
-    see a write that is simply never audited (the Builder's todrive export, reset_password's follow-up
-    sign-out); this one can."""
+    see a write that is simply never audited (the Builder's todrive export, and once reset_password's
+    follow-up sign-out); this one can."""
     import ast
 
     from .test_mock_gam import READS

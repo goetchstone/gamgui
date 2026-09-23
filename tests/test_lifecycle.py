@@ -7,7 +7,7 @@ import pytest
 import shlex
 
 from gamgui.core.gam.commands import GAMCommands
-from gamgui.core.lifecycle import DEFAULT_MESSAGE, DEFAULT_SUBJECT, build_offboard_steps, command_line
+from gamgui.core.lifecycle import DEFAULT_MESSAGE, DEFAULT_SUBJECT, STEP_NAMES, build_offboard_steps, command_line
 
 from .helpers import gam_writes
 
@@ -15,7 +15,8 @@ from .helpers import gam_writes
 def test_offboard_steps_order_and_due_date():
     steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "Subj", "Msg", 30, date(2026, 6, 23))
     # Drive + Calendar are ONE transfer step now (a second same-user transfer 409s while the first runs).
-    assert [s.key for s in steps] == ["password", "delegate", "vacation", "transfer", "calacls", "reminder"]
+    assert [s.key for s in steps] == ["password", "revoke", "delegate", "vacation", "transfer", "calacls",
+                                      "reminder"]
     transfer = next(s for s in steps if s.key == "transfer")
     assert transfer.label == "Transfer Drive & Calendar ownership"
     assert "30-day" in steps[-1].label
@@ -32,6 +33,9 @@ async def test_offboard_steps_call_the_right_connector_methods():
     class _FakeConn:
         async def reset_password(self, e):
             calls.append(("reset_password", e)); return _R()
+
+        async def revoke_access(self, e):
+            calls.append(("revoke_access", e)); return _R()
 
         async def add_delegate(self, e, d):
             calls.append(("add_delegate", e, d)); return _R()
@@ -54,7 +58,7 @@ async def test_offboard_steps_call_the_right_connector_methods():
         await s.action(_FakeConn())
 
     assert [c[0] for c in calls] == [
-        "reset_password", "add_delegate", "set_vacation",
+        "reset_password", "revoke_access", "add_delegate", "set_vacation",
         "transfer_data", "remove_from_all_calendars", "add_calendar_event",
     ]
     transfers = [c for c in calls if c[0] == "transfer_data"]
@@ -192,7 +196,7 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
     await _run_offboard(job, connector, steps)
-    assert (job.applied, job.failed) == (5, ["Remove from everyone's calendars"])
+    assert (job.applied, job.failed) == (len(steps) - 1, ["Remove from everyone's calendars"])
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
     assert "timed out after 0.5s and was stopped" in line
     assert job.log[-1].startswith("✓ ") and "reminder" in job.log[-1]
@@ -215,14 +219,14 @@ async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
     await _run_offboard(job, connector, steps)
     assert (job.applied, job.failed) == (len(steps), [])
     assert gam_writes(gam_calls()) == [argv for s in steps for argv in s.commands]
-    assert [len(s.commands) for s in steps] == [2, 1, 1, 1, 1, 1]      # the reset's sign-out follows it
+    assert [len(s.commands) for s in steps] == [1] * len(steps)        # one command, one ✓/✗ per step
 
 
 def test_offboard_step_dependencies_are_the_documented_ones():
     # The runbook's "When a step fails" table. Changing a rule is a decision: update both.
     steps = build_offboard_steps("leaver@e.com", "mgr@e.com", "s", "m", 30, date(2026, 6, 23))
     assert {s.key: s.requires for s in steps} == {
-        "password": (), "delegate": ("password",), "vacation": ("password", "delegate"),
+        "password": (), "revoke": ("password",), "delegate": ("password",), "vacation": ("password", "delegate"),
         "transfer": ("password", "delegate"), "calacls": ("password", "delegate"),
         "reminder": ("password", "delegate", "transfer"),
     }
@@ -244,27 +248,43 @@ async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
     # The account can still sign in: nothing may announce the departure or move data.
     job = await _offboard(connector, "missing-leaver@example.com")
     assert (job.applied, job.failed) == (0, ["Reset password"])
-    assert job.skipped == ["Set delegate", "Set auto-responder", "Transfer Drive & Calendar ownership",
+    assert job.skipped == ["Revoke access & sign out", "Set delegate", "Set auto-responder",
+                           "Transfer Drive & Calendar ownership",
                            "Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
     assert [w[:3] for w in gam_writes(gam_calls())] == [["update", "user", "missing-leaver@example.com"]]
-    assert job.log[1] == "– Set delegate — not run: “Reset password” didn't succeed"
+    assert job.log[1] == "– Revoke access & sign out — not run: “Reset password” didn't succeed"
 
 
 @pytest.mark.asyncio
 async def test_offboard_failed_delegate_stops_before_the_rest(connector, gam_calls):
     # The first write to the manager failed; the transfer and the reminder go to the same account.
     job = await _offboard(connector, "leaver@example.com", manager="missing-mgr@example.com")
-    assert (job.applied, job.failed) == (1, ["Set delegate"]) and len(job.skipped) == 4
+    assert (job.applied, job.failed) == (2, ["Set delegate"]) and len(job.skipped) == 4
     assert [w[:4] for w in gam_writes(gam_calls())] == [
-        ["update", "user", "leaver@example.com", "password"], ["user", "leaver@example.com", "signout"],
+        ["update", "user", "leaver@example.com", "password"], ["user", "leaver@example.com", "deprovision", "signout"],
         ["user", "leaver@example.com", "add", "delegate"]]
+
+
+@pytest.mark.asyncio
+async def test_offboard_failed_sign_out_is_a_failed_step_that_stops_nothing(connector, gam_calls):
+    # The sign-out rode inside "Reset password" and its failure was swallowed: ✓ and "6 of 6
+    # succeeded" while the leaver's sessions stayed open (failure-log 2026-09-23). Ending access is its
+    # own step now: ✗, counted, re-runnable alone — and nothing waits on it (the reset already locked
+    # new sign-ins, and a missing security scope must not strand the mailbox without its delegate).
+    job = await _offboard(connector, "SIGNOUTFAIL-leaver@example.com")
+    assert job.failed == ["Revoke access & sign out"] and job.skipped == []
+    assert job.applied == len(STEP_NAMES) - 1
+    [line] = [ln for ln in job.log if ln.startswith("✗ ")]
+    assert line.startswith("✗ Revoke access & sign out — ") and "Sign Out Failed" in line
+    audit = [(e["action"], e["ok"]) for e in connector.audit.tail()]
+    assert ("revoke_access", False) in audit and ("reset_password", True) in audit
 
 
 @pytest.mark.asyncio
 async def test_offboard_failed_transfer_skips_only_the_reminder(connector, gam_calls):
     # The reminder asks the manager to approve deletion — which, without the transfer, loses the files.
     job = await _offboard(connector, "CONFLICT409-leaver@example.com")
-    assert (job.applied, job.failed) == (4, ["Transfer Drive & Calendar ownership"])
+    assert (job.applied, job.failed) == (5, ["Transfer Drive & Calendar ownership"])
     assert job.skipped == ["30-day reminder for mgr@example.com"]
     assert not [w for w in gam_writes(gam_calls()) if "event" in w]
     assert job.log[-1].startswith("– 30-day reminder") and "Transfer Drive" in job.log[-1]

@@ -1,8 +1,9 @@
 # Domain: Lifecycle — Offboarding
 
-**One line:** The ordered "a user is leaving" routine — reset password, delegate + auto-reply the
-mailbox, transfer Drive/Calendar, sweep the user off everyone's calendars, and drop a dated reminder
-on the manager — plus the separate, gated account **delete** that IT runs later.
+**One line:** The ordered "a user is leaving" routine — reset password, revoke access (sessions, app
+passwords, backup codes, OAuth tokens), delegate + auto-reply the mailbox, transfer Drive/Calendar,
+sweep the user off everyone's calendars, and drop a dated reminder on the manager — plus the
+separate, gated account **delete** that IT runs later.
 
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on
 data-transfer completion** (advisory) and **the all-users calendar-ACL sweep is best-effort**
@@ -24,11 +25,12 @@ combined transfer service list is one argv element (CLAUDE.md #1).
   `guard.enforce`'s rule for every account delete, so the Builder's "Delete account" asks for the
   address and warns on a pending transfer too).
 - `gamgui/core/connectors/gam_connector.py` — the real mutations: `transfer_data`,
-  `remove_from_all_calendars`, `reset_password`, `delete_user`, `add_delegate`, `set_vacation`,
-  `add_calendar_event`; all via `_run_write` (`tolerate_kinds`). `incomplete_transfers_for` is a
+  `remove_from_all_calendars`, `reset_password`, `revoke_access`, `delete_user`, `add_delegate`,
+  `set_vacation`, `add_calendar_event`; all via `_run_write` (`tolerate_kinds`). `incomplete_transfers_for` is a
   **read** (direct `run_authenticated`, not `_run_write`) that the delete gate calls.
-- `gamgui/core/gam/commands.py` (~275-325) — argv builders (`create_datatransfer`,
-  `remove_all_calendar_acls`, `print_datatransfers`, `delete_user`, `reset_password`, …).
+- `gamgui/core/gam/commands.py` (~275-335) — argv builders (`create_datatransfer`,
+  `remove_all_calendar_acls`, `print_datatransfers`, `delete_user`, `reset_password`,
+  `deprovision_user`, …).
 
 ## How it works
 **Both addresses are checked first**, by the preview and again by the run (`_check` →
@@ -41,9 +43,9 @@ manager who is already the leaver's delegate (the preview only; see "Re-running 
 steps then act on the directory's primary addresses, whatever case was typed. A typo'd manager used
 to be accepted and half-offboard the account (failure-log 2026-09-23).
 
-`build_offboard_steps` returns 6 ordered `OffboardStep`s (`password`, `delegate`, `vacation`,
-`transfer`, `calacls`, `reminder`), each a `lambda conn: conn.<method>(...)` plus `commands`, the
-argv(s) that method runs, built from the same `GAMCommands` builders and values. It is pure and
+`build_offboard_steps` returns 7 ordered `OffboardStep`s (`password`, `revoke`, `delegate`,
+`vacation`, `transfer`, `calacls`, `reminder`), each a `lambda conn: conn.<method>(...)` plus
+`commands`, the one argv that method runs (one command per step, so each has its own `✓/✗`), built from the same `GAMCommands` builders and values. It is pure and
 testable; the route runs it. The **preview** lists every step with its exact command
 (`command_line`: one `gam …` line per argv, each element shell-quoted so a subject with spaces is
 visibly one argument; a value after a sensitive key masked as the audit log masks it, GAM's own
@@ -62,7 +64,8 @@ directory and hands the held steps, never rebuilt ones, to `start_job` and `_run
 rebuilt them from the live form, failure-log 2026-09-23). An emptied subject/message runs the default
 text, as the auto-reply block shows. `_run_offboard` runs each step in order and appends a `✓/✗`
 line to `job.log`; **a step whose `requires` did not all succeed is not run** (a `–` line, listed in
-`job.skipped`, and the panel says "Offboarding stopped"). The "timer" is the last step: a calendar
+`job.skipped`, and the panel says "Offboarding stopped"). The green "Offboarding complete" panel
+means every step succeeded; any `✗` makes it "incomplete" (amber, with the recovery steps). The "timer" is the last step: a calendar
 reminder event on the manager's calendar `days` out — there is no app-side scheduler. The final
 account **delete** is a distinct guarded action on the user detail page (`delete_user`,
 `RiskLevel.DESTRUCTIVE`).
@@ -74,7 +77,8 @@ step (failure-log).
 
 | Step | If it fails | Why |
 |---|---|---|
-| Reset password (+ sign-out) | **stop** — nothing else runs | The lock is the point. Nothing may announce the departure or move data while the account can still sign in, and a first-step failure (wrong credentials, a missing user) usually fails every step. The sign-out is best-effort: its failure doesn't fail the reset. |
+| Reset password | **stop** — nothing else runs | The lock is the point. Nothing may announce the departure or move data while the old password still works, and a first-step failure (wrong credentials, a missing user) usually fails every step. |
+| Revoke access & sign out | continue — `✗`, and the run is not "complete" | Runs straight after the reset, before anything is handed over, and nothing but the reset can stop it. It gates nothing: the reset has already stopped new sign-ins, and its likeliest failure (a missing `admin.directory.user.security` scope) would otherwise strand the mailbox with no delegate. The panel says the leaver may still be signed in. Until 2026-09-23 the sign-out rode inside the reset and a failure was swallowed (failure-log). |
 | Set delegate | **stop** — nothing else runs | The first write to the manager, who also receives the transfer and the reminder. |
 | Auto-reply | continue | Nothing depends on it; senders get no auto-reply until it's re-run. |
 | Transfer Drive & Calendar | continue, **but no reminder** | The reminder asks the manager to approve deletion, and deleting before the transfer loses the files for good. A transfer that was never created leaves nothing for the delete screen's pending-transfer warning to find. |
@@ -91,7 +95,8 @@ the reminder runs without one). What each step does if run again after it succee
 
 | Step | Run again after it succeeded | Tick it? |
 |---|---|---|
-| Reset password (+ sign-out) | Harmless: `password random` makes a new password each time; sessions are ended again. | optional |
+| Reset password | Harmless: `password random` makes a new password each time. | optional |
+| Revoke access & sign out | Harmless: whatever app passwords and tokens are left are deleted, the backup codes are invalidated again, sessions are ended again. | optional |
 | Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_already_delegate`, a `print delegates` read), which also covers a manager who had access before offboarding started. | **yes** |
 | Auto-reply | Harmless: `vacation on …` replaces the settings. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
@@ -108,7 +113,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
 | Step | argv we emit | Grammar | Verdict |
 |---|---|---|---|
 | Reset password | `update user <leaver> password random changepassword off` | `gam update user <UserItem> [ignorenullpassword] <UserAttribute>*` (5942); `<UserBasicAttribute>` (5823): `(password (random [<Integer>])\|…)`, `(changepassword\|changepasswordatnextlogin <Boolean>)` | Match. GAM generates the password; we never see it. |
-| …then sign-out (only if the reset worked) | `user <leaver> signout` | `gam <UserTypeEntity> signout` (8938) | Match; the command takes no options. |
+| Revoke access & sign out | `user <leaver> deprovision signout` | `gam <UserTypeEntity> deprovision\|deprov [popimap] [signout] [turnoff2sv]` (7899) | Match. Per user, GAM (`deprovisionUser`, read statically) deletes every app password, invalidates the backup codes, deletes every OAuth token, then with `signout` calls `users.signOut` (as `gam <UserTypeEntity> signout`, 8938, does). A failure is reported against the user (exit 50) and stops that user's remaining parts. **Not** `turnoff2sv` — it would weaken a locked account, and nobody needs to sign in as the leaver (the manager gets delegation). **Not** `popimap` — POP/IMAP need the password, an app password or a token, all revoked here; it would add two Gmail settings writes for nothing. |
 | Delegate | `user <leaver> add delegate <manager>` | `gam <UserTypeEntity> create\|add delegate\|delegates [convertalias] <UserEntity>` (7910) | Match; `convertalias` optional, unused. |
 | Auto-reply | `user <leaver> vacation on subject <S> message <M> html` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly …] [domainonly …] [start …] [end …]` (8283); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. `html`: see Gotchas. |
 | Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager>` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598) | Match; the service list is ONE element. No privacy keyword: see Gotchas. |
@@ -145,13 +150,26 @@ parser was read statically (its bytecode, never run). No mismatch found.
   in-flight transfer per user, so the second returned "409: already in progress" and was silently
   ignored. Fix: a single call with the comma-joined service list `"drive,calendar"` — a valid
   `<DataTransferServiceList>` that rides as **one argv element**. Reduced offboard from 7 steps to 6.
-- Same commit fixed the sweep misclassification: `classify_stderr` mapped "Cannot change your own
+- **Ending access is its own step, and its failure is a failure (2026-09-23).** The sign-out used to
+  run inside `reset_password` as a best-effort follow-up whose `ChangeResult` was discarded: a
+  refused sign-out showed `✓ Reset password` and "complete — 6 of 6 steps succeeded" while the
+  leaver's sessions stayed open, and a re-run (tick the `✓` lines) could never retry it. Reset + sign-out
+  also left app passwords, backup codes and connected apps' OAuth tokens working. Now `revoke` runs
+  `deprovision signout`; `reset_password` runs only the reset.
+- Same commit as the one-transfer fix, the sweep misclassification: `classify_stderr` mapped "Cannot change your own
   access level" to UNKNOWN (no 403 token), so the already-present PERMISSION_DENIED tolerance never
   fired. `errors.py` now maps `cannotChangeOwnAcl` → `PERMISSION_DENIED`.
 
 ## Gotchas / mock-lies traps
 - **`set_vacation` rejects `formatjson`** (see MEMORY / the formatjson gotcha) — the mock can't catch
   that; verify against the vendored grammar `gamgui/resources/gam7/GamCommands.txt`.
+- **What the routine does not cut off.** Sign-in through a third-party identity provider (SSO)
+  doesn't use the Google password: disable the user there too. Gmail filters that forward mail are
+  not touched: look at them before the run (Builder → Users → Gmail - Filters → Show filters, a
+  read). Admin roles aren't removed either (the preview warns).
+- `SIGNOUTFAIL` in an address makes the mock refuse the sign-out (`signout`, and `deprovision … signout`
+  after its other parts) the way a missing security scope does: "Sign Out Failed: Not Authorized to
+  access this resource/api", exit 50. The deprovision handler's stdout is GAM's shape, not captured.
 - The mock only 409s when the old-owner email contains the literal `CONFLICT409`. The `all users
   delete calendaracls` sweep succeeds by default; `OWNACL` in the address emits the exact own-ACL
   stderr (exit 50, tolerated) and `SWEEPFAIL` a scope error (not tolerated); `SWEEPBENIGN` a
@@ -183,19 +201,22 @@ auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering,
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
 edited form, a used/expired token and a directory change are refused), the dependency rules (a failed
-reset / delegate / transfer against the mock's `missing` and `CONFLICT409` triggers), the re-run ticks
+reset / delegate / transfer against the mock's `missing` and `CONFLICT409` triggers; a refused
+sign-out is a `✗` that stops nothing, `test_offboard_failed_sign_out_is_a_failed_step_that_stops_nothing`,
+and the panel then isn't "complete", `test_offboard_a_refused_sign_out_is_a_failed_step_not_a_clean_run`), the re-run ticks
 (`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
-actual per-user calendar sweep at domain scale, and `delete_user` itself. Per CLAUDE.md, these must
+actual per-user calendar sweep at domain scale, `deprovision signout` (never run live: its output
+and its behaviour for a user with no app passwords or tokens), and `delete_user` itself. Per CLAUDE.md, these must
 be run against a **throwaway** account before being trusted.
 
 ## First live run checklist
 Offboarding a real user is the live test (plan D8). Keep this page open.
 
 **In the preview, before Run**
-- The header names the right person and says "6 steps" (nothing ticked as already done).
+- The header names the right person and says "7 steps" (nothing ticked as already done).
 - Every warning is dealt with: a super-admin leaver's role revoked first (and another super admin
   exists; GamGUI isn't connected as the leaver); a manager who is already a delegate → tick
   "Set delegate".
@@ -205,10 +226,12 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
 - Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
   writes in the app waiting behind it. Don't close the app mid-run.
 
-**After the run** — the panel should say "6 of 6 steps succeeded"; GamGUI → Audit shows seven `ok`
-records (the reset's sign-out is its own). Then check in Google, not just in GamGUI:
+**After the run** — the panel should say "Offboarding complete — 7 of 7 steps succeeded"; GamGUI →
+Audit shows seven `ok` records, one per step. Then check in Google, not just in GamGUI:
 - Sign-in: the leaver's old password no longer works (the Admin console's admin audit log —
-  Reporting → Audit and investigation — lists the password change and the sign-out).
+  Reporting → Audit and investigation — lists the password change and the sign-out). The user's
+  Security panel in the Admin console lists no app passwords and no connected apps. If they sign
+  in through a third-party identity provider, disable them there.
 - Mailbox: the manager's Gmail account switcher offers the leaver's mailbox (delegation can take a
   while to appear); an email to the leaver from another account gets the auto-reply (or GamGUI →
   the user → Vacation responder shows it on).
@@ -223,11 +246,13 @@ records (the reset's sign-out is its own). Then check in Google, not just in Gam
 **If a step fails** — the panel names it, its `✗` line says why, and `–` lines were not run (the
 "When a step fails" table). Nothing is half-done except a sweep stopped by its timeout.
 1. Fix the cause. Auth/scope errors: re-run setup. Reset failed: check the leaver's account — nothing
-   else ran. Delegate failed: "already exists" means it's done (tick it); "does not exist" or a
+   else ran. Revoke access failed: the leaver may still be signed in — usually the
+   `admin.directory.user.security` scope (re-do the domain-wide delegation step); the user's page has
+   "Sign out everywhere" for the sessions alone. Delegate failed: "already exists" means it's done (tick it); "does not exist" or a
    suspended account: fix the manager or leaver. Transfer 409: a transfer is already running — wait
    for `completed` (Data Transfers → Print), then tick it.
 2. Tick the steps whose lines are `✓` (and any step you've decided to skip — ticked means "don't run,
-   treat as done"), Preview again, check the header says "N of 6 steps", Run.
+   treat as done"), Preview again, check the header says "N of 7 steps", Run.
 3. **Don't delete the account** until the transfer shows `completed`.
 
 **Wrong person offboarded?** There is no undo routine. By hand: set a new password in the Admin

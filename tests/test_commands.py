@@ -136,6 +136,8 @@ def test_own_acl_error_classifies_as_permission_denied():
 def test_signout_and_undelete_user():
     assert GAMCommands.signout_user("a@e.com") == ["user", "a@e.com", "signout"]
     assert GAMCommands.undelete_user("a@e.com") == ["undelete", "user", "a@e.com"]
+    # Offboarding's revoke: never `turnoff2sv` (it weakens the locked account) — the runbook says why.
+    assert GAMCommands.deprovision_user("a@e.com") == ["user", "a@e.com", "deprovision", "signout"]
 
 
 def test_create_group_commands():

@@ -339,10 +339,14 @@ class GAMConnector(Connector):
 
     # --- lifecycle (offboarding) -------------------------------------------------------
     async def reset_password(self, email: str) -> ChangeResult:
-        res = await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
-        if res.ok:  # best-effort: end existing sessions too — audited, but its failure doesn't fail the reset
-            await self.signout_user(email)
-        return res
+        # Only the reset: ending sessions is offboarding's own step (revoke_access), so its failure is
+        # shown and can be re-run — as a follow-up here it was swallowed (failure-log 2026-09-23).
+        return await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
+
+    async def revoke_access(self, email: str) -> ChangeResult:
+        """Sign ``email`` out everywhere and revoke what outlives a password reset: app passwords,
+        backup codes and every connected app's OAuth token (``deprovision signout``)."""
+        return await self._run_write("revoke_access", email, GAMCommands.deprovision_user(email), RiskLevel.LOW)
 
     async def transfer_data(self, old_owner: str, service: str, new_owner: str) -> ChangeResult:
         argv = GAMCommands.create_datatransfer(old_owner, service, new_owner)

@@ -52,9 +52,10 @@ Actively developed and used against live Google Workspace tenants. Working today
   background job with live per-member progress — so nobody is left saying "you shared it but I can't
   see it", and you get the list of anyone it couldn't be added for. Also: search a calendar's events,
   and remove a stray event or an entire orphaned secondary calendar.
-- **Lifecycle** — a guided **offboarding** routine (reset password → delegate → auto-responder →
-  transfer Drive & calendars → remove from everyone's calendars → reminder on the manager), with a
-  live preview of the generated auto-reply and the exact `gam` command each step will run. Both
+- **Lifecycle** — a guided **offboarding** routine (reset password → revoke access & sign out →
+  delegate → auto-responder → transfer Drive & calendars → remove from everyone's calendars →
+  reminder on the manager), with a live preview of the generated auto-reply and the exact `gam`
+  command each step will run. Both
   addresses are checked against the directory, Run executes exactly what was previewed, a failed step
   stops the steps that rely on it, and a re-run can skip the steps that already succeeded.
 - **Onboarding** — editable role templates that set up a new hire: create the account (its one-time
@@ -114,7 +115,8 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed** |
 | Clear vacation | Users, Builder | not yet |
 | Reset password | Offboarding, Builder | **confirmed** |
-| Sign out everywhere (also follows every reset) | Users, Offboarding, Builder | not yet |
+| Sign out everywhere | Users, Builder | not yet |
+| Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | not yet |
 | Suspend / unsuspend | Users, Builder | not yet |
 | Delete an account | Users, Builder | not yet |
 | Undelete an account | Builder | not yet |
@@ -137,7 +139,9 @@ fixed, but the fixes have not themselves run live yet: Drive and calendar are no
 *single* data-transfer call (two separate calls collided with a `409 conflict`), and "remove from
 everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to abort the sweep.
 That sweep is one domain-wide call, so it runs under a 1-hour timeout instead of the 2-minute
-per-call default; how long it really takes on a large tenant is unmeasured. How the routine runs —
+per-call default; how long it really takes on a large tenant is unmeasured. Revoking the leaver's
+access (app passwords, backup codes, connected apps' tokens, sessions) is a step of its own that has
+never run live. How the routine runs —
 Run executes exactly the previewed steps, a failed step stops the ones that rely on it, a re-run
 skips the steps ticked as done — is proven offline only. The
 [first live run checklist](docs/domains/lifecycle-offboarding.md#first-live-run-checklist) says

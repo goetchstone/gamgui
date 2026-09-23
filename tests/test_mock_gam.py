@@ -25,6 +25,7 @@ WRITES = {
     "set_suspended": [C.set_suspended("alice@example.com", True), C.set_suspended("alice@example.com", False)],
     "reset_password": [C.reset_password("alice@example.com")],
     "signout_user": [C.signout_user("alice@example.com")],
+    "deprovision_user": [C.deprovision_user("alice@example.com")],
     "delete_user": [C.delete_user("alice@example.com")],
     "undelete_user": [C.undelete_user("alice@example.com")],
     "add_calendar_acl": [C.add_calendar_acl("alice@example.com", "bob@example.com"),
@@ -128,6 +129,7 @@ async def test_mock_accepts_every_shape_the_app_emits(runner, domain, argv):
     (["create", "datatransfer", "leaver@example.com", "drive,mail", "mgr@example.com"], "Invalid choice (mail)"),
     (["user", "alice@example.com", "forward", "on", "bounce", "fwd@example.com"], "Invalid choice (bounce)"),
     (["user", "alice@example.com", "signout", "now"], "Invalid argument"),
+    (["user", "alice@example.com", "deprovision", "signout", "now"], "Invalid argument"),
     (["delete", "calendars", CAL], "mock: unhandled argv"),       # the catch-all fails now
     (["user", "alice@example.com", "delete", "calendars", CAL], "mock: unhandled argv"),
 ])

@@ -37,9 +37,14 @@ TRANSFER_SERVICES = "drive,calendar"
 #     reminder, so it gates the rest;
 #   - the reminder asks the manager to approve deletion, and deleting before the transfer loses the
 #     leaver's files for good — so no transfer, no reminder.
-# The auto-reply and the calendar sweep gate nothing: their failure is reported and the routine goes on.
+# Revoking access (sessions, app passwords, tokens), the auto-reply and the calendar sweep gate
+# nothing: their failure is reported (✗, and the run isn't "complete") and the routine goes on. The
+# revoke runs straight after the reset, before anything is handed over, and a failed delegate can't
+# stop it; it doesn't gate the hand-over either — the reset has already stopped new sign-ins, and the
+# likeliest cause (a missing security scope) would otherwise strand the mailbox with no delegate.
 REQUIRES: Dict[str, Tuple[str, ...]] = {
     "password": (),
+    "revoke": ("password",),
     "delegate": ("password",),
     "vacation": ("password", "delegate"),
     "transfer": ("password", "delegate"),
@@ -47,9 +52,9 @@ REQUIRES: Dict[str, Tuple[str, ...]] = {
     "reminder": ("password", "delegate", "transfer"),
 }
 # The steps as the form's "already done" boxes name them (a re-run skips a ticked step).
-STEP_NAMES = {"password": "Reset password", "delegate": "Set delegate", "vacation": "Auto-reply",
-              "transfer": "Transfer Drive & Calendar", "calacls": "Remove from everyone's calendars",
-              "reminder": "Manager reminder"}
+STEP_NAMES = {"password": "Reset password", "revoke": "Revoke access & sign out", "delegate": "Set delegate",
+              "vacation": "Auto-reply", "transfer": "Transfer Drive & Calendar",
+              "calacls": "Remove from everyone's calendars", "reminder": "Manager reminder"}
 
 # GAM's own password generators (grammar <UserBasicAttribute>): keywords, not secrets, so shown as-is.
 _PASSWORD_KEYWORDS = frozenset({"random", "uniquerandom", "blocklogin", "prompt", "uniqueprompt"})
@@ -125,7 +130,7 @@ def check_addresses(directory: Sequence[GAMUser], user: str, manager: str) -> Ad
                               f"remove it; revoke it in the Admin console.")
     if leaver and leaver.suspended:
         check.warnings.append(f"{leaver.primary_email} is already suspended — the mailbox steps (delegate, "
-                              f"auto-reply) may fail for a suspended account.")
+                              f"auto-reply) and “{STEP_NAMES['revoke']}” may fail for a suspended account.")
     if mgr and mgr.suspended:
         check.warnings.append(f"The manager {mgr.primary_email} is suspended — the delegate, the Drive & "
                               f"Calendar transfer and the reminder all go to this account and will likely fail.")
@@ -171,9 +176,16 @@ def build_offboard_steps(
     start, end = due.isoformat(), (due + timedelta(days=1)).isoformat()
     steps = [
         OffboardStep("password", "Reset password",
-                     f"Reset {user}'s password and end sessions (locks sign-in; mailbox stays live)",
+                     f"Set {user}'s password to a random one nobody is shown, so the old password stops "
+                     f"working (the mailbox stays live)",
                      lambda c: c.reset_password(user),
-                     [GAMCommands.reset_password(user), GAMCommands.signout_user(user)]),
+                     [GAMCommands.reset_password(user)]),
+        OffboardStep("revoke", STEP_NAMES["revoke"],
+                     f"Sign {user} out of every web and device session, delete their app passwords, "
+                     f"invalidate their 2-Step Verification backup codes and revoke every connected app's "
+                     f"access (OAuth tokens). 2-Step Verification itself is left on",
+                     lambda c: c.revoke_access(user),
+                     [GAMCommands.deprovision_user(user)]),
         OffboardStep("delegate", "Set delegate",
                      f"Give {manager} delegate access to {user}'s mailbox",
                      lambda c: c.add_delegate(user, manager),

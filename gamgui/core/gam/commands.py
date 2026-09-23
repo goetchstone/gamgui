@@ -275,12 +275,21 @@ class GAMCommands:
     # --- lifecycle (offboarding) -------------------------------------------------------
     @staticmethod
     def reset_password(email: str) -> List[str]:
-        # Random password + no change-prompt: locks sign-in while the mailbox stays live.
+        # Random password + no change-prompt: the old password stops working; the mailbox stays live.
         return ["update", "user", email, "password", "random", "changepassword", "off"]
 
     @staticmethod
     def signout_user(email: str) -> List[str]:
         return ["user", email, "signout"]
+
+    @staticmethod
+    def deprovision_user(email: str) -> List[str]:
+        # `deprovision|deprov [popimap] [signout] [turnoff2sv]` (GamCommands.txt 7899): deletes the
+        # user's app passwords, invalidates their backup codes and deletes their OAuth tokens; with
+        # `signout`, then ends every web and device session. Not `turnoff2sv` (it would weaken a
+        # locked account and nobody needs to sign in as the leaver — the manager gets delegation);
+        # not `popimap` (POP/IMAP need a password, app password or token, all revoked here).
+        return ["user", email, "deprovision", "signout"]
 
     @staticmethod
     def create_datatransfer(old_owner: str, service: str, new_owner: str) -> List[str]:

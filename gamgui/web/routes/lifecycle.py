@@ -256,7 +256,7 @@ async def offboard_run(
     job = start_job(st.jobs, len(steps))
     job.task = asyncio.create_task(_run_offboard(job, conn, steps, done=held.done))
     st.invalidate_users()  # password/org/etc. changed
-    return TEMPLATES.TemplateResponse(request, "_offboard_run.html", {"job": job, "user": user})
+    return _panel(request, job, user)
 
 
 @router.get("/offboard/status", response_class=HTMLResponse)
@@ -264,4 +264,10 @@ async def offboard_status(request: Request, job: str = "") -> HTMLResponse:
     j = request.app.state.gamgui.jobs.get(job)
     if j is None:
         return _err(request, "That offboarding run is no longer available.")
-    return TEMPLATES.TemplateResponse(request, "_offboard_run.html", {"job": j, "user": ""})
+    return _panel(request, j, "")
+
+
+def _panel(request: Request, job, user: str) -> HTMLResponse:
+    """The run's progress panel (polls itself), then its outcome."""
+    return TEMPLATES.TemplateResponse(request, "_offboard_run.html",
+                                      {"job": job, "user": user, "revoke_label": lifecycle.STEP_NAMES["revoke"]})

@@ -12,10 +12,14 @@
   {% if job.log %}<ul class="mt-3 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
 </div>
 {% elif job %}
-<div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p class="font-medium">Offboarding {{ "stopped" if job.skipped else "complete" }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.</p>
+{% set clean = not job.failed_total and not job.skipped %}
+<div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if clean else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p class="font-medium">Offboarding {{ "complete" if clean else ("stopped" if job.skipped else "incomplete") }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.</p>
   {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
-  {% if job.failed %}
+  {% if revoke_label and revoke_label in job.failed %}
+  <p class="mt-3 text-xs"><strong>The leaver may still be signed in</strong>, and their app passwords and connected apps may still work: “{{ revoke_label }}” didn't finish. Fix what it reports and run it again (it is safe to repeat); “Sign out everywhere” on the user's page ends the sessions on its own.</p>
+  {% endif %}
+  {% if not clean %}
   <p class="mt-3 text-xs">To finish: fix what the failed step reports, tick the steps marked ✓ as already done, preview again and run the rest. <strong>Don't delete the account</strong> until the Drive &amp; Calendar transfer has succeeded and finished.</p>
   {% else %}
   <p class="mt-3 text-xs">The manager now has a calendar reminder. When they confirm it's safe, delete the account from the user's detail page.</p>
