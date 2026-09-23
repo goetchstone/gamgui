@@ -67,6 +67,7 @@ async def test_oauth_token_write_back_through_a_real_run(runner, vault, domain, 
 # Launch-environment variables that must never reach the process holding the plaintext credentials.
 HOSTILE_ENV = {
     "DYLD_INSERT_LIBRARIES": "/tmp/evil.dylib",
+    "DYLD_LIBRARY_PATH": "/tmp/evil",
     "PYTHONPATH": "/tmp/evil",
     "PYTHONHOME": "/tmp/evil",
     "_MEIPASS2": "/tmp/evil",
@@ -77,14 +78,27 @@ HOSTILE_ENV = {
     "GAMCFGDIR": "/tmp/not-the-ephemeral-dir",
 }
 
+# What gam may inherit, written out here rather than read from runner.py: a test that computed its
+# expectation from ENV_ALLOWLIST passed an edit adding PYTHONPATH, DYLD_*, GAMCFGSECTION or
+# SSL_CERT_FILE to the allowlist. A new variable GAM genuinely needs is added in both places.
+EXPECTED_PASSTHROUGH = {
+    "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "USER",
+    "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy",
+}
+SET_BY_THE_RUNNER = {"GAMCFGDIR", "GAM_NO_UPDATE_CHECK"}
+EXPECTED_MOCK_ONLY = {"GAM_MOCK_FIXTURES", "GAM_MOCK_REFRESH", "GAM_MOCK_ARGV_LOG", "GAM_MOCK_STATE"}
 
-@pytest.mark.parametrize("frozen", [False, True])
-async def test_gam_inherits_only_the_allowlisted_environment(vault, tmp_path, monkeypatch, frozen):
-    # A real child process reports what it received: /usr/bin/env stands in for gam.
-    import sys
-    from pathlib import Path
 
+def test_the_env_allowlist_is_the_reviewed_one():
     from gamgui.core.gam.runner import ENV_ALLOWLIST, MOCK_ENV
+
+    assert set(ENV_ALLOWLIST) == EXPECTED_PASSTHROUGH
+    assert set(MOCK_ENV) == EXPECTED_MOCK_ONLY
+
+
+async def _child_env(vault, tmp_path, monkeypatch, frozen, child, argv):
+    """Run ``child`` as gam under a hostile launch environment; return (result, the env it saw)."""
+    import sys
 
     for k, v in HOSTILE_ENV.items():
         monkeypatch.setenv(k, v)
@@ -92,15 +106,38 @@ async def test_gam_inherits_only_the_allowlisted_environment(vault, tmp_path, mo
     monkeypatch.setenv("GAM_MOCK_FIXTURES", "/tmp/fixtures")
     if frozen:
         monkeypatch.setattr(sys, "frozen", True, raising=False)
-    env_runner = GAMRunner(vault=vault, gam_binary=Path("/usr/bin/env"), base_dir=tmp_path, timeout=15)
-    res = await env_runner.run_in_cfgdir(tmp_path, ["-0"])
-    env = dict(kv.split("=", 1) for kv in res.stdout.split("\0") if kv)
+    env_runner = GAMRunner(vault=vault, gam_binary=child, base_dir=tmp_path, timeout=15)
+    res = await env_runner.run_in_cfgdir(tmp_path, argv)
+    return res, dict(kv.split("=", 1) for kv in res.stdout.split("\0") if kv)
 
-    allowed = ENV_ALLOWLIST | {"GAMCFGDIR", "GAM_NO_UPDATE_CHECK"} | (set() if frozen else MOCK_ENV)
+
+@pytest.mark.parametrize("frozen", [False, True])
+async def test_gam_inherits_only_the_allowlisted_environment(vault, tmp_path, monkeypatch, frozen):
+    # A real child process reports exactly what it received: /usr/bin/env stands in for gam.
+    from pathlib import Path
+
+    _, env = await _child_env(vault, tmp_path, monkeypatch, frozen, Path("/usr/bin/env"), ["-0"])
+    allowed = EXPECTED_PASSTHROUGH | SET_BY_THE_RUNNER | (set() if frozen else EXPECTED_MOCK_ONLY)
     assert set(env) <= allowed, set(env) - allowed
+    assert not (set(HOSTILE_ENV) - {"GAMCFGDIR"}) & set(env)
     assert env["GAMCFGDIR"] == str(tmp_path)  # ours, never the launch environment's
     assert env["LANG"] == "en_US.UTF-8" and "PATH" in env
     assert ("GAM_MOCK_FIXTURES" in env) is not frozen  # test-only variables never reach the .app's gam
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+async def test_no_dyld_variable_reaches_gam(vault, tmp_path, monkeypatch, frozen):
+    # /usr/bin/env can't show DYLD_*: it is a SIP-protected platform binary, so macOS strips them
+    # before it runs. The venv's Python is not, so it sees any that the runner passes (-I: a leaked
+    # PYTHONHOME can't stop it starting). A leaked DYLD_INSERT_LIBRARIES aborts it: returncode != 0.
+    import sys
+    from pathlib import Path
+
+    code = "import os, sys; sys.stdout.write('\\0'.join(f'{k}={v}' for k, v in os.environ.items()))"
+    res, env = await _child_env(vault, tmp_path, monkeypatch, frozen, Path(sys.executable), ["-I", "-c", code])
+    assert res.returncode == 0, res.stderr
+    assert not {k for k in env if k.startswith("DYLD_")}, env
+    assert not (set(HOSTILE_ENV) - {"GAMCFGDIR"}) & set(env)
 
 
 def test_binary_override_is_ignored_in_the_packaged_app(tmp_path, monkeypatch):

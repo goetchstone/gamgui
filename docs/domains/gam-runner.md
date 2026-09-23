@@ -12,7 +12,8 @@ owned by `core/secrets/`) and #2 (the mutation chokepoint runs *through* this ru
 `tests/test_models.py` — all offline against `tests/fixtures/mock_gam.sh`. No drift guard beyond
 those; the argv-only property is structural (single `_exec`), not asserted by a lint. The env
 allowlist and the frozen-app binary lock are tripwired in `test_runner.py`
-(`test_gam_inherits_only_the_allowlisted_environment`, `test_binary_override_is_ignored_in_the_packaged_app`).
+(`test_the_env_allowlist_is_the_reviewed_one`, `test_gam_inherits_only_the_allowlisted_environment`,
+`test_no_dyld_variable_reaches_gam`, `test_binary_override_is_ignored_in_the_packaged_app`).
 
 ## Files
 - `gamgui/core/gam/runner.py` — `GAMRunner`; `_exec` is the only `create_subprocess_exec`. Locates
@@ -52,7 +53,11 @@ and `version` (no credentials).
   TMPDIR USER` and the proxy variables (GAM's httplib2 takes its proxy only from the environment)
   pass; `GAMCFGDIR` and `GAM_NO_UPDATE_CHECK` are set by us. The mock's `GAM_MOCK_FIXTURES/REFRESH/
   ARGV_LOG` pass only in a source checkout (`sys.frozen` unset); real GAM ignores them anyway. A new
-  variable GAM genuinely needs goes into `ENV_ALLOWLIST` deliberately, never a prefix match.
+  variable GAM genuinely needs goes into `ENV_ALLOWLIST` deliberately, never a prefix match — and
+  into the test's literal `EXPECTED_PASSTHROUGH` too: the test once computed its expectation from
+  `ENV_ALLOWLIST` itself, so adding `PYTHONPATH`/`DYLD_*`/`SSL_CERT_FILE` to the allowlist passed it.
+  `/usr/bin/env` can't show `DYLD_*` (SIP strips them from a platform binary before it runs), so a
+  second child, the venv's own Python (`-I`), checks those.
 - **`serialize=True` write-lock.** Mutations pass `serialize=True`, taking `_write_lock` so two
   writes can't race the *same* ephemeral `GAMCFGDIR` — and, critically, can't race the oauth2.txt
   refresh write-back into the vault (GAM rewrites `oauth2.txt` on token refresh; `EphemeralConfig`
@@ -135,7 +140,8 @@ binary, the four classified failure kinds, per-line classification of a mixed st
 `GAMCFGDIR` still wiped, the write lock released —
 `test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`; the sweep's own timeout via the
 mock's `SWEEPSLOW` in `test_lifecycle.py::test_offboard_sweep_timeout_is_a_clear_step_failure`), and the env
-allowlist (a real child, `/usr/bin/env`, reports exactly what it received, frozen and not). Untrusted
+allowlist (pinned as a literal set in the test; a real child, `/usr/bin/env`, reports exactly what it
+received, frozen and not, and the venv's Python reports any `DYLD_*`). Untrusted
 until run live: whether real GAM needs any variable outside the allowlist (none known), the
 real stderr wording behind each `GAMErrorKind` (only a handful of lines mocked), whether a real
 multi-entity sweep prints any stderr line beyond progress chatter and per-entity failures (one would
