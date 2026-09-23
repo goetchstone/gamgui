@@ -34,6 +34,11 @@ You do **not** need the GAM binary or any Google credentials to run the tests â€
 mock `gam` (`tests/fixtures/mock_gam.sh`) and an in-memory Keychain, so it is fully offline and runs
 in CI on macOS and Linux.
 
+To look at a screen without a tenant, `.venv/bin/python scripts/preview_mock.py` serves the app at
+<http://127.0.0.1:8766/?token=t> on the same mock `gam`, an in-memory Keychain and made-up
+`example.com` data (a few users and groups, an onboarding role, a small calendar index); its state
+lives in a temp dir that is deleted when it stops. A write there only proves the mock accepted it.
+
 ## Project layout
 
 ```
@@ -45,7 +50,8 @@ tests/              # offline test suite + fixtures (incl. the mock gam)
 scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (SHA-256 pins),
                     # build_command_catalog.py (regenerate the browse catalog after a GAM bump),
                     # build_app.sh (PyInstaller .app), acceptance.py (read-only live check),
-                    # vendor_assets.sh (vendor the JS/CSS the UI loads)
+                    # vendor_assets.sh (vendor the JS/CSS the UI loads),
+                    # preview_mock.py (the UI on the mock gam, for looking at a screen)
 ```
 
 ## Conventions
