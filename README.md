@@ -96,7 +96,10 @@ fixed, but the fixes have not themselves been exercised live yet: Drive and cale
 transferred in a *single* data-transfer call (two separate calls collided with a `409 conflict`),
 and "remove from everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to
 abort the sweep. That sweep is one domain-wide call, so it now runs under a 1-hour timeout instead of
-the 2-minute per-call default; how long it really takes on a large tenant is unmeasured.
+the 2-minute per-call default; how long it really takes on a large tenant is unmeasured. The
+[first live run checklist](docs/domains/lifecycle-offboarding.md#first-live-run-checklist) says
+what to check in the preview, what to verify in Google afterwards, and how to recover from a failed
+step.
 
 ## Design goals
 

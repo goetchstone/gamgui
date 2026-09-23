@@ -188,6 +188,51 @@ commands: each step's exact `gam` line in the page, and the previewed argv = wha
 actual per-user calendar sweep at domain scale, and `delete_user` itself. Per CLAUDE.md, these must
 be run against a **throwaway** account before being trusted.
 
+## First live run checklist
+Offboarding a real user is the live test (plan D8). Keep this page open.
+
+**In the preview, before Run**
+- The header names the right person and says "6 steps" (nothing ticked as already done).
+- Every warning is dealt with: a super-admin leaver's role revoked first (and another super admin
+  exists; GamGUI isn't connected as the leaver); a manager who is already a delegate → tick
+  "Set delegate".
+- Each `gam` line: the leaver everywhere, the manager in the delegate, transfer and reminder;
+  `drive,calendar` as one argument; the auto-reply text as senders should read it (sent as HTML, so
+  line breaks collapse); the reminder date and invitee.
+- Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
+  writes in the app waiting behind it. Don't close the app mid-run.
+
+**After the run** — the panel should say "6 of 6 steps succeeded"; GamGUI → Audit shows seven `ok`
+records (the reset's sign-out is its own). Then check in Google, not just in GamGUI:
+- Sign-in: the leaver's old password no longer works (the Admin console's admin audit log —
+  Reporting → Audit and investigation — lists the password change and the sign-out).
+- Mailbox: the manager's Gmail account switcher offers the leaver's mailbox (delegation can take a
+  while to appear); an email to the leaver from another account gets the auto-reply (or GamGUI →
+  the user → Vacation responder shows it on).
+- Transfer: the Builder's Data Transfers → Print (a read, `gam print datatransfers`, every transfer)
+  shows it `completed` after ~10–25 min; the manager's My Drive then has a folder of the leaver's files. Check whether files the
+  leaver had **shared** moved too (the privacy-level gotcha above) and whether their secondary
+  calendars are now the manager's. **Record what you find in the README's live-verification status.**
+- Calendar sweep: a colleague who had shared a calendar with the leaver no longer lists them
+  (Calendar → Settings → Share with specific people).
+- Reminder: the all-day event is on the manager's calendar on the date; the invitee got the invite.
+
+**If a step fails** — the panel names it, its `✗` line says why, and `–` lines were not run (the
+"When a step fails" table). Nothing is half-done except a sweep stopped by its timeout.
+1. Fix the cause. Auth/scope errors: re-run setup. Reset failed: check the leaver's account — nothing
+   else ran. Delegate failed: "already exists" means it's done (tick it); "does not exist" or a
+   suspended account: fix the manager or leaver. Transfer 409: a transfer is already running — wait
+   for `completed` (Data Transfers → Print), then tick it.
+2. Tick the steps whose lines are `✓` (and any step you've decided to skip — ticked means "don't run,
+   treat as done"), Preview again, check the header says "N of 6 steps", Run.
+3. **Don't delete the account** until the transfer shows `completed`.
+
+**Wrong person offboarded?** There is no undo routine. By hand: set a new password in the Admin
+console; remove the delegate and turn the auto-reply off on the user's detail page; delete the
+reminder event. Calendar shares removed by the sweep are gone — colleagues must re-share. A transfer
+can't be reversed by a second transfer (one from the manager back would move *all* the manager's
+files): move the leaver's folder back by hand.
+
 ## To do common tasks here
 - **Add/reorder an offboard step:** edit `build_offboard_steps` in `core/lifecycle.py` (add an
   `OffboardStep` whose lambda calls a connector method), add the connector method + its
