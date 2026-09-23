@@ -281,7 +281,7 @@ def test_apply_job_record_tracks_tallies_and_feed():
     job.record("b@x.com", False)
     job.record("c@x.com", True)
     assert (job.applied, job.failed_total, job.done) == (2, 1, 3)
-    assert job.failed == ["b@x.com"]
+    assert [f.email for f in job.failed] == ["b@x.com"]
     # the live feed carries each outcome in order, newest last
     assert [(r.email, r.ok) for r in job.recent] == [
         ("a@x.com", True), ("b@x.com", False), ("c@x.com", True),
@@ -293,11 +293,14 @@ def test_apply_job_record_stays_bounded_at_scale():
     # retained failed sample and the live feed are capped no matter how many users are processed.
     from gamgui.web.routes.signatures import ApplyJob, _RECENT_WINDOW, _FAILED_SAMPLE_CAP
 
+    from gamgui.web.routes.signatures import _DETAIL_CAP
+
     job = ApplyJob(id="x", total=5000)
-    for i in range(5000):
-        job.record(f"u{i}@x.com", ok=(i % 2 == 0))  # half succeed, half fail
+    for i in range(5000):   # half succeed, half fail — each failure with GAM echoing a huge body
+        job.record(f"u{i}@x.com", ok=(i % 2 == 0), reason="Not found.", detail="x" * 10_000)
     assert (job.done, job.applied, job.failed_total) == (5000, 2500, 2500)
     assert len(job.failed) == _FAILED_SAMPLE_CAP     # sample capped, full count kept in failed_total
+    assert all(len(r.detail) <= _DETAIL_CAP for r in job.failed + job.recent)   # and each reason
     assert len(job.recent) == _RECENT_WINDOW         # feed is a fixed-size rolling window
     assert job.recent[-1].email == "u4999@x.com"     # newest last
     assert job.recent[0].email == f"u{5000 - _RECENT_WINDOW}@x.com"
@@ -336,6 +339,36 @@ def test_signatures_apply_final_summary_caps_failed_list(client):
     assert r.status_code == 200
     assert "Failed (300)" in r.text  # full count, not the capped sample length
     assert "more" in r.text          # "+N more" overflow indicator for the truncated list
+
+
+def test_signatures_apply_failure_keeps_a_reason_per_user(client):
+    # The feed once listed failed emails only; each failure now says why in words, with GAM's own
+    # error one click away — in the live feed and the final summary.
+    from gamgui.core.gam.models import GAMUser
+    from gamgui.web.routes.signatures import ApplyJob, _run_apply
+
+    st = client.app.state.gamgui
+    job = ApplyJob(id="whytest", total=2)
+    st.jobs[job.id] = job
+    matched = [GAMUser("alice@example.com", "Alice"), GAMUser("gone-missing@example.com", "Gone")]
+    client.portal.call(_run_apply, job, st.connector, matched, "{name}")
+    not_found = "The requested user, group, or resource was not found."
+    assert (job.applied, job.failed_total) == (1, 1)
+    assert (job.failed[0].email, job.failed[0].reason) == ("gone-missing@example.com", not_found)
+    assert "Does not exist" in job.failed[0].detail
+    done = client.get("/signatures/apply/status", params={"job": job.id}).text
+    assert f'gone-missing@example.com</span> — {not_found}' in done
+    assert "<details" in done and "Does not exist" in done
+    job.finished = False                                  # the same job, as the live feed shows it
+    live = client.get("/signatures/apply/status", params={"job": job.id}).text
+    assert "✗" in live and f"— {not_found}" in live and "Does not exist" not in live
+
+
+def test_signature_set_failure_says_why_with_gams_error_expandable(client):
+    r = client.post("/users/signature", data={"email": "gone-missing@example.com", "signature": "Hi"})
+    headline, _, raw = r.text.partition("<details")
+    assert "Couldn&#39;t set the signature. The requested user, group, or resource was not found." in headline
+    assert "GAM failed" not in headline and "Does not exist" in raw
 
 
 def test_signatures_preview_user_scope(client):

@@ -12,7 +12,7 @@ from typing import List, Optional, Sequence
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, build_user_query
-from ..gam.errors import GAMErrorKind
+from ..gam.errors import GAMError, GAMErrorKind
 from ..gam.models import (
     CalendarACL,
     CalendarEvent,
@@ -37,6 +37,9 @@ from .base import (
     RiskLevel,
 )
 from .person import ConnectorAccount, Person
+
+# The remediation for a write that failed before GAM could say why (no binary, a Keychain error).
+_WRITE_FAILED = "Something went wrong talking to GAM. See details below."
 
 
 def _csv_from(out: str) -> str:
@@ -528,7 +531,8 @@ class GAMConnector(Connector):
                 return ChangeResult(preview=preview, ok=True,
                                     detail="Completed (best-effort — per-entity 'not shared' / "
                                            "own-calendar notices are expected and were skipped).")
-            return ChangeResult(preview=preview, ok=False, detail=error)
+            remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
+            return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation)
         self.audit.record(
             action, target=target, argv=shown, ok=True,
             extra={"group": target_extra} if target_extra else None,

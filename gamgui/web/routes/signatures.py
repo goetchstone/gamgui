@@ -47,10 +47,13 @@ class SigResult:
 
     email: str
     ok: bool
+    reason: str = ""   # a failure's remediation, in words (a short fixed text per GAMErrorKind)
+    detail: str = ""   # a failure's raw GAM error, cut to _DETAIL_CAP
 
 
 _RECENT_WINDOW = 12       # most-recent per-user results kept for the live feed (bounds the polled HTML)
-_FAILED_SAMPLE_CAP = 200  # cap the retained failed-email list so a mostly-failing run can't bloat the poll
+_FAILED_SAMPLE_CAP = 200  # cap the retained failed list so a mostly-failing run can't bloat the poll
+_DETAIL_CAP = 300         # chars of raw error kept per failure: GAM echoes the argv (the whole body) on a usage error
 
 
 @dataclass
@@ -62,26 +65,28 @@ class ApplyJob:
     applied: int = 0
     done: int = 0
     failed_total: int = 0
-    failed: List[str] = field(default_factory=list)         # capped sample of failed emails (see _FAILED_SAMPLE_CAP)
+    failed: List[SigResult] = field(default_factory=list)   # capped sample of failures, with why (see _FAILED_SAMPLE_CAP)
     recent: List[SigResult] = field(default_factory=list)   # rolling window, newest last; drives the live feed
     current: str = ""
     finished: bool = False
     error: Optional[str] = None
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
-    def record(self, email: str, ok: bool) -> None:
+    def record(self, email: str, ok: bool, reason: str = "", detail: str = "") -> None:
         """Log one user's outcome: tallies, the capped failed sample, and the rolling live feed.
 
-        Both the failed list and the feed are bounded so the polled status partial stays small even
-        on a domain-wide (thousands of users) apply — the feed shows only the most recent handful.
+        Both the failed list and the feed are bounded — in length and, per failure, in the raw error
+        kept — so the polled status partial stays small even on a domain-wide (thousands of users)
+        apply; the feed shows only the most recent handful.
         """
+        result = SigResult(email, ok, reason, detail[:_DETAIL_CAP])
         if ok:
             self.applied += 1
         else:
             self.failed_total += 1
             if len(self.failed) < _FAILED_SAMPLE_CAP:
-                self.failed.append(email)
-        self.recent.append(SigResult(email, ok))
+                self.failed.append(result)
+        self.recent.append(result)
         if len(self.recent) > _RECENT_WINDOW:
             del self.recent[0]
         self.done += 1
@@ -122,10 +127,9 @@ async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
             job.current = u.primary_email
             try:
                 result = await conn.set_signature(u.primary_email, sig.render_signature(template, u), html=True)
-                ok = bool(getattr(result, "ok", False))
-            except Exception:
-                ok = False
-            job.record(u.primary_email, ok)
+                job.record(u.primary_email, result.ok, result.remediation, result.detail)
+            except Exception as exc:  # noqa: BLE001 — _run_write reports GAM's failures; this is anything else
+                job.record(u.primary_email, False, _friendly(exc), str(exc))
     except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
         job.error = _friendly(exc)
     finally:

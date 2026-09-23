@@ -70,8 +70,9 @@ class ChangePreview:
 class ChangeResult:
     preview: ChangePreview
     ok: bool
-    detail: str = ""
+    detail: str = ""         # on a failure, GAM's raw error (redacted) — for a "details" disclosure
     output: str = ""         # the command's stdout on success (e.g. the Sheet URL a todrive export prints)
+    remediation: str = ""    # on a failure, what to do about it in words (GAMError.remediation) — show this first
 
 
 class Connector:

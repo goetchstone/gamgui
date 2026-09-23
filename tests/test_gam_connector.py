@@ -33,6 +33,20 @@ async def test_set_signature_succeeds_and_audits_redacted(connector):
     assert "Best,\nAlice" not in last["argv"]  # signature value redacted in the audit log
 
 
+async def test_a_failed_write_says_why_in_words_and_keeps_gams_error(connector, monkeypatch):
+    res = await connector.set_signature("gone-missing@example.com", "Hi", html=True)
+    assert res.ok is False
+    assert res.remediation == "The requested user, group, or resource was not found."
+    assert "Does not exist" in res.detail                 # GAM's own line, for a details disclosure
+
+    async def no_binary(*_a, **_k):
+        raise RuntimeError("GAM binary not found at /nowhere/gam")
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", no_binary)
+    res = await connector.set_signature("alice@example.com", "Hi", html=True)
+    assert res.remediation.startswith("Something went wrong talking to GAM") and "/nowhere/gam" in res.detail
+
+
 async def test_plan_suspend_is_destructive(connector):
     previews = connector.plan_suspend(["alice@example.com"])
     assert len(previews) == 1

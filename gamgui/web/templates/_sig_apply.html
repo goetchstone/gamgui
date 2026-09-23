@@ -1,10 +1,10 @@
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
-{% elif job and job.error %}
+{% elif job.error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
   {{ job.error }}<br>Applied to {{ job.applied }} of {{ job.total }} before stopping.
 </div>
-{% elif job and not job.finished %}
+{% elif not job.finished %}
 <div hx-get="/signatures/apply/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
      hx-target="this" hx-swap="outerHTML"
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
@@ -21,19 +21,26 @@
     {% for r in job.recent | reverse %}
     <li class="flex items-center gap-1.5">
       {% if r.ok %}<span class="text-emerald-600" aria-hidden="true">✓</span>{% else %}<span class="text-rose-600" aria-hidden="true">✗</span>{% endif %}
-      <span class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}">{{ r.email }}</span>
+      <span class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ r.email }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</span>
     </li>
     {% endfor %}
   </ul>
   {% endif %}
 </div>
 {% else %}
-{% set _applied = job.applied if job else applied %}
-{% set _total = job.total if job else total %}
-{% set _failed = job.failed if job else (failed or []) %}
-{% set _failed_total = job.failed_total if job else (failed | length if failed else 0) %}
-<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not _failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  Applied to {{ _applied }} of {{ _total }} user{{ "s" if _total != 1 }}.
-  {% if _failed_total %}<div class="mt-1 max-h-24 overflow-y-auto text-xs">Failed ({{ _failed_total }}): {{ _failed | join(", ") }}{% if _failed_total > (_failed | length) %} … +{{ _failed_total - (_failed | length) }} more{% endif %}</div>{% endif %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  Applied to {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.
+  {% if job.failed_total %}
+  <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
+  <ul class="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs">
+    {% for f in job.failed %}
+    <li><span class="font-mono">{{ f.email }}</span> — {{ f.reason or "Failed." }}
+      {% if f.detail %}<details class="ml-4"><summary class="cursor-pointer text-amber-900">GAM's error</summary>
+        <pre class="mt-1 whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-amber-900">{{ f.detail }}</pre></details>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if job.failed_total > (job.failed | length) %}<div class="mt-1 text-xs">… +{{ job.failed_total - (job.failed | length) }} more</div>{% endif %}
+  {% endif %}
 </div>
 {% endif %}

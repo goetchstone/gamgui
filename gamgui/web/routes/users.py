@@ -144,11 +144,15 @@ async def set_signature(
     if conn is None:
         return _err(request, _NOT_CONNECTED)
     result = await conn.set_signature(email, signature, html=(html == "on"))
-    note = smart_quote_warning(signature) if result.ok else ""
-    message = ("Signature updated." + (" " + note if note else "")) if result.ok else result.detail
+    if not result.ok:
+        return TEMPLATES.TemplateResponse(
+            request, "_action_result.html",
+            {"ok": False, "message": "Couldn't set the signature. " + result.remediation, "details": result.detail},
+        )
+    note = smart_quote_warning(signature)
     return TEMPLATES.TemplateResponse(
         request, "_action_result.html",
-        {"ok": result.ok, "message": message},
+        {"ok": True, "message": "Signature updated." + (" " + note if note else "")},
     )
 
 
