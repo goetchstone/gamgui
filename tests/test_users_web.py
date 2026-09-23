@@ -864,6 +864,11 @@ def test_calendars_detail_has_share_form_and_row_remove(client):
     assert r.text.count('hx-post="/calendars/unshare"') == 2
 
 
+# Offboarding checks both addresses against the directory: a plain active user leaves, and an active
+# user (alice, a super admin — only a leaver's admin role draws a warning) takes over.
+LEAVER, MGR = "carol@example.com", "alice@example.com"
+
+
 def test_lifecycle_page_renders(client):
     r = client.get("/lifecycle")
     assert r.status_code == 200
@@ -872,7 +877,7 @@ def test_lifecycle_page_renders(client):
 
 def test_lifecycle_offboard_preview_lists_steps(client):
     r = client.post("/lifecycle/offboard/preview",
-                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30"})
+                    data={"user": LEAVER, "manager": MGR, "subject": "s", "message": "m", "days": "30"})
     assert r.status_code == 200
     assert "6 steps" in r.text  # Drive + Calendar are one combined transfer step now (was two)
     assert "Reset password" in r.text and "Transfer Drive" in r.text and "Run offboarding" in r.text
@@ -884,17 +889,16 @@ def test_lifecycle_offboard_preview_shows_each_exact_command(client):
     import html
 
     r = client.post("/lifecycle/offboard/preview",
-                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "Away now",
-                          "message": "m", "days": "30"})
+                    data={"user": LEAVER, "manager": MGR, "subject": "Away now", "message": "m", "days": "30"})
     text = html.unescape(r.text)
     for line in [
-        "gam update user leaver@example.com password random changepassword off",
-        "gam user leaver@example.com signout",
-        "gam user leaver@example.com add delegate mgr@example.com",
-        "gam user leaver@example.com vacation on subject 'Away now' message m html",
-        "gam create datatransfer leaver@example.com drive,calendar mgr@example.com",
-        "gam all users delete calendaracls primary leaver@example.com",
-        "gam user mgr@example.com add event primary summary 'Offboarding leaver@example.com: confirm",
+        "gam update user carol@example.com password random changepassword off",
+        "gam user carol@example.com signout",
+        "gam user carol@example.com add delegate alice@example.com",
+        "gam user carol@example.com vacation on subject 'Away now' message m html",
+        "gam create datatransfer carol@example.com drive,calendar alice@example.com",
+        "gam all users delete calendaracls primary carol@example.com",
+        "gam user alice@example.com add event primary summary 'Offboarding carol@example.com: confirm",
     ]:
         assert line in text, line
     assert text.count("<pre") == 7
@@ -902,17 +906,61 @@ def test_lifecycle_offboard_preview_shows_each_exact_command(client):
 
 
 def test_lifecycle_offboard_preview_requires_both_emails(client):
-    r = client.post("/lifecycle/offboard/preview", data={"user": "leaver@example.com", "manager": "  "})
+    r = client.post("/lifecycle/offboard/preview", data={"user": LEAVER, "manager": "  "})
     assert "Enter both" in r.text
+
+
+@pytest.mark.parametrize("user, manager, expected", [
+    ("nobody@example.com", MGR, "nobody@example.com isn't in the directory"),
+    (LEAVER, "alcie@example.com", "alcie@example.com isn't in the directory"),     # the typo'd manager
+    ("a.anders@example.com", LEAVER, "a.anders@example.com is an alias of alice@example.com"),
+    (LEAVER, "Carol@Example.com", "are the same account"),
+])
+def test_offboard_blocks_an_address_the_directory_does_not_confirm(client, gam_calls, user, manager, expected):
+    # A typo'd manager meant a half-offboarded account: the password reset ran, then the delegate and
+    # the transfer went to nobody. The preview and the run both refuse before any write.
+    import html
+
+    form = {"user": user, "manager": manager, "subject": "s", "message": "m", "days": "30"}
+    for route, extra in (("/lifecycle/offboard/preview", {}), ("/lifecycle/offboard/run", {"confirmed": "1"})):
+        r = client.post(route, data={**form, **extra})
+        assert expected in html.unescape(r.text) and "Run offboarding" not in r.text, route
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
+
+
+def test_offboard_blocks_when_the_directory_cannot_be_read(client, gam_calls, monkeypatch):
+    async def unreadable(force=False):
+        raise RuntimeError("gam print users failed")
+
+    monkeypatch.setattr(client.app.state.gamgui, "users", unreadable)
+    r = client.post("/lifecycle/offboard/preview", data={"user": LEAVER, "manager": MGR})
+    assert "Couldn&#39;t read the directory" in r.text and "Run offboarding" not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_offboard_acts_on_the_directory_primary_address(client):
+    r = client.post("/lifecycle/offboard/preview", data={"user": " CAROL@example.com ", "manager": "Alice@Example.com"})
+    assert "gam update user carol@example.com password" in r.text
+    assert "add delegate alice@example.com" in r.text
+
+
+@pytest.mark.parametrize("user, manager, expected", [
+    ("alice@example.com", LEAVER, "alice@example.com is a super admin"),
+    (LEAVER, "bob@example.com", "The manager bob@example.com is suspended"),
+    ("bob@example.com", LEAVER, "bob@example.com is already suspended"),
+])
+def test_offboard_preview_warns_but_does_not_block(client, user, manager, expected):
+    r = client.post("/lifecycle/offboard/preview", data={"user": user, "manager": manager})
+    assert expected in r.text and "Run offboarding" in r.text
 
 
 def test_lifecycle_autoreply_substitutes_employee_and_manager(client):
     # The departing user's name (from the directory) + the manager fill the auto-reply.
     r = client.post("/lifecycle/offboard/preview", data={
-        "user": "alice@example.com", "manager": "mgr@example.com",
+        "user": "alice@example.com", "manager": "carol@example.com",
         "subject": "{employee} has left", "message": "Please contact {manager}.", "days": "30"})
     assert "Alice Anders has left" in r.text          # name resolved from the cached directory
-    assert "Please contact mgr@example.com." in r.text
+    assert "Please contact Carol Clark (carol@example.com)." in r.text
 
 
 def test_lifecycle_page_has_live_autoreply_preview(client):
@@ -957,7 +1005,7 @@ def test_lifecycle_autoreply_live_uses_placeholders_before_entry(client):
 
 def test_lifecycle_preview_shows_autoreply_block(client):
     r = client.post("/lifecycle/offboard/preview", data={
-        "user": "alice@example.com", "manager": "mgr@example.com", "days": "30"})
+        "user": "alice@example.com", "manager": "carol@example.com", "days": "30"})
     assert "Auto-reply senders will receive" in r.text          # prominent block in the step preview
     assert "Alice Anders is no longer with the company" in r.text
 
@@ -971,15 +1019,16 @@ def _offboard_writes(calls):
     return [c[:5] for c in gam_writes(calls)]
 
 
-OFFBOARD_WRITES = [
-    ["update", "user", "leaver@example.com", "password", "random"],
-    ["user", "leaver@example.com", "signout"],                       # reset_password's follow-up
-    ["user", "leaver@example.com", "add", "delegate", "mgr@example.com"],
-    ["user", "leaver@example.com", "vacation", "on", "subject"],
-    ["create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com"],
-    ["all", "users", "delete", "calendaracls", "primary"],
-    ["user", "mgr@example.com", "add", "event", "primary"],
-]
+def offboard_writes(user="leaver@example.com", mgr="mgr@example.com"):
+    return [
+        ["update", "user", user, "password", "random"],
+        ["user", user, "signout"],                       # reset_password's follow-up
+        ["user", user, "add", "delegate", mgr],
+        ["user", user, "vacation", "on", "subject"],
+        ["create", "datatransfer", user, "drive,calendar", mgr],
+        ["all", "users", "delete", "calendaracls", "primary"],
+        ["user", mgr, "add", "event", "primary"],
+    ]
 
 
 def test_lifecycle_offboard_run_starts(client, gam_calls):
@@ -987,13 +1036,13 @@ def test_lifecycle_offboard_run_starts(client, gam_calls):
     # own loop (not by polling the status endpoint — that hung CI for 6h before the fixtures were
     # context-managed), then the finished panel is rendered once.
     r = client.post("/lifecycle/offboard/run",
-                    data={"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s", "message": "m", "days": "30",
+                    data={"user": LEAVER, "manager": MGR, "subject": "s", "message": "m", "days": "30",
                           "confirmed": "1"})
     assert_ok_partial(r)
     job = _job(client, r.text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
     assert (job.applied, job.failed) == (6, [])
-    assert _offboard_writes(gam_calls()) == OFFBOARD_WRITES
+    assert _offboard_writes(gam_calls()) == offboard_writes(LEAVER, MGR)
     assert [(a, ok) for a, _, ok in _audited(client, 7)] == [(a, True) for a in OFFBOARD_AUDIT]
     done = client.get("/lifecycle/offboard/status", params={"job": job.id})
     assert_ok_partial(done)
@@ -1016,7 +1065,7 @@ async def test_offboard_executor_runs_every_step(connector, gam_calls):
     assert job.finished and job.done == len(steps)
     assert (job.applied, job.failed) == (len(steps), [])
     assert all(line.startswith("✓ ") for line in job.log), job.log
-    assert _offboard_writes(gam_calls()) == OFFBOARD_WRITES
+    assert _offboard_writes(gam_calls()) == offboard_writes()
     audit = connector.audit.tail()
     assert [e["action"] for e in audit] == OFFBOARD_AUDIT and all(e["ok"] for e in audit)
 

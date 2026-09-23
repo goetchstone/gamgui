@@ -11,10 +11,11 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Awaitable, Callable, List, Sequence
+from typing import Awaitable, Callable, List, Optional, Sequence
 
 from .audit import redact_argv
 from .gam.commands import GAMCommands
+from .gam.models import GAMUser
 from .gam.runner import DOMAIN_WIDE_TIMEOUT
 
 DEFAULT_SUBJECT = "{employee} is no longer with the company"
@@ -54,6 +55,58 @@ def fill_autoreply(text: str, employee: str, manager: str) -> str:
             .replace("{employee}", employee)
             .replace("{manager}", manager)
             .replace("{contact}", manager))
+
+
+@dataclass
+class AddressCheck:
+    """The directory's verdict on an offboarding's two addresses: errors block it, warnings are shown."""
+    user: Optional[GAMUser] = None
+    manager: Optional[GAMUser] = None
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+
+
+def check_addresses(directory: Sequence[GAMUser], user: str, manager: str) -> AddressCheck:
+    """Find the departing user and the manager in the directory, by primary address.
+
+    Unknown is an error: a typo'd manager would have the mailbox, Drive and reminder handed to nobody
+    after the password was already reset. So is an alias (the calendar sweep matches ACLs by primary
+    address) and the same person twice (GAM refuses a transfer to oneself)."""
+    by_email = {u.primary_email.lower(): u for u in directory}
+    by_alias = {a.lower(): u for u in directory for a in u.aliases}
+    check = AddressCheck()
+
+    def find(addr: str, role: str) -> Optional[GAMUser]:
+        found = by_email.get(addr.lower())
+        if found is None:
+            owner = by_alias.get(addr.lower())
+            check.errors.append(
+                f"{addr} is an alias of {owner.primary_email} — enter the primary address as the {role}."
+                if owner else
+                f"{addr} isn't in the directory — check the {role}'s address (an account created in the "
+                f"last few minutes shows after Users → Refresh).")
+        return found
+
+    check.user, check.manager = find(user, "departing user"), find(manager, "manager")
+    leaver, mgr = check.user, check.manager
+    if leaver and mgr and leaver.primary_email.lower() == mgr.primary_email.lower():
+        check.errors.append("The departing user and the manager are the same account — enter the manager "
+                            "who takes over the mailbox and files.")
+        return check
+    if leaver and leaver.is_admin:
+        check.warnings.append(
+            f"{leaver.primary_email} is a super admin. Offboarding doesn't remove the role — revoke it in the "
+            f"Admin console, and if GamGUI is connected as this account, the password reset may sign it out.")
+    elif leaver and leaver.is_delegated_admin:
+        check.warnings.append(f"{leaver.primary_email} holds a delegated admin role — offboarding doesn't "
+                              f"remove it; revoke it in the Admin console.")
+    if leaver and leaver.suspended:
+        check.warnings.append(f"{leaver.primary_email} is already suspended — the mailbox steps (delegate, "
+                              f"auto-reply) may fail for a suspended account.")
+    if mgr and mgr.suspended:
+        check.warnings.append(f"The manager {mgr.primary_email} is suspended — the delegate, the Drive & "
+                              f"Calendar transfer and the reminder all go to this account and will likely fail.")
+    return check
 
 
 @dataclass

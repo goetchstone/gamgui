@@ -14,8 +14,9 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 ## Files
 - `gamgui/core/lifecycle.py` — pure step builder. `build_offboard_steps(...)`, `fill_autoreply`,
   `OffboardStep` dataclass (its `commands` = the exact argv(s) it runs), `command_line` (argv → the
-  quoted, redacted `gam …` line the preview shows), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No
-  scheduler, no persisted state.
+  quoted, redacted `gam …` line the preview shows), `check_addresses` (both addresses against the
+  directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No scheduler,
+  no persisted state.
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
   Executes the steps as a progress-tracked `BatchJob` (`_run_offboard`); name-resolution helpers.
 - `gamgui/web/routes/users.py` (lines ~425-455) — the **delete** flow: `delete_zone`,
@@ -28,6 +29,15 @@ combined transfer service list is one argv element (CLAUDE.md #1).
   `remove_all_calendar_acls`, `print_datatransfers`, `delete_user`, `reset_password`, …).
 
 ## How it works
+**Both addresses are checked first**, by the preview and again by the run (`_check` →
+`lifecycle.check_addresses`, against the cached `gam print users`, ≤5 min old). Blocked, before any
+write: an address not in the directory, an alias (the message names the primary), the same account
+twice, and a directory that can't be read (fails closed). Warned in the preview, not blocked: a
+super-admin or delegated-admin leaver (offboarding doesn't remove the role), an already-suspended
+leaver (mailbox steps may fail) and a suspended manager (delegate/transfer/reminder go there). The
+steps then act on the directory's primary addresses, whatever case was typed. A typo'd manager used
+to be accepted and half-offboard the account (failure-log 2026-09-23).
+
 `build_offboard_steps` returns 6 ordered `OffboardStep`s (`password`, `delegate`, `vacation`,
 `transfer`, `calacls`, `reminder`), each a `lambda conn: conn.<method>(...)` plus `commands`, the
 argv(s) that method runs, built from the same `GAMCommands` builders and values. It is pure and
@@ -105,6 +115,9 @@ parser was read statically (its bytecode, never run). No mismatch found.
   handler that fails a malformed argv. It does **not** model real DTS async timing, partial
   multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test proves
   classification/argv, not that a live tenant transfers cleanly.
+- **Route tests offboard fixture users** (`carol@` leaves, `alice@` takes over): the directory check
+  refuses anyone else. The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
+  they can use any address — including the mock's trigger substrings above.
 - **The transfer names no Drive privacy level.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
   `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser) —
   without one, the Data Transfer API's own default decides whether files the leaver *shared* move to
@@ -121,7 +134,8 @@ gam + in-memory Keychain). Covered: step order/keys, the single combined-service
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL and not-found) vs. real
 auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
-auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, and the preview's
+auto-reply substitution, reminder invitee, `incomplete_transfers_for` filtering, the directory check
+(unknown/alias/same-account blocked on preview and run, admin/suspended warnings), and the preview's
 commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the

@@ -97,7 +97,7 @@ GATED = {
                                     "/calendars/event/preview"),
     "/calendars/delete": Case({"cal": SEC_CAL, "label": "Team Calendar"}, "/calendars/delete/preview",
                               typed={"confirm": "DELETE"}),
-    "/lifecycle/offboard/run": Case({"user": "leaver@example.com", "manager": "mgr@example.com", "subject": "s",
+    "/lifecycle/offboard/run": Case({"user": "carol@example.com", "manager": "alice@example.com", "subject": "s",
                                      "message": "m", "days": "30", "notify": ""}, "/lifecycle/offboard/preview"),
     "/signatures/apply": Case({"template": "{name}", "scope_type": "company", "scope_value": ""}, "/signatures/preview"),
     "/onboard/run": Case({"role": "Sales", "name": "Ada Byte", "email": "ada@example.com",

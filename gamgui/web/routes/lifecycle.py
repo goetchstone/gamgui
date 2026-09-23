@@ -42,6 +42,16 @@ def _days(value: str) -> int:
         return 30
 
 
+async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
+    """Both addresses against the cached directory — before the preview and again before the run.
+    Fails closed: a directory that can't be read blocks the routine rather than skipping the check."""
+    try:
+        directory = await st.users()
+    except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why
+        return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {_friendly(exc)}"])
+    return lifecycle.check_addresses(directory, user, manager)
+
+
 async def _resolve_name(st, email: str) -> str:
     """A user's directory display name, falling back to the email if not found."""
     try:
@@ -105,6 +115,10 @@ async def offboard_preview(
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return _err(request, "Enter both the departing user and the manager email.")
+    check = await _check(st, user, manager)
+    if check.errors:
+        return _err(request, " ".join(check.errors))
+    user, manager = check.user.primary_email, check.manager.primary_email
     days_i = _days(days)
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, days_i, date.today(),
@@ -113,7 +127,7 @@ async def offboard_preview(
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
-        {"steps": steps, "user": user, "manager": manager, "days": days_i,
+        {"steps": steps, "user": user, "manager": manager, "days": days_i, "warnings": check.warnings,
          "ar_subject": ar_subject, "ar_message": ar_message},
     )
 
@@ -172,6 +186,10 @@ async def offboard_run(
     refusal = guard.enforce(guard.changes([user], RiskLevel.DESTRUCTIVE, "Offboard"), await request.form())
     if refusal:
         return _err(request, refusal)
+    check = await _check(st, user, manager)
+    if check.errors:
+        return _err(request, " ".join(check.errors))
+    user, manager = check.user.primary_email, check.manager.primary_email
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, _days(days), date.today(),
         notify=notify.strip(), employee_name=await _employee_name(st, user),
