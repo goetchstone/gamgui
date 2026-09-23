@@ -37,6 +37,7 @@ router = APIRouter(prefix="/onboard")
 _RECENT_WINDOW = 12
 _FAILED_SAMPLE_CAP = 200
 _CREDS_TTL = 15 * 60   # keep the bulk credentials sheet re-fetchable for 15 min, or until Done
+_MAX_CSV_BYTES = 1024 * 1024   # a hire list is kilobytes; refuse a huge upload before decoding it
 
 
 def _st(request: Request):
@@ -441,9 +442,13 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
     if _st(request).connector is None:
         return _err(request, "Not connected.")
     try:
-        text = (await csv_file.read()).decode("utf-8-sig", errors="replace")
+        data = await csv_file.read(_MAX_CSV_BYTES + 1)
     except Exception as exc:  # noqa: BLE001
         return _err(request, "Couldn't read the file: " + str(exc))
+    if len(data) > _MAX_CSV_BYTES:
+        return _err(request, "That file is over 1 MB — a hire list should be far smaller. Split it into "
+                             "several CSVs, or check you picked the right file.")
+    text = data.decode("utf-8-sig", errors="replace")
     rows, parse_errors = onboarding.parse_hire_csv(text)
     if not rows and not parse_errors:
         return _err(request, "No hires found in the CSV.")

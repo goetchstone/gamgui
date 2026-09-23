@@ -689,6 +689,24 @@ def test_parse_hire_csv_rejects_invalid_email_targets():
     assert sum("not a valid email" in e for e in errors) == 2
 
 
+def test_parse_hire_csv_refuses_an_unreadable_file_instead_of_raising():
+    # B1: a cell over csv's 131,072-char field limit raised csv.Error out of the row loop (a 500).
+    text = "role,email,name\nSales,a@x.com,ok\nSales,b@x.com," + "x" * 140000 + "\n"
+    rows, errors = onboarding.parse_hire_csv(text)
+    assert rows == [] and len(errors) == 1                      # refused whole, never half-imported
+    assert errors[0].startswith("Row 3: couldn't read the CSV") and "Nothing was imported" in errors[0]
+
+
+def test_bulk_preview_unreadable_or_oversized_csv_is_a_friendly_error(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    long_cell = "role,email,name\nSales,a@x.com," + "x" * 140000 + "\n"
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", long_cell, "text/csv")})
+    assert r.status_code == 200 and "couldn&#39;t read the CSV" in r.text and "Run onboarding" not in r.text
+    big = "role,email\n" + "Sales,a@x.com\n" * 80000                # ~1.1 MB of otherwise-valid rows
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", big, "text/csv")})
+    assert r.status_code == 200 and "over 1 MB" in r.text and "Run onboarding" not in r.text
+
+
 def test_run_rejects_invalid_email(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "groups": "sales@example.com"})
     r = client.post("/onboard/run", data={"role": "Sales", "name": "X", "email": "oauthuser",

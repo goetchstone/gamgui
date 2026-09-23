@@ -145,11 +145,16 @@ def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
     A row needs a ``role`` and at least an ``email`` or ``assignee`` to be actionable; fully-blank lines
     are skipped. This is pure/structural — whether the role actually exists is checked by the caller
     (it owns the template store). ``create_account``/``send_welcome`` parse as booleans."""
+    reader = csv.DictReader(io.StringIO(text))
     try:
-        reader = csv.DictReader(io.StringIO(text))
         fieldnames = reader.fieldnames
-    except Exception as exc:  # noqa: BLE001 — malformed CSV
-        return [], ["Couldn't read the CSV: {}".format(exc)]
+        # Read every record up front, inside the try: csv.Error (e.g. a cell over the module's 131,072-char
+        # field limit) escaped the old loop and 500'd the preview. The reader can't resume past it, so the
+        # whole file is refused rather than half-imported. line_num still points at the previous line then.
+        records = [(reader.line_num, raw) for raw in reader]
+    except csv.Error as exc:
+        return [], ["Row {}: couldn't read the CSV ({}). Nothing was imported — fix the file and upload "
+                    "it again.".format(reader.line_num + 1, exc)]
     if not fieldnames:
         return [], ["The CSV has no header row."]
     fieldmap = {(fn or "").strip().lower(): fn for fn in fieldnames}
@@ -162,8 +167,7 @@ def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
     rows: List[Dict] = []
     errors: List[str] = []
     seen: Dict[str, int] = {}   # email (lowercased) -> first row that used it
-    for raw in reader:
-        i = reader.line_num  # the row's real line number in the file (DictReader silently skips blanks)
+    for i, raw in records:  # i = the row's real line number in the file (DictReader silently skips blanks)
         role, name = cell(raw, "role"), cell(raw, "name")
         email, assignee = cell(raw, "email"), cell(raw, "assignee")
         if not any([role, name, email, assignee]):
