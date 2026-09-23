@@ -25,6 +25,7 @@ from ...core.gam.errors import GAMError
 from ...core.gam.parser import parse_records
 from ..csvutil import csv_safe
 from ..jobs import start_job
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/builder")
@@ -101,12 +102,34 @@ async def _pending_transfers(conn, decision) -> list:
     return pending
 
 
+# A mutation runs exactly what its preview showed: the preview holds the argv under a single-use token
+# (web/previews.py) that its Run button posts back, and Run refuses a form that no longer matches —
+# another command loaded, a slot retyped. Run once rebuilt the command from the live form, so a stale
+# Run panel ran a command nobody had previewed (failure-log 2026-09-23). The sequence is held the
+# same way, keyed by its steps. Reads are exempt: they change nothing, and run from the live form.
+_FLOW = "builder"
+_SEQ_FLOW = "builder_sequence"
+_AGAIN = "here is a new preview; check it and run again"
+
+
+def _form_key(cmd, slots: dict) -> tuple:
+    return (cmd.id, tuple(sorted(slots.items())))
+
+
+def _seq_key(seq) -> tuple:
+    return tuple((s["cid"], s["target"], tuple(s["argv"]), s["risk"]) for s in seq)
+
+
 async def _preview_page(request: Request, cmd, argv, target, slots, error: str = "") -> HTMLResponse:
-    """The single-command preview: the exact `gam …`, the guard's decision, and its confirm step."""
+    """The single-command preview: the exact `gam …`, the guard's decision, and its confirm step —
+    for a mutation, holding what it shows under the token its Run button posts."""
+    st = _st(request)
     decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
+    token = "" if cmd.risk == RiskLevel.READ_ONLY else st.previews.hold(_FLOW, _form_key(cmd, slots),
+                                                                         (list(argv), target))
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
         "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
-        "pending_transfers": await _pending_transfers(_st(request).connector, decision), "error": error,
+        "pending_transfers": await _pending_transfers(st.connector, decision), "error": error, "token": token,
     })
 
 
@@ -283,7 +306,6 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     slots, argv, target, error = await _assemble(request, cmd)
     if error:
         return _err(request, error)
-    preview = _preview_of(cmd, argv, target)
     if cmd.risk == RiskLevel.READ_ONLY:
         form = await request.form()
         if form.get("td_export"):  # a new Google Sheet instead of the in-app table — a write, audited
@@ -299,10 +321,17 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
         except Exception as exc:  # noqa: BLE001
             return _err(request, _friendly(exc), _details(exc))
         return _render_read(request, out, _gam_str(argv))
-    # A mutation that needs confirmation must come back through the preview (the "Confirm & run"
-    # button sends confirmed=1, and an account delete its typed address) — a bare POST never silently
-    # runs a destructive command.
-    refusal = guard_mod.enforce([preview], await request.form())
+    # A mutation runs only from its preview: the held command, when the live form still matches it.
+    # Otherwise the answer is a fresh preview of what the form holds now, to check before running.
+    form = await request.form()
+    token = str(form.get(TOKEN_FIELD) or "")
+    held, refusal = st.previews.take(_FLOW, token, _form_key(cmd, slots), again=_AGAIN)
+    if refusal:
+        return await _preview_page(request, cmd, argv, target, slots,
+                                   error=refusal if token else "Check what this will run, then run it.")
+    preview = _preview_of(cmd, *held)
+    # The preview's Run button sends confirmed=1 (and an account delete its typed address).
+    refusal = guard_mod.enforce([preview], form, confirm_step=True)
     if refusal:
         return await _preview_page(request, cmd, argv, target, slots, error=refusal)
     result = (await conn.apply([preview]))[0]
@@ -358,15 +387,22 @@ def _seq_previews(seq) -> list:
                           summary=s["label"], risk=RiskLevel(s["risk"]), argv=s["argv"]) for s in seq]
 
 
+async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLResponse:
+    """The sequence's confirm step, holding the steps it shows under the token its Run form posts."""
+    st = _st(request)
+    decision = guard_mod.evaluate(_seq_previews(seq))
+    token = st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq])
+    return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
+        "sequence": seq, "decision": decision, "error": error, "token": token,
+        "pending_transfers": await _pending_transfers(st.connector, decision)})
+
+
 @router.post("/sequence/preview", response_class=HTMLResponse)
 async def seq_preview(request: Request) -> HTMLResponse:
     st = _st(request)
     if not st.builder_sequence:
         return _err(request, "The sequence is empty.")
-    decision = guard_mod.evaluate(_seq_previews(st.builder_sequence))
-    return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
-        "sequence": st.builder_sequence, "decision": decision,
-        "pending_transfers": await _pending_transfers(st.connector, decision)})
+    return await _seq_preview_page(request, list(st.builder_sequence))
 
 
 async def _run_sequence(job, conn, previews) -> None:
@@ -399,13 +435,19 @@ async def seq_run(request: Request) -> HTMLResponse:
     seq = list(st.builder_sequence)
     if not seq:
         return _err(request, "The sequence is empty.")
-    previews = _seq_previews(seq)
-    # Enforce the full guard server-side (mirrors /run): a bulk-destructive sequence needs typed
-    # "confirm"; any other confirmation-requiring sequence needs the Confirm & run click.
-    refusal = guard_mod.enforce(previews, await request.form())
+    # Only the steps the preview showed: a step added, removed or moved since is refused.
+    form = await request.form()
+    token = str(form.get(TOKEN_FIELD) or "")
+    held, refusal = st.previews.take(_SEQ_FLOW, token, _seq_key(seq), again=_AGAIN, what="sequence")
     if refusal:
-        return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
-            "sequence": seq, "decision": guard_mod.evaluate(previews), "error": refusal})
+        return await _seq_preview_page(request, seq, error=refusal if token else "Check what this will run, then run it.")
+    previews = _seq_previews(held)
+    # Enforce the full guard server-side (mirrors /run): a bulk-destructive sequence needs typed
+    # "confirm"; any other confirmation-requiring sequence needs the Confirm & run click; an account
+    # delete, its address typed.
+    refusal = guard_mod.enforce(previews, form)
+    if refusal:
+        return await _seq_preview_page(request, seq, error=refusal)
     job = start_job(st.jobs, len(previews))
     job.task = asyncio.create_task(_run_sequence(job, conn, previews))
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": job})

@@ -442,18 +442,68 @@ def test_destructive_command_requires_confirm(client):
     assert "DESTRUCTIVE" in r.text and "Confirm" in r.text   # red confirm button (& is HTML-escaped)
 
 
+def _builder_preview(client, **form):
+    """Preview a Builder command; return the page and its Run button's single-use token ("" if none)."""
+    r = client.post("/builder/preview", data=form)
+    m = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', r.text)
+    return r.text, (m.group(1) if m else "")
+
+
+def _builder_run(client, token, **form):
+    """Post Run as the preview's button does: the live form (hx-include) + confirmed + the token."""
+    return client.post("/builder/run", data={**form, "confirmed": "1", "preview": token})
+
+
+@pytest.mark.parametrize("previewed, ran, shown", [
+    # Preview an undelete, load "Delete account", type another address, click the stale blue Run:
+    # the account was deleted with no preview and no confirm dialog.
+    ({"cid": "build.undelete_user", "email": "carol@example.com"},
+     {"cid": "build.delete_user", "email": "alice@example.com", "confirm_email": "alice@example.com"},
+     "gam delete user alice@example.com"),
+    # Preview a suspend for carol, retype the address, click Confirm & run: alice was suspended.
+    ({"cid": "build.suspend_user", "email": "carol@example.com"},
+     {"cid": "build.suspend_user", "email": "alice@example.com"},
+     "gam update user alice@example.com suspended on"),
+])
+def test_builder_run_executes_only_the_previewed_command(client, gam_calls, previewed, ran, shown):
+    _, token = _builder_preview(client, **previewed)
+    r = _builder_run(client, token, **ran)
+    assert "The form changed after the preview" in r.text and "done" not in r.text
+    assert "Will run" in r.text and shown in r.text          # the new command's own preview, to check first
+    assert gam_writes(gam_calls()) == []
+
+
+def test_builder_run_is_single_use(client, gam_calls):
+    form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
+    _, token = _builder_preview(client, **form)
+    assert "done" in _builder_run(client, token, **form).text
+    r = _builder_run(client, token, **form)                          # a replayed click
+    assert "expired or was already run" in r.text and "done" not in r.text
+    assert len(gam_writes(gam_calls())) == 1
+
+
+def test_builder_mutation_runs_only_from_its_preview(client, gam_calls):
+    # Even a single-target LOW write: a POST that didn't come from a preview shows the preview instead.
+    r = client.post("/builder/run", data={"cid": "build.set_signature", "email": "alice@example.com",
+                                          "signature": "Hi", "confirmed": "1"})
+    assert "Will run" in r.text and "done" not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
 def test_builder_delete_needs_the_email_typed(client, gam_calls):
     # The Builder's "Delete account" (a row action on every result table) once ran on the Confirm
     # click alone, while the Users delete zone demanded the exact email typed. guard.enforce owns
     # that rule now: the preview asks for the address, and the run refuses without it.
     form = {"cid": "build.delete_user", "email": "alice@example.com"}
-    shown = client.post("/builder/preview", data=form).text
+    shown, _ = _builder_preview(client, **form)
     assert 'name="confirm_email"' in shown and "#builder-confirm-email" in shown
     for typed in ({}, {"confirm_email": "carol@example.com"}):
-        r = client.post("/builder/run", data={**form, "confirmed": "1", **typed})
-        assert "Will run" in r.text and "done" not in r.text
+        _, token = _builder_preview(client, **form)
+        r = _builder_run(client, token, **form, **typed)
+        assert "Type the exact email" in r.text and "Will run" in r.text and "done" not in r.text
     assert gam_writes(gam_calls()) == []
-    ok = client.post("/builder/run", data={**form, "confirmed": "1", "confirm_email": "alice@example.com"})
+    _, token = _builder_preview(client, **form)
+    ok = _builder_run(client, token, **form, confirm_email="alice@example.com")
     assert "Delete account" in ok.text and "done" in ok.text
     assert gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
 
@@ -468,8 +518,9 @@ def test_builder_delete_warns_on_a_pending_data_transfer(client):
 
 
 def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
-    r = client.post("/builder/run", data={"cid": "build.set_signature",
-                                          "email": "alice@example.com", "signature": "Hi"})
+    form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
+    _, token = _builder_preview(client, **form)
+    r = _builder_run(client, token, **form)
     assert_ok_partial(r)
     assert "Set Gmail signature — done" in r.text
     argv = ["user", "alice@example.com", "signature", "Hi", "html"]
@@ -535,7 +586,8 @@ def test_sequence_add_remove_and_run(client, gam_calls):
     r = client.post("/builder/sequence/add", data={"cid": "build.add_delegate",
                                                    "email": "alice@example.com", "delegate": "bob@example.com"})
     assert "Set Gmail signature" in r.text and "Add mailbox delegate" in r.text
-    run = client.post("/builder/sequence/run")
+    _, token = _seq_preview(client)
+    run = client.post("/builder/sequence/run", data={"preview": token})
     m = re.search(r"/builder/sequence/status\?job=([A-Za-z0-9_\-]+)", run.text)
     assert m, run.text[:200]
     # Await the job on the client's own loop (never poll the status endpoint), then check each step
@@ -571,28 +623,64 @@ async def test_run_sequence_executor_applies_each(connector):
 def test_destructive_single_step_sequence_needs_confirm(client):
     # A lone destructive step must still be confirmed — running it via a 1-step sequence is no bypass.
     client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "victim@example.com"})
-    bare = client.post("/builder/sequence/run")
-    assert "status?job=" not in bare.text and "Confirm" in bare.text   # confirm interstitial, not run
-    ok = client.post("/builder/sequence/run", data={"confirmed": "1"})
+    _, token = _seq_preview(client)
+    unconfirmed = client.post("/builder/sequence/run", data={"preview": token})
+    assert "status?job=" not in unconfirmed.text and "Confirm" in unconfirmed.text   # the interstitial again
+    _, token = _seq_preview(client)
+    ok = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
     assert "status?job=" in ok.text                                    # now it starts the job
+
+
+def _seq_preview(client):
+    """Preview the sequence; return the page and the single-use token its Run form carries ("" if none)."""
+    r = client.post("/builder/sequence/preview")
+    m = re.search(r'name="preview" value="([A-Za-z0-9_\-]+)"', r.text)
+    return r.text, (m.group(1) if m else "")
+
+
+def test_sequence_run_executes_only_the_previewed_sequence(client, gam_calls):
+    # The sequence lives on the server, so the stale case is a step added (or removed or moved) after
+    # Preview: Run once ran whatever the sequence held at click time.
+    client.post("/builder/sequence/add", data={"cid": "build.set_signature", "email": "alice@example.com",
+                                               "signature": "Hi"})
+    _, token = _seq_preview(client)
+    client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "carol@example.com"})
+    r = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
+    assert "The sequence changed after the preview" in r.text and "status?job=" not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_sequence_run_is_single_use(client, gam_calls):
+    client.post("/builder/sequence/add", data={"cid": "build.set_signature", "email": "alice@example.com",
+                                               "signature": "Hi"})
+    _, token = _seq_preview(client)
+    run = client.post("/builder/sequence/run", data={"preview": token})
+    job = client.app.state.gamgui.jobs[re.search(r"status\?job=([A-Za-z0-9_\-]+)", run.text).group(1)]
+    wait_for_job(client, job)
+    again = client.post("/builder/sequence/run", data={"preview": token})     # a replayed click
+    assert "expired or was already run" in again.text and "status?job=" not in again.text
+    assert len(gam_writes(gam_calls())) == 1
 
 
 def test_a_sequence_that_deletes_an_account_needs_the_email_typed(client, gam_calls):
     client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "victim@example.com"})
-    shown = client.post("/builder/sequence/preview").text
+    shown, token = _seq_preview(client)
     assert 'name="confirm_email"' in shown and "victim@example.com" in shown
-    r = client.post("/builder/sequence/run", data={"confirmed": "1"})
+    r = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
     assert "status?job=" not in r.text and "exact email" in r.text
     assert gam_writes(gam_calls()) == []
-    ok = client.post("/builder/sequence/run", data={"confirmed": "1", "confirm_email": "victim@example.com"})
+    _, token = _seq_preview(client)
+    ok = client.post("/builder/sequence/run", data={"confirmed": "1", "confirm_email": "victim@example.com",
+                                                    "preview": token})
     assert "status?job=" in ok.text
 
 
 def test_destructive_bulk_sequence_needs_typed_confirm(client):
     for _ in range(10):  # ten destructive deletes => bulk + destructive => typed confirm
         client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "victim@example.com"})
-    prev = client.post("/builder/sequence/preview")
-    assert 'name="confirm"' in prev.text          # typed confirmation required
-    assert prev.text.count('name="confirm_email"') == 1          # and the one deleted address, once
-    blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "confirm_email": "victim@example.com"})
+    prev, token = _seq_preview(client)
+    assert 'name="confirm"' in prev               # typed confirmation required
+    assert prev.count('name="confirm_email"') == 1               # and the one deleted address, once
+    blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "confirm_email": "victim@example.com",
+                                                         "preview": token})
     assert "Type confirm" in blocked.text and "status?job=" not in blocked.text

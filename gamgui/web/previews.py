@@ -48,15 +48,16 @@ class Previews:
         held[token] = _Held(form, value)
         return token
 
-    def take(self, flow: str, token: str, form: Hashable,
-             again: str = "preview again") -> Tuple[Optional[Any], Optional[str]]:
+    def take(self, flow: str, token: str, form: Hashable, again: str = "preview again",
+             what: str = "form") -> Tuple[Optional[Any], Optional[str]]:
         """``(value, None)`` when ``token`` holds a live preview of this very ``form``, else
-        ``(None, why not)``. Either way the token is spent: a second run needs a new preview."""
+        ``(None, why not)``: ``again`` says what to click, ``what`` names the thing that changed.
+        Either way the token is spent: a second run needs a new preview."""
         held = self._flows.get(flow, {}).pop(token, None) if token else None
         if held is None or time.monotonic() - held.at > PREVIEW_TTL:
             return None, f"That preview has expired or was already run — {again}."
         if held.form != form:
-            return None, f"The form changed after the preview — {again}, so what runs is what you checked."
+            return None, f"The {what} changed after the preview — {again}, so what runs is what you checked."
         return held.value, None
 
     def count(self, flow: str) -> int:
