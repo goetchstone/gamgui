@@ -70,8 +70,9 @@ rebuilt them from the live form, failure-log 2026-09-23). An emptied subject/mes
 text, as the auto-reply block shows. `_run_offboard` runs each step in order and appends a `✓/✗`
 line to `job.log`; **a step whose `requires` did not all succeed is not run** (a `–` line, listed in
 `job.skipped`, and the panel says "Offboarding stopped"). The green "Offboarding complete" panel
-means every step succeeded; any `✗` makes it "incomplete" (amber, with the recovery steps). The "timer" is the last step: a calendar
-reminder event on the manager's calendar `days` out — there is no app-side scheduler. The final
+means every step succeeded; any `✗` makes it "incomplete" (amber, with the recovery steps). The
+"timer" is the last step: a calendar reminder event on the manager's calendar `days` out — there is
+no app-side scheduler. The final
 account **delete** is a distinct guarded action on the user detail page (`delete_user`,
 `RiskLevel.DESTRUCTIVE`).
 
@@ -101,7 +102,7 @@ step (failure-log).
 The form has one "already done" box per step (`lifecycle.STEP_NAMES`, posted as `done`). A ticked
 step is not run and **counts as succeeded** for the steps that require it; the preview shows it
 struck through, without a command, and the ticks are part of the frozen form (tick one after Preview
-and Run refuses). All six ticked is refused ("nothing to run"). **Tick exactly the `✓` lines of the
+and Run refuses). All eight ticked is refused ("nothing to run"). **Tick exactly the `✓` lines of the
 failed run** — ticking a step that did not succeed tells the routine it did (tick the transfer and
 the reminder runs without one). What each step does if run again after it succeeded (GAM 7.48.11):
 
@@ -126,7 +127,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
 | Step | argv we emit | Grammar | Verdict |
 |---|---|---|---|
 | Reset password | `update user <leaver> password random changepassword off` | `gam update user <UserItem> [ignorenullpassword] <UserAttribute>*` (5942); `<UserBasicAttribute>` (5823): `(password (random [<Integer>])\|…)`, `(changepassword\|changepasswordatnextlogin <Boolean>)` | Match. GAM generates the password; we never see it. |
-| Revoke access & sign out | `user <leaver> deprovision signout` | `gam <UserTypeEntity> deprovision\|deprov [popimap] [signout] [turnoff2sv]` (7899) | Match. Per user, GAM (`deprovisionUser`, read statically) deletes every app password, invalidates the backup codes, deletes every OAuth token, then with `signout` calls `users.signOut` (as `gam <UserTypeEntity> signout`, 8938, does). A failure is reported against the user (exit 50) and stops that user's remaining parts. **Not** `turnoff2sv` — it would weaken a locked account, and nobody needs to sign in as the leaver (the manager gets delegation). **Not** `popimap` — POP/IMAP need the password, an app password or a token, all revoked here; it would add two Gmail settings writes for nothing. |
+| Revoke access & sign out | `user <leaver> deprovision signout` | `gam <UserTypeEntity> deprovision\|deprov [popimap] [signout] [turnoff2sv]` (7899) | Match. Per user, GAM (`deprovisionUser`, read statically) deletes every app password, invalidates the backup codes, deletes every OAuth token, then with `signout` calls `users.signOut` (as `gam <UserTypeEntity> signout`, 8938, does). A failed listing or sign-out is reported against the user (exit 50) and ends that user's remaining parts; one app password or token that fails to delete is reported and the rest go on. **Not** `turnoff2sv` — it would weaken a locked account, and nobody needs to sign in as the leaver (the manager gets delegation). **Not** `popimap` — POP/IMAP need the password, an app password or a token, all revoked here; it would add two Gmail settings writes for nothing. |
 | Turn off forwarding | `user <leaver> forward off` | `gam <UserTypeEntity> forward <FalseValues>` (7998); `<FalseValues>= false\|off\|no\|disabled\|0` (22) | Match. GAM (`setForward`) sends `updateAutoForwarding` with `enabled: false` and shows the result; a user without Gmail is "Service/App not enabled", exit 73. The same builder as the Builder's "Turn off forwarding". |
 | Delegate | `user <leaver> add delegate <manager>` | `gam <UserTypeEntity> create\|add delegate\|delegates [convertalias] <UserEntity>` (7910) | Match; `convertalias` optional, unused. |
 | Auto-reply | `user <leaver> vacation on subject <S> message <M> html` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly …] [domainonly …] [start …] [end …]` (8283); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. `html`: see Gotchas. |
@@ -167,11 +168,12 @@ parser was read statically (its bytecode, never run). No mismatch found.
 - **Ending access is its own step, and its failure is a failure (2026-09-23).** The sign-out used to
   run inside `reset_password` as a best-effort follow-up whose `ChangeResult` was discarded: a
   refused sign-out showed `✓ Reset password` and "complete — 6 of 6 steps succeeded" while the
-  leaver's sessions stayed open, and a re-run (tick the `✓` lines) could never retry it. Reset + sign-out
-  also left app passwords, backup codes and connected apps' OAuth tokens working. Now `revoke` runs
-  `deprovision signout`; `reset_password` runs only the reset.
-- Same commit as the one-transfer fix, the sweep misclassification: `classify_stderr` mapped "Cannot change your own
-  access level" to UNKNOWN (no 403 token), so the already-present PERMISSION_DENIED tolerance never
+  leaver's sessions stayed open, and a re-run (tick the `✓` lines) could never retry it. Reset +
+  sign-out also left app passwords, backup codes, connected apps' OAuth tokens and mail forwarding
+  working. Now `revoke` runs `deprovision signout` and `forward` runs `forward off`, each its own
+  step; `reset_password` runs only the reset.
+- The one-transfer commit also fixed the sweep misclassification: `classify_stderr` mapped "Cannot
+  change your own access level" to UNKNOWN (no 403 token), so the already-present PERMISSION_DENIED tolerance never
   fired. `errors.py` now maps `cannotChangeOwnAcl` → `PERMISSION_DENIED`.
 
 ## Gotchas / mock-lies traps
@@ -224,13 +226,13 @@ forwarding turned off after the revoke, and its failure stopping nothing,
 `test_offboard_turns_off_forwarding_and_a_failure_stops_nothing`), the re-run ticks
 (`test_offboard_rerun_runs_only_the_steps_not_ticked_done`, the already-a-delegate warning), the
 unreadable-delegates warning (`test_offboard_preview_warns_when_the_leavers_delegates_cannot_be_read`),
-one run per leaver (`test_offboard_refuses_a_second_run_for_a_leaver_whose_offboarding_is_running`), and the preview's
-commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
+one run per leaver (`test_offboard_refuses_a_second_run_for_a_leaver_whose_offboarding_is_running`),
+and the preview's commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
-actual per-user calendar sweep at domain scale, `deprovision signout` (never run live: its output
-and its behaviour for a user with no app passwords or tokens), and `delete_user` itself. Per CLAUDE.md, these must
-be run against a **throwaway** account before being trusted.
+actual per-user calendar sweep at domain scale, `deprovision signout` and `forward off` (never run
+live: their output, and `deprovision` for a user with no app passwords or tokens), and `delete_user`
+itself. Per CLAUDE.md, these must be run against a **throwaway** account before being trusted.
 
 ## First live run checklist
 Offboarding a real user is the live test (plan D8). Keep this page open.
@@ -242,7 +244,7 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   (Gmail settings, or the Admin console) if there is one. Builder → Users → Gmail - Forwarding →
   Show tells you whether auto-forwarding is on now, and to where — note it if so.
 - Every warning is dealt with: a super-admin leaver's role revoked first (and another super admin
-  exists; GamGUI isn't connected as the leaver); a manager who is already a delegate → tick
+  exists; GamGUI isn't connected as the leaver — "Revoke access" would delete GamGUI's own token); a manager who is already a delegate → tick
   "Set delegate"; "Couldn't read … mail delegates" → fix what it quotes (Gmail off for the leaver, a
   missing Gmail scope) and preview again, or the delegate step fails after the reset.
 - Each `gam` line: the leaver everywhere, the manager in the delegate, transfer and reminder;

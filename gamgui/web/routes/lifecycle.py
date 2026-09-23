@@ -263,7 +263,8 @@ async def offboard_run(
     conn = st.connector
     if conn is None:
         return _err(request, "Not connected.")
-    # Destructive for the leaver (locks sign-in, strips calendar access domain-wide): confirmed=1.
+    # Destructive for the leaver (resets the password, revokes access, strips calendar access
+    # domain-wide): confirmed=1.
     form = await request.form()
     refusal = guard.enforce(guard.changes([user.strip()], RiskLevel.DESTRUCTIVE, "Offboard"), form)
     if refusal:
