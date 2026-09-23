@@ -25,6 +25,9 @@ EXPECTED_GAM_VERSION = "7.48.11"
 
 # Roles accepted by Google Directory for group membership.
 GROUP_ROLES = ("member", "manager", "owner")
+# `<CalendarACLRole>` in the vendored grammar, verbatim (tests/test_command_contract.py pins it).
+CALENDAR_ACL_ROLES = ("editor", "freebusy", "freebusyreader", "owner", "reader", "writer",
+                      "writerwithoutprivateaccess", "none")
 
 # `gam print users` returns ONLY primaryEmail unless fields are requested — these populate the list.
 # `organizations` carries the job title (the practical "role" for automations).
@@ -174,7 +177,7 @@ class GAMCommands:
     @staticmethod
     def add_calendar_acl(email: str, target: str, role: str = "reader", calendar: str = "primary") -> List[str]:
         # `target` is a scope: a bare email = a user; pass "group:<email>"/"domain"/"default" as-is.
-        return ["user", email, "add", "calendaracls", calendar, role, target]
+        return ["user", email, "add", "calendaracls", calendar, _validate_calendar_role(role), target]
 
     @staticmethod
     def delete_calendar_acl(email: str, scope: str, calendar: str = "primary") -> List[str]:
@@ -211,7 +214,7 @@ class GAMCommands:
         # impersonation, no formatjson. `scope`: bare email = user; pass "group:<email>"/"domain"/
         # "default" through unchanged. Notifications default OFF: the subscribe makes it visibly
         # appear (the whole point is people miss the sharing email).
-        argv = ["calendars", calendar_id, "add", "calendaracls", role, scope]
+        argv = ["calendars", calendar_id, "add", "calendaracls", _validate_calendar_role(role), scope]
         if send_notifications:
             argv += ["sendnotifications", "true"]
         return argv
@@ -513,6 +516,13 @@ def _validate_role(role: str) -> str:
     role = (role or "member").strip().lower()
     if role not in GROUP_ROLES:
         raise ValueError(f"invalid group role {role!r}; expected one of {GROUP_ROLES}")
+    return role
+
+
+def _validate_calendar_role(role: str) -> str:
+    role = (role or "").strip().lower()
+    if role not in CALENDAR_ACL_ROLES:
+        raise ValueError(f"invalid calendar role {role!r}; expected one of: {', '.join(CALENDAR_ACL_ROLES)}")
     return role
 
 

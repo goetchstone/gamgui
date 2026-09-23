@@ -14,7 +14,8 @@ Builder layer). No runtime hook — the shape is frozen by tests, not asserted i
 ## Files
 - `gamgui/core/gam/commands.py` — the ONLY argv construction. `class GAMCommands` (static methods,
   one per GAM sub-command), the `EXPECTED_GAM_VERSION` constant, field-set tuples
-  (`USER_LIST_FIELDS`, `CACHE_FIELDS`, …), and two helpers: `_validate_role`, `build_user_query`.
+  (`USER_LIST_FIELDS`, `CACHE_FIELDS`, …), the role sets `GROUP_ROLES` / `CALENDAR_ACL_ROLES`, and three
+  helpers: `_validate_role`, `_validate_calendar_role`, `build_user_query`.
 - `tests/test_commands.py` — asserts each builder's exact argv, including "poison stays one element."
 - `tests/test_command_contract.py` — no-credential drift guards (token contract, version consistency,
   catalog↔grammar count).
@@ -29,7 +30,9 @@ directly; mutations go `GAMCommands.X(...)` → `ChangePreview` → `guard.evalu
 (`core/catalog/catalog.py`) binds each `build.*` id to a `lambda s: GAMCommands.X(s[...])`, so even the
 UI's assembled commands come from these same methods. `build_user_query` turns the search box into a
 Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_role` gates
-`add_group_member` to `member|manager|owner`.
+`add_group_member` to `member|manager|owner`, and `_validate_calendar_role` gates `add_calendar_acl` /
+`add_calendar_acl_cal` to the grammar's `<CalendarACLRole>` (`CALENDAR_ACL_ROLES`). Both raise
+`ValueError` before anything runs; the route catches it and renders a friendly error.
 
 ## Invariants & the failure history
 - **#1 argv-only.** A value like `"a@x.com; rm -rf /"` is one element, never interpolated — proven by
@@ -47,6 +50,12 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   rejects extra args. See `test_calendar_delete_vs_unsubscribe_commands`.
 - **`create datatransfer` service list is ONE element** (`"drive,calendar"`) — splitting it caused
   Google 409 "transfer already in progress"; pinned by `test_lifecycle_commands`.
+- **An operator-chosen enum is validated in the builder, not the route.** The calendar role was
+  checked (by silently coercing to `reader`) in `/calendars/share` but passed through untouched by
+  `/users/calendar/add` — a check in one route is a check some other path skips (failure-log
+  2026-09-23). `test_calendar_acl_role_is_validated_in_the_builder`; and
+  `test_calendar_acl_roles_match_grammar_and_mock` pins `CALENDAR_ACL_ROLES` to the mock's
+  `ACL_ROLES` and (when vendored) to every `<CalendarACLRole>` definition in the grammar.
 - **Grammar spelling** — the reference reads `create|add user` / `create|add group`, so those are the
   `REQUIRED_TOKENS`, not `create user` / `create group`.
 

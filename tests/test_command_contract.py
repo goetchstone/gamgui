@@ -100,6 +100,20 @@ def test_catalog_matches_grammar():
     assert len(data["commands"]) == len(fresh), "command_catalog.json is stale — regenerate it after the GAM bump"
 
 
+def test_calendar_acl_roles_match_grammar_and_mock():
+    # The builders validate against CALENDAR_ACL_ROLES; the strict mock must reject exactly the same
+    # set, and (when vendored) the grammar's every <CalendarACLRole> definition must equal it.
+    import re
+
+    from gamgui.core.gam.commands import CALENDAR_ACL_ROLES
+
+    mock = (ROOT / "tests" / "fixtures" / "mock_gam.sh").read_text()
+    assert f'ACL_ROLES="{"|".join(CALENDAR_ACL_ROLES)}"' in mock
+    if GAM_COMMANDS_REF.exists():
+        defs = re.findall(r"<CalendarACLRole> ::=\s*(\S+)", GAM_COMMANDS_REF.read_text(errors="replace"))
+        assert defs and {tuple(d.split("|")) for d in defs} == {CALENDAR_ACL_ROLES}
+
+
 def test_pinned_version_consistent():
     # Committed sources of the pin must agree. (The vendored VERSION file is checked in the gam-compat
     # CI step instead — after a real fetch — since locally it may be a placeholder.)

@@ -476,6 +476,19 @@ def test_calendar_access_add_requires_target(client):
     assert "Enter an email to share with." in r.text
 
 
+@pytest.mark.parametrize("path,data", [
+    ("/users/calendar/add", {"email": "alice@example.com", "target": "carol@example.com"}),
+    ("/calendars/share", {"cal": "c_house123@group.calendar.google.com", "target": "carol@example.com"}),
+])
+def test_calendar_share_refuses_a_role_outside_the_grammar(client, gam_calls, path, data):
+    # Both share paths: the builder's <CalendarACLRole> check surfaces as a friendly error, no gam write.
+    # (/calendars/share used to coerce an unknown role to reader; /users/calendar/add passed it to GAM.)
+    r = client.post(path, data={**data, "role": "admin"})
+    assert r.status_code == 200
+    assert "Couldn&#39;t share calendar: invalid calendar role &#39;admin&#39;" in r.text
+    assert gam_writes(gam_calls()) == []
+
+
 def test_calendars_page_renders(client):
     r = client.get("/calendars")
     assert r.status_code == 200

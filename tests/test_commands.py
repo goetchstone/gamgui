@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import GAMCommands, build_user_query
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands, build_user_query
 from gamgui.core.gam.errors import GAMErrorKind, classify_stderr
 
 
@@ -38,6 +38,19 @@ def test_calendar_acl_commands():
         ["user", "a@e.com", "add", "calendaracls", "primary", "reader", "bob@e.com"]
     assert GAMCommands.delete_calendar_acl("a@e.com", "bob@e.com") == \
         ["user", "a@e.com", "delete", "calendaracls", "primary", "bob@e.com"]
+
+
+def test_calendar_acl_role_is_validated_in_the_builder():
+    # Every path that adds a calendar ACL gets the grammar's <CalendarACLRole> check, not just one route.
+    for r in CALENDAR_ACL_ROLES:
+        assert GAMCommands.add_calendar_acl("a@e.com", "bob@e.com", role=r)[5] == r
+        assert GAMCommands.add_calendar_acl_cal("room@x", "bob@e.com", role=r)[4] == r
+    assert GAMCommands.add_calendar_acl_cal("room@x", "bob@e.com", role=" Writer ")[4] == "writer"
+    for bad in ("admin", "viewer", "", "reader bob@e.com", "reader;rm"):
+        with pytest.raises(ValueError, match="invalid calendar role"):
+            GAMCommands.add_calendar_acl("a@e.com", "bob@e.com", role=bad)
+        with pytest.raises(ValueError, match="invalid calendar role"):
+            GAMCommands.add_calendar_acl_cal("room@x", "bob@e.com", role=bad)
 
 
 def test_calendar_share_commands():

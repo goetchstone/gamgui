@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import GAMCommands as C
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
 
 CAL = "c_team@group.calendar.google.com"
@@ -28,10 +28,13 @@ WRITES = {
     "delete_user": [C.delete_user("alice@example.com")],
     "undelete_user": [C.undelete_user("alice@example.com")],
     "add_calendar_acl": [C.add_calendar_acl("alice@example.com", "bob@example.com"),
-                         C.add_calendar_acl("alice@example.com", "group:sales@example.com", role="writer")],
+                         C.add_calendar_acl("alice@example.com", "group:sales@example.com", role="writer")]
+                        + [C.add_calendar_acl("alice@example.com", "bob@example.com", role=r)
+                           for r in CALENDAR_ACL_ROLES],
     "delete_calendar_acl": [C.delete_calendar_acl("alice@example.com", "user:bob@example.com")],
     "add_calendar_acl_cal": [C.add_calendar_acl_cal(CAL, "bob@example.com"),
-                             C.add_calendar_acl_cal(CAL, "domain", role="freebusyreader", send_notifications=True)],
+                             C.add_calendar_acl_cal(CAL, "domain", role="freebusyreader", send_notifications=True)]
+                            + [C.add_calendar_acl_cal(CAL, "bob@example.com", role=r) for r in CALENDAR_ACL_ROLES],
     "delete_calendar_acl_cal": [C.delete_calendar_acl_cal(CAL, "user:bob@example.com")],
     "subscribe_calendar": [C.subscribe_calendar("bob@example.com", CAL),
                            C.subscribe_calendar("bob@example.com", CAL, selected=False)],
@@ -113,8 +116,10 @@ async def test_mock_accepts_every_shape_the_app_emits(runner, domain, argv):
 @pytest.mark.parametrize("argv,needle", [
     # Without doit GAM only reports what it would delete — "Event deleted." would be a lie.
     (["calendars", CAL, "delete", "events", "eventid", "evt-1", "sendupdates", "none"], "Use doit"),
-    (C.add_calendar_acl("alice@example.com", "bob@example.com", role="admin"), "Invalid choice (admin)"),
-    (C.add_calendar_acl_cal(CAL, "bob@example.com", role="viewer"), "Invalid choice (viewer)"),
+    # The builders refuse a bad role now (ValueError); the mock must still reject one GAM would.
+    (["user", "alice@example.com", "add", "calendaracls", "primary", "admin", "bob@example.com"],
+     "Invalid choice (admin)"),
+    (["calendars", CAL, "add", "calendaracls", "viewer", "bob@example.com"], "Invalid choice (viewer)"),
     (["user", "alice@example.com", "signature"], "Missing argument"),
     (["user", "alice@example.com", "add", "delegate"], "Missing argument"),
     (C.set_vacation("alice@example.com", "Away", "Back", start="July 1"), "Invalid date"),

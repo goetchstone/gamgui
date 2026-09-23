@@ -402,7 +402,10 @@ async def calendar_add(
     target = target.strip()
     if not target:
         return _err(request, "Enter an email to share with.")
-    result = await conn.add_calendar_acl(email, target, role=role)
+    try:
+        result = await conn.add_calendar_acl(email, target, role=role)
+    except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
+        return _err(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
         return _err(request, f"Couldn't share calendar: {result.detail}")
     return await _calendar_partial(request, conn, email)

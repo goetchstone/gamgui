@@ -32,8 +32,6 @@ _SUBSCRIBE_JOB_TEMPLATE = "_calendar_subscribe_job.html"
 # email; holiday/system use @group.v.calendar.google.com or a `#…@` id; rooms use
 # @resource.calendar.google.com; imports use @import.calendar.google.com — none end in this suffix.
 SECONDARY_SUFFIX = "@group.calendar.google.com"
-# Roles we expose for sharing (app-wide subset of GAM's CalendarACLRole set).
-ACL_ROLES = ("reader", "freebusyreader", "writer", "owner")
 # Most-recent per-member lines kept while a group subscribe runs (bounds the polled partial).
 _SUBSCRIBE_LOG_WINDOW = 12
 
@@ -360,8 +358,10 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
     cal, target = cal.strip(), target.strip()
     if not target:
         return _err(request, "Enter a person or group to share with.")
-    role = role if role in ACL_ROLES else "reader"
-    result = await conn.add_calendar_acl_for(cal, target, role=role)
+    try:
+        result = await conn.add_calendar_acl_for(cal, target, role=role)
+    except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
+        return _err(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
         return _err(request, f"Couldn't share calendar: {result.detail}")
     kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
