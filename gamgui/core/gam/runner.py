@@ -34,6 +34,13 @@ ENV_ALLOWLIST = frozenset({
 MOCK_ENV = frozenset({"GAM_MOCK_FIXTURES", "GAM_MOCK_REFRESH", "GAM_MOCK_ARGV_LOG"})
 
 DEFAULT_TIMEOUT = 120.0
+# One `all users …` call: GAM visits every user in turn (~0.5–1 s each, one process), so the default
+# killed a sweep of a few hundred users partway. An hour covers several thousand; a caller passes it.
+DOMAIN_WIDE_TIMEOUT = 3600.0
+
+
+def _duration(seconds: float) -> str:
+    return f"{seconds / 60:g} min" if seconds >= 60 else f"{seconds:g}s"
 
 
 def strip_cfgdir_noise(stdout: str, cfgdir: Path) -> str:
@@ -125,7 +132,10 @@ class GAMRunner:
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            raise GAMError(GAMErrorKind.TIMEOUT, exit_code=None, stderr="command timed out", argv=list(argv))
+            # Killed mid-run: say so, since a multi-entity command may have done part of its work.
+            raise GAMError(GAMErrorKind.TIMEOUT, exit_code=None, argv=list(argv),
+                           stderr=f"timed out after {_duration(timeout)} and was stopped; "
+                                  "it may have done part of its work")
         return RunResult(
             stdout=(out or b"").decode("utf-8", "replace"),
             stderr=(err or b"").decode("utf-8", "replace"),

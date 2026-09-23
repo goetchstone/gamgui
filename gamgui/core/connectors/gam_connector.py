@@ -25,7 +25,7 @@ from ..gam.models import (
 )
 from ..calendar_index import IndexedCalendar
 from ..gam.parser import parse_one, parse_records
-from ..gam.runner import GAMRunner
+from ..gam.runner import DOMAIN_WIDE_TIMEOUT, GAMRunner
 from .base import (
     Capability,
     ChangePreview,
@@ -263,7 +263,8 @@ class GAMConnector(Connector):
         it). Each user's primary, holiday/system calendars are skipped — they aren't shared calendars
         you'd search for, and excluding them keeps the index small on large tenants.
         """
-        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars())
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_all_calendars(),
+                                                  timeout=DOMAIN_WIDE_TIMEOUT)
         agg: dict = {}
         for row in parse_records(out):
             cid = str(row.get("id") or "").strip()
@@ -381,11 +382,13 @@ class GAMConnector(Connector):
         # Best-effort sweep across every user. Expected, harmless per-entity outcomes: NOT_FOUND
         # (that user never shared with the departing user) and PERMISSION_DENIED / cannotChangeOwnAcl
         # (the departing user's OWN primary calendar — you can't delete your own owner ACL, and it's
-        # going away with the account anyway). Only a real auth/scope failure should fail this step.
+        # going away with the account anyway). Only a real auth/scope failure should fail this step —
+        # and a timeout, which stopped it partway (never tolerated: it is neither benign kind).
         argv = GAMCommands.remove_all_calendar_acls(email)
         return await self._run_write(
             "remove_from_all_calendars", email, argv, RiskLevel.LOW,
             tolerate_kinds=(GAMErrorKind.NOT_FOUND, GAMErrorKind.PERMISSION_DENIED),
+            timeout=DOMAIN_WIDE_TIMEOUT,
         )
 
     async def incomplete_transfers_for(self, email: str) -> List[dict]:
@@ -493,6 +496,7 @@ class GAMConnector(Connector):
         tolerate_kinds: tuple = (),
         audit_argv: Optional[List[str]] = None,
         secrets: Sequence[str] = (),
+        timeout: Optional[float] = None,
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
         a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)
@@ -502,11 +506,12 @@ class GAMConnector(Connector):
         a secret that must never touch the audit log or the UI — e.g. a create-user temp password.
         ``secrets`` are those values themselves: every occurrence is masked in the shown argv, the error
         text (GAM echoes the command line on a usage error) and the audit record. By value, so no
-        neighbouring token can shift it; the positional masks in audit/errors are the second layer."""
+        neighbouring token can shift it; the positional masks in audit/errors are the second layer.
+        ``timeout`` overrides the runner's default — a domain-wide (``all users``) call needs longer."""
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
         try:
-            out = await self.runner.run_authenticated(self.domain, argv, serialize=True)
+            out = await self.runner.run_authenticated(self.domain, argv, timeout=timeout, serialize=True)
         except Exception as exc:
             # Every error line must be tolerable: a sweep's stderr holds one line per entity, and one
             # real failure among the benign notices is a failure (GAMError.kinds, not just .kind).

@@ -31,7 +31,10 @@ method and call `runner.run_authenticated(domain, argv, serialize=...)`. That op
 `EphemeralConfig` context (vault → `0700` dir with `0600` credential files), runs `_exec`, and on
 exit writes any refreshed `oauth2.txt` back to the vault and wipes the dir. `_exec` spawns via
 `create_subprocess_exec(str(gam_binary), *argv, ...)` with an allowlisted env carrying `GAMCFGDIR`;
-a `wait_for` timeout kills the process and raises a `TIMEOUT` `GAMError`. Non-zero exit →
+a `wait_for` timeout kills the process and raises a `TIMEOUT` `GAMError` whose text says how long it
+ran and that it may have done part of its work. The timeout is `DEFAULT_TIMEOUT` (120s) unless the
+caller passes one: a domain-wide `all users …` call (the offboarding calendar sweep, the calendar-index
+scan) passes `DOMAIN_WIDE_TIMEOUT` (1 h), because GAM walks every user in turn. Non-zero exit →
 `GAMError.from_run` (stderr classified line by line; `kind` is the most severe line). Success stdout
 is de-noised, then the connector runs it through `parse_records`/`parse_one` and `Model.from_json`.
 Two side paths: `run_in_cfgdir` (setup wizard, explicit persistent cfgdir, returns raw `RunResult`)
@@ -104,7 +107,14 @@ and `version` (no credentials).
   A mock that returns a bare JSON object per row where GAM returns the `key,JSON` CSV would hide a
   break.
 - **Timeout raises `TIMEOUT` directly** in `_exec` (exit_code `None`), never touching
-  `classify_stderr`; `from_run` independently also maps a `None` exit_code to `TIMEOUT`.
+  `classify_stderr`; `from_run` independently also maps a `None` exit_code to `TIMEOUT`. A
+  best-effort caller never tolerates it (it is not a per-entity notice). Anything stderr held before
+  the kill is lost.
+- **A domain-wide call under the default timeout is a bug.** `all users …` makes one API call per
+  user inside one process, so 120s ended a few-hundred-user sweep partway. Pass
+  `DOMAIN_WIDE_TIMEOUT` (`test_offboard_safety.py::test_domain_wide_calls_get_the_long_timeout`);
+  it is a guess from ~0.5–1 s/user, not a measured bound — a tenant past several thousand users
+  needs it raised.
 
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_runner.py tests/test_errors.py tests/test_parser.py
@@ -113,8 +123,10 @@ binary, the four classified failure kinds, per-line classification of a mixed st
 (`test_errors.py`; end to end through the sweep in `test_lifecycle.py`
 `test_offboard_calendar_sweep_multi_user_stderr`), banner stripping, the oauth2 write-back
 (`GAM_MOCK_REFRESH` → vault value changes) under `serialize=True`, and the timeout path
-(`MOCKSLEEP`: `TIMEOUT` raised, the process killed and reaped, the `GAMCFGDIR` still wiped, the write
-lock released — `test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`), and the env
+(`MOCKSLEEP`: `TIMEOUT` raised with a "stopped after N" message, the process killed and reaped, the
+`GAMCFGDIR` still wiped, the write lock released —
+`test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock`; the sweep's own timeout via the
+mock's `SWEEPSLOW` in `test_lifecycle.py::test_offboard_sweep_timeout_is_a_clear_step_failure`), and the env
 allowlist (a real child, `/usr/bin/env`, reports exactly what it received, frozen and not). Untrusted
 until run live: whether real GAM needs any variable outside the allowlist (none known), the
 real stderr wording behind each `GAMErrorKind` (only a handful of lines mocked), whether a real

@@ -52,6 +52,13 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
   (`GAMError.kinds`, 2026-09-23): one unrecognized per-user failure among the benign lines fails the
   step and is the detail shown. Before that, the first "Does not exist" line classified the whole
   stderr `NOT_FOUND` and a partial failure was reported as success.
+- **The sweep is one domain-wide call, so it gets a domain-wide timeout.** GAM visits every user in
+  turn inside one process (~0.5–1 s each); under the runner's 120s default a sweep of a few hundred
+  users was killed partway (failure-log 2026-09-23). `remove_from_all_calendars` passes
+  `DOMAIN_WIDE_TIMEOUT` (1 h, `core/gam/runner.py`). A timeout is a plain step failure — never
+  tolerated — and its log line reads "timed out after 60 min and was stopped; it may have done part
+  of its work", so some users may still share with the leaver; the routine goes on to the reminder.
+  The write lock is held for the whole sweep, so other writes in the app wait behind it.
 - **One transfer, not two (CLAUDE.md #1 + #2).** `26eee5b` (post-mortem from a real audit log):
   offboarding fired two `create datatransfer` calls (drive, then calendar); Google DTS allows one
   in-flight transfer per user, so the second returned "409: already in progress" and was silently
@@ -68,10 +75,10 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
   delete calendaracls` sweep succeeds by default; `OWNACL` in the address emits the exact own-ACL
   stderr (exit 50, tolerated) and `SWEEPFAIL` a scope error (not tolerated); `SWEEPBENIGN` a
   multi-user stderr where every line is tolerable and `SWEEPMIXED` the same plus one real per-user
-  failure (not tolerated). Every step's write has a strict handler that fails a malformed argv. It
-  does **not** model real DTS async timing, partial multi-app transfer failures, or per-user
-  calendar iteration — a green sweep/transfer test proves classification/argv, not that a live
-  tenant transfers cleanly.
+  failure (not tolerated); `SWEEPSLOW` sleeps so the timeout fires. Every step's write has a strict
+  handler that fails a malformed argv. It does **not** model real DTS async timing, partial
+  multi-app transfer failures, or per-user calendar iteration — a green sweep/transfer test proves
+  classification/argv, not that a live tenant transfers cleanly.
 - `incomplete_transfers_for` reads `overallTransferStatusCode` (falling back to `status`) and treats
   anything not `"completed"` as pending; a real tenant's status vocabulary is the source of truth.
 
@@ -79,8 +86,9 @@ event on the manager's calendar `days` out — there is no app-side scheduler. T
 `.venv/bin/python -m pytest -q tests/test_lifecycle.py tests/test_offboard_safety.py` (offline: mock
 gam + in-memory Keychain). Covered: step order/keys, the single combined-service transfer + audit
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL and not-found) vs. real
-auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), auto-reply
-substitution, reminder invitee, and `incomplete_transfers_for` filtering.
+auth errors, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
+timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
+auto-reply substitution, reminder invitee, and `incomplete_transfers_for` filtering.
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
 actual per-user calendar sweep at domain scale, and `delete_user` itself. Per CLAUDE.md, these must
 be run against a **throwaway** account before being trusted.

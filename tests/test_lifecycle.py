@@ -172,3 +172,24 @@ async def test_offboard_calendar_sweep_multi_user_stderr(connector):
     assert not bad.ok and "Internal error encountered" in bad.detail
     rec = connector.audit.tail()[-1]
     assert rec["ok"] is False and rec["extra"]["tolerated"] is False
+
+
+@pytest.mark.asyncio
+async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeypatch):
+    # The all-users sweep is still walking the domain when its timeout fires: the step fails and says
+    # it was stopped partway (not a hang, not a tolerated "best-effort" success), and the routine goes
+    # on to the manager's reminder.
+    from gamgui.core.connectors import gam_connector
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.lifecycle import _run_offboard
+
+    monkeypatch.setattr(gam_connector, "DOMAIN_WIDE_TIMEOUT", 0.5)
+    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    job = start_job({}, len(steps))
+    await _run_offboard(job, connector, steps)
+    assert (job.applied, job.failed) == (5, ["Remove from everyone's calendars"])
+    [line] = [ln for ln in job.log if ln.startswith("✗ ")]
+    assert "timed out after 0.5s and was stopped" in line
+    assert job.log[-1].startswith("✓ ") and "reminder" in job.log[-1]
+    rec = next(e for e in connector.audit.tail() if e["action"] == "remove_from_all_calendars")
+    assert rec["ok"] is False and rec["extra"]["tolerated"] is False

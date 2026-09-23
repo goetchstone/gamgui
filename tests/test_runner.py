@@ -48,6 +48,7 @@ async def test_timeout_kills_gam_wipes_the_config_and_frees_the_write_lock(runne
     with pytest.raises(GAMError) as ei:
         await runner.run_authenticated(domain, ["MOCKSLEEP", "30", str(pidfile)], timeout=0.5, serialize=True)
     assert ei.value.kind is GAMErrorKind.TIMEOUT and ei.value.exit_code is None
+    assert "timed out after 0.5s and was stopped" in str(ei.value)   # says it was cut off, not just failed
     with pytest.raises(ProcessLookupError):
         os.kill(int(pidfile.read_text()), 0)          # killed and reaped
     assert list(tmp_path.glob("gamcfg-*")) == []       # credentials wiped despite the timeout

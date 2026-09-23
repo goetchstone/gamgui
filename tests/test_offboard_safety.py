@@ -8,6 +8,7 @@ import pytest
 from gamgui.core.audit import AuditLog
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
+from gamgui.core.gam.runner import DEFAULT_TIMEOUT, DOMAIN_WIDE_TIMEOUT
 
 
 class _RaisingRunner:
@@ -35,8 +36,9 @@ async def test_remove_from_all_calendars_tolerates_benign(kind, tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", [GAMErrorKind.SCOPE_MISSING, GAMErrorKind.AUTH_EXPIRED])
+@pytest.mark.parametrize("kind", [GAMErrorKind.SCOPE_MISSING, GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.TIMEOUT])
 async def test_remove_from_all_calendars_still_fails_on_real_errors(kind, tmp_path):
+    # TIMEOUT: the sweep was killed partway — never a best-effort success.
     exc = GAMError(kind=kind, exit_code=1, stderr="insufficient authentication scope")
     res = await _conn(_RaisingRunner(exc), tmp_path).remove_from_all_calendars("x@example.com")
     assert not res.ok
@@ -49,6 +51,29 @@ async def test_remove_from_all_calendars_needs_every_line_tolerable(tmp_path):
                    kinds=frozenset({GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.UNKNOWN}))
     res = await _conn(_RaisingRunner(exc), tmp_path).remove_from_all_calendars("x@example.com")
     assert not res.ok
+
+
+class _RecordingRunner:
+    def __init__(self):
+        self.timeouts = []
+
+    async def run_authenticated(self, domain, argv, timeout=None, serialize=False):
+        self.timeouts.append((list(argv[:2]), timeout))
+        return ""
+
+
+@pytest.mark.asyncio
+async def test_domain_wide_calls_get_the_long_timeout(tmp_path):
+    # `all users …` walks every user in one gam process; under the 120s default a sweep of a few
+    # hundred users was killed partway. Per-user calls keep the runner's default (None here).
+    runner = _RecordingRunner()
+    conn = _conn(runner, tmp_path)
+    await conn.remove_from_all_calendars("x@example.com")
+    await conn.scan_all_calendars()
+    await conn.transfer_data("x@example.com", "drive,calendar", "m@example.com")
+    domain_wide = [t for head, t in runner.timeouts if head == ["all", "users"]]
+    assert domain_wide == [DOMAIN_WIDE_TIMEOUT, DOMAIN_WIDE_TIMEOUT] and DOMAIN_WIDE_TIMEOUT > DEFAULT_TIMEOUT
+    assert all(t is None for head, t in runner.timeouts if head != ["all", "users"])
 
 
 @pytest.mark.asyncio

@@ -14,9 +14,10 @@
 #   - anything unhandled FAILS. Add a handler for a new command; never make the catch-all succeed.
 # Failure triggers, by argument substring: *missing*/*nonexistent* -> "Does not exist" for the user,
 # group, calendar, event or delegate; *exists* -> 409 on create; plus SENDFAIL, SUBFAIL, CONFLICT409,
-# FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED (see each handler). The stderr wording and exit codes are GAM7's shape
-# (2 usage error, 50 action failed, 51 action not performed, 56 does not exist) written from its
-# source conventions, not captured from a tenant — only a live capture (plan Phase 8) proves them.
+# FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED, SWEEPSLOW (see each handler). The stderr wording
+# and exit codes are GAM7's shape (2 usage error, 50 action failed, 51 action not performed, 56 does
+# not exist) written from its source conventions, not captured from a tenant — only a live capture
+# (plan Phase 8) proves them.
 
 set -eu
 
@@ -608,6 +609,7 @@ fi
 # which the connector tolerates. SWEEPFAIL: a real failure it must not tolerate. SWEEPBENIGN: a multi-user
 # stderr (GAM's "Getting all/Got N" chatter, as in GamUpdate.txt, then one line per entity) where every
 # line is tolerable; SWEEPMIXED: the same with one real per-user failure among them, exit 50 either way.
+# SWEEPSLOW: a sweep still walking the domain when the runner's timeout fires (exec keeps the PID it kills).
 if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && [ "${4:-}" = "calendaracls" ]; then
   [ -n "${5:-}" ] || missing_arg "UserCalendarEntity"
   shift 5
@@ -616,6 +618,7 @@ if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && 
   [ $# -eq 1 ] || invalid_arg "$2"
   scope="$1"
   case "$scope" in
+    *SWEEPSLOW*) exec sleep 30 ;;
     *OWNACL*)
       printf '    Calendar: %s, Calendar ACL: (Scope: user:%s), Delete Failed: Cannot change your own access level.\n' "$scope" "$scope" 1>&2
       exit 50 ;;
