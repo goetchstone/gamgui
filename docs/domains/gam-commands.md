@@ -84,8 +84,8 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   any trailing word, so a mock pass proves nothing here — check `gamgui/resources/gam7/GamCommands.txt`,
   the source of truth. The per-user reads (`info user`, `show vacation|signature`, `print delegates`,
   `print groups member`, `user … print calendaracls`) are the exception: keyed on their target (each
-  fixture user has different data; an address that isn't a user fails as GAM does) and accept only
-  the argv the app sends, so `print delegates`, `show vacation` and `show signature` reject
+  fixture user has different data; an address that isn't a user fails as GAM does), and all but
+  `info user` accept only the argv the app sends, so `print delegates`, `show vacation` and `show signature` reject
   `formatjson` as GAM does (and `print groups member` any option — stricter than the grammar, the
   safe direction). A `todrive` tail is accepted only on a print/report read and only with the
   attributes the Builder emits (`tduser`, `tdtitle`). (Its *write* handlers are strict:
