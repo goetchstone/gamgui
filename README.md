@@ -120,7 +120,7 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Suspend / unsuspend | Users, Builder | not yet |
 | Delete an account | Users, Builder | not yet |
 | Undelete an account | Builder | not yet |
-| Transfer Drive + calendar data | Offboarding, Builder | **confirmed** as two calls; the single call offboarding now makes is not yet |
+| Transfer Drive + calendar data | Offboarding, Builder | **confirmed** as two calls; the single call offboarding now makes (with `all`: private and shared Drive files) is not yet |
 | Remove the leaver from everyone's calendars | Offboarding | not yet |
 | Add a calendar event (the manager's reminder) | Offboarding | **confirmed** |
 | Share a calendar (add an ACL) | Calendars, Users (their own calendar) | **confirmed** |

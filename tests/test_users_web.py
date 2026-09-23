@@ -1084,7 +1084,7 @@ def test_lifecycle_offboard_preview_shows_each_exact_command(client):
         "gam user carol@example.com forward off",
         "gam user carol@example.com add delegate alice@example.com",
         "gam user carol@example.com vacation on subject 'Away now' message m html",
-        "gam create datatransfer carol@example.com drive,calendar alice@example.com",
+        "gam create datatransfer carol@example.com drive,calendar alice@example.com all",
         "gam all users delete calendaracls primary carol@example.com",
         "gam user alice@example.com add event primary summary 'Offboarding carol@example.com: confirm",
     ]:

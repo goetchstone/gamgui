@@ -881,7 +881,18 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
   [ -n "${5:-}" ] || missing_arg "NewOwnerID"
   old="$3"; svcs="$4"; new="$5"; shift 5
   while [ $# -gt 0 ]; do
-    case "$1" in private|shared|all|release_resources) shift ;; *) invalid_arg "$1" ;; esac
+    case "$1" in
+      # PRIVACY_LEVEL is a Drive parameter: GAM's _assignAppParameter refuses it (usage error) when no
+      # listed app takes it.
+      private|shared|all)
+        case ",$svcs," in
+          *,drive,*|*,googledrive,*|*,gdrive,*|*",drive and docs,"*) ;;
+          *) usage_error "No data transfer application for key PRIVACY_LEVEL" ;;
+        esac
+        shift ;;
+      release_resources) shift ;;
+      *) invalid_arg "$1" ;;
+    esac
   done
   case "$old" in
     *CONFLICT409*) echo "ERROR: 409: conflict - Data transfer already in progress for the user." 1>&2; exit 9 ;;

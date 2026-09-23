@@ -41,6 +41,7 @@ ENUM_ARGS = {
     ("add_calendar_acl_cal", "role"): CALENDAR_ACL_ROLES,
     ("set_forward", "action"): GAMCommands.FORWARD_ACTIONS,
     ("search_messages", "detail"): GAMCommands.MESSAGE_DETAIL,
+    ("create_datatransfer", "privacy"): ("", *GAMCommands.TRANSFER_PRIVACY),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}

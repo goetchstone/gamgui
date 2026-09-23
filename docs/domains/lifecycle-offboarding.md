@@ -132,7 +132,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
 | Turn off forwarding | `user <leaver> forward off` | `gam <UserTypeEntity> forward <FalseValues>` (7998); `<FalseValues>= false\|off\|no\|disabled\|0` (22) | Match. GAM (`setForward`) sends `updateAutoForwarding` with `enabled: false` and shows the result; a user without Gmail is "Service/App not enabled", exit 73. The same builder as the Builder's "Turn off forwarding". |
 | Delegate | `user <leaver> add delegate <manager>` | `gam <UserTypeEntity> create\|add delegate\|delegates [convertalias] <UserEntity>` (7910) | Match; `convertalias` optional, unused. |
 | Auto-reply | `user <leaver> vacation on subject <S> message <M> html contactsonly false domainonly false start Started end NotSpecified` | `gam <UserTypeEntity> vacation [<Boolean>] [subject <String>] [<VacationMessageContent> …] [html [<Boolean>]] [contactsonly [<Boolean>]] [domainonly [<Boolean>]] [start\|startdate <Date>\|Started] [end\|enddate <Date>\|NotSpecified]` (8283-8288); `<VacationMessageContent>` ::= `(message\|textmessage\|htmlmessage <String>)\|…` | Match, in grammar order; no `formatjson`. GAM's `getYYYYMMDD` compares `Started`/`NotSpecified` case-insensitively and returns no date for them, which clears a stored one. Why every setting is named, and `html`: see Gotchas. |
-| Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager>` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598) | Match; the service list is ONE element. No privacy keyword: see Gotchas. |
+| Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager> all` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598-3601) | Match; the service list is ONE element. `all` = `PRIVACY_LEVEL: PRIVATE,SHARED` (GAM's `PRIVACY_LEVEL_CHOICE_MAP`), attached by `_assignAppParameter` only to a listed app whose `transferParams` take it — Drive, not Calendar (read statically from the vendored build; GamUpdate 6.07.21 fixed it reaching every listed app). See Gotchas. |
 | Calendar sweep | `all users delete calendaracls primary <leaver>` | `gam <UserTypeEntity> delete calendaracls <UserCalendarEntity> <CalendarACLRole>] <CalendarACLScopeEntity>` (6327) | Match. The grammar line lost its `[`: the role is optional, as in `calendars … delete acls [<CalendarACLRole>]` (1689) and in GAM's parser (`getChoice(…, defaultChoice=None)`, then the scope, then no extra arguments). `all users` = `<UserTypeEntity>`, `primary` = `<UserCalendarEntity>`, a bare address = `<CalendarACLScope>` (a user). |
 | Manager reminder | `user <manager> add event primary summary <S> start allday <D> end allday <D+1> [description <T>] [attendee <E>]` | `gam <UserTypeEntity> create\|add event <UserCalendarEntity> [id <String>] <EventAttribute>+ [<EventNotificationAttribute>]` (6469); `<EventAttribute>` (6391): `summary`, `start\|starttime (allday <Date>)`, `end\|endtime (allday <Date>)`, `description`, `attendee <EmailAddress>` | Match. The end date is exclusive, so a one-day event on D. |
 | Delete (later, user detail page) | `delete user <leaver>` | `gam delete user <UserItem> [noactionifalias]` (5964) | Match; `noactionifalias` unused (the page passes the primary address). |
@@ -218,11 +218,14 @@ parser was read statically (its bytecode, never run). No mismatch found.
 - **Route tests offboard fixture users** (`carol@` leaves, `alice@` takes over): the directory check
   refuses anyone else. The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
   they can use any address — including the mock's trigger substrings above.
-- **The transfer names no Drive privacy level.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
-  `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser) —
-  without one, the Data Transfer API's own default decides whether files the leaver *shared* move to
-  the manager. Unverified which; check the manager's Drive after the first live run, before the
-  account is deleted. GAM also refuses a transfer to the same user (the step fails with a usage error).
+- **The transfer names the Drive privacy level `all`.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
+  `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser).
+  Until 2026-09-23 the step gave none, leaving it to the Data Transfer API's undocumented default
+  whether the files the leaver had *shared* moved — and what stays with the leaver is lost at delete,
+  while the delete gate still passes on a `completed` transfer (failure-log). The mock refuses a
+  privacy level on a transfer without Drive, as GAM does ("No data transfer application for key
+  PRIVACY_LEVEL"). The Builder's "Transfer Drive/Calendar ownership" still names none. GAM also
+  refuses a transfer to the same user (the step fails with a usage error).
 - **The auto-reply is sent as HTML** (`html`), built from the text by `lifecycle.autoreply_html`: each
   line break becomes `<br/>`, `&`/`<`/`>` are escaped and a backslash is `&#92;`, so senders read
   what the preview block ("Auto-reply senders will receive") shows. Before 2026-09-23 the raw text
@@ -238,7 +241,7 @@ gam + in-memory Keychain). Covered: step order/keys, the single combined-service
 argv, the second-same-user 409 still failing hard, sweep tolerance (own-ACL, not-found, a user
 without Calendar) vs. real auth errors and a per-user 403, a mixed multi-user stderr (all-tolerable vs. one real failure), the sweep's long
 timeout and a timeout as a clear step failure (`test_offboard_sweep_timeout_is_a_clear_step_failure`),
-auto-reply substitution, the auto-reply sent as the previewed text (`test_offboard_autoreply_is_sent_as_the_text_the_preview_shows`), the auto-reply not inheriting the leaver's old vacation settings (stateful
+the transfer's `all` privacy level (and the mock refusing one without Drive), auto-reply substitution, the auto-reply sent as the previewed text (`test_offboard_autoreply_is_sent_as_the_text_the_preview_shows`), the auto-reply not inheriting the leaver's old vacation settings (stateful
 mock, `test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings`), reminder invitee, `incomplete_transfers_for` filtering, the directory check
 (unknown/alias/same-account blocked on preview and run, admin/suspended warnings), the frozen preview
 (Run's writes = the previewed lines, `test_offboard_run_executes_exactly_the_previewed_commands`; an
@@ -272,7 +275,7 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   "Set delegate"; "Couldn't read … mail delegates" → fix what it quotes (Gmail off for the leaver, a
   missing Gmail scope) and preview again, or the delegate step fails after the reset.
 - Each `gam` line: the leaver everywhere, the manager in the delegate, transfer and reminder;
-  `drive,calendar` as one argument; the auto-reply block reads as senders should see it (its `gam`
+  `drive,calendar` as one argument, then `all`; the auto-reply block reads as senders should see it (its `gam`
   line carries the same text as HTML: `<br/>` for each line break); the reminder date and invitee.
 - Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
   writes in the app waiting behind it. Don't close the app mid-run. Left the page or reloaded? Enter
@@ -291,9 +294,14 @@ Audit shows eight `ok` records, one per step. Then check in Google, not just in 
   answer a colleague. GamGUI → the user → Vacation responder shows it on, "Domain only" and
   "Contacts only" unticked and no dates.
 - Transfer: the Builder's Data Transfers → Print (a read, `gam print datatransfers`, every transfer)
-  shows it `completed` after ~10–25 min; the manager's My Drive then has a folder of the leaver's files. Check whether files the
-  leaver had **shared** moved too (the privacy-level gotcha above) and whether their secondary
-  calendars are now the manager's. **Record what you find in the README's live-verification status.**
+  shows it `completed` after ~10–25 min; the manager's My Drive then has a folder of the leaver's
+  files. Then count what the leaver **still owns**: Builder → Users → Drive → Show filecounts, User =
+  the leaver (a read, `gam user <leaver> show filecounts`; GAM counts only files the user owns unless
+  told otherwise). Expect 0 — private and shared files both moved (`all`). Anything still counted is
+  lost when the account is deleted: Print filelist (same place, same user) names it; move it by hand
+  or ask before deleting. (Unverified live: whether files in the leaver's trash move.) Also check
+  whether their secondary calendars are now the manager's. **Record what you find in the README's
+  live-verification status.**
 - Calendar sweep: a colleague who had shared a calendar with the leaver no longer lists them
   (Calendar → Settings → Share with specific people).
 - Reminder: the all-day event is on the manager's calendar on the date; the invitee got the invite.

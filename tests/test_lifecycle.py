@@ -46,8 +46,8 @@ async def test_offboard_steps_call_the_right_connector_methods():
         async def set_vacation(self, e, s, m):
             calls.append(("set_vacation", e)); return _R()
 
-        async def transfer_data(self, o, svc, n):
-            calls.append(("transfer_data", o, svc, n)); return _R()
+        async def transfer_data(self, o, svc, n, privacy=""):
+            calls.append(("transfer_data", o, svc, n, privacy)); return _R()
 
         async def remove_from_all_calendars(self, e):
             calls.append(("remove_from_all_calendars", e)); return _R()
@@ -67,6 +67,7 @@ async def test_offboard_steps_call_the_right_connector_methods():
     transfers = [c for c in calls if c[0] == "transfer_data"]
     assert len(transfers) == 1                       # one transfer carrying both services
     assert transfers[0][2] == "drive,calendar"       # ONE argv-shaped service list
+    assert transfers[0][4] == "all"                  # private and shared Drive files
 
 
 async def test_offboard_reminder_invites_notify_target():
@@ -150,15 +151,18 @@ async def test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_sett
 async def test_offboard_transfer_step_invokes_combined_service_list(connector):
     # Bug 1 regression: the single transfer step must audit ONE `create datatransfer` whose service
     # element is the "drive,calendar" list — proving we no longer fire two overlapping same-user
-    # transfers (the second of which 409'd in production).
+    # transfers (the second of which 409'd in production). It names the Drive privacy level `all`
+    # (private AND shared files): without one, the Data Transfer API's own default decides whether the
+    # files the leaver had shared move — and whatever stays is lost when the account is deleted.
     steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     transfer = next(s for s in steps if s.key == "transfer")
     res = await transfer.action(connector)
     assert res.ok
     rec = next(e for e in connector.audit.tail() if e["action"] == "transfer_data")
     assert rec["ok"] and rec["argv"] == [
-        "create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com",
+        "create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com", "all",
     ]
+    assert transfer.commands == [rec["argv"]]
 
 
 @pytest.mark.asyncio

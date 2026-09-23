@@ -116,6 +116,11 @@ def test_lifecycle_commands():
     combined = GAMCommands.create_datatransfer("a@e.com", "drive,calendar", "b@e.com")
     assert combined == ["create", "datatransfer", "a@e.com", "drive,calendar", "b@e.com"]
     assert combined[3] == "drive,calendar"  # not split into two tokens
+    # `[private|shared|all]` (GamCommands.txt 3599): GAM sends PRIVACY_LEVEL only when one is named.
+    assert GAMCommands.create_datatransfer("a@e.com", "drive,calendar", "b@e.com", privacy="all") == [
+        "create", "datatransfer", "a@e.com", "drive,calendar", "b@e.com", "all"]
+    with pytest.raises(ValueError):
+        GAMCommands.create_datatransfer("a@e.com", "drive", "b@e.com", privacy="everything")
     assert GAMCommands.print_datatransfers() == ["print", "datatransfers"]
     assert GAMCommands.print_datatransfers("a@e.com") == ["print", "datatransfers", "olduser", "a@e.com"]
     assert GAMCommands.remove_all_calendar_acls("a@e.com") == ["all", "users", "delete", "calendaracls", "primary", "a@e.com"]

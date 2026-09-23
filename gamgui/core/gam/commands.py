@@ -291,13 +291,25 @@ class GAMCommands:
         # not `popimap` (POP/IMAP need a password, app password or token, all revoked here).
         return ["user", email, "deprovision", "signout"]
 
+    # `[private|shared|all]` (GamCommands.txt 3599): which of the old owner's Drive files move — `all`
+    # is both. GAM sends PRIVACY_LEVEL only when one is named, and only to a listed app that takes it
+    # (Drive; with no such app it is a usage error), so without one the Data Transfer API's own
+    # default decides whether the files the old owner had shared move.
+    TRANSFER_PRIVACY = ("private", "shared", "all")
+
     @staticmethod
-    def create_datatransfer(old_owner: str, service: str, new_owner: str) -> List[str]:
+    def create_datatransfer(old_owner: str, service: str, new_owner: str, privacy: str = "") -> List[str]:
         # `service` is a <DataTransferServiceList>: one service ("drive" | "calendar") OR a
         # comma-joined list ("drive,calendar") that rides as ONE argv element. Passing both in a
         # single transfer avoids Google's 409 "transfer already in progress" when two separate
         # transfers for the same user overlap.
-        return ["create", "datatransfer", old_owner, service, new_owner]
+        argv = ["create", "datatransfer", old_owner, service, new_owner]
+        if privacy:
+            if privacy not in GAMCommands.TRANSFER_PRIVACY:
+                raise ValueError(f"invalid transfer privacy level {privacy!r}; expected one of "
+                                 f"{GAMCommands.TRANSFER_PRIVACY}")
+            argv.append(privacy)
+        return argv
 
     @staticmethod
     def print_datatransfers(old_owner: str = "") -> List[str]:

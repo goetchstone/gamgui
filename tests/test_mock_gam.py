@@ -45,7 +45,9 @@ WRITES = {
     "add_calendar_event": [C.add_calendar_event("mgr@example.com", "Confirm", "2026-07-23", "2026-07-24"),
                            C.add_calendar_event("mgr@example.com", "Confirm", "2026-07-23", "2026-07-24",
                                                 description="d", attendee="it@example.com")],
-    "create_datatransfer": [C.create_datatransfer("leaver@example.com", "drive,calendar", "mgr@example.com")],
+    "create_datatransfer": [C.create_datatransfer("leaver@example.com", "drive,calendar", "mgr@example.com")]
+                           + [C.create_datatransfer("leaver@example.com", "drive,calendar", "mgr@example.com", privacy=p)
+                              for p in C.TRANSFER_PRIVACY],
     "create_tasklist": [C.create_tasklist("mgr@example.com", "Onboard Ada")],
     "create_task": [C.create_task("mgr@example.com", "MockTasklist_abc123", "Order a laptop", notes="n")],
     "send_email": [C.send_email("new@example.com", "Welcome", "<p>Hi</p>"),
@@ -142,6 +144,9 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     (["update", "user", "alice@example.com", "organization", "title", "T"], "Missing argument"),
     (["update", "group", "sales@example.com", "add", "admin", "carol@example.com"], "Invalid argument"),
     (["create", "datatransfer", "leaver@example.com", "drive,mail", "mgr@example.com"], "Invalid choice (mail)"),
+    # A privacy level is a Drive parameter: GAM (_assignAppParameter) refuses it when no listed app takes it.
+    (["create", "datatransfer", "leaver@example.com", "calendar", "mgr@example.com", "all"],
+     "No data transfer application for key PRIVACY_LEVEL"),
     (["user", "alice@example.com", "forward", "on", "bounce", "fwd@example.com"], "Invalid choice (bounce)"),
     (["user", "alice@example.com", "signout", "now"], "Invalid argument"),
     (["user", "alice@example.com", "deprovision", "signout", "now"], "Invalid argument"),

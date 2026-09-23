@@ -29,6 +29,9 @@ DEFAULT_MESSAGE = (
 
 # The combined <DataTransferServiceList>: ONE transfer, one argv element (a second same-user one 409s).
 TRANSFER_SERVICES = "drive,calendar"
+# Every Drive file the leaver owns, private and shared: left to the API's default, files they had
+# shared might stay behind — and be lost when the account is deleted.
+TRANSFER_PRIVACY = "all"
 
 # What each step needs to have succeeded before it runs — a failed step stops the steps that rely on
 # it rather than half-offboarding the account (the runbook's "When a step fails" table):
@@ -216,9 +219,9 @@ def build_offboard_steps(
                      lambda c: c.set_vacation(user, subject, body),
                      [GAMCommands.set_vacation(user, subject, body)]),
         OffboardStep("transfer", "Transfer Drive & Calendar ownership",
-                     f"Transfer {user}'s Drive/Docs and calendars to {manager}",
-                     lambda c: c.transfer_data(user, TRANSFER_SERVICES, manager),
-                     [GAMCommands.create_datatransfer(user, TRANSFER_SERVICES, manager)]),
+                     f"Transfer {user}'s Drive/Docs (private and shared files) and calendars to {manager}",
+                     lambda c: c.transfer_data(user, TRANSFER_SERVICES, manager, privacy=TRANSFER_PRIVACY),
+                     [GAMCommands.create_datatransfer(user, TRANSFER_SERVICES, manager, privacy=TRANSFER_PRIVACY)]),
         OffboardStep("calacls", "Remove from everyone's calendars",
                      f"Remove {user} from other users' calendars — one domain-wide call that visits "
                      f"every user, so it can take many minutes (stopped and reported failed after "

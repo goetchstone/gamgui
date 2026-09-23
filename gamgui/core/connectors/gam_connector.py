@@ -356,8 +356,8 @@ class GAMConnector(Connector):
         """Turn off automatic forwarding of ``email``'s incoming mail (harmless if it was off)."""
         return await self._run_write("forward_off", email, GAMCommands.forward_off(email), RiskLevel.LOW)
 
-    async def transfer_data(self, old_owner: str, service: str, new_owner: str) -> ChangeResult:
-        argv = GAMCommands.create_datatransfer(old_owner, service, new_owner)
+    async def transfer_data(self, old_owner: str, service: str, new_owner: str, privacy: str = "") -> ChangeResult:
+        argv = GAMCommands.create_datatransfer(old_owner, service, new_owner, privacy=privacy)
         return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, target_extra=new_owner)
 
     async def create_onboarding_runbook(self, assignee: str, title: str, steps: List[str]) -> dict:
