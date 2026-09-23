@@ -68,6 +68,11 @@ def _parse_signature(text: str) -> str:
     return "" if sig in ("", "None") else sig
 
 
+def _require_read(cmd) -> None:
+    if cmd.risk != RiskLevel.READ_ONLY:
+        raise ValueError(f"{cmd.id} is not a read-only command")
+
+
 class GAMConnector(Connector):
     id = ConnectorID.GOOGLE_WORKSPACE
     capabilities = {Capability.DIRECTORY, Capability.GROUPS, Capability.MAIL}
@@ -331,11 +336,8 @@ class GAMConnector(Connector):
     # --- lifecycle (offboarding) -------------------------------------------------------
     async def reset_password(self, email: str) -> ChangeResult:
         res = await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
-        if res.ok:  # best-effort: end existing sessions too
-            try:
-                await self.runner.run_authenticated(self.domain, GAMCommands.signout_user(email), serialize=True)
-            except Exception:
-                pass
+        if res.ok:  # best-effort: end existing sessions too — audited, but its failure doesn't fail the reset
+            await self.signout_user(email)
         return res
 
     async def transfer_data(self, old_owner: str, service: str, new_owner: str) -> ChangeResult:
@@ -412,6 +414,21 @@ class GAMConnector(Connector):
     async def delete_user(self, email: str) -> ChangeResult:
         return await self._run_write("delete_user", email, GAMCommands.delete_user(email), RiskLevel.DESTRUCTIVE)
 
+    # --- the Builder's catalog reads ---------------------------------------------------
+    async def catalog_read(self, cmd, argv: List[str]) -> str:
+        """Run a Builder catalog read and return its output. Refuses anything the catalog doesn't mark
+        READ_ONLY (the Builder sends a write to ``apply``), so this can't become a second write path."""
+        _require_read(cmd)
+        return await self.runner.run_authenticated(self.domain, argv)
+
+    async def export_to_sheet(self, cmd, argv: List[str], owner: str = "", title: str = "") -> ChangeResult:
+        """Run a Builder read with ``todrive``: GAM writes the result to a new Google Sheet in
+        ``owner``'s Drive (blank = the admin's). Creating a file is a write, so it runs through the
+        chokepoint; ``output`` carries the Sheet URL GAM prints."""
+        _require_read(cmd)
+        argv = list(argv) + GAMCommands.todrive_args(owner, title)
+        return await self._run_write("export_to_sheet", owner or "(admin Drive)", argv, RiskLevel.LOW)
+
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:
         """Build dry-run previews for (un)suspending a concrete set of users.
@@ -473,7 +490,7 @@ class GAMConnector(Connector):
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
         try:
-            await self.runner.run_authenticated(self.domain, argv, serialize=True)
+            out = await self.runner.run_authenticated(self.domain, argv, serialize=True)
         except Exception as exc:
             # Every error line must be tolerable: a sweep's stderr holds one line per entity, and one
             # real failure among the benign notices is a failure (GAMError.kinds, not just .kind).
@@ -496,4 +513,4 @@ class GAMConnector(Connector):
             extra={"group": target_extra} if target_extra else None,
             secrets=secrets,
         )
-        return ChangeResult(preview=preview, ok=True)
+        return ChangeResult(preview=preview, ok=True, output=redact_secrets(out, secrets))

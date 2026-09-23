@@ -33,7 +33,9 @@ grammar, split into two tiers by whether they can run:
    `requires_confirmation` runs only with a posted `confirmed`; a bulk-destructive sequence needs the
    typed `confirm`. A bare POST that skips the UI must not execute.
 4. **Every mutation is audited.** Mutations go through `GAMConnector.apply → _run_write` (serialized +
-   audit log). Reads go through `runner.run_authenticated` + `parse_records`.
+   audit log). Reads go through `GAMConnector.catalog_read` (which refuses a non-`READ_ONLY` command)
+   + `parse_records`. A read exported with `todrive` creates a Sheet — possibly in another user's
+   Drive — so it is a write: `export_to_sheet → _run_write`, audited as `export_to_sheet`.
 
 ## How reads become buildable
 

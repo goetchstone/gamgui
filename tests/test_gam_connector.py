@@ -100,3 +100,33 @@ async def test_resolve_links_workspace_account(connector):
     account = await connector.resolve(person)
     assert account is not None
     assert account.native_id == "alice@example.com"
+
+
+def _audit_rows(connector):
+    return [(e["action"], e["target"], e["ok"]) for e in connector.audit.tail()]
+
+
+async def test_reset_password_audits_its_follow_up_signout(connector, gam_calls):
+    # The sign-out ends every session the leaver has — a write, so it goes through _run_write too.
+    res = await connector.reset_password("alice@example.com")
+    assert res.ok is True
+    assert gam_calls()[-1] == ["user", "alice@example.com", "signout"]
+    assert _audit_rows(connector) == [("reset_password", "alice@example.com", True),
+                                      ("signout_user", "alice@example.com", True)]
+
+
+async def test_a_failed_follow_up_signout_is_audited_but_the_reset_stands(connector, monkeypatch):
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+
+    real = connector.runner.run_authenticated
+
+    async def signout_fails(domain, argv, **kw):
+        if argv[-1:] == ["signout"]:
+            raise GAMError(GAMErrorKind.PERMISSION_DENIED, exit_code=1, stderr="ERROR: 403: Forbidden")
+        return await real(domain, argv, **kw)
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", signout_fails)
+    res = await connector.reset_password("alice@example.com")
+    assert res.ok is True                                   # best-effort: the reset itself succeeded
+    assert _audit_rows(connector) == [("reset_password", "alice@example.com", True),
+                                      ("signout_user", "alice@example.com", False)]

@@ -875,8 +875,8 @@ def test_lifecycle_preview_shows_autoreply_block(client):
     assert "Alice Anders is no longer with the company" in r.text
 
 
-OFFBOARD_AUDIT = ["reset_password", "add_delegate", "set_vacation", "transfer_data",
-                  "remove_from_all_calendars", "add_calendar_event"]
+OFFBOARD_AUDIT = ["reset_password", "signout_user", "add_delegate", "set_vacation", "transfer_data",
+                  "remove_from_all_calendars", "add_calendar_event"]   # the sign-out is reset's audited follow-up
 
 
 def _offboard_writes(calls):
@@ -907,7 +907,7 @@ def test_lifecycle_offboard_run_starts(client, gam_calls):
     wait_for_job(client, job)
     assert (job.applied, job.failed) == (6, [])
     assert _offboard_writes(gam_calls()) == OFFBOARD_WRITES
-    assert [(a, ok) for a, _, ok in _audited(client, 6)] == [(a, True) for a in OFFBOARD_AUDIT]
+    assert [(a, ok) for a, _, ok in _audited(client, 7)] == [(a, True) for a in OFFBOARD_AUDIT]
     done = client.get("/lifecycle/offboard/status", params={"job": job.id})
     assert_ok_partial(done)
     assert "Offboarding complete — 6 of 6 steps succeeded." in done.text

@@ -71,6 +71,7 @@ class ChangeResult:
     preview: ChangePreview
     ok: bool
     detail: str = ""
+    output: str = ""         # the command's stdout on success (e.g. the Sheet URL a todrive export prints)
 
 
 class Connector:

@@ -110,13 +110,24 @@ def test_pinned_version_consistent():
     assert EXPECTED_GAM_VERSION in mock, "mock_gam.sh must echo EXPECTED_GAM_VERSION"
 
 
+# The connector functions that may record() or run a write outside `_run_write`, each with its reason.
+AUDITED_OUTSIDE_RUN_WRITE = {
+    "create_onboarding_runbook": "a two-step tasklist build; records `onboard_runbook` itself",
+}
+# Functions that run an argv the tripwire can't trace to one builder, each proven a read another way.
+READ_BY_CONTRACT = {
+    "catalog_read": "refuses a non-READ_ONLY catalog command "
+                    "(test_builder.py::test_catalog_read_and_export_refuse_a_write_command)",
+}
+
+
 def test_audit_record_only_in_run_write_or_allowlist():
     """Invariant #2: every ``self.audit.record(`` in the connector is inside ``_run_write`` or a small,
     named allowlist of documented non-chokepoint audited paths. A NEW audited write path outside them
     fails here — surfacing a mutation that skipped ChangePreview -> guard.evaluate."""
     import ast
     src = (ROOT / "gamgui" / "core" / "connectors" / "gam_connector.py").read_text()
-    allow = {"_run_write", "create_onboarding_runbook"}   # the documented audited two-step helper
+    allow = {"_run_write", *AUDITED_OUTSIDE_RUN_WRITE}
     offenders = []
     for node in ast.walk(ast.parse(src)):
         if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
@@ -126,3 +137,70 @@ def test_audit_record_only_in_run_write_or_allowlist():
     assert not offenders, (
         "audit.record() outside _run_write / the allowlist — a mutation may be skipping the "
         "ChangePreview->guard chokepoint (invariant #2): {}".format(sorted(set(offenders))))
+
+
+def _own_calls(fn):
+    """The calls in ``fn``'s own body — a nested def/lambda is its own scope, counted on its own."""
+    import ast
+    stack = list(fn.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        if isinstance(node, ast.Call):
+            yield node
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _builder_of(node, fn):
+    """The ``GAMCommands`` builder an argv expression comes from: a direct call, or a local assigned
+    exactly once from one. None when it can't be traced."""
+    import ast
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name) and node.func.value.id == "GAMCommands"):
+        return node.func.attr
+    if isinstance(node, ast.Name):
+        values = [n.value for n in ast.walk(fn) if isinstance(n, ast.Assign)
+                  and any(isinstance(t, ast.Name) and t.id == node.id for t in n.targets)]
+        if len(values) == 1:
+            return _builder_of(values[0], fn)
+    return None
+
+
+def test_every_run_authenticated_call_is_the_chokepoint_or_a_read():
+    """Invariant #2 (plan Q6): ``runner.run_authenticated`` is how every credentialed GAM call runs, so
+    each call site must be one of: ``_run_write``; a named, hand-audited path; a function proven a read
+    another way (``READ_BY_CONTRACT``); or a read — its argv traced to a builder classified as a read in
+    ``tests/test_mock_gam.py`` and not taking the write lock. The audit.record() tripwire above can't
+    see a write that is simply never audited (the Builder's todrive export, reset_password's follow-up
+    sign-out); this one can."""
+    import ast
+
+    from .test_mock_gam import READS
+
+    allowed = {"_run_write", *AUDITED_OUTSIDE_RUN_WRITE, *READ_BY_CONTRACT}
+    offenders, seen, expected = [], 0, 0
+    for path in sorted((ROOT / "gamgui").rglob("*.py")):
+        src = path.read_text()
+        expected += src.count(".run_authenticated(")
+        for fn in ast.walk(ast.parse(src)):
+            if not isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                continue
+            for call in _own_calls(fn):
+                if not (isinstance(call.func, ast.Attribute) and call.func.attr == "run_authenticated"):
+                    continue
+                seen += 1
+                if fn.name in allowed:
+                    continue
+                argv = call.args[1] if len(call.args) > 1 else next(
+                    (k.value for k in call.keywords if k.arg == "argv"), None)
+                builder = _builder_of(argv, fn)
+                serialized = any(k.arg == "serialize" and not (isinstance(k.value, ast.Constant)
+                                                               and k.value.value is False)
+                                 for k in call.keywords)
+                if builder not in READS or serialized:
+                    offenders.append(f"{path.relative_to(ROOT)}::{fn.name} ({builder or 'untraced argv'})")
+    assert seen == expected, "a run_authenticated( call outside any function body escaped the scan"
+    assert not offenders, (
+        "run_authenticated() with a write, an untraceable argv or the write lock, outside _run_write and "
+        "the named allowlists — route the mutation through _run_write (invariant #2): {}".format(offenders))

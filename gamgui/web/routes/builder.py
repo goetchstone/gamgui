@@ -21,7 +21,6 @@ from ...core.catalog import load_catalog
 from ...core.catalog.catalog import AREA_ORDER
 from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
-from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ...core.gam.parser import parse_records
 from ..csvutil import csv_safe
@@ -272,18 +271,18 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     preview = _preview_of(cmd, argv, target)
     if cmd.risk == RiskLevel.READ_ONLY:
         form = await request.form()
-        export = bool(form.get("td_export"))
-        if export:  # send the result to a Google Sheet instead of the in-app table
+        if form.get("td_export"):  # a new Google Sheet instead of the in-app table — a write, audited
             owner = (form.get("td_user") or "").strip()
-            argv = argv + GAMCommands.todrive_args(owner, (form.get("td_title") or "").strip())
+            res = await conn.export_to_sheet(cmd, argv, owner, (form.get("td_title") or "").strip())
+            if not res.ok:
+                return _err(request, "The export to a Google Sheet failed.", res.detail)
+            return TEMPLATES.TemplateResponse(request, "_export_result.html",
+                                              {"gam": _gam_str(res.preview.argv), "output": res.output,
+                                               "owner": owner or "the admin account"})
         try:
-            out = await conn.runner.run_authenticated(conn.domain, argv)
+            out = await conn.catalog_read(cmd, argv)
         except Exception as exc:  # noqa: BLE001
             return _err(request, _friendly(exc), _details(exc))
-        if export:
-            return TEMPLATES.TemplateResponse(request, "_export_result.html",
-                                              {"gam": _gam_str(argv), "output": out,
-                                               "owner": owner or "the admin account"})
         return _render_read(request, out, _gam_str(argv))
     # A mutation that needs confirmation must come back through the preview (the "Confirm & run"
     # button sends confirmed=1) — a bare POST never silently runs a destructive command.

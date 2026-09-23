@@ -293,11 +293,49 @@ def test_catalog_paginates_with_prev_next(client):
     assert "‹ Prev" in r2.text and "Page 2 of" in r2.text
 
 
+def _audit(client):
+    return client.app.state.gamgui.connector.audit.tail()
+
+
 def test_read_command_export_to_drive(client):
     r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
                                           "td_export": "1", "td_user": "boss@example.com", "td_title": "Delegates"})
     assert "Exported to a Google Sheet" in r.text and "boss@example.com" in r.text
     assert "todrive tduser boss@example.com tdtitle Delegates" in r.text
+    # The export creates a file in boss's Drive — a write, so the chokepoint audits it (plan Q6).
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("export_to_sheet", "boss@example.com", True)
+    assert entry["argv"] == ["user", "alice@example.com", "print", "delegates",
+                             "todrive", "tduser", "boss@example.com", "tdtitle", "Delegates"]
+
+
+def test_a_failed_export_is_audited_and_shown(client, monkeypatch):
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+
+    async def refused(domain, argv, **kw):
+        raise GAMError(GAMErrorKind.PERMISSION_DENIED, exit_code=1, stderr="ERROR: 403: Insufficient permissions")
+
+    monkeypatch.setattr(client.app.state.gamgui.connector.runner, "run_authenticated", refused)
+    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
+                                          "td_export": "1", "td_user": "boss@example.com"})
+    assert "export to a Google Sheet failed" in r.text and "403" in r.text
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("export_to_sheet", "boss@example.com", False)
+
+
+def test_a_plain_read_writes_no_audit_entry(client):
+    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    assert "assistant@example.com" in r.text and _audit(client) == []
+
+
+async def test_catalog_read_and_export_refuse_a_write_command(connector, gam_calls):
+    # The Builder's read entry points can't become a second write path, whatever a caller passes.
+    write = load_catalog().by_id("build.delete_user")
+    with pytest.raises(ValueError):
+        await connector.catalog_read(write, write.build({"email": "alice@example.com"}))
+    with pytest.raises(ValueError):
+        await connector.export_to_sheet(write, write.build({"email": "alice@example.com"}))
+    assert gam_calls() == [] and connector.audit.tail() == []
 
 
 def test_row_action_prefills_the_form(client):
