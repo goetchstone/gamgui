@@ -24,6 +24,7 @@ from ...core.gam.errors import GAMError
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
 from ..jobs import start_job
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/users")
@@ -305,6 +306,20 @@ async def set_organization(
 
 
 # --- bulk: set the department on many users, preserving each person's title ----
+# Apply sets the department its preview showed on the people it listed, held under a single-use token
+# (web/previews.py). Apply once re-resolved the live form, so a list or department edited after
+# Preview was written under a dialog that still named the previewed value and count.
+_BULK_FLOW = "bulk_department"
+
+
+def _pasted(emails_raw: str) -> set:
+    return {e.strip().lower() for e in emails_raw.replace(",", "\n").splitlines() if e.strip()}
+
+
+def _bulk_form_key(store: str, group: str, emails_raw: str) -> tuple:
+    return (store.strip(), group.strip().lower(), tuple(sorted(_pasted(emails_raw))))
+
+
 async def _bulk_targets(st, group: str, emails_raw: str):
     """Resolve target ACTIVE users from a group OR a pasted email list (matched against the cache)."""
     users = await st.users()
@@ -312,7 +327,7 @@ async def _bulk_targets(st, group: str, emails_raw: str):
         members = await st.connector.list_group_members(group)
         wanted = {m.email.lower() for m in members}
     else:
-        wanted = {e.strip().lower() for e in emails_raw.replace(",", "\n").splitlines() if e.strip()}
+        wanted = _pasted(emails_raw)
     return [u for u in users if u.primary_email.lower() in wanted and not u.suspended]
 
 
@@ -360,8 +375,13 @@ async def bulk_preview(request: Request, store: Annotated[str, Form()] = "", gro
         targets = await _bulk_targets(st, group.strip(), emails)
     except Exception as exc:
         return _err(request, _friendly(exc))
+    token = ""
+    if targets and store.strip():
+        token = st.previews.hold(_BULK_FLOW, _bulk_form_key(store, group, emails),
+                                 (store.strip(), [u.primary_email for u in targets]))
     return TEMPLATES.TemplateResponse(
-        request, "_bulk_preview.html", {"targets": targets[:200], "count": len(targets), "store": store.strip()}
+        request, "_bulk_preview.html",
+        {"targets": targets[:200], "count": len(targets), "store": store.strip(), "token": token}
     )
 
 
@@ -371,17 +391,24 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     conn = st.connector
     if conn is None:
         return _err(request, _NOT_CONNECTED)
-    store = store.strip()
-    if not store:
+    if not store.strip():
         return _err(request, "Enter a department first.")
+    form = await request.form()
+    held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""),
+                                     _bulk_form_key(store, group, emails), again="click Preview again")
+    if refusal:
+        return _err(request, refusal)
+    store, emails_held = held
+    # The previewed people, with their titles as the directory has them now (the job keeps each title).
     try:
-        targets = await _bulk_targets(st, group.strip(), emails)
+        current = {u.primary_email.lower(): u for u in await st.users()}
     except Exception as exc:
         return _err(request, _friendly(exc))
-    if not targets:
-        return _err(request, "No matching active users to update.")
+    targets = [current.get(e.lower()) for e in emails_held]
+    if not targets or any(u is None or u.suspended for u in targets):
+        return _err(request, "Someone in the preview is no longer an active user — click Preview again.")
     previews = guard.changes([u.primary_email for u in targets], RiskLevel.LOW, "Set department")
-    refusal = guard.enforce(previews, await request.form(), confirm_step=True)
+    refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
         return _err(request, refusal)
     job = start_job(st.jobs, len(targets))

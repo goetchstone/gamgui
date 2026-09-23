@@ -529,9 +529,46 @@ def test_bulk_store_apply_requires_store_value(client):
     assert "Enter a department first" in r.text
 
 
+def _bulk_preview(client, **form):
+    """Preview a bulk department change; return the page and its Apply button's token ("" if none)."""
+    r = client.post("/users/bulk/preview", data=form)
+    m = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', r.text)
+    return r.text, (m.group(1) if m else "")
+
+
+def _bulk_apply(client, token, **form):
+    """Post Apply as the preview's button does: the live form (hx-include) + confirmed + the token."""
+    return client.post("/users/bulk/apply", data={**form, "confirmed": "1", "preview": token})
+
+
+BULK_ALICE = {"store": "Sales", "group": "", "emails": "alice@example.com"}
+
+
+@pytest.mark.parametrize("edit", [{"store": "Finance"},                                       # another value
+                                  {"emails": "alice@example.com\ncarol@example.com"},         # more people
+                                  {"emails": "", "group": "sales@example.com"}])              # a group instead
+def test_bulk_store_apply_runs_only_what_was_previewed(client, gam_calls, edit):
+    # Apply once posted the live form: preview Sales on alice, change the list and the department,
+    # and the stale "Apply to 1 user" wrote Finance to both, under a dialog naming Sales and 1 user.
+    shown, token = _bulk_preview(client, **BULK_ALICE)
+    assert "Apply to 1 user" in shown
+    r = _bulk_apply(client, token, **{**BULK_ALICE, **edit})
+    assert "The form changed after the preview" in r.text
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
+
+
+def test_bulk_store_apply_is_single_use(client, gam_calls):
+    _, token = _bulk_preview(client, **BULK_ALICE)
+    wait_for_job(client, _job(client, _bulk_apply(client, token, **BULK_ALICE).text, "/users/bulk/status"))
+    assert len(gam_writes(gam_calls())) == 1
+    r = _bulk_apply(client, token, **BULK_ALICE)                     # a replayed click
+    assert "expired or was already run" in r.text and len(gam_writes(gam_calls())) == 1
+
+
 def test_bulk_store_apply_runs_as_job(client, gam_calls):
-    r = client.post("/users/bulk/apply", data={"store": "Downtown", "group": "", "emails": "alice@example.com",
-                                               "confirmed": "1"})
+    form = {"store": "Downtown", "group": "", "emails": "alice@example.com"}
+    _, token = _bulk_preview(client, **form)
+    r = _bulk_apply(client, token, **form)
     assert_ok_partial(r)
     job = _job(client, r.text, "/users/bulk/status")
     wait_for_job(client, job)
