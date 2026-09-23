@@ -231,6 +231,56 @@ def test_shred_dir_still_removes_a_file_it_cannot_overwrite(tmp_path):
     assert not d.exists()
 
 
+_PLANTED = 256 << 20   # a sparse file far larger than any credential (those are a few KB)
+
+
+def test_zeroing_a_huge_sparse_file_is_bounded_in_memory_and_disk(tmp_path):
+    # `_zero_file` allocated the whole file size at once (b"\x00" * st_size). A huge sparse file planted
+    # in a gamcfg-* dir made the startup sweep allocate (and then write) that much: MemoryError where
+    # the allocation is refused — the sweep catches only OSError, so startup crashed — and on macOS,
+    # which grants it, a memset of the whole size. The overwrite is now chunked and capped.
+    import tracemalloc
+
+    d = _make_cfgdir(tmp_path, "gamcfg-sparse")
+    big = d / "planted"
+    with open(big, "wb") as fh:
+        fh.write(b"secret")                         # a head that must still be overwritten
+        fh.truncate(_PLANTED)
+    dir_fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+    tracemalloc.start()
+    try:
+        ephemeral._zero_file(dir_fd, "planted")
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+        os.close(dir_fd)
+    assert peak < 1 << 20, peak                     # not the file's size
+    with open(big, "rb") as fh:
+        assert fh.read(6) == b"\0" * 6              # the head was overwritten
+    assert os.stat(big).st_blocks * 512 < 8 << 20   # and the disk was not filled with its zeros
+
+
+def test_zeroing_covers_a_file_across_several_chunks(tmp_path):
+    d = _make_cfgdir(tmp_path, "gamcfg-chunks")
+    f = d / FILENAMES["oauth2service"]
+    f.write_bytes(b"k" * (ephemeral._ZERO_CHUNK * 3 + 17))    # not a whole number of chunks
+    dir_fd = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        ephemeral._zero_file(dir_fd, f.name)
+    finally:
+        os.close(dir_fd)
+    assert f.read_bytes() == b"\0" * (ephemeral._ZERO_CHUNK * 3 + 17)   # every byte, not one past
+
+
+def test_sweep_removes_a_dir_holding_a_huge_sparse_file(tmp_path):
+    d = _make_cfgdir(tmp_path, "gamcfg-huge", pid=_dead_pid())
+    (d / FILENAMES["oauth2"]).write_text("secret", encoding="utf-8")
+    with open(d / "planted", "wb") as fh:
+        fh.truncate(_PLANTED)
+    assert sweep_stale_configs(base_dir=tmp_path, max_age_seconds=0) == 1
+    assert not d.exists()
+
+
 def test_shred_dir_tolerates_a_dir_that_is_already_gone(tmp_path):
     _shred_dir(tmp_path / "gamcfg-gone")     # listing it raises; the wipe must not
 

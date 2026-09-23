@@ -62,6 +62,15 @@ def app_runtime_dir() -> Path:
     return base
 
 
+# The overwrite goes in fixed-size chunks, and stops after _ZERO_MAX_BYTES. Every file we write here
+# is a few KB (the credentials, the pid marker, GAM's refreshed oauth2.txt), so the cap never cuts
+# one short. It exists for a file we did NOT write: zeroing a planted huge sparse file in one
+# allocation (b"\x00" * st_size) crashed the startup sweep with MemoryError, or on macOS, which grants
+# the allocation, memset the whole size; zeroing it all in chunks would instead fill the disk.
+_ZERO_CHUNK = 1 << 16
+_ZERO_MAX_BYTES = 1 << 20
+
+
 def _zero_file(dir_fd: int, name: str) -> None:
     # O_NOFOLLOW: a planted symlink can't aim the zeroing at a file outside the dir. O_NONBLOCK: a
     # FIFO fails fast (ENXIO) instead of blocking the wipe until something opens its other end.
@@ -69,7 +78,14 @@ def _zero_file(dir_fd: int, name: str) -> None:
     try:
         st = os.fstat(fd)
         if stat.S_ISREG(st.st_mode):
-            os.write(fd, b"\x00" * st.st_size)
+            size = min(st.st_size, _ZERO_MAX_BYTES)
+            chunk = b"\x00" * min(_ZERO_CHUNK, size)
+            written = 0
+            while written < size:
+                n = os.write(fd, chunk[:size - written])
+                if n <= 0:
+                    break           # no progress: stop; removal is what matters
+                written += n
             os.fsync(fd)
     finally:
         os.close(fd)
