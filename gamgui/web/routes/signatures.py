@@ -15,6 +15,7 @@ from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/signatures")
@@ -113,6 +114,16 @@ def _previews(matched):
     return guard.changes([u.primary_email for u in matched], RiskLevel.LOW, "Set signature")
 
 
+# Apply writes what the preview showed: its template to the people it resolved, held under a single-use
+# token (web/previews.py). Apply once re-resolved the live form, so a scope widened after Preview
+# overwrote everyone it now matched while the button still said "Apply to 1 user".
+_FLOW = "signatures"
+
+
+def _form_key(template: str, scope_type: str, scope_value: str) -> tuple:
+    return (template, scope_type, scope_value.strip())
+
+
 def _prune_jobs(st, keep: int = 10) -> None:
     """Drop the oldest finished jobs so the registry can't grow without bound."""
     finished = [jid for jid, j in st.jobs.items() if j.finished]
@@ -173,11 +184,12 @@ async def preview(
     matched = await _matched(st, users, scope_type, scope_value)
     sample = matched[0] if matched else None
     decision = guard.evaluate(_previews(matched), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    token = st.previews.hold(_FLOW, _form_key(template, scope_type, scope_value), (template, matched)) if matched else ""
     return TEMPLATES.TemplateResponse(
         request, _PREVIEW_PARTIAL,
         {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),
          "sample": sample, "warning": sig.smart_quote_warning(template),
-         "typed_count": decision.requires_typed_count},
+         "typed_count": decision.requires_typed_count, "token": token},
     )
 
 
@@ -191,16 +203,16 @@ async def apply(
     st = request.app.state.gamgui
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "Not connected."})
-    try:
-        users = await st.users()
-    except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": _friendly(exc)})
-    matched = await _matched(st, users, scope_type, scope_value)
-    if not matched:
-        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "No active users match this scope."})
-    # Only via the preview's Apply button, and over COUNT_CONFIRM_ABOVE people with the count typed.
-    refusal = guard.enforce(_previews(matched), await request.form(), confirm_step=True,
-                            typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    form = await request.form()
+    # The previewed template and people, or nothing: a used, expired or missing preview, or a scope or
+    # template edited since, is refused rather than run on values the preview never showed.
+    held, refusal = st.previews.take(_FLOW, str(form.get(TOKEN_FIELD) or ""),
+                                     _form_key(template, scope_type, scope_value), again="click Preview again")
+    if refusal:
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
+    template, matched = held
+    # Only via the preview's Apply button, and over COUNT_CONFIRM_ABOVE people with the previewed count typed.
+    refusal = guard.enforce(_previews(matched), form, confirm_step=True, typed_count_above=guard.COUNT_CONFIRM_ABOVE)
     if refusal:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
 

@@ -193,18 +193,17 @@ def test_signatures_preview(client):
 
 
 def _start_apply(client, body):
-    """POST an apply and assert it started a job-polling panel (we don't poll to completion under
-    TestClient — the bg task + subprocess can deadlock; per-user apply is covered by command tests)."""
-    import re
-
-    r = client.post("/signatures/apply", data=body)
+    """Preview, then POST the preview's Apply, and assert it started a job-polling panel (the job is
+    awaited with wait_for_job, never by polling the status endpoint under TestClient)."""
+    _, token = _sig_preview(client, **body)
+    r = _sig_apply(client, token, **body)
     assert r.status_code == 200
     assert re.search(r"/signatures/apply/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
     return r
 
 
 def test_signatures_apply(client, gam_calls):
-    r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": "", "confirmed": "1"})
+    r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
     assert "Applying signature" in r.text
     job = _job(client, r.text, "/signatures/apply/status")
     wait_for_job(client, job)
@@ -221,12 +220,15 @@ def test_signatures_apply(client, gam_calls):
     assert "Applied to 2 of 2 users." in done.text
 
 
-def test_signatures_apply_empty_scope_is_friendly(client):
-    # An empty single-user selection must not bulk-apply — it returns a friendly message, no job.
-    r = client.post("/signatures/apply", data={"template": "{name}", "scope_type": "user", "scope_value": ""})
-    assert r.status_code == 200
-    assert "No active users match this scope." in r.text
-    assert "apply/status" not in r.text
+def test_signatures_apply_empty_scope_is_friendly(client, gam_calls):
+    # An empty single-user selection must not bulk-apply: its preview offers no Apply (and holds
+    # nothing to apply), and an Apply posted anyway starts no job.
+    body = {"template": "{name}", "scope_type": "user", "scope_value": ""}
+    shown, token = _sig_preview(client, **body)
+    assert "No active users match this scope." in shown and "/signatures/apply" not in shown and token == ""
+    r = _sig_apply(client, token, **body)
+    assert r.status_code == 200 and "apply/status" not in r.text
+    assert gam_writes(gam_calls()) == []
 
 
 def test_signatures_designer_defaults_to_one_user(client, gam_calls):
@@ -238,7 +240,7 @@ def test_signatures_designer_defaults_to_one_user(client, gam_calls):
     r = client.post("/signatures/preview", data={"template": "{name}"})
     assert "Applies to <strong>0</strong>" in r.text
     r = client.post("/signatures/apply", data={"template": "{name}", "confirmed": "1"})
-    assert "No active users match this scope." in r.text and "apply/status" not in r.text
+    assert "apply/status" not in r.text
     assert gam_writes(gam_calls()) == []
 
 
@@ -247,15 +249,17 @@ def test_signatures_apply_over_the_threshold_needs_the_count_typed(client, gam_c
 
     monkeypatch.setattr(guard, "COUNT_CONFIRM_ABOVE", 1)     # the fixture tenant has two active users
     body = {"template": "{name}", "scope_type": "company", "scope_value": ""}
-    shown = client.post("/signatures/preview", data=body).text
+    shown, _ = _sig_preview(client, **body)
     button = re.search(r'<button id="sig-apply-btn"[^>]*>', shown).group(0)
     assert 'name="confirm_count"' in shown and "Type <strong>2</strong>" in shown
     assert re.search(r"\sdisabled[\s>]", button) and "hx-confirm" not in button and "#sig-confirm-count" in button
     for typed in ({}, {"confirm_count": "3"}, {"confirm_count": "all"}):   # the click alone is not enough
-        r = client.post("/signatures/apply", data={**body, "confirmed": "1", **typed})
+        _, token = _sig_preview(client, **body)
+        r = _sig_apply(client, token, **body, **typed)
         assert "type 2 to confirm" in r.text and "apply/status" not in r.text, r.text[:300]
     assert gam_writes(gam_calls()) == []
-    r = client.post("/signatures/apply", data={**body, "confirmed": "1", "confirm_count": "2"})
+    _, token = _sig_preview(client, **body)
+    r = _sig_apply(client, token, **body, confirm_count="2")
     wait_for_job(client, _job(client, r.text, "/signatures/apply/status"))
     assert [c[1] for c in gam_writes(gam_calls())] == ["alice@example.com", "carol@example.com"]
 
@@ -265,6 +269,64 @@ def test_signatures_apply_under_the_threshold_keeps_the_click_confirm(client):
     button = re.search(r'<button id="sig-apply-btn"[^>]*>', shown).group(0)
     assert 'name="confirm_count"' not in shown and "hx-confirm=" in button
     assert not re.search(r"\sdisabled[\s>]", button)
+
+
+def _sig_preview(client, **body):
+    """Preview a signature; return the page and the single-use token its Apply button posts ("" if none)."""
+    r = client.post("/signatures/preview", data=body)
+    m = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', r.text)
+    return r.text, (m.group(1) if m else "")
+
+
+def _sig_apply(client, token, **body):
+    """Post Apply as the preview's button does: the live form (hx-include) + confirmed + the token."""
+    return client.post("/signatures/apply", data={**body, "confirmed": "1", "preview": token})
+
+
+ALICE_ONLY = {"template": "{name}", "scope_type": "user", "scope_value": "alice@example.com"}
+
+
+@pytest.mark.parametrize("edit", [{"scope_type": "company", "scope_value": ""},   # widened after the preview
+                                  {"scope_value": "carol@example.com"},          # someone nobody previewed
+                                  {"template": "{name} EDITED"}])                # a body nobody previewed
+def test_signatures_apply_runs_only_what_was_previewed(client, gam_calls, edit):
+    # Apply once posted the live form: preview one user, switch the scope to Whole company, and the
+    # stale "Apply to 1 user" overwrote everyone — at 25 people or fewer nothing else asked.
+    shown, token = _sig_preview(client, **ALICE_ONLY)
+    assert "Apply to 1 user" in shown
+    r = _sig_apply(client, token, **{**ALICE_ONLY, **edit})
+    assert "The form changed after the preview" in r.text and "apply/status" not in r.text
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
+
+
+def test_signatures_apply_is_single_use(client, gam_calls):
+    _, token = _sig_preview(client, **ALICE_ONLY)
+    wait_for_job(client, _job(client, _sig_apply(client, token, **ALICE_ONLY).text, "/signatures/apply/status"))
+    assert len(gam_writes(gam_calls())) == 1
+    r = _sig_apply(client, token, **ALICE_ONLY)                      # a replayed click
+    assert "expired or was already run" in r.text and len(gam_writes(gam_calls())) == 1
+
+
+def test_signatures_apply_writes_the_previewed_people_and_asks_their_count(client, gam_calls, monkeypatch):
+    # The people written and the count to type are the preview's: someone who joined the scope after
+    # the preview is neither written nor counted (apply once re-resolved the scope at click time).
+    from gamgui.core import guard
+    from gamgui.core.gam.models import GAMUser
+
+    monkeypatch.setattr(guard, "COUNT_CONFIRM_ABOVE", 1)
+    body = {"template": "{name}", "scope_type": "company", "scope_value": ""}
+    shown, token = _sig_preview(client, **body)
+    assert "Type <strong>2</strong>" in shown
+    st = client.app.state.gamgui
+    grown = client.portal.call(st.users) + [GAMUser(primary_email="dan@example.com", given_name="Dan")]
+
+    async def users(force=False):
+        return grown
+
+    monkeypatch.setattr(st, "users", users)
+    r = _sig_apply(client, token, **body, confirm_count="2")
+    wait_for_job(client, _job(client, r.text, "/signatures/apply/status"))
+    assert [c[1] for c in gam_writes(gam_calls())] == ["alice@example.com", "carol@example.com"]
 
 
 def test_signatures_apply_status_unknown_job(client):
