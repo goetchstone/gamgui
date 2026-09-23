@@ -1,18 +1,19 @@
 # Builder commands — domain reference
 
-The Builder (`/builder`) is GamGUI's catalog of GAM commands — 1,067 of them in the pinned 7.46.11
-grammar, split into two tiers by whether they can run:
+The Builder (`/builder`) is GamGUI's catalog of every command in the pinned GAM grammar, split into
+two tiers by whether they can run (the current counts are in CLAUDE.md invariant #3 and the README;
+`tests/test_polish.py` keeps them true):
 
-- **Buildable** (~533): has typed slots and a `build()` returning an injection-safe argv. Two
-  sources, and the difference matters:
+- **Buildable**: has typed slots and a `build()` returning an injection-safe argv. Two sources, and
+  the difference matters:
   - the 26 **hand-curated** commands in `_curated()` (`core/catalog/catalog.py`). argv comes from a
     `GAMCommands` static method; the `RiskLevel` is **authoritative** — hand-set to match the real
     mutation — and the slots are friendly (labels, hints, drag targets).
-  - ~507 **auto-promoted reads**. `load_catalog()` calls `_make_reads_buildable()`, which attaches
-    the generic grammar-derived builder from `core/catalog/readbuilder.py` to every non-curated
-    command that is `RiskLevel.READ_ONLY` *and* not `uncertain`. That gate is the safety property:
-    the builder emits no verb of its own, so a promoted command can only ever read.
-- **Browse-only** (~534): everything else — every write, and anything the risk inference was unsure
+  - the **auto-promoted reads** (over 500). `load_catalog()` calls `_make_reads_buildable()`, which
+    attaches the generic grammar-derived builder from `core/catalog/readbuilder.py` to every
+    non-curated command that is `RiskLevel.READ_ONLY` *and* not `uncertain`. That gate is the safety
+    property: the builder emits no verb of its own, so a promoted command can only ever read.
+- **Browse-only**: everything else — every write, and anything the risk inference was unsure
   about (`parser._find_verb` finds no known verb → `uncertain=True` and risk `LOW`, never
   `READ_ONLY`, so it cannot be promoted). Parsed from the vendored grammar
   (`gamgui/resources/gam7/GamCommands.txt`) by `core/catalog/parser.py`, categorized from the `# `

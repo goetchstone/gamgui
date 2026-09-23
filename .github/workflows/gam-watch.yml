@@ -96,13 +96,13 @@ jobs:
           git commit -q -m "GAM: bump $PIN -> $LATEST (automated)
 
           Asset attested (gh attestation verify --repo GAM-team/GAM), pinned, vendored, catalog
-          regenerated, mock + CLAUDE.md counts refreshed by scripts/bump_gam.py. $STATUS"
+          regenerated, mock + doc counts refreshed by scripts/bump_gam.py. $STATUS"
           git push -u origin "$BR"
           gh pr create --title "GAM $LATEST (automated bump)" --head "$BR" --body \
           "Automated bump of the vendored GAM, **$PIN → $LATEST**, via \`scripts/bump_gam.py\`.
 
           - Asset **build-attestation verified** against \`GAM-team/GAM\` before the pin was written.
-          - Pin, version strings, test mock, browse catalog and CLAUDE.md counts updated mechanically.
+          - Pin, version strings, test mock, browse catalog and the counts in CLAUDE.md, README and ROADMAP updated mechanically.
           - $STATUS
 
           **Before merge (human):** skim the changelog below, and run \`scripts/acceptance.py\` against a

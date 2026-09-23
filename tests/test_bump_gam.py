@@ -55,6 +55,9 @@ _PATTERNS = [
     ("tests/fixtures/mock_gam.sh", r'echo "GAM [0-9.]+ - mock"'),
     ("CLAUDE.md", r"Of \d+ catalog entries, \d+ run:\n   26 hand-curated \(the only ones that can \*change\* anything\) plus \d+ grammar-derived commands"),
     ("CLAUDE.md", r"\(currently [0-9.]+\)"),
+    ("README.md", bump.README_COUNTS),
+    ("ROADMAP.md", bump.ROADMAP_COUNTS),
+    ("ROADMAP.md", bump.ROADMAP_READS),
 ]
 
 
@@ -62,6 +65,20 @@ _PATTERNS = [
 def test_bump_patterns_still_match_their_files(relpath, pattern):
     text = (ROOT / relpath).read_text()
     assert re.search(pattern, text, re.MULTILINE), f"{relpath}: bump_gam.py can no longer find {pattern!r}"
+
+
+def test_refresh_doc_counts_rewrites_every_stated_count(tmp_path, monkeypatch):
+    for name in ("CLAUDE_MD", "README", "ROADMAP"):
+        src = getattr(bump, name)
+        (tmp_path / src.name).write_text(src.read_text())
+        monkeypatch.setattr(bump, name, tmp_path / src.name)
+    bump.refresh_doc_counts(2000, 1100, 26, 1074, "v9.1.1")   # its own comma'd output must re-match
+    bump.refresh_doc_counts(2000, 777, 26, 751, "v9.1.2")
+    readme, roadmap = (tmp_path / "README.md").read_text(), (tmp_path / "ROADMAP.md").read_text()
+    assert "(2,000 commands, 777 of them" in readme and "plus 751 read-only" in readme
+    assert "Of 2,000 catalog entries, 777 can" in roadmap and "The other 1,223 —" in roadmap
+    assert "open*: 751 grammar-derived" in roadmap
+    assert "(currently 9.1.2)" in (tmp_path / "CLAUDE.md").read_text()
 
 
 def test_write_pin_replaces_the_gam_line_and_keeps_the_header(tmp_path, monkeypatch):

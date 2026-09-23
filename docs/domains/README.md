@@ -18,8 +18,8 @@ authority for each.
 | [setup-credentials](setup-credentials.md) | The guided setup wizard: inode-bounded, race-safe import of `oauth2service.json`/`oauth2.txt`/`client_secrets.json`; DWD verify | `core/setup.py`, `web/routes/setup.py` | #5 (inode-based import bound); exercises #4 |
 | [connectors-chokepoint](connectors-chokepoint.md) | `GAMConnector` builds argv and funnels **every mutation** through the single `_run_write` (serialize + redact + audit) | `core/connectors/gam_connector.py`, `base.py` | #2 (the one write path); leans on #1, #4 |
 | [guard-audit](guard-audit.md) | The confirmation gate (`guard.evaluate`) and the append-only redacted JSONL audit log (rotation, generation-spanning readers) | `core/guard.py`, `core/audit.py` | #2 (guard is the mandatory middle); #4 (redaction); retention bound (#9-class) |
-| [catalog-builder](catalog-builder.md) | Turns the vendored grammar into a browsable catalog and decides which commands become **runnable** (26 curated + 512 auto-promoted reads) — powers `/builder` | `core/catalog/*.py`, `web/routes/builder.py` | #3 (only confident reads auto-promote); edges of #1, #8 |
-| [onboarding](onboarding.md) | `/onboard`: create the account (printed one-time temp password), apply signature + OU, push a Tasks checklist, send welcome mail | `core/onboarding.py`, `web/routes/onboarding.py` | Temp-password redaction (a specialization of #2); touches #1 |
+| [catalog-builder](catalog-builder.md) | Turns the vendored grammar into a browsable catalog and decides which commands become **runnable** (26 curated + over 500 auto-promoted reads) — powers `/builder` | `core/catalog/*.py`, `web/routes/builder.py` | #3 (only confident reads auto-promote); edges of #1, #8 |
+| [onboarding](onboarding.md) | `/onboard`: create the account (one-time password on a printable sheet, or emailed via `notify`), apply OU + signature, add groups + calendars, push a Tasks checklist, send welcome mail — one hire or a CSV | `core/onboarding.py`, `web/routes/onboarding.py` | Temp-password redaction (a specialization of #2); touches #1 |
 | [lifecycle-offboarding](lifecycle-offboarding.md) | The ordered "user is leaving" routine (reset/delegate/autoreply/transfer/calendar-sweep/reminder) + the separate gated account **delete** | `core/lifecycle.py`, `web/routes/lifecycle.py`, `web/routes/users.py` | Delete gated on transfer completion; best-effort calendar-ACL sweep (via #1, #2) |
 | [signatures](signatures.md) | Design one HTML signature template with `{vars}`/`[[optional]]`, scope it, preview as a real user, bulk-apply with a live ✓/✗ feed | `core/signatures.py`, `web/routes/signatures.py` | #9 (bound the poll — rolling feed + capped failed list); carries #2, #8 |
 | [reports](reports.md) | Read-only directory-insight buckets (2SV, inactive, admins, completeness…) plus a lazy per-user storage/mail usage report | `core/reports.py`, `web/routes/reports.py` | None directly (read-only); leans on #1, #3, #9 |
@@ -47,8 +47,8 @@ authority for each.
   [signatures](signatures.md), [reports](reports.md).
 - **Bump the GAM version** → [build-packaging](build-packaging.md) (the whole runbook; `bump_gam.py`,
   step 1 fails by design), then [gam-commands](gam-commands.md) (`EXPECTED_GAM_VERSION`) and
-  [catalog-builder](catalog-builder.md) (regenerate `command_catalog.json`; keep the CLAUDE.md counts
-  true).
+  [catalog-builder](catalog-builder.md) (regenerate `command_catalog.json`; keep the counts in CLAUDE.md,
+  README and ROADMAP true).
 - **Handle a new GAM error or output shape** → [gam-runner](gam-runner.md) (error taxonomy + parser +
   tolerant models).
 

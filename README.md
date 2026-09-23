@@ -8,6 +8,16 @@ without memorizing CLI commands, with your credentials kept in the macOS **Keych
 > signatures/delegates/forwarding, advanced group settings, bulk operations, reporting). GamGUI
 > puts a safe, native front end on top of it.
 
+**Who it's for:** a Google Workspace admin on a Mac who wants the recurring chores — onboarding,
+offboarding, signatures, delegation, calendar sharing — behind a preview and an audit log instead of
+a terminal, with GAM's full reach still underneath.
+
+**First five minutes:** there is no packaged download yet, so [build from source](#build-from-source)
+(`make setup && make gam && make run`). **Setup** imports an existing GAM install into the Keychain
+or walks you through a new one; then **Users** and **Reports** only read — nothing in your domain
+changes until you start a write yourself. Before relying on a write, check
+[Live verification status](#live-verification-status).
+
 ![Users — fast directory search, with title and status](docs/screenshots/users.png)
 
 ![Signature designer — variables with a live preview](docs/screenshots/signatures.png)
@@ -47,14 +57,18 @@ Actively developed and used against live Google Workspace tenants. Working today
   live preview of the generated auto-reply and the exact `gam` command each step will run. Both
   addresses are checked against the directory, Run executes exactly what was previewed, a failed step
   stops the steps that rely on it, and a re-run can skip the steps that already succeeded.
-- **Onboarding** — role → task-list runbooks (persisted, editable) that become a Google Tasks
-  checklist on the new hire, plus a templated welcome email.
-- **Command Builder** — browse/search the full categorized GAM catalog (~1,040 commands); curated
-  commands get typed slots, drag-a-user targeting, a guarded preview → run, linear sequencing, and
-  results export (CSV download or straight to a Google Sheet). Result tables slice like grep — a live
-  row filter plus an **External only** toggle that keeps just the rows referencing addresses outside
-  your domain — and clicking any address in a result offers pre-filled follow-ups (delegates,
-  forwarding, vacation, signature, title/dept, reset password, suspend, delete, group add/remove).
+- **Onboarding** — editable role templates that set up a new hire: create the account (its one-time
+  password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
+  OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
+  setup, and a templated welcome email — for one person, or a CSV of hires as a background job.
+- **Command Builder** — browse/search the full categorized GAM catalog (1,075 commands, 538 of them
+  runnable: 26 hand-curated, the only ones that can change anything, plus 512 read-only commands
+  derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
+  preview → run, linear sequencing, and results export (CSV download or straight to a Google
+  Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
+  keeps just the rows referencing addresses outside your domain — and clicking any address in a
+  result offers pre-filled follow-ups (delegates, forwarding, vacation, signature, title/dept, reset
+  password, suspend, delete, group add/remove).
 - **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, suspended accounts, and
   directory completeness (missing title/department/phone/location), plus a **storage & mail usage**
   panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
@@ -70,33 +84,59 @@ You build and run it yourself; it is not yet notarized for distribution to other
 > refuses a request that skipped the confirmation — the page asking is not enough. That guard is
 > well covered by tests; what tests cannot prove is that a given GAM command behaves as expected
 > against a real tenant. See [Live verification status](#live-verification-status) for which writes have been
-> confirmed against a production domain and which have not — and run anything in the second list
+> confirmed against a production domain and which have not — and run anything marked *not yet*
 > once on a **throwaway user/event/calendar** before you rely on it. Account deletion is reversible
 > only within Google's ~20-day window. GamGUI is provided **as-is under the MIT License, with no
 > warranty — use at your own risk**; you are responsible for what you run against your own tenant.
 
 ### Live verification status
 
-Every write is audited, so this list is derived from real audit logs rather than memory. "Confirmed
-live" means the operation has succeeded at least once against a production Google Workspace domain.
+Every write is audited, so this table comes from real audit logs rather than memory. **Confirmed**
+means the operation has succeeded at least once against a production Google Workspace domain. **Not
+yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
+it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
+reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`).
 
-**Confirmed live:** calendar share (ACL) · calendar auto-subscribe (making a shared calendar appear
-in someone's sidebar) · add calendar event · delete calendar · add delegate · remove group member ·
-reset password · set organization fields · set signature · set vacation · transfer data · plus all
-reads (a read-only pass over the parsers ships as `scripts/acceptance.py`).
+| Write | Where | Live |
+|---|---|---|
+| Create an account | Onboard (one hire or a CSV) | not yet |
+| Tasks checklist (a task list, one task per step) | Onboard | not yet |
+| Welcome email | Onboard | not yet |
+| Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
+| Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
+| Add group member | Groups, Users, Onboard, Builder | not yet |
+| Remove group member | Groups, Users, Builder | **confirmed** |
+| Add delegate | Users, Offboarding, Builder | **confirmed** |
+| Remove delegate | Users, Builder | not yet |
+| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed** |
+| Clear vacation | Users, Builder | not yet |
+| Reset password | Offboarding, Builder | **confirmed** |
+| Sign out everywhere (also follows every reset) | Users, Offboarding, Builder | not yet |
+| Suspend / unsuspend | Users, Builder | not yet |
+| Delete an account | Users, Builder | not yet |
+| Undelete an account | Builder | not yet |
+| Transfer Drive + calendar data | Offboarding, Builder | **confirmed** as two calls; the single call offboarding now makes is not yet |
+| Remove the leaver from everyone's calendars | Offboarding | not yet |
+| Add a calendar event (the manager's reminder) | Offboarding | **confirmed** |
+| Share a calendar (add an ACL) | Calendars, Users (their own calendar) | **confirmed** |
+| Subscribe someone, so a shared calendar appears | Calendars, Onboard | **confirmed** |
+| Share with a group, subscribing each member | Calendars | not yet — each call it makes is confirmed, the expansion is not |
+| Unshare a calendar (remove an ACL) | Calendars, Users | not yet |
+| Delete an event | Calendars | not yet |
+| Delete a secondary calendar | Calendars | **confirmed** |
+| Forwarding: add an address, forward on / off | Builder | not yet |
+| Create / delete an alias | Builder | not yet |
+| Create a group | Builder | not yet |
+| Export a result to a Google Sheet | Builder | not yet |
 
-**Not yet confirmed live** — treat as unproven and test on a throwaway target first: unshare a
-calendar (remove ACL) · remove delegate · clear vacation · add group member · sign out everywhere ·
-delete event · delete user · the group fan-out of a calendar share (the individual calls it makes —
-ACL add and subscribe — are each confirmed live, but the group expansion itself is not) · and the two
-offboarding repairs described below.
-
-**Known-good repairs awaiting live re-run.** Two offboarding bugs were found in real audit logs and
-fixed, but the fixes have not themselves been exercised live yet: Drive and calendar are now
-transferred in a *single* data-transfer call (two separate calls collided with a `409 conflict`),
-and "remove from everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to
-abort the sweep. That sweep is one domain-wide call, so it now runs under a 1-hour timeout instead of
-the 2-minute per-call default; how long it really takes on a large tenant is unmeasured. The
+**Offboarding repairs awaiting a live run.** Two offboarding bugs were found in real audit logs and
+fixed, but the fixes have not themselves run live yet: Drive and calendar are now transferred in a
+*single* data-transfer call (two separate calls collided with a `409 conflict`), and "remove from
+everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to abort the sweep.
+That sweep is one domain-wide call, so it runs under a 1-hour timeout instead of the 2-minute
+per-call default; how long it really takes on a large tenant is unmeasured. How the routine runs —
+Run executes exactly the previewed steps, a failed step stops the ones that rely on it, a re-run
+skips the steps ticked as done — is proven offline only. The
 [first live run checklist](docs/domains/lifecycle-offboarding.md#first-live-run-checklist) says
 what to check in the preview, what to verify in Google afterwards, and how to recover from a failed
 step.

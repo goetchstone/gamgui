@@ -12,7 +12,8 @@ The mechanical steps a maintainer used to do by hand, in order:
   4. bump `EXPECTED_GAM_VERSION` and `TAG`;
   5. point the test mock's `gam version` at the new number (the mock must match the real GAM);
   6. regenerate the browse catalog;
-  7. refresh the command counts stated in `CLAUDE.md` (a test guards them).
+  7. refresh the command counts stated in `CLAUDE.md`, `README.md` and `ROADMAP.md` (a test guards
+     them).
 
 What is deliberately NOT here — because it needs judgment or a real tenant, not mechanism:
   - reading `GamUpdate.txt` for breaking changes (the contract test catches a renamed/removed command
@@ -44,6 +45,8 @@ FETCH = ROOT / "scripts" / "fetch_gam.sh"
 COMMANDS_PY = ROOT / "gamgui" / "core" / "gam" / "commands.py"
 MOCK = ROOT / "tests" / "fixtures" / "mock_gam.sh"
 CLAUDE_MD = ROOT / "CLAUDE.md"
+README = ROOT / "README.md"
+ROADMAP = ROOT / "ROADMAP.md"
 
 
 # --- pure text transforms (unit-tested; no network) ----------------------------------------------
@@ -80,8 +83,24 @@ def bump_mock_version(version: str) -> None:
     _sub(MOCK, r'echo "GAM [0-9.]+ - mock"', f'echo "GAM {v} - mock"')
 
 
-def refresh_claude_counts(total: int, buildable: int, curated: int, promoted: int, version: str) -> None:
-    """Rewrite the catalog counts + pinned version stated in CLAUDE.md so its guard test stays green."""
+def _wrapped(pattern: str) -> str:
+    """A doc sentence gets re-wrapped: let each space in ``pattern`` match any run of whitespace."""
+    return pattern.replace(" ", r"\s+")
+
+
+# The count sentences in README/ROADMAP; each group is one number, rewritten in place.
+# tests/test_bump_gam.py asserts every pattern still matches its file.
+README_COUNTS = _wrapped(r"catalog \(([\d,]+) commands, ([\d,]+) of them runnable: ([\d,]+) hand-curated,"
+                         r" the only ones that can change anything, plus ([\d,]+) read-only")
+ROADMAP_COUNTS = _wrapped(r"Of ([\d,]+) catalog entries, ([\d,]+) can run today: ([\d,]+) hand-curated commands"
+                          r" \(the only ones that can \*change\* anything\) plus ([\d,]+) grammar-derived commands"
+                          r" auto-promoted because they are confidently read-only\. The other ([\d,]+) —")
+ROADMAP_READS = _wrapped(r"\*Reads are already open\*: ([\d,]+) grammar-derived")
+
+
+def refresh_doc_counts(total: int, buildable: int, curated: int, promoted: int, version: str) -> None:
+    """Rewrite the catalog counts (and CLAUDE.md's pinned version) the docs state, so the guard test
+    (tests/test_polish.py) stays green."""
     v = version.lstrip("v")
     _sub(CLAUDE_MD,
          r"Of \d+ catalog entries, \d+ run:\n   26 hand-curated \(the only ones that can \*change\* anything\) plus \d+ grammar-derived commands",
@@ -89,6 +108,9 @@ def refresh_claude_counts(total: int, buildable: int, curated: int, promoted: in
           f"   {curated} hand-curated (the only ones that can *change* anything) plus {promoted} "
           "grammar-derived commands"))
     _sub(CLAUDE_MD, r"\(currently [0-9.]+\)", f"(currently {v})")
+    _sub_numbers(README, README_COUNTS, (total, buildable, curated, promoted))
+    _sub_numbers(ROADMAP, ROADMAP_COUNTS, (total, buildable, curated, promoted, total - buildable))
+    _sub_numbers(ROADMAP, ROADMAP_READS, (promoted,))
 
 
 def catalog_counts() -> "tuple[int, int, int, int]":
@@ -100,6 +122,22 @@ def catalog_counts() -> "tuple[int, int, int, int]":
     buildable = [c for c in cmds if getattr(c, "buildable", False)]
     curated = [c for c in buildable if not str(getattr(c, "id", "")).startswith("raw.")]
     return len(cmds), len(buildable), len(curated), len(buildable) - len(curated)
+
+
+def _sub_numbers(path: Path, pattern: str, values) -> None:
+    """Replace each capture group of ``pattern``'s match with the next of ``values`` (as ``1,075``)."""
+    def repl(m: "re.Match") -> str:
+        out, cur = [], m.start()
+        for i, value in enumerate(values, 1):
+            out += [m.string[cur:m.start(i)], f"{value:,}"]
+            cur = m.end(i)
+        return "".join(out) + m.string[cur:m.end()]
+
+    text = path.read_text()
+    new, n = re.subn(pattern, repl, text)
+    if n == 0:
+        raise SystemExit(f"{path.name}: pattern not found, refusing to guess: {pattern!r}")
+    path.write_text(new)
 
 
 def _sub(path: Path, pattern: str, repl: str, flags: int = 0) -> None:
@@ -155,7 +193,7 @@ def main() -> int:
     bump_version_strings(version)
     bump_mock_version(version)
     _run([sys.executable, str(ROOT / "scripts" / "build_command_catalog.py")], cwd=ROOT, stream=True)
-    refresh_claude_counts(*catalog_counts(), version=version)
+    refresh_doc_counts(*catalog_counts(), version=version)
 
     print(f"\n==> bumped to {version}. Now run:  .venv/bin/python -m pytest -q")
     print("    then skim gamgui/resources/gam7/GamUpdate.txt and run scripts/acceptance.py on a tenant.")

@@ -198,28 +198,35 @@ def test_makefile_setup_selects_the_interpreter_via_a_variable():
 
 
 # --- CLAUDE.md is instructions to an agent, so its facts have to stay true ----------------
-# Two agent-facing docs once both asserted that only the 26 curated commands can run (533 can), which
-# made a reviewer agent flag correct readbuilder code as a violation. Scattered copies rot silently;
-# a guard turns the load-bearing claims into something CI can fail on.
+# Two agent-facing docs once both asserted that only the 26 curated commands can run (over 500 can),
+# which made a reviewer agent flag correct readbuilder code as a violation. Scattered copies rot
+# silently; a guard turns the load-bearing claims into something CI can fail on.
+
+_ROOT = Path(__file__).parent.parent
 
 
 def _claude_md() -> str:
-    return (Path(__file__).parent.parent / "CLAUDE.md").read_text()
+    return (_ROOT / "CLAUDE.md").read_text()
 
 
-def test_claude_md_command_counts_match_the_real_catalog():
+def _catalog_counts() -> dict:
     from gamgui.core.catalog.catalog import load_catalog
 
     cmds = list(load_catalog().commands)
     buildable = [c for c in cmds if getattr(c, "buildable", False)]
     curated = [c for c in buildable if not str(getattr(c, "id", "")).startswith("raw.")]
-    text = _claude_md()
-    for claim in (str(len(cmds)), str(len(buildable)), str(len(curated)),
-                  str(len(buildable) - len(curated))):
-        assert claim in text, (
-            f"CLAUDE.md no longer states {claim}: the catalog is now {len(cmds)} total, "
-            f"{len(buildable)} buildable ({len(curated)} curated + {len(buildable) - len(curated)} "
-            "auto-promoted reads)")
+    return {"total": len(cmds), "buildable": len(buildable), "curated": len(curated),
+            "auto-promoted reads": len(buildable) - len(curated)}
+
+
+@pytest.mark.parametrize("doc", ["CLAUDE.md", "README.md", "ROADMAP.md"])
+def test_docs_state_the_real_catalog_counts(doc):
+    # README once said "~1,040" and ROADMAP "533 of ~1,067" long after a GAM bump moved both.
+    text = (_ROOT / doc).read_text()
+    counts = _catalog_counts()
+    for label, n in counts.items():
+        assert str(n) in text or f"{n:,}" in text, f"{doc} no longer states the {label} count: now {counts}"
+    assert "~1," not in text, f"{doc} rounds a catalog count; state the real one ({counts})"
 
 
 def test_claude_md_states_the_current_gam_pin_and_python_floor():

@@ -16,24 +16,23 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
   this shape of operation.
 - **Job control: a Stop button, and retry-only-the-failures.** A mis-scoped bulk apply currently
   runs to completion with no way to halt it, and a run with 40 transient failures can only be redone
-  in full. Both job types already track `failed`; the missing pieces are a `cancelled` flag checked
-  in the loop, and a scope that means "just these users."
-- **Offboarding as a checklist.** The routine always runs all six steps. Let the operator skip ones
-  that do not apply (e.g. transferring 40 GB of Drive nobody wants). `OffboardStep` already carries a
-  `key`, so preview and run can stay in sync off one list.
+  in full. Every job type already tracks its failures; the missing pieces are a `cancelled` flag
+  checked in the loop, and a scope that means "just these users."
+- **Offboarding: skip a step that doesn't apply.** Half there: each step has an "already done" box,
+  so a re-run skips the steps that succeeded, and preview and run stay in sync off the step `key`s.
+  Left: a "doesn't apply" choice (transferring 40 GB of Drive nobody wants) that the preview shows
+  as skipped rather than counting it as done.
 
 ## Then — bigger, still clearly worth it
 
-- **Onboarding that actually creates the account.** The most visible asymmetry in the app:
-  offboarding performs six real mutations, onboarding writes a checklist and sends a welcome mail
-  and never touches the directory. `create_user()` / `update_user()` exist and are referenced by no
-  route.
 - **Back up signatures before a bulk overwrite.** Bulk apply replaces every matched user's signature
   with no backup and no undo. Capture the previous value per user first, and offer a restore.
 - **Bulk apply from CSV.** The counterpart to the CSV export that already ships. Real work arrives as
-  a spreadsheet — twelve new hires, a reorg, a phone-number cleanup.
+  a spreadsheet — new hires already import from one on the Onboard screen; a reorg or a phone-number
+  cleanup still can't.
 - **Org-unit management.** Every Workspace policy derives from the OU, and GamGUI is read-only about
-  it: it displays `orgUnitPath` and buckets reports by it, but cannot move anyone.
+  it: it displays `orgUnitPath`, buckets reports by it and places a new hire in their role's OU, but
+  cannot move anyone.
 - **License assign / remove / report.** Offboarding transfers Drive and sets an auto-reply but leaves
   the paid seat assigned. That is money, every month, silently.
 - **Group settings** — posting permissions, moderation, who can join, external senders. The Groups
@@ -48,9 +47,9 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Later
 
-- **Grow the buildable command set — specifically the writes.** Of ~1,067 catalog entries, 533 can
-  run today: 26 hand-curated commands (the only ones that can *change* anything) plus 507
-  grammar-derived commands auto-promoted because they are confidently read-only. The other 534 —
+- **Grow the buildable command set — specifically the writes.** Of 1,075 catalog entries, 538 can
+  run today: 26 hand-curated commands (the only ones that can *change* anything) plus 512
+  grammar-derived commands auto-promoted because they are confidently read-only. The other 537 —
   every write, and anything whose risk could not be inferred with confidence — are inert, syntax
   display only. That asymmetry is the safety boundary: a command can become runnable automatically
   only if it cannot mutate, so adding write coverage stays a deliberate, reviewed act of curation.
@@ -65,7 +64,6 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **A second connector** (Mosyle MDM, Apple Business Manager, PBXact) plus cross-system person
   lifecycle — the original reason the connector protocol exists.
 - **Notarization**, if the app is ever to be handed to another Mac. Needs an Apple Developer ID.
-- **Screenshots in the README.** The slots are ready in `docs/screenshots/`.
 
 ## Deliberate trade-offs
 
@@ -80,7 +78,7 @@ discover later.
   asked for it, so the effort goes elsewhere. The connector/core split is where you would start if
   that changed.
 - **A free-text `gam …` box.** The tempting escape hatch, and the trade-off is narrower than it
-  sounds. *Reads are already open*: 507 grammar-derived read commands run today with no curation at
+  sounds. *Reads are already open*: 512 grammar-derived read commands run today with no curation at
   all (the handful whose output is a secret — backup codes, browser tokens, file downloads — are
   audited when run). The line is drawn at **writes** — every command that can change something is hand-modeled, so
   a preview can show the real blast radius before you confirm, and every write lands in the audit
@@ -93,5 +91,6 @@ discover later.
 ## Verification debt
 
 Some write paths have never run against a real tenant. That list, and what *has* been confirmed
-live, is tracked in the README under [Status](README.md#status) — it is a safety notice, not a
+live, is tracked in the README under
+[Live verification status](README.md#live-verification-status) — it is a safety notice, not a
 roadmap item, and it is the first thing to check before trusting a destructive action.
