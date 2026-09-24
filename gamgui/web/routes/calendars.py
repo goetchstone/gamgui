@@ -18,15 +18,14 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
-from ...core.gam.errors import GAMError
 from ..jobs import start_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, connector, error_partial, friendly, write_failed
 
 router = APIRouter(prefix="/calendars")
 
 EVENT_CAP = 200
-_NOT_CONNECTED = "Not connected."
 _CALENDAR_LIST_TEMPLATE = "_calendar_list.html"
 _CALENDAR_INDEX_JOB_TEMPLATE = "_calendar_index_job.html"
 _SUBSCRIBE_JOB_TEMPLATE = "_calendar_subscribe_job.html"
@@ -100,7 +99,7 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
                 if not ok:
                     kind, why = getattr(res, "kind", None), getattr(res, "remediation", "")
             except Exception as exc:            # noqa: BLE001 — one member must not stop the rest
-                ok, kind, why = False, getattr(exc, "kind", None), _friendly(exc)
+                ok, kind, why = False, getattr(exc, "kind", None), friendly(exc)
             if ok:
                 job.applied += 1
             else:
@@ -113,7 +112,7 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
                 job.error = stop
                 break
     except Exception as exc:                    # noqa: BLE001 — whole-batch failure (auth expired)
-        job.error = _friendly(exc)
+        job.error = friendly(exc)
     finally:
         job.current = ""
         job.finished = True
@@ -167,24 +166,6 @@ async def _resolve_delete_owner(request: Request, conn, cal: str):
     return owner, ""
 
 
-def _conn(request: Request):
-    return request.app.state.gamgui.connector
-
-
-def _friendly(exc: Exception) -> str:
-    return exc.remediation if isinstance(exc, GAMError) else "Something went wrong talking to GAM."
-
-
-def _err(request: Request, message: str) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
-
-
-def _failed(request: Request, what: str, result) -> HTMLResponse:
-    """A failed write: what didn't happen and the remediation in words, GAM's error one click away."""
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {
-        "ok": False, "message": f"{what} {result.remediation}".strip(), "details": result.detail})
-
-
 def _humanize_age(seconds: float) -> str:
     s = int(max(0, seconds))
     if s < 90:
@@ -223,7 +204,7 @@ def _index_ctx(request: Request) -> dict:
 
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
-    connected = _conn(request) is not None
+    connected = connector(request) is not None
     ctx: dict = {"connected": connected}
     if connected:
         ctx["index"] = _index_ctx(request)
@@ -232,13 +213,13 @@ async def page(request: Request) -> HTMLResponse:
 
 @router.get("/resources", response_class=HTMLResponse)
 async def resources(request: Request, q: str = "") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     try:
         rs = await conn.list_resources(q.strip())
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     items = [
         {"cal_id": r.email, "label": r.name or r.email, "meta": r.resource_type or "resource", "owner": ""}
         for r in rs if r.email
@@ -249,8 +230,8 @@ async def resources(request: Request, q: str = "") -> HTMLResponse:
 @router.get("/search", response_class=HTMLResponse)
 async def search(request: Request, q: str = "") -> HTMLResponse:
     """Instant name search, served entirely from the local index (no live domain scan)."""
-    if _conn(request) is None:
-        return _err(request, _NOT_CONNECTED)
+    if connector(request) is None:
+        return error_partial(request, NOT_CONNECTED)
     idx = request.app.state.gamgui.calendar_index
     if idx is None or not _index_ready(request):  # missing, empty, or built for another domain
         return TEMPLATES.TemplateResponse(request, _CALENDAR_LIST_TEMPLATE, {
@@ -291,9 +272,9 @@ async def _build_index(job, conn, idx, domain: str) -> None:
 async def index_rebuild(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     if st.calendar_index is None:
-        return _err(request, "Calendar index is unavailable.")
+        return error_partial(request, "Calendar index is unavailable.")
     existing = st.jobs.get(st.cal_index_job_id)
     if existing is not None and not existing.finished:  # don't start a second multi-minute scan
         return TEMPLATES.TemplateResponse(request, _CALENDAR_INDEX_JOB_TEMPLATE, {"job": existing})
@@ -316,16 +297,16 @@ async def index_status(request: Request, job: str = "") -> HTMLResponse:
 
 @router.get("/user", response_class=HTMLResponse)
 async def user_calendars(request: Request, email: str = "") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     email = email.strip()
     if not email:
-        return _err(request, "Enter a user's email.")
+        return error_partial(request, "Enter a user's email.")
     try:
         cals = await conn.list_user_calendars(email)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     items = [
         {"cal_id": c.id, "label": c.summary or c.id,
          "meta": (("primary · " if c.primary else "") + (c.access_role or "")), "owner": ""}
@@ -359,13 +340,13 @@ async def _detail_ctx(request: Request, conn, cal: str, label: str) -> dict:
 
 @router.get("/detail", response_class=HTMLResponse)
 async def detail(request: Request, cal: str, label: str = "") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     try:
         ctx = await _detail_ctx(request, conn, cal, label)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
 
 
@@ -384,16 +365,16 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
     """Grant access, then put the calendar on the person's (or each group member's) list. A group of
     DEFAULT_BULK_THRESHOLD or more members is resolved first and answered with a confirm step naming
     the count (``/share/group`` runs it), not written: the fan-out is one write per member."""
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     cal, target = cal.strip(), target.strip()
     if not target:
-        return _err(request, "Enter a person or group to share with.")
+        return error_partial(request, "Enter a person or group to share with.")
     try:   # the builder's <CalendarACLRole> check, before any confirm step; this runs nothing
         GAMCommands.add_calendar_acl_cal(cal, target, role=role)
     except ValueError as exc:
-        return _err(request, f"Couldn't share calendar: {exc}.")
+        return error_partial(request, f"Couldn't share calendar: {exc}.")
     kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
     decision = guard.evaluate(_fanout(emails)) if kind == "group" else None
     if decision is not None and decision.requires_confirmation:
@@ -402,7 +383,7 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
         try:
             ctx = await _detail_ctx(request, conn, cal, label)
         except Exception as exc:
-            return _err(request, _friendly(exc))
+            return error_partial(request, friendly(exc))
         ctx.update(share_target=target, share_role=role, share_confirm={
             "target": target, "count": len(emails), "sample": emails[:_CONFIRM_SAMPLE],
             "warnings": decision.warnings, "token": token})
@@ -419,16 +400,16 @@ async def share_group(request: Request, cal: Annotated[str, Form()] = "", target
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     form = await request.form()
     held, refusal = st.previews.take(_SHARE_FLOW, str(form.get(TOKEN_FIELD) or ""),
                                      _share_key(cal, target, role), again="click Share again")
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     cal, target, role, emails = held
     refusal = guard.enforce(_fanout(emails), form, confirm_step=True)
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     return await _grant_and_subscribe(request, conn, cal, target, role, label, "group", emails)
 
 
@@ -438,9 +419,9 @@ async def _grant_and_subscribe(request: Request, conn, cal: str, target: str, ro
     try:
         result = await conn.add_calendar_acl_for(cal, target, role=role)
     except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
-        return _err(request, f"Couldn't share calendar: {exc}.")
+        return error_partial(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
-        return _failed(request, f"Couldn't share the calendar with {target}.", result)
+        return write_failed(request, f"Couldn't share the calendar with {target}.", result)
     notice, job = "", None
     if kind == "user" and emails:
         sub = await conn.subscribe_calendar_for(emails[0], cal)
@@ -465,7 +446,7 @@ async def _grant_and_subscribe(request: Request, conn, cal: str, target: str, ro
     try:
         ctx = await _detail_ctx(request, conn, cal, label)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     ctx["share_notice"] = notice
     ctx["subscribe_job"] = job
     return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
@@ -482,17 +463,17 @@ async def share_status(request: Request, job: str = "") -> HTMLResponse:
 @router.post("/unshare", response_class=HTMLResponse)
 async def unshare(request: Request, cal: Annotated[str, Form()], scope: Annotated[str, Form()],
                   label: Annotated[str, Form()] = "") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     cal, scope = cal.strip(), scope.strip()
     result = await conn.remove_calendar_acl_for(cal, scope)
     if not result.ok:
-        return _err(request, f"Couldn't remove access: {result.detail}")
+        return error_partial(request, f"Couldn't remove access: {result.detail}")
     try:
         ctx = await _detail_ctx(request, conn, cal, label)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     ctx["share_notice"] = f"Removed access for {scope}."
     return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
 
@@ -509,16 +490,16 @@ def _delete_view(request: Request, *, cal: str, label: str, owner: str, acl_coun
 async def delete_preview(request: Request, cal: Annotated[str, Form()],
                          label: Annotated[str, Form()] = "",
                          acl_count: Annotated[int, Form()] = 0) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     cal = cal.strip()
     try:
         owner, refusal = await _resolve_delete_owner(request, conn, cal)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     if not owner:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     return _delete_view(request, cal=cal, label=label.strip(), owner=owner, acl_count=acl_count)
 
 
@@ -526,17 +507,17 @@ async def delete_preview(request: Request, cal: Annotated[str, Form()],
 async def delete_cal(request: Request, cal: Annotated[str, Form()],
                      confirm: Annotated[str, Form()] = "",
                      label: Annotated[str, Form()] = "") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     cal = cal.strip()
     # Re-resolve owner + re-validate the id server-side — never act on a client-supplied identity.
     try:
         owner, refusal = await _resolve_delete_owner(request, conn, cal)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     if not owner:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     if confirm.strip() != "DELETE":  # exact-case gate
         return _delete_view(request, cal=cal, label=label.strip(), owner=owner,
                             error="Type DELETE (in capitals) to confirm.")
@@ -553,42 +534,42 @@ async def delete_cal(request: Request, cal: Annotated[str, Form()],
 
 @router.get("/events", response_class=HTMLResponse)
 async def events(request: Request, cal: str, q: str = "", after: str = "", before: str = "") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     q, after, before = q.strip(), after.strip(), before.strip()
     if not (q or after or before):  # never an unbounded all-events scan
         return TEMPLATES.TemplateResponse(request, "_event_results.html", {"cal": cal, "events": [], "need_filter": True})
     try:
         evs = await conn.search_events(cal, query=q, after=after, before=before, cap=EVENT_CAP)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     return TEMPLATES.TemplateResponse(request, "_event_results.html", {"cal": cal, "events": evs, "capped": len(evs) >= EVENT_CAP})
 
 
 @router.post("/event/preview", response_class=HTMLResponse)
 async def event_preview(request: Request, cal: Annotated[str, Form()], event_id: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     try:
         ev = await conn.get_event(cal, event_id)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc))
     if ev is None:
-        return _err(request, "That event no longer exists.")
+        return error_partial(request, "That event no longer exists.")
     return TEMPLATES.TemplateResponse(request, "_event_delete.html", {"cal": cal, "event": ev, "deleted": False})
 
 
 @router.post("/event/delete", response_class=HTMLResponse)
 async def event_delete(request: Request, cal: Annotated[str, Form()], event_id: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     refusal = guard.enforce(guard.changes([event_id], RiskLevel.DESTRUCTIVE, "Delete event"), await request.form())
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     result = await conn.delete_event(cal, event_id)
     if not result.ok:
-        return _err(request, f"Couldn't delete the event: {result.detail}")
+        return error_partial(request, f"Couldn't delete the event: {result.detail}")
     return TEMPLATES.TemplateResponse(request, "_event_delete.html", {"cal": cal, "event": None, "deleted": True})

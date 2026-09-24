@@ -27,6 +27,7 @@ from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, app_state, error_partial, friendly
 
 router = APIRouter(prefix="/builder")
 
@@ -35,19 +36,11 @@ MAX_SEQUENCE_STEPS = 25
 _SEQUENCE_PAGE = "_sequence.html"
 
 
-def _st(request: Request):
-    return request.app.state.gamgui
-
-
 def _catalog(request: Request):
-    st = _st(request)
+    st = app_state(request)
     if st.catalog is None:
         st.catalog = load_catalog()
     return st.catalog
-
-
-def _friendly(exc: Exception) -> str:
-    return exc.remediation if isinstance(exc, GAMError) else "Something went wrong talking to GAM."
 
 
 def _details(exc: Exception) -> str:
@@ -55,11 +48,6 @@ def _details(exc: Exception) -> str:
     if isinstance(exc, GAMError):
         return (exc.stderr or "").strip() or exc.message
     return str(exc)
-
-
-def _err(request: Request, message: str, details: str = "") -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_action_result.html",
-                                      {"ok": False, "message": message, "details": details})
 
 
 # --- slot assembly ---------------------------------------------------------------------
@@ -102,7 +90,7 @@ async def _alias_deletes(st, decision) -> list:
     try:
         resolved = {a: await st.connector.primary_address(a) for a in decision.typed_emails}
     except Exception as exc:  # noqa: BLE001 - the message says why the delete can't be checked
-        return [f"Couldn't confirm which account that address belongs to — {_friendly(exc)}"]
+        return [f"Couldn't confirm which account that address belongs to — {friendly(exc)}"]
     return guard_mod.alias_deletes(resolved)
 
 
@@ -136,7 +124,7 @@ def _seq_key(seq) -> tuple:
 async def _preview_page(request: Request, cmd, argv, target, slots, error: str = "") -> HTMLResponse:
     """The single-command preview: the exact `gam …`, the guard's decision, and its confirm step —
     for a mutation, holding what it shows under the token its Run button posts."""
-    st = _st(request)
+    st = app_state(request)
     decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
     blocked = await _alias_deletes(st, decision)
     token = "" if cmd.risk == RiskLevel.READ_ONLY or blocked else st.previews.hold(
@@ -162,7 +150,7 @@ def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResp
     if records:
         # Keep the full result set for the CSV download — the table itself truncates at 100 rows —
         # and, for a sensitive read, what the download's audit record names (never the rows).
-        _st(request).builder_last_result = {
+        app_state(request).builder_last_result = {
             "records": records, "gam": gam,
             "sensitive": {"command": cmd.id, "argv": list(argv), "target": target} if cmd.sensitive else None}
         return TEMPLATES.TemplateResponse(request, "_records_table.html", {"records": records, "gam": gam})
@@ -176,7 +164,7 @@ async def export_csv(request: Request) -> Response:
     The download of a sensitive read's result (backup codes, browser tokens) hands the secret out as a
     file, so it is audited like the Sheet export: ``sensitive_csv_export``, never the rows. With no
     connector to audit through, it is refused rather than served unrecorded."""
-    st = _st(request)
+    st = app_state(request)
     last = st.builder_last_result
     if not last or not last.get("records"):
         return Response("No results to export — run a read command first.",
@@ -213,7 +201,7 @@ async def export_csv(request: Request) -> Response:
 
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "builder.html", {"connected": False})
     cat = _catalog(request)
@@ -237,7 +225,7 @@ async def pick(request: Request, kind: str = "users", q: str = "") -> HTMLRespon
 
     Scales to large domains — the match runs against the in-memory user cache (shared with the Users
     list) and only the top matches are ever rendered, never the whole directory."""
-    st = _st(request)
+    st = app_state(request)
     ql = q.strip().lower()
     pairs = []
     try:
@@ -306,7 +294,7 @@ ROW_ACTIONS = [
 async def command_form(request: Request, cid: str) -> HTMLResponse:
     cmd = _catalog(request).by_id(cid)
     if cmd is None:
-        return _err(request, "Unknown command.")
+        return error_partial(request, "Unknown command.")
     # Pre-fill any slot whose key is passed as a query param (e.g. ?email=alice@x.com from a row click).
     prefill = {k: v for k, v in request.query_params.items() if k != "cid"}
     return TEMPLATES.TemplateResponse(request, "_builder_form.html", {"cmd": cmd, "prefill": prefill})
@@ -318,39 +306,39 @@ async def command_form(request: Request, cid: str) -> HTMLResponse:
 async def preview(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     cmd = _catalog(request).by_id(cid)
     if cmd is None or not cmd.buildable:
-        return _err(request, "That command can't be built — copy its syntax and run it in GAM directly.")
+        return error_partial(request, "That command can't be built — copy its syntax and run it in GAM directly.")
     slots, argv, target, error = await _assemble(request, cmd)
     if error:
-        return _err(request, error)
+        return error_partial(request, error)
     return await _preview_page(request, cmd, argv, target, slots)
 
 
 @router.post("/run", response_class=HTMLResponse)
 async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return error_partial(request, NOT_CONNECTED)
     cmd = _catalog(request).by_id(cid)
     if cmd is None or not cmd.buildable:
-        return _err(request, "That command can't be run from here.")
+        return error_partial(request, "That command can't be run from here.")
     slots, argv, target, error = await _assemble(request, cmd)
     if error:
-        return _err(request, error)
+        return error_partial(request, error)
     if cmd.risk == RiskLevel.READ_ONLY:
         form = await request.form()
         if form.get("td_export"):  # a new Google Sheet instead of the in-app table — a write, audited
             owner = str(form.get("td_user") or "").strip()
             res = await conn.export_to_sheet(cmd, argv, owner, str(form.get("td_title") or "").strip())
             if not res.ok:
-                return _err(request, "The export to a Google Sheet failed.", res.detail)
+                return error_partial(request, "The export to a Google Sheet failed.", res.detail)
             return TEMPLATES.TemplateResponse(request, "_export_result.html",
                                               {"gam": _gam_str(res.preview.argv), "output": res.output,
                                                "owner": owner or "the admin account"})
         try:
             out = await conn.catalog_read(cmd, argv, target)
         except Exception as exc:  # noqa: BLE001
-            return _err(request, _friendly(exc), _details(exc))
+            return error_partial(request, friendly(exc), _details(exc))
         return _render_read(request, out, cmd, argv, target)
     # A mutation runs only from its preview: the held command, when the live form still matches it.
     # Otherwise the answer is a fresh preview of what the form holds now, to check before running.
@@ -374,15 +362,15 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
 
 @router.post("/sequence/add", response_class=HTMLResponse)
 async def seq_add(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     cmd = _catalog(request).by_id(cid)
     if cmd is None or not cmd.buildable:
-        return _err(request, "That command can't be added.")
+        return error_partial(request, "That command can't be added.")
     if len(st.builder_sequence) >= MAX_SEQUENCE_STEPS:
-        return _err(request, f"Sequence is capped at {MAX_SEQUENCE_STEPS} steps.")
+        return error_partial(request, f"Sequence is capped at {MAX_SEQUENCE_STEPS} steps.")
     _, argv, target, error = await _assemble(request, cmd)
     if error:
-        return _err(request, error)
+        return error_partial(request, error)
     st.builder_sequence.append({
         "cid": cid, "label": cmd.name, "target": target, "argv": argv,
         "risk": int(cmd.risk), "gam": _gam_str(argv),
@@ -392,7 +380,7 @@ async def seq_add(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse
 
 @router.post("/sequence/remove", response_class=HTMLResponse)
 async def seq_remove(request: Request, index: Annotated[int, Form()]) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     if 0 <= index < len(st.builder_sequence):
         st.builder_sequence.pop(index)
     return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": st.builder_sequence})
@@ -400,7 +388,7 @@ async def seq_remove(request: Request, index: Annotated[int, Form()]) -> HTMLRes
 
 @router.post("/sequence/move", response_class=HTMLResponse)
 async def seq_move(request: Request, index: Annotated[int, Form()], to: Annotated[int, Form()]) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     seq = st.builder_sequence
     if 0 <= index < len(seq) and 0 <= to < len(seq):
         seq.insert(to, seq.pop(index))
@@ -409,7 +397,7 @@ async def seq_move(request: Request, index: Annotated[int, Form()], to: Annotate
 
 @router.post("/sequence/clear", response_class=HTMLResponse)
 async def seq_clear(request: Request) -> HTMLResponse:
-    _st(request).builder_sequence.clear()
+    app_state(request).builder_sequence.clear()
     return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": []})
 
 
@@ -421,7 +409,7 @@ def _seq_previews(seq) -> list:
 
 async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLResponse:
     """The sequence's confirm step, holding the steps it shows under the token its Run form posts."""
-    st = _st(request)
+    st = app_state(request)
     decision = guard_mod.evaluate(_seq_previews(seq))
     blocked = await _alias_deletes(st, decision)
     token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq])
@@ -432,9 +420,9 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
 
 @router.post("/sequence/preview", response_class=HTMLResponse)
 async def seq_preview(request: Request) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     if not st.builder_sequence:
-        return _err(request, "The sequence is empty.")
+        return error_partial(request, "The sequence is empty.")
     return await _seq_preview_page(request, list(st.builder_sequence))
 
 
@@ -468,13 +456,13 @@ async def _run_sequence(job, conn, previews, catalog=None) -> None:
 
 @router.post("/sequence/run", response_class=HTMLResponse)
 async def seq_run(request: Request) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return error_partial(request, NOT_CONNECTED)
     seq = list(st.builder_sequence)
     if not seq:
-        return _err(request, "The sequence is empty.")
+        return error_partial(request, "The sequence is empty.")
     # Only the steps the preview showed: a step added, removed or moved since is refused.
     form = await request.form()
     token = str(form.get(TOKEN_FIELD) or "")
@@ -496,7 +484,7 @@ async def seq_run(request: Request) -> HTMLResponse:
 
 @router.get("/sequence/status", response_class=HTMLResponse)
 async def seq_status(request: Request, job: str = "") -> HTMLResponse:
-    j = _st(request).jobs.get(job)
+    j = app_state(request).jobs.get(job)
     if j is None:
-        return _err(request, "That run is no longer available.")
+        return error_partial(request, "That run is no longer available.")
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": j})

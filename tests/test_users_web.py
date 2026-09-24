@@ -1139,6 +1139,15 @@ def test_no_route_appends_to_a_batch_jobs_failed_list_directly():
     assert offenders == []
 
 
+def test_route_helpers_live_once_in_common():
+    # Seven pasted `_friendly`s, five `_err`s and three `_conn`s had begun to drift (plan Q10); one copy
+    # in _common.py keeps every screen saying the same thing the same way.
+    routes = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
+    local = re.compile(r"^def (_friendly|_err|_conn|_st|_failed|_sig_store)\(", re.M)
+    offenders = [f"{p.name}: {m}" for p in routes.glob("*.py") for m in local.findall(p.read_text())]
+    assert offenders == []
+
+
 async def _ok(email: str):
     # every 50th member fails, so the failed-list path is exercised too
     import types

@@ -6,17 +6,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import reports as reports_mod
-from ...core.gam.errors import GAMError
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, friendly
 
 router = APIRouter(prefix="/reports")
 
 _REPORTS_PAGE = "reports.html"
 _USAGE_REPORT_PARTIAL = "_usage_report.html"
-
-
-def _friendly(exc: Exception) -> str:
-    return exc.remediation if isinstance(exc, GAMError) else "Couldn't load report data."
 
 
 @router.get("", response_class=HTMLResponse)
@@ -27,7 +23,7 @@ async def reports_page(request: Request) -> HTMLResponse:
     try:
         users = await st.users()  # shared cache (CACHE_FIELDS superset covers REPORT_FIELDS)
     except Exception as exc:
-        msg = exc.remediation if isinstance(exc, GAMError) else "Couldn't load users."
+        msg = friendly(exc, "Couldn't load users.")
         return TEMPLATES.TemplateResponse(
             request, _REPORTS_PAGE, {"connected": True, "reports": [], "error": msg, "total": 0}
         )
@@ -43,10 +39,10 @@ async def usage(request: Request) -> HTMLResponse:
     """Lazy-loaded storage/mail usage (a separate, slower Reports-API call)."""
     conn = request.app.state.gamgui.connector
     if conn is None:
-        return TEMPLATES.TemplateResponse(request, _USAGE_REPORT_PARTIAL, {"rows": [], "date": "", "error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _USAGE_REPORT_PARTIAL, {"rows": [], "date": "", "error": NOT_CONNECTED})
     try:
         data = await conn.usage_report(reports_mod.USAGE_PARAMS)
     except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, _USAGE_REPORT_PARTIAL, {"rows": [], "date": "", "error": _friendly(exc)})
+        return TEMPLATES.TemplateResponse(request, _USAGE_REPORT_PARTIAL, {"rows": [], "date": "", "error": friendly(exc, "Couldn't load report data.")})
     rows = reports_mod.parse_usage(data["rows"])[:25]
     return TEMPLATES.TemplateResponse(request, _USAGE_REPORT_PARTIAL, {"rows": rows, "date": data["date"]})

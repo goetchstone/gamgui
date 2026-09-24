@@ -24,10 +24,10 @@ from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
 from ...core.gam.models import GAMUser
 from ...core.onboarding import RunbookStore
-from ...core.signatures import SignatureStore
 from ..jobs import register_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, app_state, error_partial, signature_store
 
 router = APIRouter(prefix="/onboard")
 
@@ -40,26 +40,11 @@ _CREDS_TTL = 15 * 60   # keep the bulk credentials sheet re-fetchable for 15 min
 _MAX_CSV_BYTES = 1024 * 1024   # a hire list is kilobytes; refuse a huge upload before decoding it
 
 
-def _st(request: Request):
-    return request.app.state.gamgui
-
-
 def _store(request: Request) -> RunbookStore:
-    st = _st(request)
+    st = app_state(request)
     if st.runbooks is None:
         st.runbooks = RunbookStore()
     return st.runbooks
-
-
-def _sig_store(request: Request) -> SignatureStore:
-    st = _st(request)
-    if st.sig_templates is None:
-        st.sig_templates = SignatureStore()
-    return st.sig_templates
-
-
-def _err(request: Request, message: str) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
 
 
 def _ctx(name: str, email: str, role: str, manager: str) -> dict:
@@ -278,13 +263,13 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[
 
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "onboarding.html", {"connected": False})
     store = _store(request)
     return TEMPLATES.TemplateResponse(request, "onboarding.html", {
         "connected": True, "roles": store.roles(), "welcome": store.welcome(),
-        "vars": onboarding.WELCOME_VARS, "sig_templates": _sig_store(request).names(),
+        "vars": onboarding.WELCOME_VARS, "sig_templates": signature_store(request).names(),
     })
 
 
@@ -297,7 +282,7 @@ async def save_role(request: Request, name: Annotated[str, Form()], steps: Annot
         store.set_role(name, steps.splitlines(), signature=signature, org_unit=org_unit,
                        groups=groups.splitlines(), calendars=calendars.splitlines())
     except ValueError as exc:
-        return _err(request, str(exc))
+        return error_partial(request, str(exc))
     return TEMPLATES.TemplateResponse(request, "_onboard_roles.html", {"roles": store.roles()})
 
 
@@ -344,17 +329,17 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
                   create_account: Annotated[str, Form()] = "", first: Annotated[str, Form()] = "",
                   last: Annotated[str, Form()] = "") -> HTMLResponse:
     if email.strip() and not onboarding.looks_like_email(email):
-        return _err(request, "That does not look like a valid email address for the new hire.")
+        return error_partial(request, "That does not look like a valid email address for the new hire.")
     store = _store(request)
     cfg = store.role(role)
     if cfg is None or not cfg.steps:
-        return _err(request, "That role has no steps yet — add some in Role templates.")
+        return error_partial(request, "That role has no steps yet — add some in Role templates.")
     w, ctx = store.welcome(), _ctx(name, email, role, manager)
     given, family = _split_name(name, first, last)
     hire = {"role": role, "name": name, "email": email.strip(), "manager": manager, "assignee": assignee,
             "create_account": bool(create_account), "first": first, "last": last,
             "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
-    token = _st(request).previews.hold(
+    token = app_state(request).previews.hold(
         _FLOW, _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last),
         (hire, cfg))
     return TEMPLATES.TemplateResponse(request, "_onboard_preview.html", {
@@ -374,53 +359,53 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
               assignee: Annotated[str, Form()] = "", send_welcome: Annotated[str, Form()] = "",
               create_account: Annotated[str, Form()] = "", first: Annotated[str, Form()] = "",
               last: Annotated[str, Form()] = "") -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return error_partial(request, NOT_CONNECTED)
     previewed = _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last)
     store = _store(request)
     cfg = store.role(role)
     if cfg is None or not cfg.steps:
-        return _err(request, "That role has no steps.")
+        return error_partial(request, "That role has no steps.")
     email = email.strip()
     if email and not onboarding.looks_like_email(email):
-        return _err(request, "That does not look like a valid email address for the new hire.")
+        return error_partial(request, "That does not look like a valid email address for the new hire.")
     make_account = bool(create_account)
 
     # Validate everything that does NOT write BEFORE any mutation, so a bad assignee (or any later
     # step) can't strand a just-created account's one-time password (it exists nowhere else).
     if make_account:
         if not email:
-            return _err(request, "Enter the new hire's email to create the account.")
+            return error_partial(request, "Enter the new hire's email to create the account.")
         given, family = _split_name(name, first, last)
         if not given or not family:
-            return _err(request, "Enter the new hire's first and last name to create the account.")
+            return error_partial(request, "Enter the new hire's first and last name to create the account.")
     assignee = assignee.strip() or email
     if not assignee:
-        return _err(request, "Enter the assignee (who does the setup) or the new hire's email.")
+        return error_partial(request, "Enter the assignee (who does the setup) or the new hire's email.")
     if not onboarding.looks_like_email(assignee):
-        return _err(request, "The assignee does not look like a valid email address.")
+        return error_partial(request, "The assignee does not look like a valid email address.")
     # Every run writes (a task list at least; maybe an account): only via the preview's Run button.
     form = await request.form()
     refusal = guard.enforce(guard.changes([email or assignee], RiskLevel.LOW, "Onboard"), form, confirm_step=True)
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     # ...and only the hire that preview showed: a used or expired preview, or a form edited since
     # (an account ticked, an address retyped), is refused rather than run.
     held, refusal = st.previews.take(_FLOW, str(form.get(TOKEN_FIELD) or ""), previewed, again="click Preview again")
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
 
     # Delegate the actual provisioning to the shared per-hire path — ONE implementation for the single
     # and bulk flows (their divergence is exactly what stranded a temp password before). The single
     # flow never uses `notify` (always the printable sheet) and turns a hard failure into an error page
     # while the bulk feed shows it as a per-hire row.
     hire, cfg = held   # the previewed hire, role template and welcome email — never re-read from the store
-    res = await _provision_hire(conn, _sig_store(request), store, cfg, hire)
+    res = await _provision_hire(conn, signature_store(request), store, cfg, hire)
     if make_account and not res["account_created"]:
         detail = next((e[len("create: "):] for e in res["errors"] if e.startswith("create:")), "unknown error")
-        return _err(request, "Couldn't create the account: " + detail)
+        return error_partial(request, "Couldn't create the account: " + detail)
 
     # Map the structured result onto the single-hire result panel's contract.
     credentials = {**res["credential"], "signature": res["signature"]} if res["credential"] else None
@@ -435,7 +420,7 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if tl_err and not result.get("tasklist_id"):
         result = {**result, "error": tl_err}
     if not credentials and not memberships and tl_err and not result.get("tasklist_id"):
-        return _err(request, "Couldn't create the task list: " + tl_err)   # nothing else ran -> error page
+        return error_partial(request, "Couldn't create the task list: " + tl_err)   # nothing else ran -> error page
     title = "Onboard {} — {}".format(name or email or "new hire", role)
     return TEMPLATES.TemplateResponse(request, "_onboard_run.html", {
         "result": result, "assignee": assignee, "title": title, "email_sent": res["email_sent"],
@@ -484,23 +469,23 @@ def _bulk_summary(rows: List[dict], store: RunbookStore):
 
 @router.post("/bulk/preview", response_class=HTMLResponse)
 async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]) -> HTMLResponse:
-    if _st(request).connector is None:
-        return _err(request, "Not connected.")
+    if app_state(request).connector is None:
+        return error_partial(request, NOT_CONNECTED)
     try:
         data = await csv_file.read(_MAX_CSV_BYTES + 1)
     except Exception as exc:  # noqa: BLE001
-        return _err(request, "Couldn't read the file: " + str(exc))
+        return error_partial(request, "Couldn't read the file: " + str(exc))
     if len(data) > _MAX_CSV_BYTES:
-        return _err(request, "That file is over 1 MB — a hire list should be far smaller. Split it into "
+        return error_partial(request, "That file is over 1 MB — a hire list should be far smaller. Split it into "
                              "several CSVs, or check you picked the right file.")
     text = _csv_key(data.decode("utf-8-sig", errors="replace"))
     rows, parse_errors = onboarding.parse_hire_csv(text)
     if not rows and not parse_errors:
-        return _err(request, "No hires found in the CSV.")
+        return error_partial(request, "No hires found in the CSV.")
     valid, cfgs, summary, row_errors = _bulk_summary(rows, _store(request))
     # Run executes these rows with these role templates — not a re-parse of whatever comes back, nor a
     # role edited after the preview — under a single-use token, like every other confirm step.
-    token = _st(request).previews.hold(_BULK_FLOW, text, (valid, cfgs)) if valid else ""
+    token = app_state(request).previews.hold(_BULK_FLOW, text, (valid, cfgs)) if valid else ""
     return TEMPLATES.TemplateResponse(request, "_onboard_bulk_preview.html", {
         "summary": summary, "errors": parse_errors + row_errors,
         "csv_text": text, "can_run": bool(valid), "token": token,
@@ -509,10 +494,10 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
 
 @router.post("/bulk/run", response_class=HTMLResponse)
 async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return error_partial(request, NOT_CONNECTED)
     rows, _errs = onboarding.parse_hire_csv(csv_text)
     valid, _cfgs, _summary, _row_errors = _bulk_summary(rows, _store(request))
     # Bulk creation is gated behind the preview, like the single flow.
@@ -520,17 +505,17 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     form = await request.form()
     refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""), _csv_key(csv_text),
                                      again="upload the CSV and preview it again", what="CSV")
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     valid, cfgs = held
     if not valid:
-        return _err(request, "Nothing to run — every row had an unknown role or was invalid.")
+        return error_partial(request, "Nothing to run — every row had an unknown role or was invalid.")
     job = register_job(st.jobs, OnboardJob(id=secrets.token_urlsafe(8), total=len(valid)))
     job.task = asyncio.create_task(
-        _run_bulk_onboard(job, conn, _sig_store(request), _store(request), valid, cfgs))
+        _run_bulk_onboard(job, conn, signature_store(request), _store(request), valid, cfgs))
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": job, "credentials": None})
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -540,10 +525,10 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
 
 @router.get("/search/groups", response_class=HTMLResponse)
 async def search_groups(request: Request, q: str = "") -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
-                                          {"field": "groups", "items": [], "error": "Not connected."})
+                                          {"field": "groups", "items": [], "error": NOT_CONNECTED})
     try:
         groups = await st.groups()   # cached `gam print groups`
     except Exception as exc:  # noqa: BLE001
@@ -562,7 +547,7 @@ async def search_groups(request: Request, q: str = "") -> HTMLResponse:
 
 @router.get("/search/calendars", response_class=HTMLResponse)
 async def search_calendars(request: Request, q: str = "") -> HTMLResponse:
-    st = _st(request)
+    st = app_state(request)
     idx = st.calendar_index
     status = idx.status() if idx is not None else None
     # Serve only an index that has rows AND belongs to the connected tenant (mirrors calendars._index_ready).
@@ -578,7 +563,7 @@ async def search_calendars(request: Request, q: str = "") -> HTMLResponse:
 
 @router.get("/bulk/status", response_class=HTMLResponse)
 async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
-    j = _st(request).jobs.get(job) if job else None
+    j = app_state(request).jobs.get(job) if job else None
     if not isinstance(j, OnboardJob):   # st.jobs is shared; another feature's BatchJob isn't ours
         j = None
     # Credentials sheet: serve it while the job is finished and within _CREDS_TTL of finishing, then
@@ -598,7 +583,7 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
 
 @router.post("/bulk/done", response_class=HTMLResponse)
 async def bulk_done(request: Request, job: Annotated[str, Form()] = "") -> HTMLResponse:
-    j = _st(request).jobs.get(job) if job else None
+    j = app_state(request).jobs.get(job) if job else None
     if not isinstance(j, OnboardJob):
         j = None
     elif j.credentials:

@@ -21,12 +21,12 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
-from ...core.gam.errors import GAMError
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
 from ..jobs import start_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, GAM_TROUBLE, connector, error_partial, friendly, write_failed
 
 router = APIRouter(prefix="/users")
 
@@ -35,11 +35,7 @@ PAGE_SIZE = 10   # rows per page — sized so a page fits the fixed 13" window (
 _USERS_PAGE = "users.html"
 _DELETE_ZONE = "_delete_zone.html"
 _BULK_STORE_PAGE = "bulk_store.html"
-_NOT_CONNECTED = "Not connected."
-
-
-def _conn(request: Request):
-    return request.app.state.gamgui.connector
+_TRY_AGAIN = f"{GAM_TROUBLE} Please try again."
 
 
 def _filter_users(users, q: str, scope: str):
@@ -67,29 +63,9 @@ def _table_context(users, q: str = "", scope: str = "all", page: int = 1) -> dic
     }
 
 
-def _err(request: Request, message: str) -> HTMLResponse:
-    """A small inline error fragment (for HTMX swap targets)."""
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
-
-
-def _failed(request: Request, what: str, result) -> HTMLResponse:
-    """A failed write: what didn't happen and what to do about it in words (``remediation``), with
-    GAM's raw error one click away (``_action_result.html``'s details) — never GAM's line as the
-    headline (plan U9)."""
-    message = f"{what} {result.remediation}".strip()
-    return TEMPLATES.TemplateResponse(request, "_action_result.html",
-                                      {"ok": False, "message": message, "details": result.detail})
-
-
 def _error_page(request: Request, message: str) -> HTMLResponse:
     """A full-page friendly error (for full-page GET routes)."""
     return TEMPLATES.TemplateResponse(request, "error.html", {"message": message})
-
-
-def _friendly(exc: Exception) -> str:
-    if isinstance(exc, GAMError):
-        return exc.remediation
-    return "Something went wrong talking to GAM. Please try again."
 
 
 @router.get("", response_class=HTMLResponse)
@@ -102,7 +78,7 @@ async def users_page(request: Request) -> HTMLResponse:
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _USERS_PAGE,
-            {"connected": True, "domain": st.connector.domain, "error": _friendly(exc), **_table_context([])},
+            {"connected": True, "domain": st.connector.domain, "error": friendly(exc, _TRY_AGAIN), **_table_context([])},
         )
     return TEMPLATES.TemplateResponse(
         request, _USERS_PAGE, {"connected": True, "domain": st.connector.domain, **_table_context(users)}
@@ -115,11 +91,11 @@ async def users_table(
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return _err(request, "Not connected — run setup first.")
+        return error_partial(request, "Not connected — run setup first.")
     try:
         users = await st.users(force=bool(refresh))
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(request, "_users_table.html", _table_context(users, q, scope, page))
 
 
@@ -138,7 +114,7 @@ async def user_detail(request: Request, email: str) -> HTMLResponse:
         if user is None:
             user = await conn.get_user(email)
     except Exception as exc:
-        return _error_page(request, _friendly(exc))
+        return _error_page(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(
         request, "user_detail.html",
         {"user": user, "email": user.primary_email, "suspended": user.suspended},
@@ -152,9 +128,9 @@ async def set_signature(
     signature: Annotated[str, Form()] = "",
     html: Annotated[str, Form()] = "off",
 ) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.set_signature(email, signature, html=(html == "on"))
     if not result.ok:
         return TEMPLATES.TemplateResponse(
@@ -170,34 +146,34 @@ async def set_signature(
 
 @router.post("/signout", response_class=HTMLResponse)
 async def signout_user(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.signout_user(email)
     if not result.ok:
-        return _failed(request, f"Couldn't sign {email} out.", result)
+        return write_failed(request, f"Couldn't sign {email} out.", result)
     return TEMPLATES.TemplateResponse(
         request, "_action_result.html", {"ok": True, "message": f"Signed {email} out of all sessions."})
 
 
 @router.get("/signature/current", response_class=HTMLResponse)
 async def signature_current(request: Request, email: str) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     try:
         sig = await conn.get_signature(email)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(request, "_sig_current.html", {"signature": sig})
 
 
 # --- group membership (view + add/remove; the function behind drag-and-drop) -----------
 @router.get("/groups", response_class=HTMLResponse)
 async def user_groups(request: Request, email: str) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     return await _groups_partial(request, conn, email)
 
 
@@ -206,7 +182,7 @@ async def _groups_partial(request: Request, conn, email: str) -> HTMLResponse:
         member_of = await conn.list_user_groups(email)
         all_groups = await conn.list_groups()
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     member_set = set(member_of)
     available = [g for g in all_groups if g.email not in member_set]
     return TEMPLATES.TemplateResponse(
@@ -216,23 +192,23 @@ async def _groups_partial(request: Request, conn, email: str) -> HTMLResponse:
 
 @router.post("/groups/add", response_class=HTMLResponse)
 async def groups_add(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.add_group_member(group.strip(), email)
     if not result.ok:
-        return _failed(request, f"Couldn't add {email} to {group.strip()}.", result)
+        return write_failed(request, f"Couldn't add {email} to {group.strip()}.", result)
     return await _groups_partial(request, conn, email)
 
 
 @router.post("/groups/remove", response_class=HTMLResponse)
 async def groups_remove(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.remove_group_member(group.strip(), email)
     if not result.ok:
-        return _failed(request, f"Couldn't remove {email} from {group.strip()}.", result)
+        return write_failed(request, f"Couldn't remove {email} from {group.strip()}.", result)
     return await _groups_partial(request, conn, email)
 
 
@@ -248,7 +224,7 @@ async def _check_delegate(st, email: str, delegate: str) -> "tuple[str, str]":
     try:
         directory = await st.users()
     except Exception as exc:  # noqa: BLE001 — can't check: ask, don't guess
-        return "", f"Couldn't check {delegate} against the directory — {_friendly(exc)}"
+        return "", f"Couldn't check {delegate} against the directory — {friendly(exc, _TRY_AGAIN)}"
     key = delegate.lower()
     found = next((u for u in directory if u.primary_email.lower() == key), None)
     if found is None:
@@ -269,7 +245,7 @@ async def add_delegate(request: Request, email: Annotated[str, Form()], delegate
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     delegate = delegate.strip()
     error, warning = await _check_delegate(st, email, delegate)
     if error:
@@ -285,9 +261,9 @@ async def add_delegate(request: Request, email: Annotated[str, Form()], delegate
 
 @router.post("/delegate/remove", response_class=HTMLResponse)
 async def remove_delegate(request: Request, email: Annotated[str, Form()], delegate: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     delegate = delegate.strip()
     result = await conn.remove_delegate(email, delegate)
     if not result.ok:
@@ -304,11 +280,11 @@ async def set_organization(
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     title, department = title.strip(), department.strip()
     result = await conn.set_organization(email, title=title, department=department)
     if not result.ok:
-        return _failed(request, "Couldn't update the title and department.", result)
+        return write_failed(request, "Couldn't update the title and department.", result)
     st.invalidate_users()  # title/department changed -> cached directory is stale
     return TEMPLATES.TemplateResponse(
         request, "_org_form.html", {"email": email, "title": title, "department": department, "saved": True}
@@ -354,7 +330,7 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
                 if not ok:
                     kind, why = getattr(res, "kind", None), getattr(res, "remediation", "")
             except Exception as exc:  # noqa: BLE001 — one user must not stop the rest
-                ok, kind, why = False, getattr(exc, "kind", None), _friendly(exc)
+                ok, kind, why = False, getattr(exc, "kind", None), friendly(exc, _TRY_AGAIN)
             if ok:
                 job.applied += 1
             else:
@@ -365,7 +341,7 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
                 job.error = stop
                 break
     except Exception as exc:
-        job.error = _friendly(exc)
+        job.error = friendly(exc, _TRY_AGAIN)
     finally:
         job.current = ""
         job.finished = True
@@ -380,7 +356,7 @@ async def bulk_page(request: Request) -> HTMLResponse:
     try:
         groups = await st.connector.list_groups()
     except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "error": _friendly(exc), "groups": []})
+        return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "error": friendly(exc, _TRY_AGAIN), "groups": []})
     return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "groups": [g.email for g in groups]})
 
 
@@ -388,11 +364,11 @@ async def bulk_page(request: Request) -> HTMLResponse:
 async def bulk_preview(request: Request, store: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "", emails: Annotated[str, Form()] = "") -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     try:
         targets = await _bulk_targets(st, group.strip(), emails)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     token = ""
     if targets and store.strip():
         token = st.previews.hold(_BULK_FLOW, _bulk_form_key(store, group, emails),
@@ -408,27 +384,27 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     if not store.strip():
-        return _err(request, "Enter a department first.")
+        return error_partial(request, "Enter a department first.")
     form = await request.form()
     held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""),
                                      _bulk_form_key(store, group, emails), again="click Preview again")
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     store, emails_held = held
     # The previewed people, with their titles as the directory has them now (the job keeps each title).
     try:
         current = {u.primary_email.lower(): u for u in await st.users()}
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     targets = [u for e in emails_held if (u := current.get(e.lower())) is not None and not u.suspended]
     if not targets or len(targets) != len(emails_held):
-        return _err(request, "Someone in the preview is no longer an active user — click Preview again.")
+        return error_partial(request, "Someone in the preview is no longer an active user — click Preview again.")
     previews = guard.changes([u.primary_email for u in targets], RiskLevel.LOW, "Set department")
     refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     job = start_job(st.jobs, len(targets))
     job.task = asyncio.create_task(_run_bulk_store(job, st, conn, targets, store))
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": job})
@@ -439,16 +415,16 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     j = st.jobs.get(job)
     if j is None:
-        return _err(request, "That bulk job is no longer available — re-run it.")
+        return error_partial(request, "That bulk job is no longer available — re-run it.")
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": j})
 
 
 @router.get("/delegates", response_class=HTMLResponse)
 async def delegates_get(request: Request, email: str) -> HTMLResponse:
     """Lazy-loaded into the detail page so the page renders before this gam call returns."""
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     return await _delegates_partial(request, conn, email)
 
 
@@ -458,7 +434,7 @@ async def _delegates_partial(request: Request, conn, email: str, **extra) -> HTM
     try:
         delegates = await conn.list_delegates(email)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(request, "_delegates.html", {"delegates": delegates, "email": email, **extra})
 
 
@@ -467,15 +443,15 @@ async def _calendar_partial(request: Request, conn, email: str) -> HTMLResponse:
     try:
         acls = await conn.list_calendar_acls(email)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(request, "_calendar.html", {"acls": acls, "email": email})
 
 
 @router.get("/calendar", response_class=HTMLResponse)
 async def calendar_get(request: Request, email: str) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     return await _calendar_partial(request, conn, email)
 
 
@@ -483,29 +459,29 @@ async def calendar_get(request: Request, email: str) -> HTMLResponse:
 async def calendar_add(
     request: Request, email: Annotated[str, Form()], target: Annotated[str, Form()], role: Annotated[str, Form()] = "reader"
 ) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     target = target.strip()
     if not target:
-        return _err(request, "Enter an email to share with.")
+        return error_partial(request, "Enter an email to share with.")
     try:
         result = await conn.add_calendar_acl(email, target, role=role)
     except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
-        return _err(request, f"Couldn't share calendar: {exc}.")
+        return error_partial(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
-        return _failed(request, f"Couldn't share the calendar with {target}.", result)
+        return write_failed(request, f"Couldn't share the calendar with {target}.", result)
     return await _calendar_partial(request, conn, email)
 
 
 @router.post("/calendar/remove", response_class=HTMLResponse)
 async def calendar_remove(request: Request, email: Annotated[str, Form()], scope: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.remove_calendar_acl(email, scope.strip())
     if not result.ok:
-        return _failed(request, f"Couldn't remove {scope.strip()}'s access.", result)
+        return write_failed(request, f"Couldn't remove {scope.strip()}'s access.", result)
     return await _calendar_partial(request, conn, email)
 
 
@@ -518,7 +494,7 @@ async def delete_zone(request: Request, email: str) -> HTMLResponse:
 @router.post("/delete/confirm", response_class=HTMLResponse)
 async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     # Warn (loudly) if a Drive/calendar transfer is still running — deleting now loses that data.
-    conn = _conn(request)
+    conn = connector(request)
     pending = await conn.incomplete_transfers_for(email.strip()) if conn else []
     return TEMPLATES.TemplateResponse(
         request, _DELETE_ZONE,
@@ -528,9 +504,9 @@ async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTM
 
 @router.post("/delete/apply", response_class=HTMLResponse)
 async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     # The exact address typed (and the confirm click): guard.enforce owns that rule for every route
     # that deletes an account, recognising the delete by the argv conn.delete_user runs.
     delete = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=email, summary="Delete account",
@@ -540,12 +516,12 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
         try:
             refusal = " ".join(guard.alias_deletes({email: await conn.primary_address(email.strip())}))
         except Exception as exc:  # noqa: BLE001 - fail closed: an address GAM can't resolve can't be ruled out
-            refusal = f"Couldn't confirm which account that address belongs to — {_friendly(exc)}"
+            refusal = f"Couldn't confirm which account that address belongs to — {friendly(exc, _TRY_AGAIN)}"
     if refusal:
         return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal})
     result = await conn.delete_user(email)
     if not result.ok:
-        return _failed(request, f"Couldn't delete {email}.", result)
+        return write_failed(request, f"Couldn't delete {email}.", result)
     request.app.state.gamgui.invalidate_users()
     return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "deleted": True})
 
@@ -553,9 +529,9 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
 # --- vacation / auto-responder (lazy-loaded into the detail page) ----------------------
 @router.get("/vacation", response_class=HTMLResponse)
 async def vacation_get(request: Request, email: str) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     return await _vacation_partial(request, conn, email)
 
 
@@ -563,7 +539,7 @@ async def _vacation_partial(request: Request, conn, email: str) -> HTMLResponse:
     try:
         vac = await conn.get_vacation(email)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(request, "_vacation.html", {"vac": vac, "email": email})
 
 
@@ -578,27 +554,27 @@ async def vacation_set(
     start: Annotated[str, Form()] = "",
     end: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.set_vacation(
         email, subject, message, html=True,
         start=start.strip() or None, end=end.strip() or None,
         contacts_only=(contactsonly == "on"), domain_only=(domainonly == "on"),
     )
     if not result.ok:
-        return _failed(request, "Couldn't turn on the auto-reply.", result)
+        return write_failed(request, "Couldn't turn on the auto-reply.", result)
     return await _vacation_partial(request, conn, email)
 
 
 @router.post("/vacation/off", response_class=HTMLResponse)
 async def vacation_off(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     result = await conn.clear_vacation(email)
     if not result.ok:
-        return _failed(request, "Couldn't turn off the auto-reply.", result)
+        return write_failed(request, "Couldn't turn off the auto-reply.", result)
     return await _vacation_partial(request, conn, email)
 
 
@@ -611,9 +587,9 @@ async def suspend_zone(request: Request, email: str, suspended: str = "false") -
 
 @router.post("/suspend/preview", response_class=HTMLResponse)
 async def suspend_preview(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     # plan_suspend + guard.evaluate are pure (no GAM call) — they just resolve the target set.
     decision = guard.evaluate(conn.plan_suspend([email], suspend=True))
     return TEMPLATES.TemplateResponse(
@@ -623,22 +599,22 @@ async def suspend_preview(request: Request, email: Annotated[str, Form()]) -> HT
 
 @router.post("/suspend/apply", response_class=HTMLResponse)
 async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend: Annotated[str, Form()] = "on") -> HTMLResponse:
-    conn = _conn(request)
+    conn = connector(request)
     if conn is None:
-        return _err(request, _NOT_CONNECTED)
+        return error_partial(request, NOT_CONNECTED)
     want_suspend = suspend == "on"
     previews = conn.plan_suspend([email], suspend=want_suspend)
     refusal = guard.enforce(previews, await request.form())   # suspend is destructive: confirmed=1
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     try:
         results = await conn.apply(previews)
     except Exception as exc:
-        return _err(request, _friendly(exc))
+        return error_partial(request, friendly(exc, _TRY_AGAIN))
     failed = next((r for r in results if not r.ok), None)
     if not results or failed is not None:
         what = f"Couldn't {'suspend' if want_suspend else 'unsuspend'} {email}."
-        return _failed(request, what, failed) if failed is not None else _err(request, what)
+        return write_failed(request, what, failed) if failed is not None else error_partial(request, what)
     request.app.state.gamgui.invalidate_users()  # status changed -> cached list is stale
     return TEMPLATES.TemplateResponse(
         request, "_suspend_zone.html", {"email": email, "suspended": want_suspend}

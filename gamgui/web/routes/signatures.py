@@ -13,11 +13,11 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
-from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
 from ..jobs import stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, friendly, signature_store
 
 router = APIRouter(prefix="/signatures")
 
@@ -25,15 +25,6 @@ _SIGNATURES_PAGE = "signatures.html"
 _PREVIEW_PARTIAL = "_sig_preview.html"
 _APPLY_PARTIAL = "_sig_apply.html"
 _TEMPLATES_PARTIAL = "_sig_templates.html"
-
-
-def _store(request: Request) -> SignatureStore:
-    """The saved-template store, lazily created on first use (real ~/Library file unless a test
-    pre-seeds ``st.sig_templates`` with a store pointed at a tmp path)."""
-    st = request.app.state.gamgui
-    if st.sig_templates is None:
-        st.sig_templates = SignatureStore()
-    return st.sig_templates
 
 
 def _tctx(store: SignatureStore, **extra) -> dict:
@@ -94,10 +85,6 @@ class ApplyJob:
         self.done += 1
 
 
-def _friendly(exc: Exception) -> str:
-    return exc.remediation if isinstance(exc, GAMError) else "Something went wrong talking to GAM."
-
-
 async def _matched(st, users, scope_type: str, scope_value: str):
     """Resolve the in-scope active users — group scope needs a GAM lookup, the rest is in-memory."""
     if scope_type == "group" and scope_value:
@@ -143,14 +130,14 @@ async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
                 job.record(u.primary_email, result.ok, result.remediation, result.detail)
                 kind, why = (None if result.ok else result.kind), result.remediation
             except Exception as exc:  # noqa: BLE001 — _run_write reports GAM's failures; this is anything else
-                job.record(u.primary_email, False, _friendly(exc), str(exc))
-                kind, why = getattr(exc, "kind", None), _friendly(exc)
+                job.record(u.primary_email, False, friendly(exc), str(exc))
+                kind, why = getattr(exc, "kind", None), friendly(exc)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
                 job.error = stop
                 break
     except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
-        job.error = _friendly(exc)
+        job.error = friendly(exc)
     finally:
         job.current = ""
         job.finished = True
@@ -178,7 +165,7 @@ async def page(request: Request) -> HTMLResponse:
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _SIGNATURES_PAGE,
-            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "locations": [], "users": []}, "groups": [], "variables": sig.VARIABLES, "test_user": ""},
+            {"connected": True, "error": friendly(exc), "options": {"ous": [], "departments": [], "locations": [], "users": []}, "groups": [], "variables": sig.VARIABLES, "test_user": ""},
         )
     options = sig.scope_options(users)
     return TEMPLATES.TemplateResponse(
@@ -197,11 +184,11 @@ async def preview(
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": NOT_CONNECTED})
     try:
         users = await st.users()
     except Exception as exc:
-        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": _friendly(exc)})
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": friendly(exc)})
     matched = await _matched(st, users, scope_type, scope_value)
     sample = matched[0] if matched else None
     decision = guard.evaluate(_previews(matched), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
@@ -224,7 +211,7 @@ async def apply(
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": NOT_CONNECTED})
     form = await request.form()
     # The previewed template and people, or nothing: a used, expired or missing preview, or a scope or
     # template edited since, is refused rather than run on values the preview never showed.
@@ -260,7 +247,7 @@ async def apply_status(request: Request, job: str = "") -> HTMLResponse:
 
 @router.get("/templates", response_class=HTMLResponse)
 async def list_templates(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(_store(request)))
+    return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(signature_store(request)))
 
 
 @router.post("/templates/save", response_class=HTMLResponse)
@@ -271,7 +258,7 @@ async def save_template(
 ) -> HTMLResponse:
     # `template` rides in via hx-include="#sig-form" — the CURRENT editor content — while `name`
     # comes from the save form's own input.
-    store = _store(request)
+    store = signature_store(request)
     try:
         store.save(name, template)
     except ValueError as exc:
@@ -281,6 +268,6 @@ async def save_template(
 
 @router.post("/templates/delete", response_class=HTMLResponse)
 async def delete_template(request: Request, name: Annotated[str, Form()] = "") -> HTMLResponse:
-    store = _store(request)
+    store = signature_store(request)
     store.delete(name)
     return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(store))

@@ -20,20 +20,9 @@ from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ..jobs import start_job
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, connector, error_partial, friendly
 
 router = APIRouter(prefix="/lifecycle")
-
-
-def _conn(request: Request):
-    return request.app.state.gamgui.connector
-
-
-def _friendly(exc: Exception) -> str:
-    return exc.remediation if isinstance(exc, GAMError) else "Something went wrong talking to GAM."
-
-
-def _err(request: Request, message: str) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
 
 
 def _days(value: str) -> int:
@@ -87,7 +76,7 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     try:
         directory = await st.users()
     except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why
-        return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {_friendly(exc)}"])
+        return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {friendly(exc)}"])
     admin = st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None and st.connector else ""
     return lifecycle.check_addresses(directory, user, manager, connected_admin=admin)
 
@@ -101,7 +90,7 @@ async def _delegate_warning(conn, user: str, manager: str) -> str:
     try:
         delegates = {d.lower() for d in await conn.list_delegates(user)}
     except Exception as exc:  # noqa: BLE001 - any failure is reported, whatever it was
-        reason = exc.message if isinstance(exc, GAMError) else _friendly(exc)
+        reason = exc.message if isinstance(exc, GAMError) else friendly(exc)
         return (f"Couldn't read {user}'s mail delegates ({reason}). The delegate step uses the same Gmail "
                 f"access, so it will likely fail too — after the password has been reset, and a failed "
                 f"delegate stops the routine. Fix the cause and preview again.")
@@ -156,7 +145,7 @@ async def _compose_autoreply(st, user: str, manager: str, subject: str, message:
 async def page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(
         request, "lifecycle.html",
-        {"connected": _conn(request) is not None, "subject": lifecycle.DEFAULT_SUBJECT,
+        {"connected": connector(request) is not None, "subject": lifecycle.DEFAULT_SUBJECT,
          "message": lifecycle.DEFAULT_MESSAGE, "days": 30, "step_names": lifecycle.STEP_NAMES},
     )
 
@@ -170,17 +159,17 @@ async def offboard_preview(
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return _err(request, "Not connected.")
+        return error_partial(request, NOT_CONNECTED)
     done = _done(await request.form())
     form = _form_key(user, manager, subject, message, days, notify, done)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
-        return _err(request, "Enter both the departing user and the manager email.")
+        return error_partial(request, "Enter both the departing user and the manager email.")
     if done == frozenset(lifecycle.REQUIRES):
-        return _err(request, "Every step is ticked as already done — there is nothing to run.")
+        return error_partial(request, "Every step is ticked as already done — there is nothing to run.")
     check = await _check(st, user, manager)
     if check.errors:
-        return _err(request, " ".join(check.errors))
+        return error_partial(request, " ".join(check.errors))
     assert check.user and check.manager  # check_addresses: no errors means both were found
     user, manager = check.user.primary_email, check.manager.primary_email
     if running := _running(st, user):
@@ -274,21 +263,21 @@ async def offboard_run(
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
-        return _err(request, "Not connected.")
+        return error_partial(request, NOT_CONNECTED)
     # Destructive for the leaver (resets the password, revokes access, strips calendar access
     # domain-wide): confirmed=1.
     form = await request.form()
     refusal = guard.enforce(guard.changes([user.strip()], RiskLevel.DESTRUCTIVE, "Offboard"), form)
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     # Single use: a second Run, or a Run after the form was edited, needs a new preview.
     held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
                                                                _done(form)), again="click Preview steps again")
     if refusal:
-        return _err(request, refusal)
+        return error_partial(request, refusal)
     check = await _check(st, held.user, held.manager)   # the directory may have changed since
     if check.errors:
-        return _err(request, " ".join(check.errors))
+        return error_partial(request, " ".join(check.errors))
     user, steps = held.user, held.steps
     # No await from here to the registration, so two Runs can't both pass the check.
     if running := _running(st, user):
@@ -305,7 +294,7 @@ async def offboard_run(
 async def offboard_status(request: Request, job: str = "") -> HTMLResponse:
     j = request.app.state.gamgui.jobs.get(job)
     if j is None:
-        return _err(request, "That offboarding run is no longer available.")
+        return error_partial(request, "That offboarding run is no longer available.")
     return _panel(request, j, "")
 
 

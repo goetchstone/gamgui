@@ -7,17 +7,13 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core.gam.errors import GAMError
 from ..server import TEMPLATES
+from ._common import NOT_CONNECTED, friendly
 
 _GROUPS_PAGE = "groups.html"
 _BOARD_MEMBERS_PARTIAL = "_board_members.html"
 
 router = APIRouter(prefix="/groups")
-
-
-def _friendly(exc: Exception) -> str:
-    return exc.remediation if isinstance(exc, GAMError) else "Something went wrong talking to GAM."
 
 
 @router.get("", response_class=HTMLResponse)
@@ -30,7 +26,7 @@ async def board(request: Request) -> HTMLResponse:
         groups = await st.connector.list_groups()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
-            request, _GROUPS_PAGE, {"connected": True, "users": [], "groups": [], "error": _friendly(exc)}
+            request, _GROUPS_PAGE, {"connected": True, "users": [], "groups": [], "error": friendly(exc)}
         )
     return TEMPLATES.TemplateResponse(request, _GROUPS_PAGE, {"connected": True, "users": users, "groups": groups})
 
@@ -42,7 +38,7 @@ async def _members_partial(request: Request, conn, group: str, error: str = "") 
         members = await conn.list_group_members(group)
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
-            request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": [], "error": _friendly(exc)}
+            request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": [], "error": friendly(exc)}
         )
     return TEMPLATES.TemplateResponse(
         request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": members, "error": error}
@@ -53,7 +49,7 @@ async def _members_partial(request: Request, conn, group: str, error: str = "") 
 async def members(request: Request, group: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
-        return TEMPLATES.TemplateResponse(request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": [], "error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": [], "error": NOT_CONNECTED})
     return await _members_partial(request, st.connector, group)
 
 
@@ -66,7 +62,7 @@ async def members_mutate(
 ) -> HTMLResponse:
     conn = request.app.state.gamgui.connector
     if conn is None:
-        return TEMPLATES.TemplateResponse(request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": [], "error": "Not connected."})
+        return TEMPLATES.TemplateResponse(request, _BOARD_MEMBERS_PARTIAL, {"group": group, "members": [], "error": NOT_CONNECTED})
     result = await (conn.remove_group_member(group, email) if op == "remove" else conn.add_group_member(group, email))
     error = "" if result.ok else result.detail
     return await _members_partial(request, conn, group, error=error)
