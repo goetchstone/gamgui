@@ -22,6 +22,9 @@
     /* Tracked caps label. */
     .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.68rem; font-weight: 600; }
     .wordmark { text-transform: uppercase; letter-spacing: 0.22em; }
+    /* Keyboard focus (plan A5): a brand-blue ring on every control, link, tab and focused panel. A text
+       field swaps it for its own focus:ring (tests/test_a11y.py holds focus:outline-none to one). */
+    :focus-visible { outline: 2px solid #5A728E; outline-offset: 2px; }
     /* Global indeterminate loading bar (shown during HTMX requests + page navigations). */
     #loadbar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60; overflow: hidden; opacity: 0; transition: opacity .15s; pointer-events: none; }
     #loadbar.on { opacity: 1; }

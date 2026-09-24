@@ -30,15 +30,15 @@
   </div>
 
   <!-- Tabs keep this content-heavy page within the window — one section group at a time. -->
-  <nav data-tabs class="flex gap-1 border-b border-brand-gray/30 text-sm">
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="overview">Overview</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="mail">Mail</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="sharing">Sharing</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="danger">Account</button>
-  </nav>
+  <div role="tablist" aria-label="Account sections" class="flex gap-1 border-b border-brand-gray/30 text-sm">
+    <button type="button" role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true" tabindex="0" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Overview</button>
+    <button type="button" role="tab" id="tab-mail" aria-controls="panel-mail" aria-selected="false" tabindex="-1" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Mail</button>
+    <button type="button" role="tab" id="tab-sharing" aria-controls="panel-sharing" aria-selected="false" tabindex="-1" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Sharing</button>
+    <button type="button" role="tab" id="tab-danger" aria-controls="panel-danger" aria-selected="false" tabindex="-1" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Account</button>
+  </div>
 
   <!-- OVERVIEW: identity + title/department -->
-  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 space-y-4" data-panel="overview">
+  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 space-y-4" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" tabindex="0">
     <div class="grid gap-4 sm:grid-cols-2">
       <div class="{{ card }}">
         <h2 class="eyebrow text-brand-grayink">Account</h2>
@@ -67,13 +67,13 @@
   </div>
 
   <!-- MAIL: signature | delegates + vacation -->
-  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" data-panel="mail">
+  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" role="tabpanel" id="panel-mail" aria-labelledby="tab-mail" tabindex="0">
     <div class="{{ card }}">
       <h2 class="eyebrow text-brand-grayink">Gmail signature</h2>
       <div id="sig-current" class="mt-3 max-h-40 overflow-y-auto" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"><p class="text-sm text-brand-grayink flex items-center gap-2"><span class="spinner"></span> Loading…</p></div>
       <form class="mt-1 space-y-3" hx-post="/users/signature" hx-target="#sig-result" hx-swap="innerHTML" hx-disabled-elt="find button">
         <input type="hidden" name="email" value="{{ email }}" />
-        <textarea name="signature" rows="3" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
+        <textarea name="signature" rows="3" aria-label="New signature" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
         <div class="flex items-center justify-between">
           <label class="flex items-center gap-2 text-sm text-brand-blueink"><input type="checkbox" name="html" value="on" checked /> HTML</label>
           <button class="{{ btn }}" type="submit">Save signature</button>
@@ -98,7 +98,7 @@
   </div>
 
   <!-- SHARING: groups | calendar access -->
-  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" data-panel="sharing">
+  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" role="tabpanel" id="panel-sharing" aria-labelledby="tab-sharing" tabindex="0">
     <div class="{{ card }}">
       <h2 class="eyebrow text-brand-grayink">Groups</h2>
       <div id="user-groups" class="mt-3" hx-get="/users/groups?email={{ email | urlencode }}" hx-trigger="load">
@@ -115,7 +115,7 @@
   </div>
 
   <!-- ACCOUNT / DANGER: suspend + delete -->
-  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden space-y-4" data-panel="danger">
+  <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden space-y-4" role="tabpanel" id="panel-danger" aria-labelledby="tab-danger" tabindex="0">
     <div class="{{ card }}">
       <h2 class="eyebrow text-brand-grayink">Suspend &amp; delete</h2>
       <div id="suspend-zone" class="mt-3">

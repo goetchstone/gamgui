@@ -8,10 +8,13 @@ each screen and the states that matter (user-detail and onboarding tabs, a signa
 calendar's access, a Builder result, an offboarding preview), injects the vendored axe-core
 (tests/a11y/, checksum-checked) and counts the serious/critical violations per screen and rule. It
 fails on a rule or screen the baseline (tests/a11y/baseline.json) doesn't list, on a count above it —
-and on a count below it, so a fix locks its gain in. The baseline only ever shrinks, to empty.
+and on a count below it, so a fix locks its gain in. The baseline only ever shrinks, to empty (it is).
+A second Chrome test uses the keyboard alone (real key events): the ARIA tab strips, focus landing in a
+confirm panel and coming back when it closes, and a brand focus ring on every Tab stop of every screen.
 
-The Chrome run is marked a11y and deselected from the default run (pyproject addopts: it starts
-Chrome); the checksum and ratchet-logic tests below it run by default. Skipped when Google Chrome
+The Chrome runs are marked a11y and deselected from the default run (pyproject addopts: they start
+Chrome); the checksum and ratchet-logic tests and the template checks (every field named, every focus
+target focusable, every tab strip an ARIA tablist) run by default. Skipped when Google Chrome
 isn't installed, unless A11Y_REQUIRE_CHROME is set (CI). Chrome gets scripts/readme_screenshots.py's
 CHROME_FLAGS — --use-mock-keychain keeps it off the login Keychain (tests/test_headless_chrome.py) —
 and talks CDP over --remote-debugging-pipe: no debugging port for another local process to reach, no
@@ -26,11 +29,13 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import select
 import signal
 import socket
 import threading
 import time
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -58,6 +63,19 @@ def _axe_source() -> str:
     assert hashlib.sha256(data).hexdigest() == expected, "tests/a11y/axe.min.js doesn't match axe.min.js.sha256"
     return data.decode()
 
+
+# A focus indicator is base.html's brand ring (a solid brand-blue outline; Chrome's own blue one doesn't
+# count) or a text field's focus:ring (a box-shadow; its focus:outline-none leaves a transparent outline).
+FOCUSED = """(() => { const a = document.activeElement; if (!a || a === document.body) return null;
+  const s = getComputedStyle(a);
+  return {id: a.id, tag: a.tagName, text: a.textContent.trim().replace(/\\s+/g, ' ').slice(0, 50),
+          html: a.outerHTML.slice(0, 160), panel: a.hasAttribute('data-focus'),
+          ring: (s.outlineStyle === 'solid' && s.outlineColor === 'rgb(90, 114, 142)') || s.boxShadow !== 'none'};
+})()"""
+
+ERROR_TRAP = """window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', e => window.__errs.push(String(e.reason)));"""
 
 # axe.run's defaults (WCAG A/AA and best practices) minus iframes: the only frame is the sandboxed
 # signature preview, which holds the operator's email HTML, not this UI, and can't run axe anyway.
@@ -180,11 +198,24 @@ class Page:
             if (!el) throw new Error('no ' + {json.dumps(sel)}); el.value = {json.dumps(val)};
             for (const t of ['input', 'keyup', 'change']) el.dispatchEvent(new Event(t, {{bubbles: true}})); }})()""")
 
-    def click(self, sel: str, text: str | None = None) -> None:
-        """Click the first `sel` (whose trimmed text starts with `text`, if given)."""
+    def click(self, sel: str, text: str | None = None, action: str = "click") -> None:
+        """Click (or `action`, e.g. focus) the first `sel` whose trimmed text starts with `text`, if given."""
         self.c.js(f"""(() => {{ const el = [...document.querySelectorAll({json.dumps(sel)})]
             .find(e => {json.dumps(text)} === null || e.textContent.trim().startsWith({json.dumps(text)}));
-            if (!el) throw new Error('no ' + {json.dumps(sel)} + ' ' + {json.dumps(text)}); el.click(); }})()""")
+            if (!el) throw new Error('no ' + {json.dumps(sel)} + ' ' + {json.dumps(text)}); el.{action}(); }})()""")
+
+    KEYS = {"Tab": 9, "Enter": 13, "End": 35, "Home": 36, "ArrowLeft": 37, "ArrowRight": 39}
+
+    def key(self, name: str) -> None:
+        """Press a key the way the keyboard does (CDP input events: Tab moves focus, Enter activates)."""
+        ev = {"key": name, "code": name, "windowsVirtualKeyCode": self.KEYS[name]}
+        down = {"type": "keyDown", "text": "\r"} if name == "Enter" else {"type": "rawKeyDown"}
+        self.c.cmd("Input.dispatchKeyEvent", **down, **ev)
+        self.c.cmd("Input.dispatchKeyEvent", type="keyUp", **ev)
+
+    def focused(self) -> dict:
+        """What has focus: its id, text, whether it is a [data-focus] panel and shows a focus indicator."""
+        return self.c.js(FOCUSED) or {}
 
     def violations(self) -> list[dict]:
         if not self.c.js("!!window.axe"):
@@ -202,7 +233,7 @@ def _screens(p: Page):
 
     p.goto("/users/detail?email=alice%40example.com")
     for tab in ("overview", "mail", "sharing", "danger"):
-        p.click(f"[data-tab='{tab}']")
+        p.click(f"#tab-{tab}")
         p.settle()
         yield f"user-detail/{tab}"
 
@@ -240,7 +271,7 @@ def _screens(p: Page):
 
     p.goto("/onboard")
     for tab in ("generate", "roles", "welcome", "bulk"):
-        p.click(f"[data-tab='{tab}']")
+        p.click(f"#tab-{tab}")
         p.settle()
         yield f"onboard/{tab}"
 
@@ -341,6 +372,205 @@ def test_no_new_serious_or_critical_axe_violations(page):
     assert not worse, "new or more serious/critical accessibility violations:\n  " + "\n  ".join(worse)
     assert not better, ("fewer violations than tests/a11y/baseline.json — lock the gain in with "
                         "A11Y_UPDATE_BASELINE=1:\n  " + "\n  ".join(better))
+
+
+# Screens whose every Tab stop must show a focus indicator (plan A5).
+RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/signatures", "/calendars",
+             "/builder", "/onboard", "/lifecycle", "/reports", "/audit", "/setup")
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(300)
+def test_the_keyboard_alone_works_the_tabs_and_each_confirm_panel(page):
+    """Plan A2 and A5, driven by real key events: the tab strips are ARIA tabs (one Tab stop, arrows, Home,
+    End), a confirm panel takes focus when it opens and hands it back when it closes, every Tab stop shows
+    a focus ring, and no page throws."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+
+    def inside(zone: str) -> bool:
+        return p.c.js(f"document.getElementById({json.dumps(zone)}).contains(document.activeElement)")
+
+    def shown() -> tuple[list[str], list[str]]:
+        return (p.c.js("[...document.querySelectorAll('[role=tab][aria-selected=true]')].map(t => t.id)"),
+                p.c.js("[...document.querySelectorAll('[role=tabpanel]')].filter(el => el.offsetParent).map(el => el.id)"))
+
+    p.goto("/users/detail?email=alice%40example.com")
+    p.click('main a[href="/users"]', action="focus")
+    p.key("Tab")
+    assert p.focused()["id"] == "tab-overview"
+    for key, tab in (("ArrowRight", "mail"), ("End", "danger"), ("Home", "overview"), ("ArrowLeft", "danger")):
+        p.key(key)
+        assert p.focused()["id"] == f"tab-{tab}", key
+        assert shown() == ([f"tab-{tab}"], [f"panel-{tab}"]), key
+    p.key("Tab")
+    assert p.focused()["id"] == "panel-danger"          # the strip was one stop: roving tabindex
+
+    # Suspend… lands on its confirm panel; Cancel re-renders the zone and focus returns to Suspend….
+    p.key("Tab")
+    assert p.focused()["text"] == "Suspend…"
+    p.key("Enter")
+    p.settle("document.querySelector('#suspend-zone [data-focus]')")
+    assert p.focused()["panel"] and inside("suspend-zone")
+    p.key("Tab")
+    p.key("Tab")
+    assert p.focused()["text"] == "Cancel"
+    p.key("Enter")
+    p.settle("!document.querySelector('#suspend-zone [data-focus]')")
+    assert p.focused()["text"] == "Suspend…"
+
+    # The account delete lands in its typed confirmation, and Cancel returns to Delete account….
+    p.key("Tab")
+    p.key("Tab")
+    assert p.focused()["text"] == "Delete account…"
+    p.key("Enter")
+    p.settle("document.querySelector('#del-confirm-email')")
+    assert p.focused()["id"] == "del-confirm-email"
+    p.key("Tab")
+    p.key("Tab")
+    p.key("Enter")
+    p.settle("!document.querySelector('#del-confirm-email')")
+    assert p.focused()["text"] == "Delete account…"
+    assert p.c.js("window.__errs") == []
+
+    # A calendar delete's Cancel only empties its zone (the "clear" action): focus returns to its opener.
+    p.goto("/calendars")
+    p.fill("input[name=q]", "sales")
+    p.settle("/View access/.test(document.body.innerText)")
+    p.click("button, a", "View access")
+    p.settle("/who has access/i.test(document.body.innerText)")
+    p.click("#cal-detail button", "Delete this calendar", action="focus")
+    p.key("Enter")
+    p.settle("document.querySelector('#cal-delete-zone [data-focus]')")
+    assert p.focused()["text"] == "Permanently delete this calendar?"
+    for _ in range(3):
+        p.key("Tab")                                    # the typed DELETE, Delete calendar, Cancel
+    assert p.focused()["text"] == "Cancel"
+    p.key("Enter")
+    assert p.focused()["text"] == "Delete this calendar…"
+    assert p.c.js("document.getElementById('cal-delete-zone').children.length") == 0
+
+    # A Builder preview lands on its panel; Run replaces it, and focus stays on the result's zone.
+    p.goto("/builder", "document.querySelector('#catalog button')")
+    p.fill("#cat-controls input[name=q]", "print groups")
+    p.settle("/List groups\\./.test(document.querySelector('#catalog').innerText)")
+    p.click("#catalog button", "Build")
+    p.settle("document.querySelector('#cmd-form form')")
+    p.click("#cmd-form button", "Preview", action="focus")
+    p.key("Enter")
+    p.settle("document.querySelector('#builder-result [data-focus]')")
+    assert p.focused()["panel"] and inside("builder-result")
+    p.key("Tab")
+    assert p.focused()["text"] == "Run"
+    p.key("Enter")
+    p.settle("document.querySelector('#builder-result table')")
+    assert p.focused()["id"] == "builder-result"
+    assert p.c.js("window.__errs") == []
+
+    # Onboarding's strip too.
+    p.goto("/onboard")
+    p.click("#tab-generate", action="focus")
+    p.key("ArrowRight")
+    assert shown() == (["tab-roles"], ["panel-roles"])
+
+    # Every Tab stop on every screen shows a focus indicator.
+    bare, stops = [], {}
+    for path in RING_WALK:
+        p.goto(path)
+        p.c.js("document.activeElement && document.activeElement.blur()")
+        seen: list[str] = []
+        for _ in range(150):
+            p.key("Tab")
+            f = p.focused()
+            if not f or f["html"] in seen[:1]:       # past the last stop, or wrapped round to the first
+                break
+            seen.append(f["html"])
+            if not f["ring"]:
+                bare.append(f"{path}: {f['html']}")
+        stops[path] = len(seen)
+        assert p.c.js("window.__errs") == [], path
+    print("Tab stops per screen:", stops)
+    assert min(stops.values()) > 11, stops                 # past the wordmark and the ten nav links
+    assert not bare, "Tab stops with no visible focus indicator:\n  " + "\n  ".join(bare)
+
+
+def _template_tags() -> list[tuple[str, int, str, dict[str, str | None], bool]]:
+    """(template, line, tag, attrs, inside a <label>) for every start tag in every template. Jinja
+    statements and comments are dropped, so an attribute a condition adds counts as present."""
+    found: list[tuple[str, int, str, dict[str, str | None], bool]] = []
+
+    class Tags(HTMLParser):
+        def __init__(self, name: str):
+            super().__init__()
+            self.name, self.open = name, []
+
+        def handle_starttag(self, tag, attrs):
+            found.append((self.name, self.getpos()[0], tag, dict(attrs), "label" in self.open))
+            if tag not in ("input", "br", "img", "meta", "link", "hr"):
+                self.open.append(tag)
+
+        def handle_endtag(self, tag):
+            if tag in self.open:
+                while self.open.pop() != tag:
+                    pass
+
+    for path in sorted((ROOT / "gamgui" / "web" / "templates").glob("*.html")):
+        # A dropped statement keeps its newlines, so the line numbers stay the template's.
+        text = re.sub(r"{%.*?%}|{#.*?#}", lambda m: "\n" * m.group().count("\n"), path.read_text(), flags=re.S)
+        Tags(path.name).feed(text)
+    return found
+
+
+def test_every_form_field_in_a_template_has_an_accessible_name():
+    """Plan A4: a wrapping <label>, a <label for>, aria-label or aria-labelledby — a placeholder or a
+    title alone is no name (it vanishes on typing, and axe's label-title-only flags it). Only the states
+    tests' axe walk visits are checked in Chrome; this reads every template."""
+    tags = _template_tags()
+    label_for = {(name, a["for"]) for name, _, tag, a, _ in tags if tag == "label" and a.get("for")}
+    unnamed = [
+        f"{name}:{line} <{tag} name={a.get('name')!r}>"
+        for name, line, tag, a, in_label in tags
+        if tag in ("input", "select", "textarea")
+        and a.get("type") not in ("hidden", "submit", "button")
+        and "hidden" not in a and a.get("aria-hidden") != "true"
+        and not (in_label or a.get("aria-label") or a.get("aria-labelledby") or (name, a.get("id")) in label_for)
+    ]
+    assert not unnamed, "form fields with no accessible name:\n  " + "\n  ".join(unnamed)
+
+
+def test_a_focus_target_can_take_focus_and_a_dropped_outline_leaves_a_ring():
+    """Plan A5: app.js focuses a swapped-in panel's [data-focus], which does nothing unless it is a control
+    or carries tabindex; and a control whose class drops the outline (focus:outline-none) must keep
+    another indicator (focus:ring-*), or base.html's focus-visible ring is all it had."""
+    tags = _template_tags()
+    inert = [f"{name}:{line} <{tag}>" for name, line, tag, a, _ in tags
+             if "data-focus" in a and tag not in ("input", "select", "textarea", "button", "a")
+             and a.get("tabindex") != "-1"]
+    assert not inert, "[data-focus] that focus() can't reach:\n  " + "\n  ".join(inert)
+    ringless = [f"{path.name}: {cls}"
+                for path in sorted((ROOT / "gamgui" / "web").rglob("*.*")) if path.suffix in (".html", ".js")
+                and "vendor" not in path.parts
+                for cls in re.findall(r"""["']([^"'\n]*focus:outline-none[^"'\n]*)["']""", path.read_text())
+                if "focus:ring-" not in cls]
+    assert not ringless, "focus:outline-none with no focus:ring-:\n  " + "\n  ".join(ringless)
+
+
+def test_each_tab_strip_is_an_aria_tablist():
+    """Plan A2: each tab controls a tabpanel that names it back, exactly one starts selected and in the
+    Tab order, and the rest start out of it (app.js keeps it so)."""
+    tags = _template_tags()
+    strips = {name for name, _, _, a, _ in tags if a.get("role") == "tablist"}
+    assert strips == {"user_detail.html", "onboarding.html"}
+    for name in strips:
+        mine = [a for n, _, _, a, _ in tags if n == name]
+        tabs = [a for a in mine if a.get("role") == "tab"]
+        panels = {a["id"]: a for a in mine if a.get("role") == "tabpanel"}
+        assert len(tabs) == len(panels) >= 2, name
+        for t in tabs:
+            assert panels[t["aria-controls"]]["aria-labelledby"] == t["id"], (name, t["id"])
+        assert [(t["aria-selected"], t["tabindex"]) for t in tabs] == \
+            [("true", "0")] + [("false", "-1")] * (len(tabs) - 1), name
 
 
 def test_the_ratchet_fails_a_new_or_grown_count_and_asks_to_lower_a_shrunk_one():

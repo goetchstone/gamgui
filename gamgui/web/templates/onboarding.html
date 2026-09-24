@@ -17,15 +17,15 @@
     <p class="text-brand-blueink text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send a welcome email. Roles &amp; the email are yours to edit.</p>
   </div>
 
-  <nav data-tabs class="flex gap-1 border-b border-brand-gray/30 text-sm">
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="generate">Generate</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="roles">Role templates</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="welcome">Welcome email</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="bulk">Bulk import</button>
-  </nav>
+  <div role="tablist" aria-label="Onboarding" class="flex gap-1 border-b border-brand-gray/30 text-sm">
+    <button type="button" role="tab" id="tab-generate" aria-controls="panel-generate" aria-selected="true" tabindex="0" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Generate</button>
+    <button type="button" role="tab" id="tab-roles" aria-controls="panel-roles" aria-selected="false" tabindex="-1" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Role templates</button>
+    <button type="button" role="tab" id="tab-welcome" aria-controls="panel-welcome" aria-selected="false" tabindex="-1" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Welcome email</button>
+    <button type="button" role="tab" id="tab-bulk" aria-controls="panel-bulk" aria-selected="false" tabindex="-1" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black">Bulk import</button>
+  </div>
 
   <!-- GENERATE -->
-  <div class="max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="generate">
+  <div class="max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" role="tabpanel" id="panel-generate" aria-labelledby="tab-generate" tabindex="0">
     {% if roles %}
     <form id="onboard-form" class="{{ card }} grid gap-3 sm:grid-cols-2">
       <label class="block text-sm"><span class="text-brand-blueink">New hire name</span>
@@ -58,7 +58,7 @@
   </div>
 
   <!-- ROLE TEMPLATES (editable) -->
-  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start" data-panel="roles">
+  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start" role="tabpanel" id="panel-roles" aria-labelledby="tab-roles" tabindex="0">
     <div class="{{ card }}">
       <h2 class="eyebrow text-brand-grayink">Roles</h2>
       <div id="onboard-roles" class="mt-3">{% include "_onboard_roles.html" %}</div>
@@ -66,8 +66,10 @@
     <form class="{{ card }} space-y-2" hx-post="/onboard/role" hx-target="#onboard-roles" hx-swap="innerHTML">
       <h2 class="eyebrow text-brand-grayink">Add / edit a role</h2>
       <p class="text-xs text-brand-grayink">Saving an existing role name replaces it. One step per line. Org unit &amp; signature apply only when onboarding creates the account; groups &amp; calendars apply to the new hire whenever an email is set.</p>
-      <input class="{{ fld }}" name="name" placeholder="Role name (e.g. Salesperson)" required />
-      <textarea class="{{ fld }} font-mono text-[12.5px]" name="steps" rows="6" placeholder="Set up the CRM login&#10;Order a laptop&#10;Add to the team channel"></textarea>
+      <label class="block text-xs text-brand-grayink">Role name
+        <input class="{{ fld }} mt-1" name="name" placeholder="e.g. Salesperson" required /></label>
+      <label class="block text-xs text-brand-grayink">Steps, one per line
+        <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="steps" rows="6" placeholder="Set up the CRM login&#10;Order a laptop&#10;Add to the team channel"></textarea></label>
       <div class="grid gap-2 sm:grid-cols-2">
         <label class="block text-xs text-brand-grayink">Org unit (new account)
           <input class="{{ fld }} mt-1" name="org_unit" placeholder="/Sales" /></label>
@@ -77,27 +79,27 @@
             {% for t in sig_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
           </select></label>
         <div class="block text-xs text-brand-grayink">Groups (search, or type one email per line)
-          <input type="search" name="q" form="ob-picker-noop" autocomplete="off" placeholder="Search your groups…" class="{{ fld }} mt-1"
+          <input type="search" name="q" form="ob-picker-noop" autocomplete="off" aria-label="Search your groups" placeholder="Search your groups…" class="{{ fld }} mt-1"
                  hx-get="/onboard/search/groups" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-group-picker" hx-swap="innerHTML" />
           <div id="ob-group-picker"></div>
-          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="groups" rows="2" placeholder="sales@example.com&#10;all-staff@example.com"></textarea></div>
+          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="groups" rows="2" aria-label="Groups, one email per line" placeholder="sales@example.com&#10;all-staff@example.com"></textarea></div>
         <div class="block text-xs text-brand-grayink">Shared calendars (search, or type one id per line)
-          <input type="search" name="q" form="ob-picker-noop" autocomplete="off" placeholder="Search shared calendars…" class="{{ fld }} mt-1"
+          <input type="search" name="q" form="ob-picker-noop" autocomplete="off" aria-label="Search shared calendars" placeholder="Search shared calendars…" class="{{ fld }} mt-1"
                  hx-get="/onboard/search/calendars" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-calendar-picker" hx-swap="innerHTML" />
           <div id="ob-calendar-picker"></div>
-          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="calendars" rows="2" placeholder="team@group.calendar.google.com"></textarea></div>
+          <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="calendars" rows="2" aria-label="Shared calendars, one id per line" placeholder="team@group.calendar.google.com"></textarea></div>
       </div>
       <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save role</button>
     </form>
   </div>
 
   <!-- WELCOME EMAIL (editable template) -->
-  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="welcome">
+  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" role="tabpanel" id="panel-welcome" aria-labelledby="tab-welcome" tabindex="0">
     <div id="onboard-welcome">{% include "_onboard_welcome.html" %}</div>
   </div>
 
   <!-- BULK IMPORT (a CSV of hires) -->
-  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="bulk">
+  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" role="tabpanel" id="panel-bulk" aria-labelledby="tab-bulk" tabindex="0">
     <div class="{{ card }} space-y-3">
       <div>
         <h2 class="eyebrow text-brand-grayink">Import a CSV of hires</h2>
@@ -107,7 +109,7 @@
       </div>
       <form hx-post="/onboard/bulk/preview" hx-target="#onboard-bulk-result" hx-swap="innerHTML"
             hx-encoding="multipart/form-data" class="flex flex-wrap items-center gap-2">
-        <input type="file" name="csv_file" accept=".csv,text/csv" required
+        <input type="file" name="csv_file" accept=".csv,text/csv" required aria-label="CSV of hires"
                class="text-sm text-brand-black file:mr-3 file:rounded-lg file:border-0 file:bg-brand-blue file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-white hover:file:bg-brand-blueink" />
         <button type="submit" class="rounded-lg border border-brand-blue px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/10 transition-colors">Preview</button>
       </form>

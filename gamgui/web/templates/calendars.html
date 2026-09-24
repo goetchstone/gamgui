@@ -19,8 +19,8 @@
 
   <div class="grid gap-5 lg:grid-cols-2">
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-      <h2 class="eyebrow text-brand-grayink">Find a calendar by name</h2>
-      <input class="{{ fld }} mt-2" type="search" name="q" placeholder="e.g. Training Calendar"
+      <h2 id="cal-find-heading" class="eyebrow text-brand-grayink">Find a calendar by name</h2>
+      <input class="{{ fld }} mt-2" type="search" name="q" aria-labelledby="cal-find-heading" placeholder="e.g. Training Calendar"
              hx-get="/calendars/search" hx-target="#cal-results" hx-swap="innerHTML"
              hx-trigger="keyup changed delay:300ms, search" hx-include="this" />
       <p class="mt-2 text-xs text-brand-grayink">Instant search over every shared calendar and room, served from a local index — works at any company size. <button class="text-brand-blueink hover:underline" hx-get="/calendars/resources" hx-target="#cal-results" hx-swap="innerHTML">List all rooms</button></p>
@@ -29,7 +29,7 @@
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
       <h2 class="eyebrow text-brand-grayink">A user's calendars</h2>
       <form class="mt-2 flex gap-2" hx-get="/calendars/user" hx-target="#cal-results" hx-swap="innerHTML">
-        <input class="{{ fld }} flex-1" type="email" name="email" placeholder="person@domain.com" />
+        <input class="{{ fld }} flex-1" type="email" name="email" aria-label="User's email" placeholder="person@domain.com" />
         <button class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Find</button>
       </form>
     </div>

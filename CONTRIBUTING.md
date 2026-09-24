@@ -167,4 +167,6 @@ or the signing scripts. An `a11y` job runs `make a11y`'s check on macOS:
 of the mock-backed app in headless Chrome, failing on a serious or critical violation
 `tests/a11y/baseline.json` doesn't already list — and on a count that dropped, so rewrite the
 baseline (`A11Y_UPDATE_BASELINE=1 .venv/bin/python -m pytest -m a11y`) in the commit that fixes one.
-The baseline only shrinks.
+The baseline only shrinks; it is empty now. The same job works the tab strips and the confirm panels
+with the keyboard alone and fails a Tab stop with no focus ring. The default run reads every template:
+a form field needs an accessible name, and a confirm panel's `data-focus` heading a `tabindex="-1"`.

@@ -31,9 +31,9 @@
     <form id="cal-share-form" class="mt-3 flex flex-wrap gap-2" hx-post="/calendars/share" hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="find button">
       <input type="hidden" name="cal" value="{{ cal }}" />
       <input type="hidden" name="label" value="{{ label }}" />
-      <input type="email" name="target" required placeholder="share with person@domain.com" value="{{ share_target or '' }}"
+      <input type="email" name="target" required aria-label="Share with (email)" placeholder="share with person@domain.com" value="{{ share_target or '' }}"
              class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
-      <select name="role" class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none">
+      <select name="role" aria-label="Access" class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
         {% for value, text in [("reader", "See all details"), ("freebusyreader", "Free/busy only"), ("writer", "Make changes"), ("owner", "Make changes & manage")] %}
         <option value="{{ value }}"{% if value == _role %} selected{% endif %}>{{ text }}</option>
         {% endfor %}
@@ -45,7 +45,7 @@
        Confirm posts the share form above (hx-include) with the preview's single-use token: a group,
        role or calendar changed since is refused, and the members run are the ones counted here. #}
     <div class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-      <p>Sharing with <strong>{{ share_confirm.target }}</strong> adds it to {{ share_confirm.count }} members' calendars — one change per member, as a background job.</p>
+      <p tabindex="-1" data-focus>Sharing with <strong>{{ share_confirm.target }}</strong> adds it to {{ share_confirm.count }} members' calendars — one change per member, as a background job.</p>
       <p class="mt-1 text-xs break-words">{{ share_confirm.sample | join(", ") }}{% if share_confirm.count > (share_confirm.sample | length) %} … and {{ share_confirm.count - (share_confirm.sample | length) }} more{% endif %}</p>
       {% for w in share_confirm.warnings %}<p class="mt-1 text-xs font-medium">{{ w }}</p>{% endfor %}
       <div class="mt-2 flex gap-2">
@@ -53,7 +53,7 @@
                 hx-vals='{"confirmed": "1", "preview": {{ share_confirm.token | tojson }} }'
                 hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="this"
                 class="rounded-lg bg-amber-700 hover:bg-amber-800 px-3 py-1.5 text-xs font-medium text-brand-white transition-colors">Confirm: share and add it for all {{ share_confirm.count }}</button>
-        <button type="button" hx-get="/calendars/detail" hx-vals='{"cal": {{ cal | tojson }}, "label": {{ label | tojson }} }'
+        <button type="button" data-cancel hx-get="/calendars/detail" hx-vals='{"cal": {{ cal | tojson }}, "label": {{ label | tojson }} }'
                 hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="this"
                 class="rounded-lg border border-amber-400/70 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-100 transition-colors">Cancel</button>
       </div>
@@ -65,9 +65,11 @@
     <h3 class="eyebrow text-brand-grayink">Find an event</h3>
     <form class="mt-2 flex flex-wrap gap-2" hx-get="/calendars/events" hx-target="#event-results" hx-swap="innerHTML">
       <input type="hidden" name="cal" value="{{ cal }}" />
-      <input class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" name="q" placeholder="event title contains…" />
-      <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none" type="date" name="after" title="on/after" />
-      <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none" type="date" name="before" title="before" />
+      <input class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" name="q" aria-label="Event title contains" placeholder="event title contains…" />
+      <label class="flex items-center gap-1.5 text-xs text-brand-blueink">On/after
+        <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="date" name="after" /></label>
+      <label class="flex items-center gap-1.5 text-xs text-brand-blueink">Before
+        <input class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="date" name="before" /></label>
       <button class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Search</button>
     </form>
     <div id="event-results" class="mt-3"></div>

@@ -3,7 +3,7 @@
 {% else %}
 {# The message says what to do in words; GAM's raw error is one click away, not the headline. #}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
-  <div>{{ message }}</div>
+  <div tabindex="-1" data-focus>{{ message }}</div>
   {% if details %}
   <details class="copy-wrap mt-1.5">
     <summary class="cursor-pointer text-xs font-medium text-amber-900">GAM's error</summary>

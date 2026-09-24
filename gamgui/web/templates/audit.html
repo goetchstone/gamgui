@@ -14,7 +14,7 @@
   <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads the full log (filters aren't applied to the download in v1).</p>
 
   <form class="flex flex-wrap items-center gap-3" hx-get="/audit/rows" hx-target="#audit-rows" hx-trigger="keyup changed delay:300ms from:input[name='q'], change from:input[name='failed']">
-    <input type="search" name="q" placeholder="Filter by action, target, or error…"
+    <input type="search" name="q" aria-label="Filter the audit log" placeholder="Filter by action, target, or error…"
            class="flex-1 min-w-[16rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
     <label class="flex items-center gap-2 text-sm text-brand-blueink">
       <input type="checkbox" name="failed" value="1" /> Failures only

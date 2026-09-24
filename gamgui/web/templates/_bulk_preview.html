@@ -1,7 +1,7 @@
 {% if error %}
-<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+<div tabindex="-1" data-focus class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% else %}
-<p class="text-sm text-brand-blueink">Will set Department to <strong>{{ store or "—" }}</strong> on <strong>{{ count }}</strong> active user{{ "s" if count != 1 }}{% if not store %} (enter a department first){% endif %}. Each person's title is preserved.</p>
+<p tabindex="-1" data-focus class="text-sm text-brand-blueink">Will set Department to <strong>{{ store or "—" }}</strong> on <strong>{{ count }}</strong> active user{{ "s" if count != 1 }}{% if not store %} (enter a department first){% endif %}. Each person's title is preserved.</p>
 {% if targets %}
 <details class="mt-2">
   <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ count }}</summary>

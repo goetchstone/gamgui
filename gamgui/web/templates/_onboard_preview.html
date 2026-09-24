@@ -1,5 +1,5 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
-  <h3 class="font-serif text-lg text-brand-black">Runbook for {{ name or email or "new hire" }} — {{ role }}</h3>
+  <h3 tabindex="-1" data-focus class="font-serif text-lg text-brand-black">Runbook for {{ name or email or "new hire" }} — {{ role }}</h3>
   {% if create_account %}
   <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
     <p class="font-medium">Creates the account <span class="font-mono">{{ email or "(enter an email)" }}</span></p>

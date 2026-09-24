@@ -2,7 +2,7 @@
 <div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">Event deleted.</div>
 {% elif event %}
 <div class="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm">
-  <p class="font-medium text-red-800">Delete this event?</p>
+  <p tabindex="-1" data-focus class="font-medium text-red-800">Delete this event?</p>
   <p class="mt-1 text-brand-black">{{ event.summary }}</p>
   <p class="text-brand-grayink">{{ event.when }}{% if event.organizer %} · organizer {{ event.organizer }}{% endif %}</p>
   {% if event.is_recurring %}<p class="mt-1 text-red-700">⚠ Recurring event — deleting removes the entire series (all occurrences).</p>{% endif %}

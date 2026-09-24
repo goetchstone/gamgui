@@ -6,10 +6,10 @@
 (function () {
   "use strict";
 
-  // Insert a hint chip's snippet into the text field in the same label (space-separated, cursor at end).
+  // Insert a hint chip's snippet into its Builder slot's text field (space-separated, cursor at end).
   function insertHint(btn) {
-    var label = btn.closest("label");
-    var inp = label && label.querySelector("input[name]");
+    var slot = btn.closest("[data-slot]");
+    var inp = slot && slot.querySelector("input[name]");
     if (!inp) return;
     var snip = btn.dataset.ins || "";
     var cur = (inp.value || "").replace(/\s+$/, "");
@@ -86,14 +86,65 @@
     setTimeout(function () { f.remove(); }, 1500);
   }
 
+  // Focus (plan A5). A confirm/preview panel or an error that an operator's click or submit swaps in
+  // takes focus — its [data-focus] heading (tabindex=-1) or control — so a keyboard or screen-reader
+  // user lands in it; the control that opened it is remembered per zone. When the panel closes, focus
+  // goes somewhere sensible instead of falling to <body>: a Cancel ([data-cancel], or the "clear"
+  // action) returns it to that opener, or to the opener's re-rendered twin (the same kind of control
+  // with the same text); a Confirm or Run that replaced the panel puts it on the zone, so its result is
+  // read. A swap from a load, a poll, typing or a changed select never moves focus.
+  var openers = new WeakMap();
+  function byOperator(detail) {
+    var t = detail.requestConfig && detail.requestConfig.triggeringEvent;
+    return !!t && (t.type === "click" || t.type === "submit");
+  }
+  function focusZone(zone) {
+    if (!zone.isConnected) return;
+    if (!zone.hasAttribute("tabindex")) zone.setAttribute("tabindex", "-1");
+    zone.focus();
+  }
+  function returnFocus(zone, opener) {
+    if (opener.isConnected) { opener.focus(); return true; }
+    var text = opener.textContent.trim();
+    var twin = [].find.call(zone.querySelectorAll(opener.tagName), function (el) {
+      return el.textContent.trim() === text;
+    });
+    if (twin) { twin.focus(); return true; }
+    return false;
+  }
+  document.body.addEventListener("htmx:afterSettle", function (e) {
+    var d = e.detail, root = e.target;
+    if (!byOperator(d) || !root.querySelector) return;
+    var zone = d.target, cfg = d.requestConfig;
+    var panel = root.matches("[data-focus]") ? root : root.querySelector("[data-focus]");
+    if (panel) {
+      // A control outside the zone opened it; one inside (the panel re-rendered with an error, or an
+      // in-zone button the panel replaced) keeps the opener already known, if any.
+      var src = cfg.triggeringEvent.submitter || cfg.elt;
+      if (src.isConnected || !openers.has(zone)) openers.set(zone, src);
+      panel.focus();
+      return;
+    }
+    var opener = openers.get(zone);
+    if (!opener) return;
+    openers.delete(zone);
+    var active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;   // focus survived the swap
+    if (!(cfg.elt.hasAttribute("data-cancel") && returnFocus(zone, opener))) focusZone(zone);
+  });
+
   var actions = {
     "copy": copyText,
     "hint": insertHint,
     "print-sheet": printSheet,
-    // A confirm step's Cancel: empty the zone it was swapped into.
+    // A confirm step's Cancel: empty the zone it was swapped into, and hand focus back to its opener.
     "clear": function (btn) {
       var zone = document.getElementById(btn.dataset.clear);
-      if (zone) zone.replaceChildren();
+      if (!zone) return;
+      zone.replaceChildren();
+      var opener = openers.get(zone);
+      openers.delete(zone);
+      if (opener) returnFocus(zone, opener);
     },
     // Bring a region into view once the request this control also fired has had time to swap it.
     "scroll-to": function (btn) {
@@ -120,21 +171,37 @@
   });
 
   // Tabs (user detail, onboarding): show one panel at a time so a content-heavy page fits the window.
-  document.querySelectorAll("[data-tabs]").forEach(function (bar) {
-    var tabs = bar.querySelectorAll("[data-tab]");
-    var panels = document.querySelectorAll("[data-panel]");
-    function show(name) {
-      panels.forEach(function (p) { p.classList.toggle("hidden", p.dataset.panel !== name); });
+  // ARIA tabs (plan A2): only the selected tab is in the Tab order (roving tabindex); Left/Right (wrapping),
+  // Home and End move to a tab and show its panel, as a click does.
+  document.querySelectorAll("[role=tablist]").forEach(function (bar) {
+    var tabs = [].slice.call(bar.querySelectorAll("[role=tab]"));
+    function show(tab) {
       tabs.forEach(function (t) {
-        var on = t.dataset.tab === name;
+        var on = t === tab;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
         t.classList.toggle("text-brand-black", on);
         t.classList.toggle("border-brand-blue", on);
         t.classList.toggle("text-brand-grayink", !on);
         t.classList.toggle("border-transparent", !on);
+        var panel = document.getElementById(t.getAttribute("aria-controls"));
+        if (panel) panel.classList.toggle("hidden", !on);
       });
     }
-    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.tab); }); });
-    if (tabs.length) show(tabs[0].dataset.tab);
+    bar.addEventListener("click", function (e) {
+      var t = e.target.closest("[role=tab]");
+      if (t) show(t);
+    });
+    bar.addEventListener("keydown", function (e) {
+      var i = tabs.indexOf(e.target);
+      var to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+      if (i < 0 || to === undefined || e.altKey || e.ctrlKey || e.metaKey) return;   // Cmd+Left is Back
+      e.preventDefault();
+      var t = tabs[(to + tabs.length) % tabs.length];
+      show(t);
+      t.focus();
+    });
+    if (tabs.length) show(bar.querySelector("[aria-selected=true]") || tabs[0]);
   });
 
   // Global activity indicators: a top bar + a "Working…" pill, shown during HTMX requests and

@@ -1,5 +1,5 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
-  <h3 class="font-serif text-lg text-brand-black">Preview — {{ summary.total }} hire{{ '' if summary.total == 1 else 's' }} ready</h3>
+  <h3 tabindex="-1" data-focus class="font-serif text-lg text-brand-black">Preview — {{ summary.total }} hire{{ '' if summary.total == 1 else 's' }} ready</h3>
   {% if summary.total %}
   <ul class="text-sm text-brand-black space-y-0.5">
     <li><strong>{{ summary.creates }}</strong> account{{ '' if summary.creates == 1 else 's' }} to create{% if summary.creates %} — {{ summary.notifies }} emailed by GAM, {{ summary.sheets }} on the printable sheet{% endif %}.</li>

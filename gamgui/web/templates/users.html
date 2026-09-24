@@ -28,9 +28,9 @@
 
     <form hx-get="/users/table" hx-target="#users-table" hx-trigger="input changed delay:300ms, change"
           class="flex gap-3">
-      <input type="search" name="q" placeholder="Search name, email, or title…"
+      <input type="search" name="q" aria-label="Search users" placeholder="Search name, email, or title…"
              class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
-      <select name="scope" class="rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none">
+      <select name="scope" aria-label="Status" class="rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
         <option value="all">All</option>
         <option value="active">Active only</option>
         <option value="suspended">Suspended</option>

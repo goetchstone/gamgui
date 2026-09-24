@@ -7,20 +7,22 @@
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="hidden" name="confirmed" value="1" />
   {% if pending_transfers %}
-  <div class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">
+  <div id="del-transfer-warning" class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">
     ⚠ <strong>Data transfer still in progress</strong> for {{ email }}:
     {% for t in pending_transfers %}{{ t.application }} ({{ t.status }}){{ ", " if not loop.last }}{% endfor %}.
     Deleting now <strong>permanently loses</strong> whatever hasn't transferred yet. Wait until it shows
     <em>completed</em> before deleting.
   </div>
   {% endif %}
-  <p class="text-sm text-red-700"><strong>Permanently delete {{ email }}?</strong> Recoverable for ~20 days, then gone. Type the email to confirm:</p>
-  <input name="confirm_email" autocomplete="off" placeholder="{{ email }}"
+  <label for="del-confirm-email" class="block text-sm text-red-700"><strong>Permanently delete {{ email }}?</strong> Recoverable for ~20 days, then gone. Type the email to confirm:</label>
+  <input id="del-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ email }}" data-focus
+         {% if pending_transfers or error %}aria-describedby="{% if error %}del-confirm-error {% endif %}{% if pending_transfers %}del-transfer-warning{% endif %}"{% endif %}
+         {% if error %}aria-invalid="true"{% endif %}
          class="w-full rounded-lg border border-red-300 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
-  {% if error %}<p class="text-xs text-red-700">{{ error }}</p>{% endif %}
+  {% if error %}<p id="del-confirm-error" class="text-xs text-red-700">{{ error }}</p>{% endif %}
   <div class="flex gap-2">
     <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Permanently delete</button>
-    <button type="button" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+    <button type="button" data-cancel class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
             hx-get="/users/delete/zone?email={{ email | urlencode }}" hx-target="#delete-zone" hx-swap="innerHTML"
             hx-disabled-elt="this">Cancel</button>
   </div>

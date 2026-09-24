@@ -1,10 +1,10 @@
 {% if error %}
-<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+<div tabindex="-1" data-focus class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% else %}
 {% if warning %}
-<div class="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ warning }}</div>
+<div tabindex="-1" data-focus class="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ warning }}</div>
 {% endif %}
-<p class="text-sm text-brand-blueink">Applies to <strong>{{ count }}</strong> user{{ "s" if count != 1 }}{% if sample %} · previewing as {{ sample.full_name }}{% endif %}</p>
+<p tabindex="-1" data-focus class="text-sm text-brand-blueink">Applies to <strong>{{ count }}</strong> user{{ "s" if count != 1 }}{% if sample %} · previewing as {{ sample.full_name }}{% endif %}</p>
 {% if sample %}
   <iframe sandbox title="Signature preview" class="mt-3 w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ rendered }}"></iframe>
   {% if count %}
@@ -13,7 +13,7 @@
   <label class="mt-3 block text-sm text-brand-blueink">This overwrites the Gmail signature of <strong>{{ count }}</strong> people. Type <strong>{{ count }}</strong> to confirm:
     <input id="sig-confirm-count" name="confirm_count" inputmode="numeric" autocomplete="off"
            data-unlocks="sig-apply-btn" data-expect="{{ count }}"
-           class="mt-1 block w-32 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none" />
+           class="mt-1 block w-32 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
   </label>
   {% endif %}
   <button id="sig-apply-btn" class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors disabled:cursor-not-allowed disabled:opacity-50"

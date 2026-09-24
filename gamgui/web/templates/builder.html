@@ -20,10 +20,10 @@
 
   <!-- Search-first faceted controls: search · area · buildable-only (one row, one request) -->
   <form id="cat-controls" class="flex items-center gap-2 shrink-0">
-    <input class="{{ fld }} min-w-0 flex-1" type="search" name="q" placeholder="Search 1,000+ commands…"
+    <input class="{{ fld }} min-w-0 flex-1" type="search" name="q" aria-label="Search commands" placeholder="Search 1,000+ commands…"
            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
            hx-trigger="keyup changed delay:300ms, search" />
-    <select class="w-52 shrink-0 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" name="area"
+    <select class="w-52 shrink-0 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" name="area" aria-label="Area"
             hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML">
       <option value="">All areas</option>
       {% for name, n in areas %}<option value="{{ name }}">{{ name }} ({{ n }})</option>{% endfor %}

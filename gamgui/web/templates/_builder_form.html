@@ -10,24 +10,27 @@
   {% if cmd.description %}<p class="text-sm text-brand-blueink/90">{{ cmd.description }}</p>{% endif %}
   <code class="block text-xs text-brand-grayink break-all">{{ cmd.raw_syntax }}</code>
   {% for slot in cmd.slots %}
-  <label class="block text-sm">
-    <span class="text-brand-blueink">{{ slot.label }}{% if not slot.required %} <span class="text-brand-grayink">(optional)</span>{% endif %}</span>
+  {# A div, not a wrapping <label>: a label may hold only its own control, not the hint buttons. #}
+  {% set sid = "slot-" ~ slot.key %}
+  <div class="block text-sm" data-slot>
+    <label for="{{ sid }}" class="text-brand-blueink">{{ slot.label }}{% if not slot.required %} <span class="text-brand-grayink">(optional)</span>{% endif %}</label>
     {% set val = prefill.get(slot.key) or slot.default %}
     {% if slot.kind.value == 'choice' %}
-    <select name="{{ slot.key }}" class="{{ fld }} mt-1">
+    <select id="{{ sid }}" name="{{ slot.key }}" class="{{ fld }} mt-1">
       {% for ch in slot.choices %}<option value="{{ ch }}" {{ 'selected' if ch == val }}>{{ ch }}</option>{% endfor %}
     </select>
     {% elif slot.is_drop %}
     <span class="upick-wrap relative mt-1 block">
-      <input name="{{ slot.key }}" value="{{ val }}" autocomplete="off"
+      <input id="{{ sid }}" name="{{ slot.key }}" value="{{ val }}" autocomplete="off" aria-describedby="{{ sid }}-help"
              placeholder="{{ slot.placeholder or ('group@domain' if slot.kind.value == 'group' else 'user@domain') }}"
              class="upick {{ fld }} border-dashed border-brand-blue/50"
              data-kind="{{ 'groups' if slot.kind.value == 'group' else 'users' }}" />
       <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
     </span>
-    <span class="text-[11px] text-brand-grayink">click and type a {{ 'group' if slot.kind.value == 'group' else 'user' }} — pick from the list</span>
+    <span id="{{ sid }}-help" class="text-[11px] text-brand-grayink">click and type a {{ 'group' if slot.kind.value == 'group' else 'user' }} — pick from the list</span>
     {% else %}
-    <input name="{{ slot.key }}" value="{{ val }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1" />
+    <input id="{{ sid }}" name="{{ slot.key }}" value="{{ val }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1"
+           {% if slot.hint_note %}aria-describedby="{{ sid }}-help"{% endif %} />
     {% if slot.hints %}
     <span class="mt-1.5 flex flex-wrap gap-1">
       {% for h in slot.hints %}
@@ -35,10 +38,10 @@
               class="rounded-full border border-brand-gray/40 bg-paper px-2 py-0.5 font-mono text-[11px] text-brand-blueink hover:border-brand-blue/50 hover:bg-brand-blue/10 transition-colors">{{ h }}</button>
       {% endfor %}
     </span>
-    {% if slot.hint_note %}<span class="mt-1 block text-[11px] text-brand-grayink">{{ slot.hint_note }}</span>{% endif %}
+    {% if slot.hint_note %}<span id="{{ sid }}-help" class="mt-1 block text-[11px] text-brand-grayink">{{ slot.hint_note }}</span>{% endif %}
     {% endif %}
     {% endif %}
-  </label>
+  </div>
   {% endfor %}
   {% if cmd.supports_export %}
   <details class="text-sm">
@@ -46,11 +49,11 @@
     <label class="mt-2 flex items-center gap-1.5"><input type="checkbox" name="td_export" value="1" /> Create a Sheet</label>
     <div class="mt-2 grid gap-2 sm:grid-cols-2">
       <span class="upick-wrap relative block">
-        <input name="td_user" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
+        <input name="td_user" aria-label="Sheet owner (whose Drive)" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
                class="upick {{ fld }} border-dashed border-brand-blue/50" data-kind="users" />
         <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
       </span>
-      <input name="td_title" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />
+      <input name="td_title" aria-label="Sheet name" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />
     </div>
   </details>
   {% endif %}
