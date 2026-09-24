@@ -10,9 +10,10 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard
 from ...core import signatures as sig
+from ...core.bulk import stop_reason
 from ...core.connectors.base import RiskLevel
 from ...core.signatures import SignatureStore
-from ..jobs import Job, register_job, stop_reason
+from ..jobs import Job, register_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, friendly, signature_store

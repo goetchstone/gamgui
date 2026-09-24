@@ -63,10 +63,10 @@ async def _signatures(conn):
 
 
 async def _department(conn):
+    from gamgui.core.bulk import set_departments
     from gamgui.web.jobs import BatchJob
-    from gamgui.web.routes.users import _run_bulk_store
     job = BatchJob(id="j", total=len(USERS))
-    await _run_bulk_store(job, SimpleNamespace(invalidate_users=lambda: None), conn, USERS, "Sales")
+    await set_departments(job, conn, USERS, "Sales")
     return job
 
 

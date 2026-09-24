@@ -684,10 +684,13 @@ def test_bulk_store_apply_refuses_someone_no_longer_active(client, gam_calls, mo
 def test_bulk_store_apply_runs_as_job(client, gam_calls):
     form = {"store": "Downtown", "group": "", "emails": "alice@example.com"}
     _, token = _bulk_preview(client, **form)
+    cache = client.app.state.gamgui.user_cache
+    assert cache._items is not None                              # the preview read the directory
     r = _bulk_apply(client, token, **form)
     assert_ok_partial(r)
     job = _job(client, r.text, "/users/bulk/status")
     wait_for_job(client, job)
+    assert cache._items is None                                  # dropped, so the new departments show
     # Department set to the store, alice's existing title kept — and GAM accepted it.
     assert (job.applied, job.failed, job.error) == (1, [], None)
     assert gam_writes(gam_calls()) == [
@@ -698,12 +701,11 @@ def test_bulk_store_apply_runs_as_job(client, gam_calls):
     assert_ok_partial(client.get("/users/bulk/status", params={"job": job.id}))
 
 
-async def test_run_bulk_store_preserves_title_and_sets_department():
-    # Deterministic check of the core behavior (the TestClient can't drive the polled background
-    # task to completion): department is set to the store, each person's existing title is kept.
+async def test_set_departments_preserves_title_and_sets_department():
+    # The bulk department loop, driven directly: the department is set, each person's existing title kept.
+    from gamgui.core.bulk import set_departments
     from gamgui.core.gam.models import GAMUser
     from gamgui.web.jobs import BatchJob
-    from gamgui.web.routes.users import _run_bulk_store
 
     calls = []
 
@@ -715,23 +717,15 @@ async def test_run_bulk_store_preserves_title_and_sets_department():
             calls.append((email, title, department))
             return _FakeResult()
 
-    class _FakeState:
-        invalidated = False
-
-        def invalidate_users(self):
-            self.invalidated = True
-
     targets = [
         GAMUser.from_json({"primaryEmail": "a@e.com", "organizations": [{"title": "Design Lead", "primary": True}]}),
         GAMUser.from_json({"primaryEmail": "b@e.com"}),  # no title
     ]
-    st = _FakeState()
     job = BatchJob(id="t", total=len(targets))
-    await _run_bulk_store(job, st, _FakeConn(), targets, "Marketing")
+    await set_departments(job, _FakeConn(), targets, "Marketing")
 
     assert job.finished and job.applied == 2 and job.failed == []
     assert calls == [("a@e.com", "Design Lead", "Marketing"), ("b@e.com", "", "Marketing")]
-    assert st.invalidated  # cache invalidated so the new departments show
 
 
 def test_calendar_access_view(client):
@@ -1101,9 +1095,9 @@ async def test_run_subscribe_bounds_its_feed_at_scale():
 async def test_batch_job_failures_stay_bounded_and_render_the_overflow(client):
     # Invariant #9: a bulk store where every user fails keeps the full count but only a sample of
     # names, and the final panel says how many it isn't listing.
+    from gamgui.core.bulk import set_departments
     from gamgui.core.gam.models import GAMUser
     from gamgui.web.jobs import FAILED_SAMPLE_CAP, BatchJob
-    from gamgui.web.routes.users import _run_bulk_store
 
     class _Refused:
         async def set_organization(self, email, title="", department=""):
@@ -1112,7 +1106,7 @@ async def test_batch_job_failures_stay_bounded_and_render_the_overflow(client):
     n = FAILED_SAMPLE_CAP + 50
     targets = [GAMUser.from_json({"primaryEmail": f"u{i}@example.com"}) for i in range(n)]
     job = BatchJob(id="bulkcap", total=n)
-    await _run_bulk_store(job, SimpleNamespace(invalidate_users=lambda: None), _Refused(), targets, "Sales")
+    await set_departments(job, _Refused(), targets, "Sales")
     assert (job.done, job.applied, job.failed_total) == (n, 0, n)
     assert len(job.failed) == FAILED_SAMPLE_CAP and job.failed[-1].item == f"u{FAILED_SAMPLE_CAP - 1}@example.com"
 
@@ -1154,16 +1148,15 @@ def _gone_result(target: str):
 
 
 async def _department_feed():
+    from gamgui.core.bulk import set_departments
     from gamgui.core.gam.models import GAMUser
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.users import _run_bulk_store
 
     async def set_organization(email, title="", department=""):
         return _gone_result(email)
 
     job = start_job({}, 2)
-    await _run_bulk_store(job, SimpleNamespace(invalidate_users=lambda: None),
-                          SimpleNamespace(set_organization=set_organization),
+    await set_departments(job, SimpleNamespace(set_organization=set_organization),
                           [GAMUser("alice@example.com"), GAMUser("gone@example.com")], "Sales")
     return job
 
@@ -1220,10 +1213,11 @@ async def test_each_bulk_feed_says_why_a_target_failed(client, feed):
         assert "✗" in live and "gone@example.com" in live and _GONE_WHY in live and "Does not exist" not in live
 
 
-def test_no_route_appends_to_a_batch_jobs_failed_list_directly():
-    # Job.record() is what caps the sample; a bare `job.failed.append` would bypass it.
-    routes = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
-    offenders = [p.name for p in routes.glob("*.py") if "job.failed.append(" in p.read_text()]
+def test_no_loop_appends_to_a_jobs_failed_list_directly():
+    # Job.record() is what caps the sample; a bare `job.failed.append` would bypass it. The loops live in
+    # web/routes and, since plan Q9, in core (bulk.py, lifecycle.py) — so the whole package is scanned.
+    package = Path(__file__).parent.parent / "gamgui"
+    offenders = [str(p.relative_to(package)) for p in package.rglob("*.py") if "job.failed.append(" in p.read_text()]
     assert offenders == []
 
 

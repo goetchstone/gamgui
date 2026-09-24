@@ -19,9 +19,10 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from ...core import clock, guard, onboarding
+from ...core.bulk import stop_reason
 from ...core.connectors.base import RiskLevel
 from ...core.onboarding import RoleTemplate, RunbookStore
-from ..jobs import Job, register_job, stop_reason
+from ..jobs import Job, register_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, app_state, error_partial, signature_store

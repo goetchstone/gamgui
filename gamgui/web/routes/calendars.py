@@ -16,9 +16,10 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import guard
+from ...core.bulk import stop_reason
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
-from ..jobs import start_job, stop_reason
+from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, connector, error_partial, friendly, write_failed

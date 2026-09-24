@@ -3,7 +3,8 @@
 A job lives on ``AppState.jobs`` (id -> job) and is rendered by an HTMX-polled partial, so a long
 per-target loop reports progress instead of looking frozen. ``Job`` is the one bounded base (invariant
 #9); ``BatchJob`` adds the per-step log of a short multi-step routine, and onboarding's ``OnboardJob``
-its account tallies and credentials sheet.
+its account tallies and credentials sheet. When a per-user loop stops early is ``core/bulk.py``
+``stop_reason``.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from dataclasses import dataclass, field
 from typing import List, Optional, TypeVar
 
 from ..core import clock
-from ..core.gam.errors import ACCOUNT_WIDE_KINDS
 
 # Invariant #9: a run where thousands genuinely fail keeps the full count but only a sample of them,
 # and the live feed only its newest rows, so the final summary (and each 1s poll) stays small.
@@ -83,17 +83,6 @@ class Job:
 class BatchJob(Job):
     log: List[str] = field(default_factory=list)      # per-step outcome lines (offboarding's handful of steps)
     skipped: List[str] = field(default_factory=list)  # not run: a step it relies on failed (offboarding's few)
-
-
-def stop_reason(kind, remediation: str, left: int) -> Optional[str]:
-    """Why a bulk loop stops here, or None to carry on. A failure of an ``ACCOUNT_WIDE_KINDS`` kind
-    (sign-in expired, GAM not set up, a scope not granted) fails every remaining target the same way,
-    so running on only buries the one cause under ``left`` identical failures. Every per-user loop
-    (signatures, bulk department, calendar fan-out, bulk onboarding) asks this after each write."""
-    if kind not in ACCOUNT_WIDE_KINDS:
-        return None
-    rest = f" The remaining {left} {'was' if left == 1 else 'were'} not attempted." if left > 0 else ""
-    return f"Stopped: {remediation}{rest}"
 
 
 J = TypeVar("J", bound=Job)

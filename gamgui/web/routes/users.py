@@ -18,12 +18,12 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import guard
+from ...core import bulk, guard
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
-from ..jobs import start_job, stop_reason
+from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, GAM_TROUBLE, connector, error_partial, friendly, write_failed
@@ -318,28 +318,10 @@ async def _bulk_targets(st, group: str, emails_raw: str):
 
 
 async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
-    """Background task: set the department per user, KEEPING each existing title. Stops at a failure
-    every later user would share (``stop_reason``)."""
+    """The job's task: ``bulk.set_departments``, then the cached directory is stale."""
     try:
-        for u in targets:
-            job.current = u.primary_email
-            kind, why, detail = None, "", ""
-            try:
-                res = await conn.set_organization(u.primary_email, title=u.title or "", department=store)
-                ok = bool(getattr(res, "ok", False))
-                if not ok:
-                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
-            except Exception as exc:  # noqa: BLE001 — one user must not stop the rest
-                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc, _TRY_AGAIN), str(exc)
-            job.record(u.primary_email, ok, why, detail)
-            stop = stop_reason(kind, why, job.total - job.done)
-            if stop:
-                job.error = stop
-                break
-    except Exception as exc:
-        job.error = friendly(exc, _TRY_AGAIN)
+        await bulk.set_departments(job, conn, targets, store)
     finally:
-        job.finish()
         st.invalidate_users()  # departments changed -> cached directory is stale
 
 
