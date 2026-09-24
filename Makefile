@@ -1,4 +1,4 @@
-.PHONY: setup gam test lint lock run app clean help
+.PHONY: setup gam test cov lint lock run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -15,6 +15,7 @@ help:
 	@echo "               override the interpreter with: make setup PYTHON=python3.13"
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
 	@echo "make test    - run the offline test suite"
+	@echo "make cov     - the suite with CI's coverage gate (floor in pyproject.toml)"
 	@echo "make lint    - run ruff and mypy (the checks CI's lint job enforces)"
 	@echo "make lock    - regenerate the hash-locked requirements/*.txt from requirements/*.in"
 	@echo "               refresh every pin with: make lock ARGS=--upgrade"
@@ -50,6 +51,9 @@ gam:
 
 test:
 	$(PY) -m pytest -q
+
+cov:
+	$(PY) -m pytest -q --cov --cov-report=term
 
 lint:
 	$(VENV)/bin/ruff check .

@@ -52,7 +52,14 @@ jobs:
 
       - name: Run tests
         # Uses the mock gam binary; needs no vendored GAM7 and no credentials.
+        if: ${{ !(matrix.os == 'macos-latest' && matrix.python == '3.14') }}
         run: pytest -q
+
+      - name: Run tests with the coverage gate (fail_under in pyproject's [tool.coverage.report])
+        # One leg only: Linux skips the macOS filesystem tests (case, NFD, the data-volume firmlink), so
+        # its total differs. This leg is where the floor was measured: a clean clone, no vendored GAM.
+        if: matrix.os == 'macos-latest' && matrix.python == '3.14'
+        run: pytest -q --cov --cov-report=term
 
   gam-compat:
     name: gam-compat (pinned binary)

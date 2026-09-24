@@ -23,7 +23,9 @@ plan's Phase 0 F1–F3.
   U2 `c8eda80` `46e0bea` `0e4a960` `af7a540` (plus the offboarding work under *Beyond the plan*) ·
   U6 `041b6e2` `63e6fb2` (its optional signature backup is a ROADMAP item, not done) · U3 `88496f3`.
 - **Phase 2** — applied: T1 `ad61a8d` · T2 `ad61a8d` (every per-user read keyed on its target,
-  `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e`. **Open:** T6 (coverage gate), T7 (a mock
+  `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e` · T6 (in the commit that marks it:
+  `fail_under = 90` in `[tool.coverage.report]` — a clean clone measured 90.5%, not the 88% below —
+  enforced by CI's macOS 3.14 leg and `make cov`; the ratchet past 90 is open). **Open:** T7 (a mock
   that validates argv against the grammar).
 - **Phase 3** — applied: C1 `9f72c3b` (ruff lint + CI `lint` job + `make lint`; the formatter is
   not adopted — `ruff format` would rewrite ~7,000 lines — and E501 is off: 81 lines run past the
@@ -278,7 +280,7 @@ tenant without per-action permission.
   strings; rewriting history is not proposed.)
 
 ## Phase 2 — Make the tests honest (mock fidelity 4 → 8)
-*Status: T1–T5 APPLIED — do not re-apply. T6, T7 open.*
+*Status: T1–T6 APPLIED — do not re-apply. T7 open.*
 - **T1 The mock's catch-all succeeds — CONFIRMED.** `tests/fixtures/mock_gam.sh:299-304` exits 0 for
   any unhandled argv, including `delete user`, `remove calendars` and `delete events` without
   `doit`. 23 of 33 used write builders have no handler; making the catch-all fail broke 20 tests

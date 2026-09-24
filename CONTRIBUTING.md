@@ -118,6 +118,7 @@ ecosystem, which regenerates them with the same flags.
 ```bash
 make test
 make lint
+make cov     # optional: the suite under CI's coverage gate
 ```
 
 `make lint` runs [ruff](https://docs.astral.sh/ruff/) with the rule set in `pyproject.toml`: checks
@@ -134,8 +135,10 @@ reason after it — `warn_unused_ignores` fails one that stops being needed. Onl
 `abapit` backend is exempt from missing stubs; a new dependency without types fails the check.
 
 CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14, each
-installed from `requirements/dev.txt`. On top
-of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
+installed from `requirements/dev.txt`. The macOS 3.14 run also measures line coverage and fails
+below `fail_under` in `pyproject.toml` (90%; the suite covered 90.5% when the gate went in) — `make
+cov` runs the same check locally. Raise the floor as tests land; don't lower it to get a PR green.
+On top of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
 `tests/test_command_contract.py` against the real command reference, plus a non-blocking
 `gam-latest-preview` job that runs the token contract against the *newest* GAM7 as an early warning
 that a command we use was renamed or removed.

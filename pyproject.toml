@@ -96,6 +96,13 @@ omit = [
     "gamgui/__main__.py",
 ]
 
+[tool.coverage.report]
+# The gate CI's macOS 3.14 leg applies (`pytest --cov`, or `make cov`): 90.5% of lines on a clean
+# clone at 2026-09-24. Raise it as tests land; never lower it to turn a red build green. It fails any
+# `--cov` run of a subset of the suite too, so add `--cov-fail-under=0` to one of those.
+fail_under = 90
+precision = 1
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

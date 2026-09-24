@@ -1,4 +1,4 @@
-"""Two rules for every workflow, checked by a text scan (no YAML dependency).
+"""Rules for the workflows, checked by a text scan (no YAML dependency).
 
 No GitHub Actions `${{ … }}` expression may be expanded inside a `run:` script. The runner
 substitutes expressions into the script text *before* the shell parses it, so a value like an
@@ -10,6 +10,8 @@ Every action is pinned by full commit SHA. A tag is mutable: whoever controls th
 move `v7` to new code, which then runs in jobs holding a token (`gam-watch.yml` can push and open
 PRs). The trailing `# vX.Y.Z` comment is what Dependabot's `github-actions` ecosystem reads to bump
 the SHA and the comment together.
+
+CI keeps a coverage floor: one test leg runs `pytest --cov` against `fail_under` in pyproject.
 """
 
 from __future__ import annotations
@@ -99,3 +101,12 @@ def test_pin_scanner_rejects_tags_and_short_shas():
 def test_dependabot_keeps_the_pinned_actions_current():
     # A SHA pin never moves by itself; without this ecosystem the pins would only ever go stale.
     assert re.search(r'package-ecosystem:\s*"github-actions"', (ROOT / ".github" / "dependabot.yml").read_text())
+
+
+def test_ci_enforces_the_coverage_floor():
+    # pytest-cov applies fail_under only to a --cov run, so the gate is both halves together.
+    report = re.search(r"^\[tool\.coverage\.report\]\n(?:.*\n)*?fail_under = (\d+)",
+                       (ROOT / "pyproject.toml").read_text(), re.M)
+    assert report and int(report[1]) >= 90, "the coverage floor in pyproject was removed or lowered"
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert re.search(r"^\s+run: pytest -q --cov\b", ci, re.M), "no CI step runs the suite under --cov"
