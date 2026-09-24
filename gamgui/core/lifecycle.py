@@ -2,7 +2,8 @@
 
 Each step reuses an existing connector mutation. The "timer" is the last step: a reminder event on
 the manager's calendar, so there is NO app-side scheduler or persisted state. Building the step list
-is pure (and testable); the web route executes it as a guarded, progress-tracked BatchJob.
+is pure (and testable); ``run_offboard`` executes it into the progress record the web route guards,
+starts and polls.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import TYPE_CHECKING, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Awaitable, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from .audit import redact_argv
 from .gam.commands import GAMCommands
@@ -253,3 +254,44 @@ def build_offboard_steps(
     for step in steps:
         step.requires = REQUIRES[step.key]
     return steps
+
+
+async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str] = frozenset()) -> None:
+    """Run the steps in order into ``job`` (a ``web/jobs.py`` ``BatchJob``, which the route polls). A
+    step whose ``requires`` did not all succeed is not run (logged "–"), so a failed reset or delegate
+    stops the routine instead of half-offboarding the account. ``done`` are the steps ticked as
+    already done by an earlier run: they satisfy ``requires``."""
+    succeeded = set(done)
+    labels = {s.key: s.label for s in steps}
+    handled = 0   # steps fully accounted for (run or deliberately skipped)
+    try:
+        for step in steps:
+            unmet = [k for k in step.requires if k not in succeeded]
+            if unmet:
+                job.log.append(f"– {step.label} — not run: “{labels.get(unmet[0], unmet[0])}” didn't succeed")
+                job.skipped.append(step.label)
+                job.done += 1
+                handled += 1
+                continue
+            job.current = step.label
+            try:
+                res = await step.action(conn)
+                ok = res is None or bool(getattr(res, "ok", True))
+                detail = "" if res is None else getattr(res, "detail", "")
+            except Exception as exc:  # noqa: BLE001 - a raising step is a failed step, reported like one
+                ok, detail = False, str(exc)
+            mark = "✓ " if ok else "✗ "
+            job.log.append(mark + step.label + (f" — {detail}" if (not ok and detail) else ""))
+            job.record(step.label, ok, detail=detail)
+            if ok:
+                succeeded.add(step.key)
+            handled += 1
+    finally:
+        # Cut off (the app quit mid-run): every step not accounted for is "not run", so the panel can't
+        # call a half-done routine complete — or tell the manager about a reminder that was never added.
+        job.interrupted = handled < len(steps)
+        for i, step in enumerate(steps[handled:]):
+            cut = i == 0 and job.current == step.label
+            job.log.append(f"– {step.label} — " + ("interrupted before it finished" if cut else "not run: interrupted"))
+            job.skipped.append(step.label)
+        job.finish()

@@ -17,10 +17,10 @@ combined transfer service list is one argv element (CLAUDE.md #1).
   `autoreply_html` (the text → the HTML body sent),
   `OffboardStep` dataclass (its `commands` = the exact argv(s) it runs), `command_line` (argv → the
   quoted, redacted `gam …` line the preview shows), `check_addresses` (both addresses against the
-  directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`. No scheduler,
-  no persisted state.
+  directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`, and the step
+  executor `run_offboard` (moved from the route, plan Q9). No scheduler, no persisted state.
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
-  Executes the steps as a progress-tracked `BatchJob` (`_run_offboard`); name-resolution helpers;
+  Starts the held steps as a progress-tracked `BatchJob` (`lifecycle.run_offboard`); name-resolution helpers;
   `_running` (one offboarding per leaver).
 - `gamgui/web/routes/users.py` (lines ~425-455) — the **delete** flow: `delete_zone`,
   `delete_confirm` (warns on pending transfers), `delete_apply` (type-the-exact-email confirm —
@@ -66,9 +66,9 @@ which the other confirm steps now use too. Run refuses a missing, used or expire
 token, and a live form (`hx-include`) that no longer matches the previewed one (`_form_key`) — edit a
 field after Preview and you must preview again. It then re-checks the previewed addresses against the
 directory, refuses a leaver whose offboarding is still running (below), and hands the held steps,
-never rebuilt ones, to `start_job` and `_run_offboard` (once it
+never rebuilt ones, to `start_job` and `run_offboard` (once it
 rebuilt them from the live form, failure-log 2026-09-23). An emptied subject/message runs the default
-text, as the auto-reply block shows. `_run_offboard` runs each step in order and appends a `✓/✗`
+text, as the auto-reply block shows. `run_offboard` runs each step in order and appends a `✓/✗`
 line to `job.log`; **a step whose `requires` did not all succeed is not run** (a `–` line, listed in
 `job.skipped`, and the panel says "Offboarding stopped"). The green "Offboarding complete" panel
 means every step succeeded; any `✗` makes it "incomplete" (amber, with the recovery steps). The
@@ -220,7 +220,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
   refuses anyone else. The mock's per-user reads answer for that user (`print delegates`: Alice has
   assistant@/backup@, Carol has helpdesk@, Bob none) and fail for an address that isn't one, as GAM
   does; with `GAM_MOCK_STATE` (`gam_state`) a delegate added is listed by the next `print delegates`
-  and a second add of it fails "already exists". The executor tests call `build_offboard_steps` + `_run_offboard` directly, so
+  and a second add of it fails "already exists". The executor tests call `build_offboard_steps` + `run_offboard` directly, so
   they can use any address — including the mock's trigger substrings above.
 - **The transfer names the Drive privacy level `all`.** GAM 7.48.11 sends `PRIVACY_LEVEL` only when
   `private|shared|all` is given (`all` = `PRIVATE,SHARED`; read from the vendored build's parser).

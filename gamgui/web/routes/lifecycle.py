@@ -208,46 +208,6 @@ async def offboard_autoreply(
         request, "_offboard_autoreply.html", {"subject": ar_subject, "message": ar_message})
 
 
-async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) -> None:
-    """Run the steps in order. A step whose ``requires`` did not all succeed is not run (logged "–"),
-    so a failed reset or delegate stops the routine instead of half-offboarding the account. ``done``
-    are the steps ticked as already done by an earlier run: they satisfy ``requires``."""
-    succeeded = set(done)
-    labels = {s.key: s.label for s in steps}
-    handled = 0   # steps fully accounted for (run or deliberately skipped)
-    try:
-        for step in steps:
-            unmet = [k for k in step.requires if k not in succeeded]
-            if unmet:
-                job.log.append(f"– {step.label} — not run: “{labels.get(unmet[0], unmet[0])}” didn't succeed")
-                job.skipped.append(step.label)
-                job.done += 1
-                handled += 1
-                continue
-            job.current = step.label
-            try:
-                res = await step.action(conn)
-                ok = res is None or bool(getattr(res, "ok", True))
-                detail = "" if res is None else getattr(res, "detail", "")
-            except Exception as exc:  # noqa: BLE001 - a raising step is a failed step, reported like one
-                ok, detail = False, str(exc)
-            mark = "✓ " if ok else "✗ "
-            job.log.append(mark + step.label + (f" — {detail}" if (not ok and detail) else ""))
-            job.record(step.label, ok, detail=detail)
-            if ok:
-                succeeded.add(step.key)
-            handled += 1
-    finally:
-        # Cut off (the app quit mid-run): every step not accounted for is "not run", so the panel can't
-        # call a half-done routine complete — or tell the manager about a reminder that was never added.
-        job.interrupted = handled < len(steps)
-        for i, step in enumerate(steps[handled:]):
-            cut = i == 0 and job.current == step.label
-            job.log.append(f"– {step.label} — " + ("interrupted before it finished" if cut else "not run: interrupted"))
-            job.skipped.append(step.label)
-        job.finish()
-
-
 @router.post("/offboard/run", response_class=HTMLResponse)
 async def offboard_run(
     request: Request,
@@ -281,7 +241,7 @@ async def offboard_run(
     job = start_job(st.jobs, len(steps))
     st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
     st.offboard_jobs[user.lower()] = job.id
-    job.task = asyncio.create_task(_run_offboard(job, conn, steps, done=held.done))
+    job.task = asyncio.create_task(lifecycle.run_offboard(job, conn, steps, done=held.done))
     st.invalidate_users()  # password/org/etc. changed
     return _panel(request, job, user)
 

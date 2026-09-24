@@ -7,7 +7,8 @@ import pytest
 import shlex
 
 from gamgui.core.gam.commands import GAMCommands
-from gamgui.core.lifecycle import DEFAULT_MESSAGE, DEFAULT_SUBJECT, STEP_NAMES, build_offboard_steps, command_line
+from gamgui.core.lifecycle import (DEFAULT_MESSAGE, DEFAULT_SUBJECT, STEP_NAMES, build_offboard_steps, command_line,
+                                   run_offboard)
 
 from .helpers import gam_writes
 
@@ -240,12 +241,11 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     # on to the manager's reminder.
     from gamgui.core.connectors import gam_connector
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.lifecycle import _run_offboard
 
     monkeypatch.setattr(gam_connector, "DOMAIN_WIDE_TIMEOUT", 0.5)
     steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
-    await _run_offboard(job, connector, steps)
+    await run_offboard(job, connector, steps)
     assert (job.applied, job.failed_items) == (len(steps) - 1, ["Remove from everyone's calendars"])
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
     assert "timed out after 0.5s and was stopped" in line
@@ -265,7 +265,6 @@ def test_quitting_mid_offboard_stops_the_sweep_and_audits_it(connector, gam_call
     from fastapi.testclient import TestClient
 
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.lifecycle import _run_offboard
     from gamgui.web.server import AppState, create_app
 
     from .helpers import TEST_HOSTS
@@ -277,7 +276,7 @@ def test_quitting_mid_offboard_stops_the_sweep_and_audits_it(connector, gam_call
         job = start_job(state.jobs, len(steps))
 
         async def _start() -> None:
-            job.task = asyncio.create_task(_run_offboard(job, connector, steps))
+            job.task = asyncio.create_task(run_offboard(job, connector, steps))
 
         client.portal.call(_start)
         deadline = time.monotonic() + 10
@@ -299,14 +298,13 @@ async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
     # The preview prints each step's `commands`; the connector builds its own argv. Every write the
     # mock received, in order, must be exactly the previewed list — any drift between the two fails here.
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.lifecycle import _run_offboard
 
     steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "{employee} has left",
                                  "Line one.\nAsk {manager} — it's fine", 30, date(2026, 6, 23),
                                  notify="it@example.com", employee_name="Lee Ver",
                                  manager_contact="Mo Gr (mgr@example.com)")
     job = start_job({}, len(steps))
-    await _run_offboard(job, connector, steps)
+    await run_offboard(job, connector, steps)
     assert (job.applied, job.failed_items) == (len(steps), [])
     assert gam_writes(gam_calls()) == [argv for s in steps for argv in s.commands]
     assert [len(s.commands) for s in steps] == [1] * len(steps)        # one command, one ✓/✗ per step
@@ -325,11 +323,10 @@ def test_offboard_step_dependencies_are_the_documented_ones():
 
 async def _offboard(connector, user, manager="mgr@example.com"):
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.lifecycle import _run_offboard
 
     steps = build_offboard_steps(user, manager, "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
-    await _run_offboard(job, connector, steps)
+    await run_offboard(job, connector, steps)
     assert job.finished and job.done == len(steps)
     return job
 
@@ -369,12 +366,11 @@ async def test_an_interrupted_offboard_marks_what_it_never_reached(connector, mo
 
     from gamgui.core.connectors import gam_connector
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.lifecycle import _run_offboard
 
     monkeypatch.setattr(gam_connector, "DOMAIN_WIDE_TIMEOUT", 30)
     steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
-    task = asyncio.create_task(_run_offboard(job, connector, steps))
+    task = asyncio.create_task(run_offboard(job, connector, steps))
     while job.current != "Remove from everyone's calendars":  # noqa: ASYNC110 — polls the job as the UI does
         await asyncio.sleep(0.05)
     await asyncio.sleep(0.3)

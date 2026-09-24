@@ -1775,11 +1775,10 @@ async def test_offboard_executor_runs_every_step(connector, gam_calls):
 
     from gamgui.core import lifecycle
     from gamgui.web.jobs import start_job
-    from gamgui.web.routes.lifecycle import _run_offboard
 
     steps = lifecycle.build_offboard_steps("leaver@example.com", "mgr@example.com", "Away", "Bye", 30, date.today())
     job = start_job({}, len(steps))
-    await _run_offboard(job, connector, steps)
+    await lifecycle.run_offboard(job, connector, steps)
     assert job.finished and job.done == len(steps)
     assert (job.applied, job.failed) == (len(steps), [])
     assert all(line.startswith("✓ ") for line in job.log), job.log
