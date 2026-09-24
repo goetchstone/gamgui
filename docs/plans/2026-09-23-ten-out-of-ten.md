@@ -82,7 +82,7 @@ plan's Phase 0 F1–F3.
   baseline 10 → 0, empty; a keyboard-only Chrome test over CDP key events — tabs, suspend/delete/calendar
   delete/Builder panels in and out, a ring on every Tab stop of 12 screens, no page errors — plus
   default-run template checks; screenshots in headless Chrome, WKWebView and a real screen reader
-  unseen) · A3 (one `#live-status` in `base.html` — `role=status`, polite, atomic — outside every swap;
+  unseen) · A3 `1390264` (one `#live-status` in `base.html` — `role=status`, polite, atomic — outside every swap;
   each render of the seven polled panels marks one `data-announce` line, `_job_live.html`'s "<label>:
   started" / "30% done" in 10% steps then the result sentence, and `app.js` speaks it only when it
   changed for that job; every feed/log ✓/✗ is an `aria-hidden` glyph plus an `sr-only`
