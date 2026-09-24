@@ -122,7 +122,7 @@ plan's Phase 0 F1–F3.
   GAM (`oauthuser` or a comma in a `<UserTypeEntity>`); `/groups?group=` opens one, and a user's group
   chips link there;
   `tests/test_groups_board.py` through the strict mock; screenshots in headless Chrome at 1100×760 — WKWebView,
-  a real screen reader and a live tenant unseen) · U5 partly (the jobs tray and Stop: a Jobs button in
+  a real screen reader and a live tenant unseen) · U5 partly `a8964de` (the jobs tray and Stop: a Jobs button in
   `base.html`'s header, "N running", opens a disclosure listing `web/jobs.py` `tray(st.jobs)` — at most 8,
   running first — each row a title (every job now has a `title` and a `kind`), its progress or final
   state, and a link to `/jobs/<id>`, whose panel loads from the job's own status route; it polls
