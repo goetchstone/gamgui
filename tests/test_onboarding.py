@@ -417,21 +417,20 @@ def test_parse_hire_csv():
 
 @pytest.mark.asyncio
 async def test_provision_hire_notify_vs_sheet(connector, tmp_path):
-    from gamgui.web.routes.onboarding import _provision_hire
     store = RunbookStore(tmp_path / "ob.json")
     store.set_role("Sales", ["Set up POS"], signature="Classic", org_unit="/Sales",
                    groups=["sales@example.com"], calendars=["team@x"])
     sig_store = SignatureStore(tmp_path / "sig.json")
     cfg = store.role("Sales")
     # notify address -> GAM emails it, nothing on the printable sheet
-    r1 = await _provision_hire(connector, sig_store, store, cfg,
-                               _hire(name="Ada Byte", email="ada@example.com", create_account=True,
-                                     notify="ada.personal@gmail.com"))
+    r1 = await onboarding.provision_hire(connector, sig_store, store, cfg,
+                                         _hire(name="Ada Byte", email="ada@example.com", create_account=True,
+                                               notify="ada.personal@gmail.com"))
     assert r1["ok"] and r1["account_created"] and r1["notified"] and r1["credential"] is None
     assert r1["signature"] == "Classic" and r1["groups"]["added"] == 1
     # blank notify -> a credential for the printable sheet, not notified
-    r2 = await _provision_hire(connector, sig_store, store, cfg,
-                               _hire(name="Sam Rivers", email="sam@example.com", create_account=True))
+    r2 = await onboarding.provision_hire(connector, sig_store, store, cfg,
+                                         _hire(name="Sam Rivers", email="sam@example.com", create_account=True))
     assert r2["credential"] and r2["credential"]["password"] and not r2["notified"]
     # the temp passwords never reach the audit log
     audit = (tmp_path / "audit.jsonl").read_text()
@@ -440,12 +439,11 @@ async def test_provision_hire_notify_vs_sheet(connector, tmp_path):
 
 @pytest.mark.asyncio
 async def test_provision_hire_account_failure_is_fatal_for_that_row(connector, tmp_path):
-    from gamgui.web.routes.onboarding import _provision_hire
     store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
     cfg = store.role("Sales")
-    r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
-                              _hire(name="Al Ready", email="exists@example.com", first="Al", last="Ready",
-                                    create_account=True))
+    r = await onboarding.provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
+                                        _hire(name="Al Ready", email="exists@example.com", first="Al", last="Ready",
+                                              create_account=True))
     assert not r["ok"] and any("create" in e for e in r["errors"])
 
 
@@ -461,7 +459,7 @@ async def test_run_bulk_onboard_executor(connector, tmp_path):
             _hire(role="Nope", name="X", email="x@example.com")]                          # unknown role
     cfgs = {"Sales": store.role("Sales"), "Nope": None}
     job = OnboardJob(id="t", total=3)
-    await _run_bulk_onboard(job, connector, sig_store, store, rows, cfgs)
+    await _run_bulk_onboard(job, connector, sig_store, store, [(r, cfgs[r["role"]]) for r in rows])
     assert job.finished and job.done == 3
     assert job.applied == 1 and job.failed_total == 2 and len(job.failed) == 2
 
@@ -475,7 +473,7 @@ async def test_bulk_job_feed_is_bounded_at_scale(connector, tmp_path):
     rows = [_hire(name=f"H{i}", email=f"h{i}@example.com") for i in range(50)]
     job = OnboardJob(id="t", total=50)
     await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
-                            rows, {"Sales": store.role("Sales")})
+                            [(r, store.role("Sales")) for r in rows])
     assert job.done == 50 and len(job.recent) == _RECENT_WINDOW
 
 
@@ -494,6 +492,25 @@ def test_bulk_preview_summarizes_and_flags_bad_rows(client):
     assert r.status_code == 200
     assert "1 hire" in r.text and "1</strong> account" in r.text and "emailed by GAM" in r.text
     assert "unknown role" in r.text.lower()   # the Bogus row is skipped and flagged
+
+
+def test_resolve_hires_pairs_rows_with_roles_and_the_tally_is_separate(tmp_path):
+    # F#22: Run needs only the pairs; the preview's summary is its own step, not computed and dropped.
+    store = RunbookStore(tmp_path / "ob.json")
+    store.set_role("Sales", ["Set up POS"])
+    store.set_role("Empty", [])
+    rows = [_hire(email="a@example.com", create_account=True, notify="a.p@example.org"),
+            _hire(email="b@example.com", create_account=True),
+            _hire(email="c@example.com"),
+            _hire(role="Empty", email="d@example.com"),
+            _hire(role="Nope", email="e@example.com")]
+    pairs, errors = onboarding.resolve_hires(rows, store)
+    assert [h["email"] for h, _ in pairs] == ["a@example.com", "b@example.com", "c@example.com"]
+    assert all(cfg.name == "Sales" for _, cfg in pairs)
+    assert errors == ["d@example.com: unknown role 'Empty' (or it has no steps).",
+                      "e@example.com: unknown role 'Nope' (or it has no steps)."]
+    assert onboarding.tally_hires(pairs) == {"total": 3, "creates": 2, "notifies": 1, "sheets": 1,
+                                             "per_role": [("Sales", 3)]}
 
 
 def test_bulk_run_needs_confirmation(client):
@@ -613,12 +630,11 @@ def test_search_calendars_uses_the_index(client, tmp_path):
 async def test_provision_hire_skips_signature_for_existing_account(connector, tmp_path):
     # Bulk must match the single flow: the role signature is applied only to an account this run
     # created — never clobbering an existing user's signature (create_account=False).
-    from gamgui.web.routes.onboarding import _provision_hire
     store = RunbookStore(tmp_path / "ob.json")
     store.set_role("Sales", ["Set up POS"], signature="Classic")
     cfg = store.role("Sales")
-    r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
-                              _hire(name="Ada Byte", email="ada@example.com", create_account=False))
+    r = await onboarding.provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, cfg,
+                                        _hire(name="Ada Byte", email="ada@example.com", create_account=False))
     assert r["ok"] and r["account_created"] is False and r["signature"] is None
 
 
@@ -655,15 +671,14 @@ def test_setup_verify_busts_group_cache(client, monkeypatch):
 @pytest.mark.asyncio
 async def test_provision_hire_partial_failure_counts_as_failed(connector, tmp_path):
     # A hire whose group add fails is NOT "ok" — the failure reaches res['errors'] and the job feed.
-    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard, _provision_hire
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
     store = RunbookStore(tmp_path / "ob.json")
     store.set_role("Sales", ["Set up POS"], groups=["missing-group@example.com"])  # 404s in the mock
     sig_store = SignatureStore(tmp_path / "sig.json")
-    r = await _provision_hire(connector, sig_store, store, store.role("Sales"), _hire(email="ada@example.com"))
+    r = await onboarding.provision_hire(connector, sig_store, store, store.role("Sales"), _hire(email="ada@example.com"))
     assert r["ok"] is False and any("groups" in e for e in r["errors"])
     job = OnboardJob(id="t", total=1)
-    await _run_bulk_onboard(job, connector, sig_store, store, [_hire(email="ada@example.com")],
-                            {"Sales": store.role("Sales")})
+    await _run_bulk_onboard(job, connector, sig_store, store, [(_hire(email="ada@example.com"), store.role("Sales"))])
     assert job.failed_total == 1 and job.applied == 0
 
 
@@ -683,9 +698,8 @@ async def test_failed_tasklist_create_is_audited(connector, tmp_path, monkeypatc
 
 
 def test_split_name_single_word_has_no_fabricated_surname():
-    from gamgui.web.routes.onboarding import _split_name
-    assert _split_name("Ada", "", "") == ("Ada", "")
-    assert _split_name("Ada Byte", "", "") == ("Ada", "Byte")
+    assert onboarding.split_name("Ada", "", "") == ("Ada", "")
+    assert onboarding.split_name("Ada Byte", "", "") == ("Ada", "Byte")
 
 
 def test_run_single_word_name_requires_last(client):
@@ -748,12 +762,11 @@ def test_run_create_account_with_groups_calendars_and_signature(client):
 
 @pytest.mark.asyncio
 async def test_provision_hire_notify_never_audits_password(connector, tmp_path, monkeypatch):
-    from gamgui.web.routes.onboarding import _provision_hire
     monkeypatch.setattr(onboarding, "generate_temp_password", lambda: "NOTIFYpw-1234-5678")
     store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
-    r = await _provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, store.role("Sales"),
-                              _hire(name="Ada Byte", email="ada@example.com", create_account=True,
-                                    first="Ada", last="Byte", notify="ada.personal@gmail.com"))
+    r = await onboarding.provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, store.role("Sales"),
+                                        _hire(name="Ada Byte", email="ada@example.com", create_account=True,
+                                              first="Ada", last="Byte", notify="ada.personal@gmail.com"))
     assert r["notified"] is True and r["credential"] is None
     audit = (tmp_path / "audit.jsonl").read_text()
     assert "NOTIFYpw-1234-5678" not in audit and "create_user" in audit   # notifypassword redacted too
@@ -795,8 +808,8 @@ async def test_bulk_recent_feed_holds_no_plaintext_password(connector, tmp_path,
     store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
     job = OnboardJob(id="t", total=1)
     await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
-                            [_hire(name="Ada Byte", email="ada@example.com", first="Ada", last="Byte",
-                                   create_account=True)], {"Sales": store.role("Sales")})
+                            [(_hire(name="Ada Byte", email="ada@example.com", first="Ada", last="Byte",
+                                    create_account=True), store.role("Sales"))])
     assert "RECENTpw-9999" not in json.dumps([vars(r) for r in job.recent])  # feed never retains plaintext
     assert any(c["password"] == "RECENTpw-9999" for c in job.credentials)   # only the sheet holds it
 

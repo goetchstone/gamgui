@@ -83,7 +83,7 @@ async def _onboard(conn):
     cfg = SimpleNamespace(steps=["Order a laptop"], org_unit="", signature="", groups=[], calendars=[])
     rows = [{"role": "Sales", "email": e, "name": "New Hire", "create_account": True} for e in EMAILS]
     job = OnboardJob(id="j", total=len(rows))
-    await _run_bulk_onboard(job, conn, None, None, rows, {"Sales": cfg})
+    await _run_bulk_onboard(job, conn, None, None, [(row, cfg) for row in rows])
     return job
 
 

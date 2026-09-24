@@ -6,23 +6,21 @@ Google account** (a one-time temp password on a printable sheet, or — when a n
 delivered by GAM/Google straight to the hire; never audited in the clear), apply the role's signature,
 add the hire to the role's groups, subscribe them to its shared calendars, fire the setup checklist to
 the assignee's Google Tasks, and send the welcome email. A **CSV of hires** runs the same per-hire
-provisioning as a polled job. Every mutation goes through the guarded, audited connector writes.
+provisioning (``core.onboarding.provision_hire``) as a polled job. Every mutation goes through the guarded, audited connector writes.
 """
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Tuple
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from ...core import clock, guard, onboarding
-from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
-from ...core.gam.models import GAMUser
-from ...core.onboarding import RunbookStore
+from ...core.onboarding import RoleTemplate, RunbookStore
 from ..jobs import Job, register_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
@@ -39,152 +37,6 @@ def _store(request: Request) -> RunbookStore:
     if st.runbooks is None:
         st.runbooks = RunbookStore()
     return st.runbooks
-
-
-def _ctx(name: str, email: str, role: str, manager: str) -> dict:
-    return {"name": name, "email": email, "role": role, "manager": manager}
-
-
-def _split_name(name: str, first: str, last: str) -> "tuple[str, str]":
-    """Prefer explicit first/last; otherwise split the display name on the first space."""
-    first, last = first.strip(), last.strip()
-    if not first and not last and name.strip():
-        parts = name.strip().split()
-        first = parts[0]
-        last = " ".join(parts[1:])
-    return first, last
-
-
-# --- shared per-hire provisioning steps (used by the single /run and the bulk executor) ---
-
-async def _apply_signature(conn, sig_store, cfg, email: str, first: str, last: str) -> Optional[str]:
-    """Apply the role's signature template to ``email``; return the template name if applied, else None."""
-    if not cfg.signature:
-        return None
-    body = sig_store.get(cfg.signature)
-    if not body:
-        return None
-    user = GAMUser(primary_email=email, given_name=first, family_name=last)
-    try:
-        r = await conn.set_signature(email, sig.render_signature(body, user), html=True)
-        return cfg.signature if r.ok else None
-    except Exception:  # noqa: BLE001 — signature is best-effort
-        return None
-
-
-async def _apply_groups(conn, email: str, groups: List[str]) -> "tuple[int, list]":
-    ok, failed = 0, []
-    for g in groups:
-        try:
-            r = await conn.add_group_member(g, email)
-            if r.ok:
-                ok += 1
-            else:
-                failed.append(g)
-        except Exception:  # noqa: BLE001
-            failed.append(g)
-    return ok, failed
-
-
-async def _apply_calendars(conn, email: str, calendars: List[str]) -> "tuple[int, list]":
-    ok, failed = 0, []
-    for c in calendars:
-        try:
-            r = await conn.subscribe_calendar_for(email, c)
-            if r.ok:
-                ok += 1
-            else:
-                failed.append(c)
-        except Exception:  # noqa: BLE001
-            failed.append(c)
-    return ok, failed
-
-
-async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
-    """Run one hire's onboarding end-to-end and return a structured result (no HTML, never raises).
-
-    ``hire`` is a parsed CSV row; ``cfg`` its resolved role template. Best-effort per sub-step. When an
-    account is created, a blank ``notify`` puts the temp password on ``credential`` (printable sheet);
-    a ``notify`` email hands sign-in delivery to GAM/Google and only sets ``notified``."""
-    email = (hire.get("email") or "").strip()
-    name = (hire.get("name") or "").strip()
-    first, last = _split_name(name, hire.get("first", ""), hire.get("last", ""))
-    res = {"email": email, "name": name or (first + " " + last).strip() or email, "role": hire["role"],
-           "ok": True, "account_created": False, "notified": False, "credential": None,
-           "signature": None, "groups": None, "calendars": None, "tasklist": None,
-           "email_sent": None, "errors": []}
-
-    if hire.get("create_account"):
-        if not email:
-            res["ok"] = False; res["errors"].append("no email to create the account"); return res
-        if not first or not last:
-            res["ok"] = False; res["errors"].append("need a first & last name to create the account"); return res
-        notify = (hire.get("notify") or "").strip() or None
-        pw = onboarding.generate_temp_password()
-        try:
-            cr = await conn.create_user(email, first, last, pw, change_password=True,
-                                        org_unit=(cfg.org_unit or None), notify=notify)
-        except Exception as exc:  # noqa: BLE001
-            res["ok"] = False; res["errors"].append("create: " + str(getattr(exc, "remediation", exc)))
-            res["stop"] = (getattr(exc, "kind", None), str(getattr(exc, "remediation", exc)))
-            return res
-        if not cr.ok:
-            res["ok"] = False; res["errors"].append("create: " + (cr.detail or "failed"))
-            res["stop"] = (cr.kind, cr.remediation)   # the bulk executor stops on an account-wide kind
-            return res
-        res["account_created"] = True
-        if notify:
-            res["notified"] = True          # GAM emailed the sign-in info; the pw lives only in that email
-        else:
-            res["credential"] = {"name": res["name"], "email": email, "password": pw,
-                                 "org_unit": cfg.org_unit or "/"}
-
-    if email:
-        # Signature only for an account THIS run created — matches the single /run flow and never
-        # clobbers an existing user's customized signature (or renders a blank {name} for an
-        # existing-account row that has no name in the CSV).
-        if res["account_created"]:
-            res["signature"] = await _apply_signature(conn, sig_store, cfg, email, first, last)
-            if cfg.signature and not res["signature"]:
-                res["errors"].append("signature: not applied")
-        if cfg.groups:
-            g_ok, g_fail = await _apply_groups(conn, email, cfg.groups)
-            res["groups"] = {"added": g_ok, "total": len(cfg.groups), "failed": g_fail}
-            if g_fail:
-                res["errors"].append("groups: couldn't add " + ", ".join(g_fail))
-        if cfg.calendars:
-            c_ok, c_fail = await _apply_calendars(conn, email, cfg.calendars)
-            res["calendars"] = {"added": c_ok, "total": len(cfg.calendars), "failed": c_fail}
-            if c_fail:
-                res["errors"].append("calendars: couldn't subscribe " + ", ".join(c_fail))
-
-    assignee = (hire.get("assignee") or email).strip()
-    if assignee:
-        title = "Onboard {} — {}".format(name or email or "new hire", hire["role"])
-        try:
-            tl = await conn.create_onboarding_runbook(assignee, title, cfg.steps)
-            res["tasklist"] = {"assignee": assignee, "tasklist_id": tl.get("tasklist_id", ""),
-                               "created": tl.get("created"), "total": tl.get("total"),
-                               "failed": tl.get("failed", []), "ok": bool(tl.get("tasklist_id"))}
-            if not tl.get("tasklist_id"):
-                res["errors"].append("tasks: no tasklist id came back")
-        except Exception as exc:  # noqa: BLE001
-            res["errors"].append("tasks: " + str(getattr(exc, "remediation", exc)))
-
-    if hire.get("send_welcome") and email:
-        # The single flow holds the welcome template its preview rendered; a bulk row uses the store's.
-        w, ctx = hire.get("welcome") or store.welcome(), _ctx(name, email, hire["role"], hire.get("manager", ""))
-        try:
-            we = await conn.send_welcome_email(email, onboarding.render(w["subject"], ctx),
-                                               onboarding.render(w["body"], ctx))
-            res["email_sent"] = bool(we.ok)
-        except Exception:  # noqa: BLE001
-            res["email_sent"] = False
-    if res["email_sent"] is False:
-        res["errors"].append("welcome email: failed to send")
-    # A hire is only "ok" if every best-effort sub-step also succeeded (not just the create).
-    res["ok"] = not res["errors"]
-    return res
 
 
 @dataclass
@@ -207,20 +59,20 @@ class OnboardJob(Job):
             self.credentials.append(res["credential"])
 
 
-async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[dict], cfgs: dict) -> None:
-    """Background executor: onboard each parsed row via its role cfg. Never raises out. Stops when an
+async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store,
+                            pairs: List[Tuple[dict, RoleTemplate]]) -> None:
+    """Background executor: onboard each (row, role template) pair. Never raises out. Stops when an
     account create fails for a reason every later hire would share (``stop_reason``: sign-in expired,
     a scope missing); a best-effort sub-step's failure (a group, a calendar, the task list) never stops
     it, since the accounts themselves may still be created."""
     try:
-        for hire in rows:
-            cfg = cfgs.get(hire["role"])
+        for hire, cfg in pairs:
             if cfg is None or not cfg.steps:
                 job.record_hire({"email": hire.get("email"), "name": hire.get("name") or hire.get("email"),
                                  "role": hire["role"], "ok": False,
                                  "errors": ["unknown role or role has no steps"]})
                 continue
-            res = await _provision_hire(conn, sig_store, store, cfg, hire)
+            res = await onboarding.provision_hire(conn, sig_store, store, cfg, hire)
             job.record_hire(res)
             kind, why = res.get("stop") or (None, "")
             stop = stop_reason(kind, why, job.total - job.done)
@@ -306,8 +158,8 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
     cfg = store.role(role)
     if cfg is None or not cfg.steps:
         return error_partial(request, "That role has no steps yet — add some in Role templates.")
-    w, ctx = store.welcome(), _ctx(name, email, role, manager)
-    given, family = _split_name(name, first, last)
+    w, ctx = store.welcome(), onboarding.welcome_context(name, email, role, manager)
+    given, family = onboarding.split_name(name, first, last)
     hire = {"role": role, "name": name, "email": email.strip(), "manager": manager, "assignee": assignee,
             "create_account": bool(create_account), "first": first, "last": last,
             "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
@@ -350,7 +202,7 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if make_account:
         if not email:
             return error_partial(request, "Enter the new hire's email to create the account.")
-        given, family = _split_name(name, first, last)
+        given, family = onboarding.split_name(name, first, last)
         if not given or not family:
             return error_partial(request, "Enter the new hire's first and last name to create the account.")
     assignee = assignee.strip() or email
@@ -374,7 +226,7 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     # flow never uses `notify` (always the printable sheet) and turns a hard failure into an error page
     # while the bulk feed shows it as a per-hire row.
     hire, cfg = held   # the previewed hire, role template and welcome email — never re-read from the store
-    res = await _provision_hire(conn, signature_store(request), store, cfg, hire)
+    res = await onboarding.provision_hire(conn, signature_store(request), store, cfg, hire)
     if make_account and not res["account_created"]:
         detail = next((e[len("create: "):] for e in res["errors"] if e.startswith("create:")), "unknown error")
         return error_partial(request, "Couldn't create the account: " + detail)
@@ -409,36 +261,6 @@ async def bulk_template() -> PlainTextResponse:
         headers={"Content-Disposition": "attachment; filename=onboard_template.csv"})
 
 
-def _bulk_summary(rows: List[dict], store: RunbookStore):
-    """Resolve each row's role and tally what a run would do. Returns (valid_rows, role_cfgs, summary,
-    row_errors). A row whose role is unknown or has no steps becomes a row error, not a valid row."""
-    cfgs: dict = {}
-    valid: List[dict] = []
-    row_errors: List[str] = []
-    per_role: dict = {}
-    creates = notifies = sheets = 0
-    for hire in rows:
-        role = hire["role"]
-        if role not in cfgs:
-            cfgs[role] = store.role(role)
-        cfg = cfgs[role]
-        if cfg is None or not cfg.steps:
-            who = hire.get("email") or hire.get("name") or "a row"
-            row_errors.append("{}: unknown role '{}' (or it has no steps).".format(who, role))
-            continue
-        valid.append(hire)
-        per_role[role] = per_role.get(role, 0) + 1
-        if hire["create_account"]:
-            creates += 1
-            if (hire.get("notify") or "").strip():
-                notifies += 1
-            else:
-                sheets += 1
-    summary = {"total": len(valid), "creates": creates, "notifies": notifies, "sheets": sheets,
-               "per_role": sorted(per_role.items())}
-    return valid, cfgs, summary, row_errors
-
-
 @router.post("/bulk/preview", response_class=HTMLResponse)
 async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]) -> HTMLResponse:
     if app_state(request).connector is None:
@@ -454,13 +276,13 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
     rows, parse_errors = onboarding.parse_hire_csv(text)
     if not rows and not parse_errors:
         return error_partial(request, "No hires found in the CSV.")
-    valid, cfgs, summary, row_errors = _bulk_summary(rows, _store(request))
+    pairs, row_errors = onboarding.resolve_hires(rows, _store(request))
     # Run executes these rows with these role templates — not a re-parse of whatever comes back, nor a
     # role edited after the preview — under a single-use token, like every other confirm step.
-    token = app_state(request).previews.hold(_BULK_FLOW, text, (valid, cfgs)) if valid else ""
+    token = app_state(request).previews.hold(_BULK_FLOW, text, pairs) if pairs else ""
     return TEMPLATES.TemplateResponse(request, "_onboard_bulk_preview.html", {
-        "summary": summary, "errors": parse_errors + row_errors,
-        "csv_text": text, "can_run": bool(valid), "token": token,
+        "summary": onboarding.tally_hires(pairs), "errors": parse_errors + row_errors,
+        "csv_text": text, "can_run": bool(pairs), "token": token,
     })
 
 
@@ -471,9 +293,9 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
     rows, _errs = onboarding.parse_hire_csv(csv_text)
-    valid, _cfgs, _summary, _row_errors = _bulk_summary(rows, _store(request))
+    resolved, _row_errors = onboarding.resolve_hires(rows, _store(request))
     # Bulk creation is gated behind the preview, like the single flow.
-    previews = guard.changes([h.get("email") or h.get("name") or "" for h in valid], RiskLevel.LOW, "Onboard")
+    previews = guard.changes([h.get("email") or h.get("name") or "" for h, _cfg in resolved], RiskLevel.LOW, "Onboard")
     form = await request.form()
     refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
@@ -482,12 +304,12 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
                                      again="upload the CSV and preview it again", what="CSV")
     if refusal:
         return error_partial(request, refusal)
-    valid, cfgs = held
-    if not valid:
+    pairs = held
+    if not pairs:
         return error_partial(request, "Nothing to run — every row had an unknown role or was invalid.")
-    job = register_job(st.jobs, OnboardJob(total=len(valid)))
+    job = register_job(st.jobs, OnboardJob(total=len(pairs)))
     job.task = asyncio.create_task(
-        _run_bulk_onboard(job, conn, signature_store(request), _store(request), valid, cfgs))
+        _run_bulk_onboard(job, conn, signature_store(request), _store(request), pairs))
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": job, "credentials": None})
     resp.headers["Cache-Control"] = "no-store"
     return resp
