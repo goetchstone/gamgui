@@ -120,10 +120,18 @@ def _serve(state_dir: Path) -> None:
     raise SystemExit("the mock preview didn't start")
 
 
+# Every headless Chrome this repo starts gets these. A fresh --user-data-dir makes macOS Chrome ask the
+# login Keychain for its "Chrome Safe Storage" key (to encrypt the throwaway profile's cookies), which
+# pops a Keychain prompt on the operator's screen for every run; --use-mock-keychain keeps it off the
+# real Keychain. tests/test_headless_chrome.py fails on a launch without it.
+CHROME_FLAGS = ["--headless=new", "--use-mock-keychain", "--no-first-run", "--no-default-browser-check",
+                "--hide-scrollbars"]
+
+
 async def shoot():
     prof = tempfile.mkdtemp(prefix="chrome-shots-")
-    proc = subprocess.Popen([CHROME, "--headless=new", "--remote-debugging-port=9333", f"--user-data-dir={prof}",
-                             "--hide-scrollbars", "--no-first-run", "--window-size=1280,880", "about:blank"],
+    proc = subprocess.Popen([CHROME, *CHROME_FLAGS, "--remote-debugging-port=9333", f"--user-data-dir={prof}",
+                             "--window-size=1280,880", "about:blank"],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):
