@@ -44,7 +44,7 @@ class AppState:
     token: str = ""
     user_cache: UserCache = field(default_factory=UserCache)
     group_cache: UserCache = field(default_factory=UserCache)  # cached `gam print groups` for the pickers
-    jobs: dict = field(default_factory=dict)  # id -> ApplyJob, for polled progress on long batch ops
+    jobs: dict = field(default_factory=dict)  # id -> web.jobs.Job, for polled progress on long batch ops
     previews: Previews = field(default_factory=Previews)  # per flow: single-use token -> what a preview showed
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)

@@ -233,12 +233,9 @@ async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) ->
                 ok, detail = False, str(exc)
             mark = "✓ " if ok else "✗ "
             job.log.append(mark + step.label + (f" — {detail}" if (not ok and detail) else ""))
+            job.record(step.label, ok, detail=detail)
             if ok:
-                job.applied += 1
                 succeeded.add(step.key)
-            else:
-                job.fail(step.label)
-            job.done += 1
             handled += 1
     finally:
         # Cut off (the app quit mid-run): every step not accounted for is "not run", so the panel can't
@@ -248,8 +245,7 @@ async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) ->
             cut = i == 0 and job.current == step.label
             job.log.append(f"– {step.label} — " + ("interrupted before it finished" if cut else "not run: interrupted"))
             job.skipped.append(step.label)
-        job.current = ""
-        job.finished = True
+        job.finish()
 
 
 @router.post("/offboard/run", response_class=HTMLResponse)

@@ -1,3 +1,12 @@
+{# One row per step (the job's window is the sequence's length): a failure says why in words, and the
+   final panel puts GAM's own error one click away. #}
+{% macro steps(job, final) %}
+{% if job.recent %}<ul class="{{ 'mt-2' if final else 'mt-3' }} space-y-1 text-xs font-mono">{% for r in job.recent %}
+  <li>{{ '✓' if r.ok else '✗' }} {{ r.item }}{% if not r.ok and r.reason %}<span class="font-sans">: {{ r.reason }}</span>{% endif %}
+    {% if final and not r.ok and r.detail %}<details class="ml-4 font-sans"><summary class="cursor-pointer text-amber-900">GAM's error</summary>
+      <pre class="mt-1 whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-amber-900">{{ r.detail }}</pre></details>{% endif %}
+  </li>{% endfor %}</ul>{% endif %}
+{% endmacro %}
 {% if job and not job.finished %}
 <div hx-get="/builder/sequence/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
      hx-target="this" hx-swap="outerHTML"
@@ -9,11 +18,11 @@
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
   </div>
-  {% if job.log %}<ul class="mt-3 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+  {{ steps(job, false) }}
 </div>
 {% elif job %}
-<div class="rounded-2xl border px-4 py-3 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p class="font-medium">Sequence complete — {{ job.applied }} of {{ job.total }} step{{ '' if job.total == 1 else 's' }} succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}.</p>
-  {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+<div class="rounded-2xl border px-4 py-3 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p class="font-medium">Sequence complete — {{ job.applied }} of {{ job.total }} step{{ '' if job.total == 1 else 's' }} succeeded{% if job.failed_total %}; {{ job.failed_total }} failed{% endif %}.</p>
+  {{ steps(job, true) }}
 </div>
 {% endif %}

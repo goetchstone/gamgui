@@ -1,0 +1,13 @@
+{# A finished job's failed sample: who, why in words, GAM's error one click away, and the count past
+   the sample (invariant #9 — job.failed is capped, job.failed_total is not). #}
+{% macro failures(job, height="max-h-48") %}
+<ul class="mt-1 {{ height }} space-y-1 overflow-y-auto text-xs">
+  {% for f in job.failed %}
+  <li><span class="font-mono">{{ f.item }}</span> — {{ f.reason or "Failed." }}
+    {% if f.detail %}<details class="ml-4"><summary class="cursor-pointer text-amber-900">GAM's error</summary>
+      <pre class="mt-1 whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-amber-900">{{ f.detail }}</pre></details>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% if job.more %}<div class="mt-1 text-xs">… +{{ job.more }} more</div>{% endif %}
+{% endmacro %}

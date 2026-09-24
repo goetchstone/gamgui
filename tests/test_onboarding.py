@@ -312,7 +312,7 @@ def test_credentials_sheets_share_one_print_helper_and_escape_the_copy_text(clie
     from gamgui.core import clock as _clock
     from gamgui.web.routes.onboarding import OnboardJob
     client.app.state.gamgui.jobs["j"] = OnboardJob(
-        id="j", total=1, done=1, ok=1, account_created=1, finished=True, finished_at=_clock.now(),
+        id="j", total=1, done=1, applied=1, account_created=1, finished=True, finished_at=_clock.now(),
         credentials=[{"name": "Ada </textarea><b>x", "email": "ada@example.com",
                       "password": "COPYpw-1", "org_unit": "/Sales"}])
     r = client.get("/onboard/bulk/status?job=j")
@@ -463,13 +463,14 @@ async def test_run_bulk_onboard_executor(connector, tmp_path):
     job = OnboardJob(id="t", total=3)
     await _run_bulk_onboard(job, connector, sig_store, store, rows, cfgs)
     assert job.finished and job.done == 3
-    assert job.ok == 1 and job.failed_total == 2 and len(job.failed) == 2
+    assert job.applied == 1 and job.failed_total == 2 and len(job.failed) == 2
 
 
 @pytest.mark.asyncio
 async def test_bulk_job_feed_is_bounded_at_scale(connector, tmp_path):
     # #9 — the live feed keeps a fixed rolling window no matter how many hires the CSV holds.
-    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard, _RECENT_WINDOW
+    from gamgui.web.jobs import RECENT_WINDOW as _RECENT_WINDOW
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
     store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
     rows = [_hire(name=f"H{i}", email=f"h{i}@example.com") for i in range(50)]
     job = OnboardJob(id="t", total=50)
@@ -559,7 +560,7 @@ def test_bulk_status_credentials_ttl_no_store_and_done(client):
     from gamgui.core import clock as _clock
     from gamgui.web.routes.onboarding import OnboardJob
     st = client.app.state.gamgui
-    st.jobs["j1"] = OnboardJob(id="j1", total=1, done=1, ok=1, account_created=1, finished=True,
+    st.jobs["j1"] = OnboardJob(id="j1", total=1, done=1, applied=1, account_created=1, finished=True,
                                finished_at=_clock.now(),
                                credentials=[{"name": "Ada", "email": "ada@example.com",
                                              "password": "SHEETpw-1234-5678", "org_unit": "/Sales"}])
@@ -663,7 +664,7 @@ async def test_provision_hire_partial_failure_counts_as_failed(connector, tmp_pa
     job = OnboardJob(id="t", total=1)
     await _run_bulk_onboard(job, connector, sig_store, store, [_hire(email="ada@example.com")],
                             {"Sales": store.role("Sales")})
-    assert job.failed_total == 1 and job.ok == 0
+    assert job.failed_total == 1 and job.applied == 0
 
 
 @pytest.mark.asyncio
@@ -761,7 +762,7 @@ async def test_provision_hire_notify_never_audits_password(connector, tmp_path, 
 def test_bulk_status_does_not_drain_credentials_before_finish(client):
     from gamgui.web.routes.onboarding import OnboardJob
     st = client.app.state.gamgui
-    st.jobs["run"] = OnboardJob(id="run", total=2, done=1, ok=1, account_created=1, finished=False,
+    st.jobs["run"] = OnboardJob(id="run", total=2, done=1, applied=1, account_created=1, finished=False,
                                 credentials=[{"name": "Ada", "email": "ada@example.com",
                                               "password": "PENDINGpw-1", "org_unit": "/Sales"}])
     r = client.get("/onboard/bulk/status?job=run")
@@ -778,10 +779,11 @@ def test_bulk_preview_accepts_excel_utf8_bom(client):
 
 @pytest.mark.asyncio
 async def test_bulk_job_failed_sample_is_capped(tmp_path):
-    from gamgui.web.routes.onboarding import OnboardJob, _FAILED_SAMPLE_CAP
+    from gamgui.web.jobs import FAILED_SAMPLE_CAP as _FAILED_SAMPLE_CAP
+    from gamgui.web.routes.onboarding import OnboardJob
     job = OnboardJob(id="t", total=_FAILED_SAMPLE_CAP + 50)
     for n in range(_FAILED_SAMPLE_CAP + 50):
-        job.record({"email": "h{}@x.com".format(n), "ok": False, "errors": ["boom"]})
+        job.record_hire({"email": "h{}@x.com".format(n), "ok": False, "errors": ["boom"]})
     assert job.failed_total == _FAILED_SAMPLE_CAP + 50 and len(job.failed) == _FAILED_SAMPLE_CAP  # #9
 
 
@@ -795,7 +797,7 @@ async def test_bulk_recent_feed_holds_no_plaintext_password(connector, tmp_path,
     await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
                             [_hire(name="Ada Byte", email="ada@example.com", first="Ada", last="Byte",
                                    create_account=True)], {"Sales": store.role("Sales")})
-    assert "RECENTpw-9999" not in json.dumps(job.recent)                    # feed never retains plaintext
+    assert "RECENTpw-9999" not in json.dumps([vars(r) for r in job.recent])  # feed never retains plaintext
     assert any(c["password"] == "RECENTpw-9999" for c in job.credentials)   # only the sheet holds it
 
 

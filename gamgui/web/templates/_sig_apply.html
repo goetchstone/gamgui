@@ -1,3 +1,4 @@
+{% from "_job_failures.html" import failures %}
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% elif not job.finished and not job.error %}
@@ -17,7 +18,7 @@
     {% for r in job.recent | reverse %}
     <li class="flex items-center gap-1.5">
       {% if r.ok %}<span class="text-emerald-600" aria-hidden="true">✓</span>{% else %}<span class="text-rose-600" aria-hidden="true">✗</span>{% endif %}
-      <span class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ r.email }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</span>
+      <span class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</span>
     </li>
     {% endfor %}
   </ul>
@@ -31,15 +32,7 @@
   {% else %}Applied to {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.{% endif %}
   {% if job.failed_total %}
   <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
-  <ul class="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs">
-    {% for f in job.failed %}
-    <li><span class="font-mono">{{ f.email }}</span> — {{ f.reason or "Failed." }}
-      {% if f.detail %}<details class="ml-4"><summary class="cursor-pointer text-amber-900">GAM's error</summary>
-        <pre class="mt-1 whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-amber-900">{{ f.detail }}</pre></details>{% endif %}
-    </li>
-    {% endfor %}
-  </ul>
-  {% if job.failed_total > (job.failed | length) %}<div class="mt-1 text-xs">… +{{ job.failed_total - (job.failed | length) }} more</div>{% endif %}
+  {{ failures(job) }}
   {% endif %}
 </div>
 {% endif %}

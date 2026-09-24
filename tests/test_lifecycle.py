@@ -246,7 +246,7 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
     await _run_offboard(job, connector, steps)
-    assert (job.applied, job.failed) == (len(steps) - 1, ["Remove from everyone's calendars"])
+    assert (job.applied, job.failed_items) == (len(steps) - 1, ["Remove from everyone's calendars"])
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
     assert "timed out after 0.5s and was stopped" in line
     assert job.log[-1].startswith("✓ ") and "reminder" in job.log[-1]
@@ -307,7 +307,7 @@ async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
                                  manager_contact="Mo Gr (mgr@example.com)")
     job = start_job({}, len(steps))
     await _run_offboard(job, connector, steps)
-    assert (job.applied, job.failed) == (len(steps), [])
+    assert (job.applied, job.failed_items) == (len(steps), [])
     assert gam_writes(gam_calls()) == [argv for s in steps for argv in s.commands]
     assert [len(s.commands) for s in steps] == [1] * len(steps)        # one command, one ✓/✗ per step
 
@@ -338,7 +338,7 @@ async def _offboard(connector, user, manager="mgr@example.com"):
 async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
     # The account can still sign in: nothing may announce the departure or move data.
     job = await _offboard(connector, "missing-leaver@example.com")
-    assert (job.applied, job.failed) == (0, ["Reset password"])
+    assert (job.applied, job.failed_items) == (0, ["Reset password"])
     assert job.skipped == ["Revoke access & sign out", "Turn off forwarding", "Set delegate", "Set auto-responder",
                            "Transfer Drive & Calendar ownership",
                            "Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
@@ -352,7 +352,7 @@ async def test_offboard_failed_delegate_stops_the_hand_over_but_not_the_sweep(co
     # reminder go to the same account, so those stop. The calendar sweep never touches the manager —
     # it still takes the leaver off colleagues' calendars.
     job = await _offboard(connector, "leaver@example.com", manager="missing-mgr@example.com")
-    assert (job.applied, job.failed) == (4, ["Set delegate"])
+    assert (job.applied, job.failed_items) == (4, ["Set delegate"])
     assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
                            "30-day reminder for missing-mgr@example.com"]
     assert [w[:4] for w in gam_writes(gam_calls())] == [
@@ -406,7 +406,7 @@ async def test_offboard_failed_sign_out_is_a_failed_step_that_stops_nothing(conn
     # own step now: ✗, counted, re-runnable alone — and nothing waits on it (the reset already locked
     # new sign-ins, and a missing security scope must not strand the mailbox without its delegate).
     job = await _offboard(connector, "SIGNOUTFAIL-leaver@example.com")
-    assert job.failed == ["Revoke access & sign out"] and job.skipped == []
+    assert job.failed_items == ["Revoke access & sign out"] and job.skipped == []
     assert job.applied == len(STEP_NAMES) - 1
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
     assert line.startswith("✗ Revoke access & sign out — ") and "Sign Out Failed" in line
@@ -423,7 +423,7 @@ async def test_offboard_turns_off_forwarding_and_a_failure_stops_nothing(connect
     writes = gam_writes(gam_calls())
     assert writes.index(["user", "leaver@example.com", "forward", "off"]) == 2       # after the revoke
     job = await _offboard(connector, "FWDFAIL-leaver@example.com")
-    assert job.failed == ["Turn off forwarding"] and job.skipped == []
+    assert job.failed_items == ["Turn off forwarding"] and job.skipped == []
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
     assert "Gmail Service/App not enabled" in line
 
@@ -432,7 +432,7 @@ async def test_offboard_turns_off_forwarding_and_a_failure_stops_nothing(connect
 async def test_offboard_failed_transfer_skips_only_the_reminder(connector, gam_calls):
     # The reminder asks the manager to approve deletion — which, without the transfer, loses the files.
     job = await _offboard(connector, "CONFLICT409-leaver@example.com")
-    assert (job.applied, job.failed) == (6, ["Transfer Drive & Calendar ownership"])
+    assert (job.applied, job.failed_items) == (6, ["Transfer Drive & Calendar ownership"])
     assert job.skipped == ["30-day reminder for mgr@example.com"]
     assert not [w for w in gam_writes(gam_calls()) if "event" in w]
     assert job.log[-1].startswith("– 30-day reminder") and "Transfer Drive" in job.log[-1]

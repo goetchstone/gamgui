@@ -14,12 +14,12 @@
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (100 * job.done // job.total) if job.total else 100 }}%"></div>
   </div>
 
-  <p class="text-sm text-brand-black"><strong>{{ job.ok }}</strong> ok · <strong>{{ job.failed_total }}</strong> failed · {{ job.account_created }} account{{ '' if job.account_created == 1 else 's' }} created ({{ job.notified }} emailed by GAM).</p>
+  <p class="text-sm text-brand-black"><strong>{{ job.applied }}</strong> ok · <strong>{{ job.failed_total }}</strong> failed · {{ job.account_created }} account{{ '' if job.account_created == 1 else 's' }} created ({{ job.notified }} emailed by GAM).</p>
 
   {% if job.recent %}
   <ul class="space-y-0.5 text-xs">
     {% for r in job.recent %}
-    <li class="{{ 'text-emerald-800' if r.ok else 'text-amber-800' }}">{{ '✓' if r.ok else '✗' }} <span class="font-mono">{{ r.email or r.name }}</span>{% if r.errors %} — {{ r.errors | join('; ') }}{% endif %}</li>
+    <li class="{{ 'text-emerald-800' if r.ok else 'text-amber-800' }}">{{ '✓' if r.ok else '✗' }} <span class="font-mono">{{ r.item }}</span>{% if r.reason %} — {{ r.reason }}{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}
@@ -27,8 +27,8 @@
   {% if job.finished %}
     {% if job.error %}<p class="text-sm text-red-700">{{ job.error }}</p>{% endif %}
     {% if job.failed %}
-    <details class="text-xs text-amber-900"><summary class="cursor-pointer">{{ job.failed_total }} failed{% if job.failed_total > job.failed | length %} (showing first {{ job.failed | length }}){% endif %}</summary>
-      <ul class="mt-1 list-disc pl-5">{% for f in job.failed %}<li>{{ f }}</li>{% endfor %}</ul>
+    <details class="text-xs text-amber-900"><summary class="cursor-pointer">{{ job.failed_total }} failed{% if job.more %} (showing first {{ job.failed | length }}){% endif %}</summary>
+      <ul class="mt-1 list-disc pl-5">{% for f in job.failed %}<li>{{ f.item }} — {{ f.reason or "failed" }}</li>{% endfor %}</ul>
     </details>
     {% endif %}
     {% if credentials %}

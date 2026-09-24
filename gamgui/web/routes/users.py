@@ -323,19 +323,15 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
     try:
         for u in targets:
             job.current = u.primary_email
-            kind, why = None, ""
+            kind, why, detail = None, "", ""
             try:
                 res = await conn.set_organization(u.primary_email, title=u.title or "", department=store)
                 ok = bool(getattr(res, "ok", False))
                 if not ok:
-                    kind, why = getattr(res, "kind", None), getattr(res, "remediation", "")
+                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
             except Exception as exc:  # noqa: BLE001 — one user must not stop the rest
-                ok, kind, why = False, getattr(exc, "kind", None), friendly(exc, _TRY_AGAIN)
-            if ok:
-                job.applied += 1
-            else:
-                job.fail(u.primary_email)
-            job.done += 1
+                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc, _TRY_AGAIN), str(exc)
+            job.record(u.primary_email, ok, why, detail)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
                 job.error = stop
@@ -343,8 +339,7 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
     except Exception as exc:
         job.error = friendly(exc, _TRY_AGAIN)
     finally:
-        job.current = ""
-        job.finished = True
+        job.finish()
         st.invalidate_users()  # departments changed -> cached directory is stale
 
 

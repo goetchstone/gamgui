@@ -403,44 +403,51 @@ def test_signatures_apply_status_unknown_job(client):
     assert "no longer available" in r.text
 
 
-def test_apply_job_record_tracks_tallies_and_feed():
-    from gamgui.web.routes.signatures import ApplyJob
+def test_job_record_tracks_tallies_and_feed():
+    from gamgui.web.jobs import Job
 
-    job = ApplyJob(id="x", total=3)
+    job = Job(total=3)
     job.record("a@x.com", True)
     job.record("b@x.com", False)
     job.record("c@x.com", True)
-    assert (job.applied, job.failed_total, job.done) == (2, 1, 3)
-    assert [f.email for f in job.failed] == ["b@x.com"]
+    assert (job.applied, job.failed_total, job.done, job.more) == (2, 1, 3, 0)
+    assert job.failed_items == ["b@x.com"]
     # the live feed carries each outcome in order, newest last
-    assert [(r.email, r.ok) for r in job.recent] == [
+    assert [(r.item, r.ok) for r in job.recent] == [
         ("a@x.com", True), ("b@x.com", False), ("c@x.com", True),
     ]
+    assert not job.finished and not job.cancel_requested and not job.interrupted
+    job.current = "c@x.com"
+    job.finish()
+    assert job.finished and job.finished_at > 0 and job.current == ""
 
 
-def test_apply_job_record_stays_bounded_at_scale():
-    # A domain-wide apply must not let the polled status HTML grow with the user count: both the
-    # retained failed sample and the live feed are capped no matter how many users are processed.
-    from gamgui.web.routes.signatures import ApplyJob, _RECENT_WINDOW, _FAILED_SAMPLE_CAP
+@pytest.mark.parametrize("make", ["Job", "BatchJob", "OnboardJob"])
+def test_every_job_record_stays_bounded_at_scale(make):
+    # A domain-wide run must not let the polled status HTML grow with the user count: the retained
+    # failed sample, the live feed and the text kept per failure are capped however many are processed.
+    # One base (web/jobs.py) holds the bounds; each bulk job type is one.
+    from gamgui.web import jobs
+    from gamgui.web.jobs import DETAIL_CAP, FAILED_SAMPLE_CAP, RECENT_WINDOW
+    from gamgui.web.routes.onboarding import OnboardJob
 
-    from gamgui.web.routes.signatures import _DETAIL_CAP
-
-    job = ApplyJob(id="x", total=5000)
+    job = {"Job": jobs.Job, "BatchJob": jobs.BatchJob, "OnboardJob": OnboardJob}[make](total=5000)
     for i in range(5000):   # half succeed, half fail — each failure with GAM echoing a huge body
-        job.record(f"u{i}@x.com", ok=(i % 2 == 0), reason="Not found.", detail="x" * 10_000)
+        job.record(f"u{i}@x.com", ok=(i % 2 == 0), reason="r" * 10_000, detail="x" * 10_000)
     assert (job.done, job.applied, job.failed_total) == (5000, 2500, 2500)
-    assert len(job.failed) == _FAILED_SAMPLE_CAP     # sample capped, full count kept in failed_total
-    assert all(len(r.detail) <= _DETAIL_CAP for r in job.failed + job.recent)   # and each reason
-    assert len(job.recent) == _RECENT_WINDOW         # feed is a fixed-size rolling window
-    assert job.recent[-1].email == "u4999@x.com"     # newest last
-    assert job.recent[0].email == f"u{5000 - _RECENT_WINDOW}@x.com"
+    assert len(job.failed) == FAILED_SAMPLE_CAP     # sample capped, full count kept in failed_total
+    assert job.more == 2500 - FAILED_SAMPLE_CAP     # the "+K more" a final panel prints
+    assert all(len(r.detail) <= DETAIL_CAP and len(r.reason) <= DETAIL_CAP for r in job.failed + job.recent)
+    assert len(job.recent) == RECENT_WINDOW         # feed is a fixed-size rolling window
+    assert job.recent[-1].item == "u4999@x.com"     # newest last
+    assert job.recent[0].item == f"u{5000 - RECENT_WINDOW}@x.com"
 
 
 def test_signatures_apply_status_shows_live_feed(client):
-    from gamgui.web.routes.signatures import ApplyJob
+    from gamgui.web.jobs import Job
 
     st = client.app.state.gamgui
-    job = ApplyJob(id="feedtest", total=4)
+    job = Job(id="feedtest", total=4)
     job.record("alice@example.com", True)
     job.record("bob@example.com", False)
     st.jobs[job.id] = job
@@ -456,10 +463,10 @@ def test_signatures_apply_status_shows_live_feed(client):
 
 
 def test_signatures_apply_final_summary_caps_failed_list(client):
-    from gamgui.web.routes.signatures import ApplyJob
+    from gamgui.web.jobs import Job
 
     st = client.app.state.gamgui
-    job = ApplyJob(id="captest", total=300)
+    job = Job(id="captest", total=300)
     for i in range(300):
         job.record(f"u{i}@example.com", False)
     job.finished = True
@@ -475,16 +482,17 @@ def test_signatures_apply_failure_keeps_a_reason_per_user(client):
     # The feed once listed failed emails only; each failure now says why in words, with GAM's own
     # error one click away — in the live feed and the final summary.
     from gamgui.core.gam.models import GAMUser
-    from gamgui.web.routes.signatures import ApplyJob, _run_apply
+    from gamgui.web.jobs import Job
+    from gamgui.web.routes.signatures import _run_apply
 
     st = client.app.state.gamgui
-    job = ApplyJob(id="whytest", total=2)
+    job = Job(id="whytest", total=2)
     st.jobs[job.id] = job
     matched = [GAMUser("alice@example.com", "Alice"), GAMUser("gone-missing@example.com", "Gone")]
     client.portal.call(_run_apply, job, st.connector, matched, "{name}")
     not_found = "The requested user, group, or resource was not found."
     assert (job.applied, job.failed_total) == (1, 1)
-    assert (job.failed[0].email, job.failed[0].reason) == ("gone-missing@example.com", not_found)
+    assert (job.failed[0].item, job.failed[0].reason) == ("gone-missing@example.com", not_found)
     assert "Does not exist" in job.failed[0].detail
     done = client.get("/signatures/apply/status", params={"job": job.id}).text
     assert f'gone-missing@example.com</span> — {not_found}' in done
@@ -1051,15 +1059,16 @@ def test_calendars_share_status_reports_progress_then_result(client):
     st = client.app.state.gamgui
 
     running = start_job(st.jobs, 3)
-    running.done, running.applied, running.current = 1, 1, "bob@example.com"
-    running.log = ["✓ alice@example.com"]
+    running.record("alice@example.com", True)
+    running.current = "bob@example.com"
     r = client.get("/calendars/share/status", params={"job": running.id})
     assert "1 added" in r.text and "bob@example.com" in r.text
     assert "/calendars/share/status?job=" in r.text          # still polling
 
     done = start_job(st.jobs, 3)
-    done.done, done.applied, done.finished = 3, 2, True
-    done.fail("carol@example.com")
+    for email, ok in (("alice@example.com", True), ("bob@example.com", True), ("carol@example.com", False)):
+        done.record(email, ok, "The requested user, group, or resource was not found." if not ok else "")
+    done.finished = True
     r = client.get("/calendars/share/status", params={"job": done.id})
     assert "appears in 2 of 3" in r.text
     assert "carol@example.com" in r.text                     # who to tell to add it manually
@@ -1072,11 +1081,11 @@ def test_calendars_share_status_unknown_job_is_quiet(client):
     assert "Adding to calendars" not in r.text
 
 
-async def test_run_subscribe_bounds_its_log_at_scale():
+async def test_run_subscribe_bounds_its_feed_at_scale():
     # A big group must not make each 1s poll carry a line per member.
     import types
-    from gamgui.web.jobs import BatchJob
-    from gamgui.web.routes.calendars import _run_subscribe, _SUBSCRIBE_LOG_WINDOW
+    from gamgui.web.jobs import RECENT_WINDOW, BatchJob
+    from gamgui.web.routes.calendars import _run_subscribe
 
     emails = [f"u{i}@example.com" for i in range(500)]
     conn = types.SimpleNamespace(
@@ -1084,8 +1093,8 @@ async def test_run_subscribe_bounds_its_log_at_scale():
     job = BatchJob(id="x", total=len(emails))
     await _run_subscribe(job, conn, "c@group.calendar.google.com", emails)
     assert job.done == 500 and job.applied == 490 and len(job.failed) == 10
-    assert len(job.log) == _SUBSCRIBE_LOG_WINDOW             # bounded window, newest kept
-    assert job.log[-1].endswith("u499@example.com")
+    assert len(job.recent) == RECENT_WINDOW                  # bounded window, newest kept
+    assert job.recent[-1].item == "u499@example.com"
     assert job.finished and job.current == ""
 
 
@@ -1105,7 +1114,7 @@ async def test_batch_job_failures_stay_bounded_and_render_the_overflow(client):
     job = BatchJob(id="bulkcap", total=n)
     await _run_bulk_store(job, SimpleNamespace(invalidate_users=lambda: None), _Refused(), targets, "Sales")
     assert (job.done, job.applied, job.failed_total) == (n, 0, n)
-    assert len(job.failed) == FAILED_SAMPLE_CAP and job.failed[-1] == f"u{FAILED_SAMPLE_CAP - 1}@example.com"
+    assert len(job.failed) == FAILED_SAMPLE_CAP and job.failed[-1].item == f"u{FAILED_SAMPLE_CAP - 1}@example.com"
 
     client.app.state.gamgui.jobs[job.id] = job
     html = client.get("/users/bulk/status", params={"job": job.id}).text
@@ -1132,8 +1141,87 @@ async def test_run_subscribe_caps_its_failed_sample(client):
     assert f"Couldn't add it for {n}" in html.replace("&#39;", "'") and "+7 more" in html
 
 
+_GONE_WHY = "The requested user, group, or resource was not found."
+
+
+def _gone_result(target: str):
+    """A write that works for everyone but gone@example.com, which fails the way _run_write reports it."""
+    from gamgui.core.connectors.base import ChangePreview, ChangeResult, ConnectorID, RiskLevel
+    ok = not target.startswith("gone@")
+    return ChangeResult(preview=ChangePreview(ConnectorID.GOOGLE_WORKSPACE, target, "write", RiskLevel.LOW), ok=ok,
+                        detail="" if ok else "GAM failed (not_found, exit=56): User: gone@example.com, Does not exist",
+                        remediation="" if ok else _GONE_WHY)
+
+
+async def _department_feed():
+    from gamgui.core.gam.models import GAMUser
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.users import _run_bulk_store
+
+    async def set_organization(email, title="", department=""):
+        return _gone_result(email)
+
+    job = start_job({}, 2)
+    await _run_bulk_store(job, SimpleNamespace(invalidate_users=lambda: None),
+                          SimpleNamespace(set_organization=set_organization),
+                          [GAMUser("alice@example.com"), GAMUser("gone@example.com")], "Sales")
+    return job
+
+
+async def _fanout_feed():
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.calendars import _run_subscribe
+
+    async def subscribe_calendar_for(email, cal):
+        return _gone_result(email)
+
+    job = start_job({}, 2)
+    await _run_subscribe(job, SimpleNamespace(subscribe_calendar_for=subscribe_calendar_for), SEC_CAL,
+                         ["alice@example.com", "gone@example.com"])
+    return job
+
+
+async def _sequence_feed():
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.builder import _run_sequence, _seq_previews
+
+    async def apply(previews):
+        return [_gone_result(p.target) for p in previews]
+
+    seq = [{"target": t, "label": "Suspend user", "argv": ["update", "user", t, "suspended", "on"], "risk": 1}
+           for t in ("alice@example.com", "gone@example.com")]
+    job = start_job({}, 2, window=2)
+    await _run_sequence(job, SimpleNamespace(apply=apply), _seq_previews(seq))
+    return job
+
+
+# Each BatchJob feed, the route that renders it, and whether its live panel lists targets as they land.
+BULK_FEEDS = {"department": (_department_feed, "/users/bulk/status", False),
+              "calendar fan-out": (_fanout_feed, "/calendars/share/status", True),
+              "builder sequence": (_sequence_feed, "/builder/sequence/status", True)}
+
+
+@pytest.mark.parametrize("feed", sorted(BULK_FEEDS))
+async def test_each_bulk_feed_says_why_a_target_failed(client, feed):
+    # Plan U9: these feeds listed failed addresses with no reason. Now each failure says why in words —
+    # live, and in the final panel with GAM's error one click away.
+    run, status, live_rows = BULK_FEEDS[feed]
+    job = await run()
+    assert (job.applied, job.failed_total) == (1, 1)
+    assert (job.failed[0].reason, "Does not exist" in job.failed[0].detail) == (_GONE_WHY, True)
+    client.app.state.gamgui.jobs[job.id] = job
+    done = unescape(client.get(status, params={"job": job.id}).text)
+    headline, _, expandable = done.partition("<details")
+    assert "gone@example.com" in headline and _GONE_WHY in headline
+    assert "GAM's error" in expandable and "Does not exist" in expandable
+    if live_rows:
+        job.finished = False                                   # the same job, as its live panel shows it
+        live = unescape(client.get(status, params={"job": job.id}).text)
+        assert "✗" in live and "gone@example.com" in live and _GONE_WHY in live and "Does not exist" not in live
+
+
 def test_no_route_appends_to_a_batch_jobs_failed_list_directly():
-    # BatchJob.fail() is what caps the sample; a bare `job.failed.append` would bypass it.
+    # Job.record() is what caps the sample; a bare `job.failed.append` would bypass it.
     routes = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
     offenders = [p.name for p in routes.glob("*.py") if "job.failed.append(" in p.read_text()]
     assert offenders == []
@@ -1422,7 +1510,7 @@ def test_offboard_a_refused_sign_out_is_a_failed_step_not_a_clean_run(client, ga
     _, token = _offboard_preview(client)
     job = _job(client, _offboard_run(client, token).text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
-    assert (job.failed, job.skipped) == (["Revoke access & sign out"], [])
+    assert (job.failed_items, job.skipped) == (["Revoke access & sign out"], [])
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
     assert "✗ Revoke access & sign out — " in text and "Sign Out Failed" in text
     assert "Offboarding complete" not in text and "Offboarding incomplete" in text
@@ -1435,8 +1523,9 @@ def test_offboard_stopped_panel_says_what_did_not_run(client):
     from gamgui.web.jobs import start_job
 
     job = start_job(client.app.state.gamgui.jobs, 3)
-    job.applied, job.done, job.finished, job.skipped = 1, 3, True, ["Set auto-responder"]
-    job.fail("Set delegate")
+    job.record("Reset password", True)
+    job.record("Set delegate", False)
+    job.done, job.finished, job.skipped = 3, True, ["Set auto-responder"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
     assert "Offboarding stopped — 1 of 3 steps succeeded; failed: Set delegate; not run: Set auto-responder." in text
     assert "Don't delete the account" in text and "now has a calendar reminder" not in text
@@ -1466,8 +1555,8 @@ def test_offboard_interrupted_panel_is_not_complete(client):
 
     # A failed step whose GAM message happens to say "interrupted" is a failure, not a cut-off run.
     failed = start_job(client.app.state.gamgui.jobs, 1)
-    failed.done, failed.finished, failed.log = 1, True, ["✗ Reset password — Connection interrupted by peer"]
-    failed.fail("Reset password")
+    failed.record("Reset password", False)
+    failed.finished, failed.log = True, ["✗ Reset password — Connection interrupted by peer"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": failed.id}).text)
     assert "Offboarding incomplete" in text and "Offboarding interrupted" not in text
 
@@ -1479,8 +1568,8 @@ def test_offboard_panel_warns_when_revoke_never_ran(client):
     from gamgui.web.jobs import start_job
 
     job = start_job(client.app.state.gamgui.jobs, 2)
+    job.record("Reset password", False)
     job.done, job.finished, job.skipped = 2, True, ["Revoke access & sign out"]
-    job.fail("Reset password")
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
     assert "The leaver may still be signed in" in text
 
@@ -1590,7 +1679,7 @@ def test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_
     assert f"{MGR} already has delegate access to {LEAVER}" in html.unescape(shown.text)
     job = _job(client, _offboard_run(client, token).text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
-    assert job.failed == ["Set delegate"] and job.applied == 4          # the calendar sweep still ran
+    assert job.failed_items == ["Set delegate"] and job.applied == 4          # the calendar sweep still ran
     assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
                            "30-day reminder for alice@example.com"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)

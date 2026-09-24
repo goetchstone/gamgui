@@ -55,8 +55,9 @@ def test_the_account_wide_kinds():
 
 
 async def _signatures(conn):
-    from gamgui.web.routes.signatures import ApplyJob, _run_apply
-    job = ApplyJob(id="j", total=len(USERS))
+    from gamgui.web.jobs import Job
+    from gamgui.web.routes.signatures import _run_apply
+    job = Job(id="j", total=len(USERS))
     await _run_apply(job, conn, USERS, "{name}")
     return job
 

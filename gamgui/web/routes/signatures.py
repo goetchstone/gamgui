@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
-from dataclasses import dataclass, field
-from typing import Annotated, List, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -14,7 +12,7 @@ from ...core import guard
 from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
 from ...core.signatures import SignatureStore
-from ..jobs import stop_reason
+from ..jobs import Job, register_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, friendly, signature_store
@@ -32,57 +30,6 @@ def _tctx(store: SignatureStore, **extra) -> dict:
     ctx: dict = {"templates": [{"name": n, "body": store.get(n)} for n in store.names()]}
     ctx.update(extra)
     return ctx
-
-
-@dataclass
-class SigResult:
-    """One user's outcome in a bulk apply — the unit of the live "as they get set" feed."""
-
-    email: str
-    ok: bool
-    reason: str = ""   # a failure's remediation, in words (a short fixed text per GAMErrorKind)
-    detail: str = ""   # a failure's raw GAM error, cut to _DETAIL_CAP
-
-
-_RECENT_WINDOW = 12       # most-recent per-user results kept for the live feed (bounds the polled HTML)
-_FAILED_SAMPLE_CAP = 200  # cap the retained failed list so a mostly-failing run can't bloat the poll
-_DETAIL_CAP = 300         # chars of raw error kept per failure: GAM echoes the argv (the whole body) on a usage error
-
-
-@dataclass
-class ApplyJob:
-    """In-memory progress for one bulk signature apply, polled by the UI."""
-
-    id: str
-    total: int
-    applied: int = 0
-    done: int = 0
-    failed_total: int = 0
-    failed: List[SigResult] = field(default_factory=list)   # capped sample of failures, with why (see _FAILED_SAMPLE_CAP)
-    recent: List[SigResult] = field(default_factory=list)   # rolling window, newest last; drives the live feed
-    current: str = ""
-    finished: bool = False
-    error: Optional[str] = None
-    task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
-
-    def record(self, email: str, ok: bool, reason: str = "", detail: str = "") -> None:
-        """Log one user's outcome: tallies, the capped failed sample, and the rolling live feed.
-
-        Both the failed list and the feed are bounded — in length and, per failure, in the raw error
-        kept — so the polled status partial stays small even on a domain-wide (thousands of users)
-        apply; the feed shows only the most recent handful.
-        """
-        result = SigResult(email, ok, reason, detail[:_DETAIL_CAP])
-        if ok:
-            self.applied += 1
-        else:
-            self.failed_total += 1
-            if len(self.failed) < _FAILED_SAMPLE_CAP:
-                self.failed.append(result)
-        self.recent.append(result)
-        if len(self.recent) > _RECENT_WINDOW:
-            del self.recent[0]
-        self.done += 1
 
 
 async def _matched(st, users, scope_type: str, scope_value: str):
@@ -112,14 +59,7 @@ def _form_key(template: str, scope_type: str, scope_value: str) -> tuple:
     return (template, scope_type, scope_value.strip())
 
 
-def _prune_jobs(st, keep: int = 10) -> None:
-    """Drop the oldest finished jobs so the registry can't grow without bound."""
-    finished = [jid for jid, j in st.jobs.items() if j.finished]
-    for jid in finished[:-keep] if len(finished) > keep else []:
-        st.jobs.pop(jid, None)
-
-
-async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
+async def _run_apply(job: Job, conn, matched, template: str) -> None:
     """Background task: set each user's signature, updating ``job`` as it goes. Stops at a failure
     every later user would share (``stop_reason``: sign-in expired, a scope missing)."""
     try:
@@ -139,8 +79,7 @@ async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
     except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
         job.error = friendly(exc)
     finally:
-        job.current = ""
-        job.finished = True
+        job.finish()
 
 
 def _test_user(st, options: dict) -> str:
@@ -227,9 +166,7 @@ async def apply(
 
     # Run the (potentially minutes-long) per-user loop in the background and report progress by polling,
     # so the UI never looks frozen on a large apply.
-    job = ApplyJob(id=secrets.token_urlsafe(8), total=len(matched))
-    _prune_jobs(st)
-    st.jobs[job.id] = job
+    job = register_job(st.jobs, Job(total=len(matched)))
     job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template))
     return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})
 

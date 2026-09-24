@@ -6,13 +6,12 @@ Google account** (a one-time temp password on a printable sheet, or — when a n
 delivered by GAM/Google straight to the hire; never audited in the clear), apply the role's signature,
 add the hire to the role's groups, subscribe them to its shared calendars, fire the setup checklist to
 the assignee's Google Tasks, and send the welcome email. A **CSV of hires** runs the same per-hire
-provisioning as a polled BatchJob. Every mutation goes through the guarded, audited connector writes.
+provisioning as a polled job. Every mutation goes through the guarded, audited connector writes.
 """
 
 from __future__ import annotations
 
 import asyncio
-import secrets
 from dataclasses import dataclass, field
 from typing import Annotated, List, Optional
 
@@ -24,18 +23,13 @@ from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
 from ...core.gam.models import GAMUser
 from ...core.onboarding import RunbookStore
-from ..jobs import register_job, stop_reason
+from ..jobs import Job, register_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, app_state, error_partial, signature_store
 
 router = APIRouter(prefix="/onboard")
 
-# Live-feed bounds (invariant #9 — bound anything polled). The status poll renders only the last
-# _RECENT_WINDOW per-hire rows and a capped failure sample; the credentials sheet is rendered once, in
-# the final panel, not on every poll.
-_RECENT_WINDOW = 12
-_FAILED_SAMPLE_CAP = 200
 _CREDS_TTL = 15 * 60   # keep the bulk credentials sheet re-fetchable for 15 min, or until Done
 _MAX_CSV_BYTES = 1024 * 1024   # a hire list is kilobytes; refuse a huge upload before decoding it
 
@@ -194,44 +188,23 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
 
 
 @dataclass
-class OnboardJob:
-    """Polled progress for a bulk CSV run. The live feed (``recent``, ``failed``) is bounded per
-    invariant #9; ``credentials`` accumulates the printable-sheet rows and is rendered once, in the
-    final panel, not on every poll."""
-    id: str
-    total: int
-    done: int = 0
-    ok: int = 0
+class OnboardJob(Job):
+    """Polled progress for a bulk CSV run: the bounded ``Job`` feed (one row per hire, never the temp
+    password) plus the account tallies, and ``credentials`` — the printable-sheet rows, rendered once,
+    in the final panel, not on every poll."""
     account_created: int = 0
     notified: int = 0
-    failed_total: int = 0
-    failed: List[str] = field(default_factory=list)      # capped sample of "email — reason"
-    recent: List[dict] = field(default_factory=list)     # capped feed of per-hire result dicts
     credentials: List[dict] = field(default_factory=list)  # printable-sheet rows (blank-notify accounts)
-    finished: bool = False
-    finished_at: float = 0.0
-    error: Optional[str] = None
-    task: object = field(default=None, repr=False)
 
-    def record(self, res: dict) -> None:
-        self.done += 1
-        if res.get("ok"):
-            self.ok += 1
-        else:
-            self.failed_total += 1
-            if len(self.failed) < _FAILED_SAMPLE_CAP:
-                self.failed.append("{} — {}".format(res.get("email") or "?",
-                                                     "; ".join(res.get("errors") or ["failed"])))
+    def record_hire(self, res: dict) -> None:
+        self.record(res.get("email") or res.get("name") or "?", bool(res.get("ok")),
+                    "; ".join(res.get("errors") or []))
         if res.get("account_created"):
             self.account_created += 1
         if res.get("notified"):
             self.notified += 1
         if res.get("credential"):
             self.credentials.append(res["credential"])
-        # The live feed shows only email/name/ok/errors — never keep the temp password here
-        # (it lives, briefly, only in `credentials` for the printable sheet).
-        self.recent.append({k: res.get(k) for k in ("email", "name", "ok", "errors")})
-        del self.recent[:-_RECENT_WINDOW]
 
 
 async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[dict], cfgs: dict) -> None:
@@ -243,12 +216,12 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[
         for hire in rows:
             cfg = cfgs.get(hire["role"])
             if cfg is None or not cfg.steps:
-                job.record({"email": hire.get("email"), "name": hire.get("name") or hire.get("email"),
-                            "role": hire["role"], "ok": False,
-                            "errors": ["unknown role or role has no steps"]})
+                job.record_hire({"email": hire.get("email"), "name": hire.get("name") or hire.get("email"),
+                                 "role": hire["role"], "ok": False,
+                                 "errors": ["unknown role or role has no steps"]})
                 continue
             res = await _provision_hire(conn, sig_store, store, cfg, hire)
-            job.record(res)
+            job.record_hire(res)
             kind, why = res.get("stop") or (None, "")
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
@@ -257,8 +230,7 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[
     except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
         job.error = str(exc)
     finally:
-        job.finished = True
-        job.finished_at = clock.now()
+        job.finish()
 
 
 @router.get("", response_class=HTMLResponse)
@@ -513,7 +485,7 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     valid, cfgs = held
     if not valid:
         return error_partial(request, "Nothing to run — every row had an unknown role or was invalid.")
-    job = register_job(st.jobs, OnboardJob(id=secrets.token_urlsafe(8), total=len(valid)))
+    job = register_job(st.jobs, OnboardJob(total=len(valid)))
     job.task = asyncio.create_task(
         _run_bulk_onboard(job, conn, signature_store(request), _store(request), valid, cfgs))
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": job, "credentials": None})

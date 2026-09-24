@@ -1,3 +1,4 @@
+{% from "_job_failures.html" import failures %}
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% elif job and job.error %}
@@ -16,13 +17,12 @@
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
   </div>
 </div>
-{% else %}
-{% set _applied = job.applied if job else 0 %}
-{% set _total = job.total if job else 0 %}
-{% set _failed = job.failed if job else [] %}
-{% set _failed_total = job.failed_total if job else 0 %}
-<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not _failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  Set department on {{ _applied }} of {{ _total }} user{{ "s" if _total != 1 }}.
-  {% if _failed_total %}<div class="mt-1 max-h-24 overflow-y-auto text-xs">Failed ({{ _failed_total }}): {{ _failed | join(", ") }}{% if _failed_total > (_failed | length) %} … +{{ _failed_total - (_failed | length) }} more{% endif %}</div>{% endif %}
+{% elif job %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  Set department on {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.
+  {% if job.failed_total %}
+  <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
+  {{ failures(job) }}
+  {% endif %}
 </div>
 {% endif %}

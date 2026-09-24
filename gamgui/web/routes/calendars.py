@@ -33,8 +33,6 @@ _SUBSCRIBE_JOB_TEMPLATE = "_calendar_subscribe_job.html"
 # email; holiday/system use @group.v.calendar.google.com or a `#…@` id; rooms use
 # @resource.calendar.google.com; imports use @import.calendar.google.com — none end in this suffix.
 SECONDARY_SUFFIX = "@group.calendar.google.com"
-# Most-recent per-member lines kept while a group subscribe runs (bounds the polled partial).
-_SUBSCRIBE_LOG_WINDOW = 12
 # A group share past the bulk threshold confirms first; its confirm step holds the resolved members
 # under a single-use token (web/previews.py) and posts the live share form back.
 _SHARE_FLOW = "calendar_share_group"
@@ -92,21 +90,15 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
     try:
         for email in emails:
             job.current = email
-            kind, why = None, ""
+            kind, why, detail = None, "", ""
             try:
                 res = await conn.subscribe_calendar_for(email, cal)
                 ok = bool(getattr(res, "ok", False))
                 if not ok:
-                    kind, why = getattr(res, "kind", None), getattr(res, "remediation", "")
+                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
             except Exception as exc:            # noqa: BLE001 — one member must not stop the rest
-                ok, kind, why = False, getattr(exc, "kind", None), friendly(exc)
-            if ok:
-                job.applied += 1
-            else:
-                job.fail(email)
-            job.log.append(f"{'✓' if ok else '✗'} {email}")
-            del job.log[:-_SUBSCRIBE_LOG_WINDOW]  # bounded: a big group must not bloat each poll
-            job.done += 1
+                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc), str(exc)
+            job.record(email, ok, why, detail)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
                 job.error = stop
@@ -114,8 +106,7 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
     except Exception as exc:                    # noqa: BLE001 — whole-batch failure (auth expired)
         job.error = friendly(exc)
     finally:
-        job.current = ""
-        job.finished = True
+        job.finish()
 
 
 def _owner_candidates(acls, cal: str) -> list:
@@ -264,8 +255,7 @@ async def _build_index(job, conn, idx, domain: str) -> None:
     except Exception as exc:  # noqa: BLE001 — surface any failure in the status partial
         job.error = str(exc)
     finally:
-        job.current = ""
-        job.finished = True
+        job.finish()
 
 
 @router.post("/index/rebuild", response_class=HTMLResponse)

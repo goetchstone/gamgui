@@ -436,22 +436,15 @@ async def _run_sequence(job, conn, previews, catalog=None) -> None:
                     # A sensitive read runs as the read it is, so it is audited as one (`sensitive_read`,
                     # never its output) — through apply() it was filed as an `apply` like any write.
                     await conn.catalog_read(cmd, list(p.argv), p.target)
-                    ok, detail = True, ""
+                    ok, why, detail = True, "", ""
                 else:
                     res = (await conn.apply([p]))[0]
-                    ok, detail = res.ok, res.detail
+                    ok, why, detail = res.ok, res.remediation, res.detail
             except Exception as exc:  # noqa: BLE001 — report every step, never abort the run
-                ok, detail = False, str(exc)
-            line = f"{p.summary} — {p.target}" + (f": {detail}" if (not ok and detail) else "")
-            job.log.append(("✓ " if ok else "✗ ") + line)
-            if ok:
-                job.applied += 1
-            else:
-                job.fail(f"{p.summary} ({p.target})")
-            job.done += 1
+                ok, why, detail = False, friendly(exc), str(exc)
+            job.record(f"{p.summary} — {p.target}", ok, why, detail)
     finally:
-        job.current = ""
-        job.finished = True
+        job.finish()
 
 
 @router.post("/sequence/run", response_class=HTMLResponse)
@@ -477,7 +470,7 @@ async def seq_run(request: Request) -> HTMLResponse:
     refusal = guard_mod.enforce(previews, form)
     if refusal:
         return await _seq_preview_page(request, seq, error=refusal)
-    job = start_job(st.jobs, len(previews))
+    job = start_job(st.jobs, len(previews), window=len(previews))   # every step's row: at most MAX_SEQUENCE_STEPS
     job.task = asyncio.create_task(_run_sequence(job, conn, previews, _catalog(request)))
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": job})
 

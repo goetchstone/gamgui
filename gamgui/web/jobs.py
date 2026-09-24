@@ -1,43 +1,88 @@
-"""Tiny in-memory batch-job helper for polled-progress bulk operations.
+"""The in-memory, polled progress record every bulk operation shares.
 
-Stored on ``AppState.jobs`` (id -> BatchJob) and rendered by an HTMX-polled partial, so a long
-per-user loop reports progress instead of looking frozen. (The signature designer has its own
-equivalent; this is the shared version used by newer bulk actions.)
+A job lives on ``AppState.jobs`` (id -> job) and is rendered by an HTMX-polled partial, so a long
+per-target loop reports progress instead of looking frozen. ``Job`` is the one bounded base (invariant
+#9); ``BatchJob`` adds the per-step log of a short multi-step routine, and onboarding's ``OnboardJob``
+its account tallies and credentials sheet.
 """
 
 from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, TypeVar
 
+from ..core import clock
 from ..core.gam.errors import ACCOUNT_WIDE_KINDS
 
-# Invariant #9: a run where thousands genuinely fail keeps the full count but only a sample of names,
-# so the final summary (and each poll) stays small. Same cap as signatures' ApplyJob / OnboardJob.
+# Invariant #9: a run where thousands genuinely fail keeps the full count but only a sample of them,
+# and the live feed only its newest rows, so the final summary (and each 1s poll) stays small.
+RECENT_WINDOW = 12
 FAILED_SAMPLE_CAP = 200
+DETAIL_CAP = 300   # chars kept of a failure's reason and raw error: GAM echoes the argv (a whole body) on a usage error
 
 
 @dataclass
-class BatchJob:
-    id: str
+class Outcome:
+    """One target's result: a row of the live feed and, when it failed, of the failed sample."""
+
+    item: str
+    ok: bool
+    reason: str = ""   # a failure's remediation, in words
+    detail: str = ""   # a failure's raw GAM error, for a collapsed "GAM's error"
+
+
+@dataclass
+class Job:
     total: int
+    id: str = field(default_factory=lambda: secrets.token_urlsafe(8))
     done: int = 0
     applied: int = 0
     failed_total: int = 0
-    failed: List[str] = field(default_factory=list)  # capped sample — record with fail(), never .append
-    skipped: List[str] = field(default_factory=list)  # not run: a step it relies on failed (offboarding's few)
+    failed: List[Outcome] = field(default_factory=list)   # capped sample — fill it with record(), never .append
+    recent: List[Outcome] = field(default_factory=list)   # rolling feed of the newest `window` outcomes, newest last
+    window: int = RECENT_WINDOW
     current: str = ""
     finished: bool = False
+    finished_at: float = 0.0
     error: Optional[str] = None
-    log: List[str] = field(default_factory=list)  # per-step outcome lines (multi-step routines)
-    interrupted: bool = False  # cut off (the app quit) before every step was accounted for
+    cancel_requested: bool = False   # for a Stop control (plan U5); no loop reads it yet
+    interrupted: bool = False        # cut off (the app quit) before every step was accounted for
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
-    def fail(self, item: str) -> None:
-        self.failed_total += 1
-        if len(self.failed) < FAILED_SAMPLE_CAP:
-            self.failed.append(item)
+    def record(self, item: str, ok: bool, reason: str = "", detail: str = "") -> None:
+        """One target done: tally it, keep a failure in the capped sample, and roll the live feed."""
+        outcome = Outcome(item, ok, (reason or "")[:DETAIL_CAP], (detail or "")[:DETAIL_CAP])
+        self.done += 1
+        if ok:
+            self.applied += 1
+        else:
+            self.failed_total += 1
+            if len(self.failed) < FAILED_SAMPLE_CAP:
+                self.failed.append(outcome)
+        self.recent.append(outcome)
+        if len(self.recent) > self.window:
+            del self.recent[0]
+
+    def finish(self) -> None:
+        self.current = ""
+        self.finished = True
+        self.finished_at = clock.now()
+
+    @property
+    def more(self) -> int:
+        """Failures counted but past the sample: the "+K more" a final panel prints."""
+        return self.failed_total - len(self.failed)
+
+    @property
+    def failed_items(self) -> List[str]:
+        return [f.item for f in self.failed]
+
+
+@dataclass
+class BatchJob(Job):
+    log: List[str] = field(default_factory=list)      # per-step outcome lines (offboarding's handful of steps)
+    skipped: List[str] = field(default_factory=list)  # not run: a step it relies on failed (offboarding's few)
 
 
 def stop_reason(kind, remediation: str, left: int) -> Optional[str]:
@@ -51,17 +96,18 @@ def stop_reason(kind, remediation: str, left: int) -> Optional[str]:
     return f"Stopped: {remediation}{rest}"
 
 
-def register_job(jobs: dict, job, keep: int = 10):
-    """Register ``job`` (anything with ``.id`` and ``.finished``), pruning the oldest finished jobs
-    first so the registry can't grow forever. Shared by ``start_job`` and feature-specific job
-    types (e.g. onboarding's ``OnboardJob``)."""
-    finished = [jid for jid, j in jobs.items() if getattr(j, "finished", False)]
+J = TypeVar("J", bound=Job)
+
+
+def register_job(jobs: dict, job: J, keep: int = 10) -> J:
+    """Register ``job``, pruning the oldest finished jobs first so the registry can't grow forever."""
+    finished = [jid for jid, j in jobs.items() if j.finished]
     for jid in finished[:-keep] if len(finished) > keep else []:
         jobs.pop(jid, None)
     jobs[job.id] = job
     return job
 
 
-def start_job(jobs: dict, total: int, keep: int = 10) -> BatchJob:
-    """Register a fresh job, pruning the oldest finished ones so the registry can't grow forever."""
-    return register_job(jobs, BatchJob(id=secrets.token_urlsafe(8), total=total), keep=keep)
+def start_job(jobs: dict, total: int, keep: int = 10, window: int = RECENT_WINDOW) -> BatchJob:
+    """Register a fresh ``BatchJob`` whose live feed keeps its newest ``window`` rows."""
+    return register_job(jobs, BatchJob(total=total, window=window), keep=keep)
