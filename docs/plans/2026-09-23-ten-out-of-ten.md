@@ -30,7 +30,7 @@ plan's Phase 0 F1–F3.
   120 width) · C2 `913cd87` (mypy 2.3.1 on `gamgui/core` + `gamgui/web` at `check_untyped_defs`, in
   `make lint` and a CI `lint` step; 22 initial errors, all mypy failing to follow correct code, bar
   a Builder field that 500'd on a file part the UI never posts — restructured, no `# type: ignore`;
-  the ratchet to required annotations is open) · C3 (in the commit that marks it: universal
+  the ratchet to required annotations is open) · C3 `b290fb3` (universal
   `uv pip compile --generate-hashes` locks `requirements/app.txt` + `dev.txt` from `.in` files kept
   equal to pyproject; CI installs `dev.txt` with `--require-hashes --only-binary :all:`;
   `build_app.sh` builds from `app.txt` in a fresh venv, hash-checking the one sdist's build backend
