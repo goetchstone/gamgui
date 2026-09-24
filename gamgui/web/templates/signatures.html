@@ -82,6 +82,9 @@
   var SIG_GROUPS = {{ groups | tojson }};
   var SIG_USERS = {{ options.users | tojson }};
   var SIG_LOCATIONS = {{ options.locations | tojson }};
+  // The connected admin's own address when it is an active user, else "" — the test user opens on
+  // the operator, never on whoever sorts first (a colleague whose signature Apply would overwrite).
+  var SIG_DEFAULT_USER = {{ test_user | tojson }};
   function sigPopulate() {
     var t = document.getElementById("scope_type").value;
     var sel = document.getElementById("scope_value");
@@ -90,10 +93,17 @@
     // departments and locations come from Google and may contain <, > or " — string concat would let
     // them break out of the markup / inject an attribute. createElement escapes them safely.
     sel.replaceChildren();
+    if (t === "user" && list.length) {
+      var blank = document.createElement("option");   // an explicit choice when the admin isn't known
+      blank.value = "";
+      blank.textContent = "Choose a user…";
+      sel.appendChild(blank);
+    }
     list.forEach(function (v) {
       var o = document.createElement("option");
       o.value = v;
       o.textContent = v;
+      o.selected = t === "user" && v === SIG_DEFAULT_USER;
       sel.appendChild(o);
     });
     sel.disabled = list.length === 0;

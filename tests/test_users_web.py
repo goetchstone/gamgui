@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -282,6 +283,31 @@ def test_signatures_designer_defaults_to_one_user(client, gam_calls):
     r = client.post("/signatures/apply", data={"template": "{name}", "confirmed": "1"})
     assert "apply/status" not in r.text
     assert gam_writes(gam_calls()) == []
+
+
+def _signed_in_as(client, email):
+    """Store an oauth2.txt whose ID-token claims name ``email`` as the connected admin."""
+    client.app.state.gamgui.vault.set(DOMAIN, "oauth2", json.dumps(
+        {"refresh_token": "r", "decoded_id_token": {"email": email, "hd": "example.com"}}))
+
+
+def test_signatures_test_user_is_the_connected_admin(client):
+    # "Specific user (test)" preselected whoever sorts first in the directory — a colleague (alice
+    # here) — so the page's default path, Preview then Apply, overwrote their live signature (review
+    # F18). It opens on the operator's own account when that is an active user.
+    _signed_in_as(client, "Carol@example.com")
+    r = client.get("/signatures")
+    assert 'var SIG_DEFAULT_USER = "carol@example.com";' in r.text
+
+
+@pytest.mark.parametrize("admin", ["tok", "outsider@example.com", "bob@example.com"])
+def test_signatures_test_user_is_an_explicit_choice_otherwise(client, admin):
+    # Unknown admin (an oauth2.txt without the claim), one outside the directory, or a suspended one:
+    # the "Which" list opens on a blank placeholder, and a Preview of it matches nobody.
+    if admin != "tok":
+        _signed_in_as(client, admin)
+    r = client.get("/signatures")
+    assert 'var SIG_DEFAULT_USER = "";' in r.text and "Choose a user" in r.text
 
 
 def test_signatures_apply_over_the_threshold_needs_the_count_typed(client, gam_calls, monkeypatch):

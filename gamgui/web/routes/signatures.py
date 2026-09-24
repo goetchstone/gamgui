@@ -148,6 +148,17 @@ async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
         job.finished = True
 
 
+def _test_user(st, options: dict) -> str:
+    """Who "Specific user (test)" opens on: the connected admin's own address when it is an active
+    user, else "" (a blank choice). It once opened on whoever sorted first — a colleague, whose live
+    signature the page's default path (Preview, Apply) then overwrote."""
+    try:
+        admin = st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None else ""
+    except Exception:  # noqa: BLE001 — an unreadable credential just means "no default"
+        admin = ""
+    return next((e for e in options["users"] if admin and e.lower() == admin), "")
+
+
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
@@ -159,11 +170,13 @@ async def page(request: Request) -> HTMLResponse:
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _SIGNATURES_PAGE,
-            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "locations": [], "users": []}, "groups": [], "variables": sig.VARIABLES},
+            {"connected": True, "error": _friendly(exc), "options": {"ous": [], "departments": [], "locations": [], "users": []}, "groups": [], "variables": sig.VARIABLES, "test_user": ""},
         )
+    options = sig.scope_options(users)
     return TEMPLATES.TemplateResponse(
         request, _SIGNATURES_PAGE,
-        {"connected": True, "options": sig.scope_options(users), "groups": [g.email for g in groups], "variables": sig.VARIABLES},
+        {"connected": True, "options": options, "groups": [g.email for g in groups], "variables": sig.VARIABLES,
+         "test_user": _test_user(st, options)},
     )
 
 

@@ -146,6 +146,29 @@ class SecretsVault:
     def has_credentials(self, domain: str) -> bool:
         return all(self.get(domain, name) for name in _REQUIRED)
 
+    def oauth_admin_email(self, domain: str) -> str:
+        """The connected admin's address — the ``email`` claim GAM keeps beside the token in
+        ``oauth2.txt`` (``decoded_id_token``; ``id_token`` when an older build stored the claims
+        there) — lowercased, or "" when it can't be read. Returns that one claim only, parsed in
+        memory: the token itself never leaves the vault. An undecoded JWT is not decoded here."""
+        try:
+            data = json.loads(self.get(domain, "oauth2") or "")
+        except ValueError:
+            return ""
+        if not isinstance(data, dict):
+            return ""
+        for key in ("decoded_id_token", "id_token"):
+            claims = data.get(key)
+            if isinstance(claims, str):
+                try:
+                    claims = json.loads(claims)
+                except ValueError:
+                    continue
+            email = claims.get("email") if isinstance(claims, dict) else None
+            if isinstance(email, str) and "@" in email and not any(c.isspace() for c in email):
+                return email.strip().lower()
+        return ""
+
     def clear_domain(self, domain: str) -> None:
         for name in CREDENTIAL_NAMES:
             self.delete(domain, name)

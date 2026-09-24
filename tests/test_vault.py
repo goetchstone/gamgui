@@ -93,3 +93,22 @@ def test_delete_invalidates_cache():
     v.set("a.com", "oauth2", "tok")
     v.delete("a.com", "oauth2")
     assert v.get("a.com", "oauth2") is None  # not a stale cached "tok"
+
+
+@pytest.mark.parametrize("stored, admin", [
+    # GAM7 keeps the ID token's claims next to the token (`decoded_id_token`, read from the vendored
+    # build's writer); an older file carries them as `id_token`.
+    ('{"refresh_token": "r", "decoded_id_token": {"email": "Admin@Example.com", "hd": "example.com"}}',
+     "admin@example.com"),
+    ('{"refresh_token": "r", "id_token": {"email": "admin@example.com"}}', "admin@example.com"),
+    ('{"refresh_token": "r", "decoded_id_token": "{\\"email\\": \\"admin@example.com\\"}"}', "admin@example.com"),
+    ('{"refresh_token": "r", "id_token": "eyJhbGciOi.jwt.sig"}', ""),     # an undecoded JWT: not read
+    ('{"refresh_token": "r", "decoded_id_token": {"email": "not-an-address"}}', ""),
+    ('{"refresh_token": "r"}', ""),
+    ("tok", ""),                                                          # not JSON at all
+    (None, ""),                                                           # no credential stored
+])
+def test_oauth_admin_email_reads_only_the_email_claim(empty_vault, stored, admin):
+    if stored is not None:
+        empty_vault.set("a.com", "oauth2", stored)
+    assert empty_vault.oauth_admin_email("a.com") == admin
