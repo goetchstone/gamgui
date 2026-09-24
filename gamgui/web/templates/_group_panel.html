@@ -1,0 +1,38 @@
+{% if not group %}
+{% if error %}<p class="text-sm text-amber-800">{{ error }}</p>
+{% else %}<p class="text-sm text-brand-grayink">Pick a group to see its members and add or remove people.</p>{% endif %}
+{% else %}
+{% set fld = "rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="flex flex-wrap items-baseline justify-between gap-x-3">
+  <h2 tabindex="-1" data-focus class="font-serif text-xl text-brand-black">{{ group_name or group }}</h2>
+  {% if group_name %}<span class="font-mono text-xs text-brand-grayink">{{ group }}</span>{% endif %}
+</div>
+
+<form id="member-add" class="mt-3 flex flex-wrap items-end gap-2" autocomplete="off"
+      hx-post="/groups/members" hx-target="#member-list" hx-swap="innerHTML" hx-include="#member-filter"
+      hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" id="board-group" name="group" value="{{ group }}" />
+  <div class="relative min-w-[16rem] flex-1">
+    <label for="member-email" class="block text-xs text-brand-grayink">Add a person — type a name or an email</label>
+    <input id="member-email" name="email" type="text" spellcheck="false" autocapitalize="off" placeholder="name or person@example.com"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="people-listbox"
+           class="{{ fld }} mt-1 w-full" />
+    <div id="people-results" class="absolute left-0 right-0 z-30 mt-1 hidden"></div>
+  </div>
+  <label class="block text-xs text-brand-grayink">Role
+    <select name="role" class="{{ fld }} mt-1 block">
+      {% for r in roles %}<option value="{{ r }}">{{ r | capitalize }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Add</button>
+</form>
+
+<div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+  <h3 class="eyebrow text-brand-grayink">Members</h3>
+  <input id="member-filter" type="search" name="q" aria-label="Filter members" placeholder="Filter members…"
+         class="{{ fld }} w-56 py-1.5"
+         hx-get="/groups/members/list" hx-trigger="input changed delay:300ms, search" hx-target="#member-list" hx-swap="innerHTML"
+         hx-include="#board-group" />
+</div>
+<div id="member-list" class="mt-2">{% include "_board_members.html" %}</div>
+{% endif %}

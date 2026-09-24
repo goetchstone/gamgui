@@ -13,38 +13,23 @@
   <div>
     <p class="eyebrow text-brand-blue">Membership</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Groups</h1>
-    <p class="text-brand-blueink mt-1 text-sm">Pick a group, then <strong>drag people in</strong> from the right to add — drag a member onto the people list (or hit ×) to remove.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Find a group, then add someone by name or email with a role, or remove a member.</p>
   </div>
-  {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
 
-  <div class="grid gap-5 sm:grid-cols-2">
-    <!-- group panel: drop a person here to ADD -->
+  <div class="grid items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-      <select id="group-select" name="group" aria-label="Group" hx-get="/groups/members" hx-target="#members" hx-trigger="change" hx-include="this"
-              class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
-        <option value="">Select a group…</option>
-        {% for g in groups %}<option value="{{ g.email }}">{{ g.name or g.email }} ({{ g.email }})</option>{% endfor %}
-      </select>
-      <div id="members" class="mt-4 max-h-80 min-h-[8rem] overflow-y-auto rounded-xl border-2 border-dashed border-brand-gray/40 p-3" data-drop="add">
-        <p class="text-sm text-brand-grayink">Pick a group, then drag people in.</p>
-      </div>
+      <label for="group-q" class="eyebrow text-brand-grayink">Find a group</label>
+      <input id="group-q" type="search" name="q" autocomplete="off" placeholder="Name or address…"
+             class="mt-2 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+             hx-get="/groups/search" hx-trigger="input changed delay:250ms, search" hx-target="#group-results" hx-swap="innerHTML"
+             hx-include="#group-selected" />
+      <input type="hidden" id="group-selected" name="selected" value="{{ selected }}" />
+      <div id="group-results" class="mt-2">{% include "_group_results.html" %}</div>
     </div>
 
-    <!-- people pool: source to drag from; drop a member here to REMOVE -->
-    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" data-drop="remove">
-      <input type="search" id="people-filter" aria-label="Filter people" placeholder="Filter people…"
-             class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
-      <div id="people" class="mt-3 max-h-80 overflow-auto space-y-1">
-        {% for u in users %}
-        <div class="ucard flex items-center justify-between rounded-lg border border-brand-gray/30 px-3 py-1.5 text-sm cursor-grab hover:bg-paper"
-             draggable="true" data-email="{{ u.primary_email }}" data-drag="add"
-             data-search="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}">
-          <span class="text-brand-black">{{ u.full_name }}</span>
-          <span class="text-brand-grayink text-xs">{{ u.primary_email }}</span>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
+    <section id="group-panel" aria-label="Group members" class="min-w-0 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      {% include "_group_panel.html" %}
+    </section>
   </div>
 </div>
 {% endif %}

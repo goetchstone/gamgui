@@ -591,12 +591,20 @@ video {
   position: relative;
 }
 
+.sticky {
+  position: sticky;
+}
+
 .left-0 {
   left: 0px;
 }
 
 .right-0 {
   right: 0px;
+}
+
+.top-0 {
+  top: 0px;
 }
 
 .z-30 {
@@ -788,6 +796,14 @@ video {
   max-height: calc(100vh - 19rem);
 }
 
+.max-h-\[calc\(100vh-22rem\)\] {
+  max-height: calc(100vh - 22rem);
+}
+
+.max-h-\[calc\(100vh-29rem\)\] {
+  max-height: calc(100vh - 29rem);
+}
+
 .min-h-0 {
   min-height: 0px;
 }
@@ -796,8 +812,8 @@ video {
   min-height: 26rem;
 }
 
-.min-h-\[8rem\] {
-  min-height: 8rem;
+.min-h-\[6rem\] {
+  min-height: 6rem;
 }
 
 .min-h-full {
@@ -810,6 +826,14 @@ video {
 
 .w-2\.5 {
   width: 0.625rem;
+}
+
+.w-24 {
+  width: 6rem;
+}
+
+.w-28 {
+  width: 7rem;
 }
 
 .w-32 {
@@ -826,6 +850,10 @@ video {
 
 .w-52 {
   width: 13rem;
+}
+
+.w-56 {
+  width: 14rem;
 }
 
 .w-full {
@@ -846,6 +874,10 @@ video {
 
 .min-w-\[16rem\] {
   min-width: 16rem;
+}
+
+.max-w-0 {
+  max-width: 0px;
 }
 
 .max-w-2xl {
@@ -878,10 +910,6 @@ video {
 
 .transform {
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
-}
-
-.cursor-grab {
-  cursor: grab;
 }
 
 .cursor-pointer {
@@ -934,6 +962,10 @@ video {
 
 .items-baseline {
   align-items: baseline;
+}
+
+.justify-end {
+  justify-content: flex-end;
 }
 
 .justify-between {
@@ -1147,6 +1179,10 @@ video {
 
 .border-b-2 {
   border-bottom-width: 2px;
+}
+
+.border-l-2 {
+  border-left-width: 2px;
 }
 
 .border-t {
@@ -2092,6 +2128,26 @@ video {
   opacity: 0.5;
 }
 
+.aria-selected\:border-brand-blue[aria-selected="true"] {
+  --tw-border-opacity: 1;
+  border-color: rgb(90 114 142 / var(--tw-border-opacity, 1));
+}
+
+.aria-selected\:bg-paper[aria-selected="true"] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(250 249 246 / var(--tw-bg-opacity, 1));
+}
+
+.aria-\[current\=true\]\:border-brand-blue[aria-current="true"] {
+  --tw-border-opacity: 1;
+  border-color: rgb(90 114 142 / var(--tw-border-opacity, 1));
+}
+
+.aria-\[current\=true\]\:bg-paper[aria-current="true"] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(250 249 246 / var(--tw-bg-opacity, 1));
+}
+
 @media (min-width: 640px) {
   .sm\:col-span-2 {
     grid-column: span 2 / span 2;
@@ -2113,6 +2169,10 @@ video {
 @media (min-width: 1024px) {
   .lg\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lg\:grid-cols-\[17rem_minmax\(0\2c 1fr\)\] {
+    grid-template-columns: 17rem minmax(0,1fr);
   }
 
   .lg\:grid-cols-\[22rem_minmax\(0\2c 1fr\)\] {

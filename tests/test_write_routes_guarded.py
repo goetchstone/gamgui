@@ -52,6 +52,7 @@ PREVIEWS = {
     "/calendars/delete/preview", "/calendars/event/preview",
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
+    "/groups/members/remove/preview",
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -131,6 +132,9 @@ GATED = {
     "/calendars/share/group": Case({"cal": SEC_CAL, "target": "group:allhands@example.com", "role": "reader",
                                     "label": "Team Calendar"}, "/calendars/share",
                                    edit={"target": "group:staff@example.com"}),
+    # The groups board adds with one click (a LOW write, above) but removes only from a confirm step.
+    "/groups/members/remove": Case({"group": "sales@example.com", "email": "alice@example.com"},
+                                   "/groups/members/remove/preview"),
     "/builder/sequence/run": Case({}, "/builder/sequence/preview",
                                   typed={"confirm": "confirm", "confirm_email": "carol@example.com"},
                                   setup=_ten_deletes, edit=_another_step),

@@ -1,0 +1,13 @@
+{% if people %}
+<div class="rounded-lg border border-brand-gray/40 bg-brand-white py-1 text-sm shadow-lg">
+  <ul id="people-listbox" role="listbox" aria-label="People" class="max-h-56 overflow-y-auto">
+    {% for u in people %}
+    <li role="option" id="person-{{ loop.index }}" aria-selected="false" data-val="{{ u.primary_email }}"
+        class="cursor-pointer truncate border-l-2 border-transparent px-3 py-1.5 hover:bg-paper aria-selected:border-brand-blue aria-selected:bg-paper">
+      {% if u.full_name != u.primary_email %}<span class="text-brand-black">{{ u.full_name }}</span> · {% endif %}<span class="text-brand-grayink">{{ u.primary_email }}{% if u.suspended %} · suspended{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if more %}<p class="px-3 pt-1 text-[11px] text-brand-grayink">Showing the first {{ people | length }} — keep typing to narrow.</p>{% endif %}
+</div>
+{% endif %}

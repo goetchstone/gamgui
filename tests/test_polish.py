@@ -180,7 +180,7 @@ def test_calendar_search_owner_links_to_user_detail(client):
 def test_user_groups_chip_links_to_groups_board(client):
     r = client.get("/users/groups", params={"email": "alice@example.com"})
     assert r.status_code == 200
-    assert 'href="/groups"' in r.text
+    assert 'href="/groups?group=sales%40example.com"' in r.text       # that group, open on the board
 
 
 # --- make setup must not build the venv from macOS's system python3 (3.9) ----------------

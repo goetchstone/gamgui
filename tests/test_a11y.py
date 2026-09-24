@@ -4,15 +4,18 @@
     A11Y_UPDATE_BASELINE=1 .venv/bin/python -m pytest -m a11y       # after a fix: lower the baseline
 
 Drives scripts/preview_mock.py's app (strict mock gam, fake example.com data, a temp $HOME) through
-each screen and the states that matter (user-detail and onboarding tabs, a signature preview, a
-calendar's access, a Builder result, an offboarding preview and its run), injects the vendored axe-core
-(tests/a11y/, checksum-checked) and counts the serious/critical violations per screen and rule. It
-fails on a rule or screen the baseline (tests/a11y/baseline.json) doesn't list, on a count above it —
-and on a count below it, so a fix locks its gain in. The baseline only ever shrinks, to empty (it is).
+each screen and the states that matter (user-detail and onboarding tabs, the Groups board's combobox
+and remove step, a signature preview, a calendar's access, a Builder result, an offboarding preview
+and its run), injects the vendored axe-core (tests/a11y/, checksum-checked) and counts the
+serious/critical violations per screen and rule. It fails on a rule or screen the baseline
+(tests/a11y/baseline.json) doesn't list, on a count above it — and on a count below it, so a fix locks
+its gain in. The baseline only ever shrinks, to empty (it is).
 A second Chrome test uses the keyboard alone (real key events): the ARIA tab strips, focus landing in a
 confirm panel and coming back when it closes, and a brand focus ring on every Tab stop of every screen.
-A third runs an offboarding and reads Chrome's accessibility tree: a polled panel speaks through
-base.html's one live region, which no poll replaces (plan A3).
+Another works the Groups board by keys alone — find a group, add a person with a role through its
+combobox, remove a member through its confirm step (plan A6). A last one runs an offboarding and
+reads Chrome's accessibility tree: a polled panel speaks through base.html's one live region, which no
+poll replaces (plan A3).
 
 The Chrome runs are marked a11y and deselected from the default run (pyproject addopts: they start
 Chrome); the checksum and ratchet-logic tests and the template checks (every field named, every focus
@@ -206,14 +209,24 @@ class Page:
             .find(e => {json.dumps(text)} === null || e.textContent.trim().startsWith({json.dumps(text)}));
             if (!el) throw new Error('no ' + {json.dumps(sel)} + ' ' + {json.dumps(text)}); el.{action}(); }})()""")
 
-    KEYS = {"Tab": 9, "Enter": 13, "End": 35, "Home": 36, "ArrowLeft": 37, "ArrowRight": 39}
+    KEYS = {"Tab": 9, "Enter": 13, "Escape": 27, "End": 35, "Home": 36, "ArrowLeft": 37, "ArrowUp": 38,
+            "ArrowRight": 39, "ArrowDown": 40}
 
     def key(self, name: str) -> None:
-        """Press a key the way the keyboard does (CDP input events: Tab moves focus, Enter activates)."""
-        ev = {"key": name, "code": name, "windowsVirtualKeyCode": self.KEYS[name]}
-        down = {"type": "keyDown", "text": "\r"} if name == "Enter" else {"type": "rawKeyDown"}
+        """Press a key the way the keyboard does (CDP input events: Tab moves focus, Enter activates, a
+        letter types — on a closed <select>, it picks the option it starts)."""
+        if len(name) == 1:
+            ev = {"key": name, "code": f"Key{name.upper()}", "windowsVirtualKeyCode": ord(name.upper())}
+            down = {"type": "keyDown", "text": name}
+        else:
+            ev = {"key": name, "code": name, "windowsVirtualKeyCode": self.KEYS[name]}
+            down = {"type": "keyDown", "text": "\r"} if name == "Enter" else {"type": "rawKeyDown"}
         self.c.cmd("Input.dispatchKeyEvent", **down, **ev)
         self.c.cmd("Input.dispatchKeyEvent", type="keyUp", **ev)
+
+    def type(self, text: str) -> None:
+        """Type into the focused field (one input event, as a paste or an IME commit makes)."""
+        self.c.cmd("Input.insertText", text=text)
 
     def focused(self) -> dict:
         """What has focus: its id, text, whether it is a [data-focus] panel and shows a focus indicator."""
@@ -253,11 +266,18 @@ def _screens(p: Page):
         p.settle()
         yield f"user-detail/{tab}"
 
-    p.goto("/groups", "document.querySelector('#group-select')")
-    p.c.js("(() => { const s = document.querySelector('#group-select'); s.selectedIndex = 1;"
-           " s.dispatchEvent(new Event('change', {bubbles: true})); })()")
-    p.settle("document.querySelector('#members')?.children.length")
+    p.goto("/groups", "document.querySelector('#group-results [data-group]')")
+    p.click("#group-results [data-group]")                  # the first group: its members and the add form
+    p.settle("document.querySelector('#member-list table')")
     yield "groups"
+    p.click("#member-email", action="focus")
+    p.fill("#member-email", "a")
+    p.settle("document.querySelector('#people-results [role=option]')")
+    p.key("ArrowDown")
+    yield "groups/suggestions"                              # the add field's combobox, open, one option active (A6)
+    p.click("#member-list button", "Remove")
+    p.settle("document.querySelector('#member-confirm [data-focus]')")
+    yield "groups/remove"
 
     p.goto("/signatures")
     p.c.js("(() => { const s = document.querySelector('select[name=scope_type]'); s.value = 'company';"
@@ -508,6 +528,76 @@ def test_the_keyboard_alone_works_the_tabs_and_each_confirm_panel(page):
     print("Tab stops per screen:", stops)
     assert min(stops.values()) > 11, stops                 # past the wordmark and the ten nav links
     assert not bare, "Tab stops with no visible focus indicator:\n  " + "\n  ".join(bare)
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_the_groups_board_works_from_the_keyboard(page):
+    """Plan A6 and U7, by real key events: find a group, add a person with a role through the combobox,
+    and remove a member through its confirm step — no drag, no mouse — while Chrome's accessibility tree
+    names the combobox, its options and the member table's columns, and nothing throws."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+
+    def ax(role: str) -> list[str]:
+        return [n.get("name", {}).get("value", "") for n in p.c.cmd("Accessibility.getFullAXTree")["nodes"]
+                if not n.get("ignored") and n.get("role", {}).get("value") == role]
+
+    def field(attr: str):
+        return p.c.js(f"document.getElementById('member-email').{attr}")
+
+    p.goto("/groups", "document.querySelector('#group-results [data-group]')")
+    p.click("#group-q", action="focus")
+    p.type("staff")
+    p.settle("document.querySelectorAll('#group-results [data-group]').length === 1")
+    p.key("Tab")
+    assert p.focused()["text"].startswith("Staff")
+    p.key("Enter")                                            # the group's panel takes focus at its heading
+    p.settle("document.querySelector('#member-list table')")
+    assert p.focused()["panel"] and p.focused()["text"] == "Staff"
+    assert p.c.js("document.querySelector('#group-results [aria-current=true]').dataset.group") == "staff@example.com"
+    assert {"Member", "Role"} <= set(ax("columnheader"))
+
+    p.key("Tab")
+    assert p.focused()["id"] == "member-email"
+    p.type("car")
+    p.wait("document.getElementById('member-email').getAttribute('aria-expanded') === 'true'")
+    assert any(name.startswith("Add a person") for name in ax("combobox"))
+    assert any("carol@example.com" in name for name in ax("option"))
+    assert "suggestion" in p.c.js("document.getElementById('live-status').textContent")
+    p.key("ArrowDown")
+    assert field("getAttribute('aria-activedescendant')") == "person-1"
+    p.key("Enter")                                            # takes the suggestion, doesn't submit
+    assert field("value") == "carol@example.com" and field("getAttribute('aria-expanded')") == "false"
+    p.key("Tab")
+    p.key("o")                                                # the role select: Owner
+    assert p.c.js("document.querySelector('#member-add [name=role]').value") == "owner"
+    p.key("Tab")
+    assert p.focused()["text"] == "Add"
+    p.key("Enter")
+    p.settle("document.querySelector('#member-list [data-added]')")
+    said = "Added carol@example.com to staff@example.com as owner."
+    assert p.c.js("document.getElementById('live-status').textContent") == said
+    assert p.focused()["id"] == "member-email" and field("value") == ""      # ready for the next person
+
+    p.click("#member-list button", "Remove…", action="focus")   # the first row: bob, a manager
+    p.key("Enter")
+    p.settle("document.querySelector('#member-confirm [data-focus]')")
+    assert p.focused()["panel"] and p.focused()["text"] == "Remove bob@example.com from staff@example.com?"
+    p.key("Tab")
+    p.key("Tab")
+    assert p.focused()["text"] == "Cancel"
+    p.key("Enter")                                            # Cancel: the zone empties, focus goes back
+    assert p.focused()["text"] == "Remove…" and p.c.js("document.getElementById('member-confirm').children.length") == 0
+    p.key("Enter")
+    p.settle("document.querySelector('#member-confirm [data-focus]')")
+    p.key("Tab")
+    assert p.focused()["text"] == "Remove"
+    p.key("Enter")
+    p.settle("/Removed bob@example.com/.test(document.getElementById('member-list').innerText)")
+    assert p.focused()["panel"] and p.focused()["text"] == "Removed bob@example.com from staff@example.com."
+    assert p.c.js("window.__errs") == []
 
 
 # Record what #live-status is told, and each time the #busy pill (a live region too) comes on.

@@ -7,7 +7,6 @@ double-quoted attribute lets such a value close the attribute and inject new one
 
 from __future__ import annotations
 
-import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -54,55 +53,62 @@ def _render(name: str, **ctx) -> str:
     return TEMPLATES.env.get_template(name).render(**ctx)
 
 
+def _field(parsed: _Attrs, name: str) -> dict[str, str]:
+    """The one hidden input named ``name``."""
+    matches = [a for tag, a in parsed.tags if tag == "input" and a.get("name") == name]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
 def test_board_member_email_cannot_break_out_of_its_attribute():
-    html = _render("_board_members.html", group="staff@example.com", members=[GroupMember(email=HOSTILE)])
+    html = _render("_board_members.html", group="staff@example.com", members=[GroupMember(email=HOSTILE)],
+                   total=1, all_count=1, page=1, pages=1, start=0)
 
-    card = _tag_with(_parse(html), "data-email")
-    assert card["data-email"] == HOSTILE  # the whole value survives, inside the attribute
-    assert "onerror" not in card          # ...and nothing leaked out as a new attribute
-    assert "&#34;" in html                # the quote is escaped, not emitted raw
+    field = _field(_parse(html), "email")        # the row's Remove… form posts it back
+    assert field["value"] == HOSTILE             # the whole value survives, inside the attribute
+    assert "onerror" not in field                # ...and nothing leaked out as a new attribute
+    assert "&#34;" in html                       # the quote is escaped, not emitted raw
     assert 'on"error="alert(1)"' not in html
 
 
-def test_board_group_name_cannot_break_out_of_hx_vals():
-    # `group` comes from the select, but is echoed back into the partial's hx-vals payload.
-    html = _render("_board_members.html", group=HOSTILE, members=[GroupMember(email="bob@example.com")])
+def test_board_group_name_cannot_break_out_of_its_attribute():
+    # `group` comes from the finder, and is echoed back into each row's form and the pager's URL.
+    html = _render("_board_members.html", group=HOSTILE, members=[GroupMember(email="bob@example.com")] * 60,
+                   total=60, all_count=60, page=1, pages=2, start=0)
+    parsed = _parse(html)
 
-    remove = _tag_with(_parse(html), "hx-vals")
-    assert json.loads(remove["hx-vals"])["group"] == HOSTILE  # confined to the payload, intact
-    assert "onerror" not in remove
-
-
-def test_people_pool_user_cannot_break_out_of_its_attribute():
-    html = _render(
-        "groups.html",
-        connected=True,
-        users=[GAMUser(primary_email=HOSTILE, given_name=HOSTILE, family_name="")],
-        groups=[GAMGroup(email=HOSTILE, name=HOSTILE)],
-    )
-
-    card = _tag_with(_parse(html), "data-email")
-    assert card["data-email"] == HOSTILE
-    assert "onerror" not in card
-    assert 'on"error="alert(1)"' not in html
+    assert {a["value"] for tag, a in parsed.tags if a.get("name") == "group"} == {HOSTILE}
+    pager = [a for _, a in parsed.tags if "hx-get" in a]
+    assert pager and all("onerror" not in a and '"' not in a["hx-get"] for a in pager)
+    confirm = _render("_group_remove_confirm.html", group=HOSTILE, email=HOSTILE, role="member", q="", page=1)
+    assert _field(_parse(confirm), "group")["value"] == HOSTILE
+    assert _field(_parse(confirm), "email")["value"] == HOSTILE
 
 
-def test_drag_and_drop_still_reads_the_email_from_the_card():
-    # Behaviour guard: each card says which way it moves, each zone what it accepts, and groups.js
-    # takes the email off the card's data-email.
-    pool = _render("groups.html", connected=True, users=[GAMUser(primary_email="a@example.com")], groups=[])
-    board = _render("_board_members.html", group="staff@example.com", members=[GroupMember(email="a@example.com")])
+def test_finder_group_and_suggested_person_cannot_break_out_of_their_attributes():
+    finder = _render("_group_results.html", groups=[GAMGroup(email=HOSTILE, name=HOSTILE)], selected="")
+    button = _tag_with(_parse(finder), "data-group")
+    assert button["data-group"] == HOSTILE and "onerror" not in button
+    assert '"' not in button["hx-get"]
 
-    assert 'data-drag="add"' in pool and 'data-drop="add"' in pool and 'data-drop="remove"' in pool
-    assert 'data-drag="remove"' in board
-    assert '<script src="/static/groups.js">' in pool
-    assert "card.dataset.email" in (STATIC_DIR / "groups.js").read_text(encoding="utf-8")
+    people = _render("_group_people.html", people=[GAMUser(primary_email=HOSTILE, given_name=HOSTILE, family_name="")])
+    option = _tag_with(_parse(people), "data-val")
+    assert option["data-val"] == HOSTILE and "onerror" not in option
+
+
+def test_groups_js_reads_addresses_off_data_attributes():
+    # Behaviour guard: groups.js takes the picked group and the suggested person off their data-*
+    # attributes (autoescaped by Jinja), never out of generated JS.
+    js = (STATIC_DIR / "groups.js").read_text(encoding="utf-8")
+    assert "btn.dataset.group" in js and "opt.dataset.val" in js
+    page = _render("groups.html", connected=True, groups=[], selected="", group="")
+    assert '<script src="/static/groups.js">' in page
 
 
 def test_board_renders_over_http(client):  # noqa: F811
     r = client.get("/groups/members", params={"group": "team@example.com"})
     assert r.status_code == 200
-    assert 'data-drag="remove"' in r.text
+    assert 'hx-post="/groups/members/remove/preview"' in r.text
 
 
 # --- the durable part: no template may put `| tojson` back into a double-quoted attribute ---

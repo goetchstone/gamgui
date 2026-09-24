@@ -92,7 +92,10 @@ plan's Phase 0 F1–F3.
   test that runs an offboarding and reads `Accessibility.getFullAXTree` — one live region, the same node
   throughout, "started" then the result, no poll-lit pill; axe adds the finished offboarding panel, still
   0 — the baseline was already empty, so there was nothing to shrink; with a scratch 0.9 s/call mock it
-  said started, 10–80% and the result, each once; VoiceOver and WKWebView unheard). **Open:** A6, A7 (A7
+  said started, 10–80% and the result, each once; VoiceOver and WKWebView unheard) · A6 with U7 (below: the
+  Groups board's add is a combobox and a form, no drag; a Chrome test adds and removes by keys alone and reads
+  the accessibility tree; axe walks the open combobox and the remove step, still 0 — the baseline was already
+  empty, so there was nothing to shrink). **Open:** A7 (A7
   not started: vendoring the fonts means downloading them, which waits on the operator's OK). A8
   declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
@@ -110,7 +113,16 @@ plan's Phase 0 F1–F3.
   `build_css.sh`; 17 screen states in headless Chrome match the Play CDN build in every computed
   style and, where the page text was the same, pixel for pixel, with 8 Tab stops on 5 screens too;
   the linux-x64 CLI wrote the same bytes under Docker; a scratch PyInstaller build bundled it —
-  `make app` itself and CI's run of the check are unseen). **Open:** U1, U5, U7, U8, U10.
+  `make app` itself and CI's run of the check are unseen) · U7 with A6 (the Groups board rebuilt in the
+  window: a group finder and an add-member type-ahead, each capped at 15 matches server-side from the cached
+  `st.groups()`/`st.users()` — no directory in the page, no live `print groups` per visit; members a page of
+  50 at a time with a role column, owners first, and a filter; add with a member/manager/owner select the
+  `GAMCommands` builder validates; remove only from a confirm step, `guard.enforce(..., confirm_step=True)`,
+  GATED in the tripwire; the free-text add refuses a group or member that isn't one address before
+  GAM (`oauthuser` or a comma in a `<UserTypeEntity>`); `/groups?group=` opens one, and a user's group
+  chips link there;
+  `tests/test_groups_board.py` through the strict mock; screenshots in headless Chrome at 1100×760 — WKWebView,
+  a real screen reader and a live tenant unseen). **Open:** U1, U5, U8, U10.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
@@ -417,7 +429,7 @@ tenant without per-action permission.
   `pyproject.toml`'s `filterwarnings`; the Starlette/httpx TestClient deprecation warning.
 
 ## Phase 4 — Accessibility (3 → 9)
-*Status: A9, A1, A2, A3, A4, A5 APPLIED; A6, A7 open (A8 declined, D7). The axe baseline is empty.*
+*Status: A9, A1, A2, A3, A4, A5, A6 APPLIED; A7 open (A8 declined, D7). The axe baseline is empty.*
 - **A1 Contrast (S, global):** `brand-gray` #B2B4BB text is 2.07:1 on white (195 uses incl. headings
   and helper text); `blueink/80` 3.86:1, `/70` 3.14:1; white on `brand-blue` 3.97:1. Adjust the
   Tailwind tokens in `base.html` to ≥4.5:1 for text (keep the light gray for borders only).
@@ -436,7 +448,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U4, U14 APPLIED; U9, U11, U12, U13 partly (see Status by item); the rest open.*
+*Status: U4, U7, U14 APPLIED; U9, U11, U12, U13 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows

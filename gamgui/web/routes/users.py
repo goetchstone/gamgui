@@ -168,7 +168,7 @@ async def signature_current(request: Request, email: str) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_sig_current.html", {"signature": sig})
 
 
-# --- group membership (view + add/remove; the function behind drag-and-drop) -----------
+# --- group membership, from the person's side (the Groups board is routes/groups.py) ----
 @router.get("/groups", response_class=HTMLResponse)
 async def user_groups(request: Request, email: str) -> HTMLResponse:
     conn = connector(request)

@@ -1,19 +1,60 @@
-{% if empty %}
-<p class="text-sm text-brand-grayink">Pick a group, then drag people in from the right. Drag a member out to remove.</p>
-{% else %}
 {% if error %}<div class="mb-2">{% with ok=False, message=error %}{% include "_action_result.html" %}{% endwith %}</div>{% endif %}
-<p class="text-xs text-brand-grayink mb-2">{{ members | length }} member{{ "s" if members | length != 1 }} in {{ group }}</p>
-<ul class="flex flex-wrap gap-2">
-  {% for m in members %}
-  <li class="inline-flex items-center gap-1.5 rounded-full bg-paper border border-brand-gray/40 pl-3 pr-1.5 py-1 text-sm cursor-grab"
-      draggable="true" data-email="{{ m.email }}" data-drag="remove">
-    <a href="/users/detail?email={{ m.email | urlencode }}" class="text-brand-black hover:underline">{{ m.email }}</a>
-    <button class="text-brand-grayink hover:text-red-700 text-base leading-none" aria-label="Remove {{ m.email }}"
-            hx-post="/groups/members" hx-target="#members" hx-swap="innerHTML" hx-disabled-elt="this"
-            hx-vals='{"group": {{ group | tojson }}, "email": {{ m.email | tojson }}, "op": "remove"}'>&times;</button>
-  </li>
-  {% else %}
-  <li class="text-sm text-brand-grayink">No members yet — drag someone in.</li>
+{% if message %}
+<p class="mb-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"
+   {% if focus %}tabindex="-1" data-focus{% else %}data-added data-announce="group-board"{% endif %}>{{ message }}</p>
+{% endif %}
+<div id="member-confirm"></div>
+{% if not unread %}
+{% set shown = members | length %}
+<p class="mb-1 text-xs text-brand-grayink"{% if focus %} tabindex="-1" data-focus{% endif %}>
+  {% if q %}{{ total }} of {{ all_count }} member{{ "s" if all_count != 1 }} match “{{ q }}”{% else %}{{ total }} member{{ "s" if total != 1 }}{% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + shown }}{% endif %}
+</p>
+{% if members %}
+<div class="max-h-[calc(100vh-29rem)] overflow-y-auto rounded-xl border border-brand-gray/30">
+  <table class="w-full text-sm">
+    <caption class="sr-only">Members of {{ group }}</caption>
+    <thead class="sticky top-0 bg-paper text-left text-xs text-brand-grayink">
+      <tr><th scope="col" class="px-3 py-1.5 font-medium">Member</th><th scope="col" class="px-3 py-1.5 font-medium">Role</th><th scope="col" class="px-3 py-1.5"><span class="sr-only">Remove</span></th></tr>
+    </thead>
+    <tbody class="divide-y divide-brand-gray/20">
+      {% for m in members %}
+      <tr>
+        <td class="max-w-0 truncate px-3 py-1.5">
+          {% if m.member_type == "GROUP" %}<a href="/groups?group={{ m.email | urlencode }}" class="text-brand-black hover:underline">{{ m.email }}</a> <span class="text-xs text-brand-grayink">(group)</span>
+          {% elif m.member_type == "USER" %}<a href="/users/detail?email={{ m.email | urlencode }}" class="text-brand-black hover:underline">{{ m.email }}</a>
+          {% else %}<span class="text-brand-black">{{ m.email or m.member_type | lower }}</span>{% endif %}
+        </td>
+        <td class="w-28 px-3 py-1.5 text-brand-blueink">{{ m.role | capitalize }}</td>
+        <td class="w-24 px-3 py-1 text-right">
+          {% if m.email %}
+          <form hx-post="/groups/members/remove/preview" hx-target="#member-confirm" hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="group" value="{{ group }}" />
+            <input type="hidden" name="email" value="{{ m.email }}" />
+            <input type="hidden" name="role" value="{{ m.role }}" />
+            <input type="hidden" name="q" value="{{ q }}" />
+            <input type="hidden" name="page" value="{{ page }}" />
+            <button type="submit" aria-label="Remove {{ m.email }}…" class="rounded-md px-2 py-1 text-xs font-medium text-brand-blueink hover:bg-red-50 hover:text-red-800">Remove…</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if pages > 1 %}
+<nav class="mt-2 flex items-center justify-end gap-2 text-xs" aria-label="Member pages">
+  <span class="text-brand-grayink">Page {{ page }} of {{ pages }}</span>
+  {% for label, to in (("Previous", page - 1), ("Next", page + 1)) %}
+  <button type="button" {% if to < 1 or to > pages %}disabled{% endif %}
+          class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
+          hx-get="/groups/members/list?group={{ group | urlencode }}&q={{ q | urlencode }}&page={{ to }}" hx-target="#member-list" hx-swap="innerHTML">{{ label }}</button>
   {% endfor %}
-</ul>
+</nav>
+{% endif %}
+{% elif q %}
+<p class="text-sm text-brand-grayink">No member matches “{{ q }}”.</p>
+{% else %}
+<p class="text-sm text-brand-grayink">No members yet — add someone above.</p>
+{% endif %}
 {% endif %}

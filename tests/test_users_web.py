@@ -184,36 +184,6 @@ def test_reports_requires_connection(unconnected_client):
     assert "Connect a domain first" in r.text
 
 
-def test_groups_board_renders(client):
-    r = client.get("/groups")
-    assert r.status_code == 200
-    assert "alice@example.com" in r.text       # draggable person card
-    assert "sales@example.com" in r.text        # group option
-
-
-def test_groups_board_members_view_and_mutate(client, gam_calls):
-    r = client.get("/groups/members", params={"group": "sales@example.com"})
-    assert r.status_code == 200
-    assert "alice@example.com" in r.text        # member from the group-members fixture
-    add = client.post("/groups/members", data={"group": "sales@example.com", "email": "carol@example.com", "op": "add"})
-    assert_ok_partial(add)
-    rem = client.post("/groups/members", data={"group": "sales@example.com", "email": "alice@example.com", "op": "remove"})
-    assert_ok_partial(rem)
-    assert gam_writes(gam_calls()) == [
-        ["update", "group", "sales@example.com", "add", "member", "carol@example.com"],
-        ["update", "group", "sales@example.com", "remove", "alice@example.com"],
-    ]
-    assert _audited(client, 2) == [("add_group_member", "carol@example.com", True),
-                                   ("remove_group_member", "alice@example.com", True)]
-
-
-def test_groups_board_mutate_failure_shows_the_error(client):
-    # A typo'd group 404s in GAM; the board must say so rather than re-render as if it worked.
-    r = client.post("/groups/members", data={"group": "missing@example.com", "email": "carol@example.com", "op": "add"})
-    assert "border-amber-300 bg-amber-50" in r.text and "not found" in r.text
-    assert _audited(client, 1) == [("add_group_member", "carol@example.com", False)]
-
-
 def test_usage_report_renders(client):
     r = client.get("/reports/usage")
     assert r.status_code == 200
@@ -1985,9 +1955,9 @@ WRITE_FAILURES += [
     ("/calendars/delete", {"cal": SEC_CAL, "confirm": "DELETE"}, "delete_calendar", "Couldn't delete the calendar."),
     ("/calendars/event/delete", {"cal": SEC_CAL, "event_id": "evt-1", "confirmed": "1"}, "delete_event",
      "Couldn't delete the event."),
-    ("/groups/members", {"group": "sales@example.com", "email": "carol@example.com", "op": "add"},
+    ("/groups/members", {"group": "sales@example.com", "email": "carol@example.com", "role": "member"},
      "add_group_member", "Couldn't add carol@example.com to sales@example.com."),
-    ("/groups/members", {"group": "sales@example.com", "email": _ALICE, "op": "remove"},
+    ("/groups/members/remove", {"group": "sales@example.com", "email": _ALICE, "confirmed": "1"},
      "remove_group_member", f"Couldn't remove {_ALICE} from sales@example.com."),
 ]
 

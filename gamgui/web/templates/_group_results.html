@@ -1,0 +1,19 @@
+{% if find_error %}
+<p class="text-xs text-amber-800">{{ find_error }}</p>
+{% elif groups %}
+<ul class="max-h-[calc(100vh-22rem)] min-h-[6rem] divide-y divide-brand-gray/20 overflow-y-auto text-sm" aria-label="Groups">
+  {% for g in groups %}
+  <li>
+    <button type="button" data-group="{{ g.email }}"{% if selected and selected | lower == g.email | lower %} aria-current="true"{% endif %}
+            class="block w-full rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left hover:bg-paper aria-[current=true]:border-brand-blue aria-[current=true]:bg-paper"
+            hx-get="/groups/members?group={{ g.email | urlencode }}" hx-target="#group-panel" hx-swap="innerHTML">
+      <span class="block truncate text-brand-black">{{ g.name or g.email }}</span>
+      {% if g.name %}<span class="block truncate font-mono text-[11px] text-brand-grayink">{{ g.email }}</span>{% endif %}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% if more %}<p class="mt-1 text-[11px] text-brand-grayink">Showing the first {{ groups | length }} — keep typing to narrow.</p>{% endif %}
+{% else %}
+<p class="text-sm text-brand-grayink">{% if find_q %}No group matches “{{ find_q }}”.{% else %}No groups yet.{% endif %}</p>
+{% endif %}

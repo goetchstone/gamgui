@@ -40,7 +40,7 @@ Actively developed and used against live Google Workspace tenants. Working today
   person's own calendar), **sign out everywhere**, and a guarded **suspend**.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
-- **Groups** — membership management, including a drag-and-drop board.
+- **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.
 - **Calendars** — find any shared calendar by name. The first time, click **Build index** on the
   Calendars screen: a one-time background scan of every user's calendars (minutes on a large tenant,
   with live progress). After that, name search is instant and served entirely from the local index —
