@@ -1417,6 +1417,14 @@ def test_offboard_stopped_panel_says_what_did_not_run(client):
     assert "Don't delete the account" in text and "now has a calendar reminder" not in text
 
 
+def test_user_page_delete_refuses_an_alias(client, gam_calls):
+    # The delete zone posts the page's primary address; a hand-made POST with an alias (typed back
+    # exactly) would still delete the owning account in GAM — refused before any write.
+    r = client.post("/users/delete/apply", data={"email": "a.anders@example.com", "confirmed": "1",
+                                                 "confirm_email": "a.anders@example.com"})
+    assert "is an alias of alice@example.com" in r.text and gam_writes(gam_calls()) == []
+
+
 def test_offboard_interrupted_panel_is_not_complete(client):
     # A run cut off by quitting once read "complete" and promised the manager a reminder.
     import html

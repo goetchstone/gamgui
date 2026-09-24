@@ -587,6 +587,17 @@ def test_builder_delete_needs_the_email_typed(client, gam_calls):
     assert gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
 
 
+def test_builder_refuses_to_delete_by_an_alias(client, gam_calls):
+    # GAM's `delete user` resolves an alias to the account that owns it: typing an alias (and typing it
+    # back) would delete alice — an account the preview never named. Refused at the preview, no Run.
+    shown, token = _builder_preview(client, cid="build.delete_user", email="a.anders@example.com")
+    assert "is an alias of alice@example.com" in shown and "/builder/run" not in shown and not token
+    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "A.Anders@example.com"})
+    seq, _ = _seq_preview(client)
+    assert "is an alias of alice@example.com" in seq and "/builder/sequence/run" not in seq
+    assert gam_writes(gam_calls()) == []
+
+
 def test_a_data_transfer_is_confirmed_like_a_destructive_change(client, gam_calls):
     # Ownership handed over can't be taken back by a second transfer (the offboarding runbook warns so),
     # and the README promises a data transfer runs behind a confirmation: a red Confirm & run, and

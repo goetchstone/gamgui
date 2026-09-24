@@ -93,6 +93,18 @@ def _gam_str(argv) -> str:
     return "gam " + " ".join(argv)
 
 
+async def _alias_deletes(st, decision) -> list:
+    """An account delete typed as an alias would delete the account that owns it — refuse it at the
+    preview. Fails closed: a directory that can't be read can't show the address isn't an alias."""
+    if not decision.typed_emails:
+        return []
+    try:
+        directory = await st.users()
+    except Exception as exc:  # noqa: BLE001 - the message says why the delete can't be checked
+        return [f"Couldn't check the address against the directory — {_friendly(exc)}"]
+    return guard_mod.alias_deletes(directory, decision.typed_emails)
+
+
 async def _pending_transfers(conn, decision) -> list:
     """Unfinished data transfers from each account the change deletes — deleting one now loses what
     hasn't moved yet (the Users delete zone warns the same way)."""
@@ -125,11 +137,13 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     for a mutation, holding what it shows under the token its Run button posts."""
     st = _st(request)
     decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
-    token = "" if cmd.risk == RiskLevel.READ_ONLY else st.previews.hold(_FLOW, _form_key(cmd, slots),
-                                                                         (list(argv), target))
+    blocked = await _alias_deletes(st, decision)
+    token = "" if cmd.risk == RiskLevel.READ_ONLY or blocked else st.previews.hold(
+        _FLOW, _form_key(cmd, slots), (list(argv), target))
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
         "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
-        "pending_transfers": await _pending_transfers(st.connector, decision), "error": error, "token": token,
+        "pending_transfers": await _pending_transfers(st.connector, decision),
+        "error": " ".join(blocked) or error, "blocked": bool(blocked), "token": token,
     })
 
 
@@ -408,10 +422,11 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
     """The sequence's confirm step, holding the steps it shows under the token its Run form posts."""
     st = _st(request)
     decision = guard_mod.evaluate(_seq_previews(seq))
-    token = st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq])
+    blocked = await _alias_deletes(st, decision)
+    token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq])
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
-        "sequence": seq, "decision": decision, "error": error, "token": token,
-        "pending_transfers": await _pending_transfers(st.connector, decision)})
+        "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
+        "token": token, "pending_transfers": await _pending_transfers(st.connector, decision)})
 
 
 @router.post("/sequence/preview", response_class=HTMLResponse)

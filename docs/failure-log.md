@@ -20,6 +20,41 @@ broke"** — see [CLAUDE.md](../CLAUDE.md) "The recurring failure mode". A fix
 whose only proof is a greener mock is not proven; say so in the Prevention field.
 
 ---
+
+## 2026-09-24 — Preview and cache expiry stopped counting while the Mac slept
+
+- **Symptom:** a re-verification measured `time.monotonic()` on the build Mac missing ~264 hours of
+  system sleep. Every expiry used it: a 15-minute preview left open over a closed lid stayed runnable
+  when the lid opened (signatures runs the people it held at preview time), the 5-minute directory
+  cache that offboarding's address checks read stayed "fresh", and the 15-minute temp-password sheet
+  outlived its window.
+- **Cause:** on macOS `time.monotonic()` is `mach_absolute_time()`, which pauses during sleep.
+- **Why not caught:** expiry tests monkeypatch the TTL, never the clock's behaviour across sleep.
+- **Fix:** `gamgui/core/clock.py` `now()` — `CLOCK_MONOTONIC` on macOS (counts sleep), `CLOCK_BOOTTIME`
+  on Linux — used by `web/previews.py`, `core/usercache.py` and the onboarding credentials TTL. Test
+  `tests/test_previews.py::test_time_asleep_counts_toward_expiry` (fails on the old store).
+- **Prevention:** `clock.py`'s docstring: TTLs use `clock.now()`; `time.monotonic()` only for timeouts
+  of work in progress.
+
+## 2026-09-24 — Deleting an account by an alias deleted the account that owns it
+
+- **Symptom:** a re-verification typed an alias (`a.anders@example.com`, Alice's) into the Builder's
+  "Delete account" and typed it back at the confirm step; the run reported done with argv
+  `delete user a.anders@example.com`. The mock accepts it; real GAM resolves the alias and deletes
+  Alice — an account the preview never named.
+- **Cause:** the typed-email rule (`guard.enforce`) compares what was typed with the argv's address,
+  which is only as good as that address; GAM's `delete user <UserItem>` accepts an alias
+  (GamUpdate.txt: `no_action_if_alias` exists to stop exactly this).
+- **Why not caught:** the mock treats every address alike; no test deleted by an alias.
+- **Fix:** `guard.alias_deletes(directory, addresses)` names each address that is someone's alias; the
+  Builder single and sequence previews refuse it (no Run, no token) and `/users/delete/apply` refuses
+  it before any write. Fails closed when the directory can't be read. Tests
+  `test_builder_refuses_to_delete_by_an_alias`, `test_user_page_delete_refuses_an_alias` (both fail on
+  the old code). `noactionifalias` was not added: its exit code when it takes no action is unknown,
+  and a 0 would turn a refusal into a misleading "deleted".
+- **Prevention:** a destructive write addressed by a typed value must resolve that value to the
+  entity it actually hits before the confirm step. Unproven live.
+
 ## 2026-09-24 — Offboarding: a cut-off run could read "complete"; a failed delegate skipped the calendar sweep; the connected admin could be offboarded
 
 - **Symptom:** a re-verification of the offboarding fixes found three gaps. (1) A run cancelled

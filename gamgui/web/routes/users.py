@@ -536,6 +536,11 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
     delete = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=email, summary="Delete account",
                            risk=RiskLevel.DESTRUCTIVE, argv=GAMCommands.delete_user(email))
     refusal = guard.enforce([delete], await request.form())
+    if not refusal:
+        try:
+            refusal = " ".join(guard.alias_deletes(await request.app.state.gamgui.users(), [email]))
+        except Exception as exc:  # noqa: BLE001 - fail closed: an unreadable directory can't rule out an alias
+            refusal = f"Couldn't check the address against the directory — {_friendly(exc)}"
     if refusal:
         return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal})
     result = await conn.delete_user(email)
