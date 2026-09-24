@@ -100,15 +100,26 @@ READS = {
     "print_groups_member": [C.print_groups_member("alice@example.com")],
 }
 
-# Builders nothing in the app calls (plan item Q11 deletes them), and the `todrive` argv suffix.
-NOT_CALLED = {"update_user", "unsubscribe_calendar", "delete_forwarding_address",
-              "create_project", "oauth_create", "create_svcacct", "todrive_args"}
+# Not a command: the `todrive` argv suffix a Builder read's export appends (export_to_sheet).
+NOT_A_COMMAND = {"todrive_args"}
 
 
 def test_every_builder_is_classified():
     # A new builder must land in WRITES (and get a strict mock handler) or READS before it ships.
     builders = {name for name, v in vars(C).items() if isinstance(v, staticmethod)}
-    assert builders - set(WRITES) - set(READS) - NOT_CALLED == set()
+    assert builders - set(WRITES) - set(READS) - NOT_A_COMMAND == set()
+
+
+def test_every_builder_has_a_caller_in_the_app():
+    # A builder nothing calls is argv no flow reviews or runs, yet the contract and the mock vouch for
+    # it; six once sat here (plan Q11), one in two grammar forms at once. Build it when a flow needs it.
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "gamgui"
+    src = "\n".join(p.read_text() for p in root.rglob("*.py") if p.name != "commands.py")
+    builders = {name for name, v in vars(C).items() if isinstance(v, staticmethod)}
+    assert {b for b in builders if not re.search(rf"\bGAMCommands\.{b}\b", src)} == set()
 
 
 @pytest.mark.parametrize("argv", [a for cases in {**WRITES, **READS}.values() for a in cases],

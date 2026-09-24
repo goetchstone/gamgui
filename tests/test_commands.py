@@ -98,13 +98,11 @@ def test_calendar_event_commands():
     assert "doit" not in GAMCommands.delete_event("room@x", "evt1", doit=False)
 
 
-def test_calendar_delete_vs_unsubscribe_commands():
+def test_calendar_delete_is_remove_calendars_not_delete_calendars():
     # GAM footgun, verified against GAM7 source: `remove calendars` permanently DELETES the secondary
     # calendar (Calendars.delete); `delete calendars` only UNSUBSCRIBES the user (CalendarList.delete).
     assert GAMCommands.remove_calendar("owner@e.com", "c_x@group.calendar.google.com") == \
         ["user", "owner@e.com", "remove", "calendars", "c_x@group.calendar.google.com"]
-    assert GAMCommands.unsubscribe_calendar("u@e.com", "c_x@group.calendar.google.com") == \
-        ["user", "u@e.com", "delete", "calendars", "c_x@group.calendar.google.com"]
     # No `doit` token — GAM7 rejects extraneous args on `remove calendars`.
     assert "doit" not in GAMCommands.remove_calendar("o@e.com", "c_x@group.calendar.google.com")
 

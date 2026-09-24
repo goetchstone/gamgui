@@ -57,9 +57,10 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   deliberately uses `serviceaccount` (see the `check_svcacct` builder); the grammar contract checks
   both spellings against their own `gam …` lines.
 - **`remove calendars` ≠ `delete calendars`** (footgun, verified against GAM7 source): `remove_calendar`
-  PERMANENTLY deletes a secondary calendar (impersonating an owner); `unsubscribe_calendar`
-  (`delete calendars`) only drops it from one user's list. No `doit` on `remove calendars` — GAM7
-  rejects extra args. See `test_calendar_delete_vs_unsubscribe_commands`.
+  PERMANENTLY deletes a secondary calendar (impersonating an owner); `delete calendars` only drops
+  it from one user's list (no builder: the app never unsubscribes anyone, and the mock refuses it).
+  No `doit` on `remove calendars` — GAM7 rejects extra args. See
+  `test_calendar_delete_is_remove_calendars_not_delete_calendars`.
 - **`create datatransfer` service list is ONE element** (`"drive,calendar"`) — splitting it caused
   Google 409 "transfer already in progress"; pinned by `test_lifecycle_commands`.
 - **An operator-chosen enum is validated in the builder, not the route.** The calendar role was
@@ -112,7 +113,12 @@ status. Read-only builders are safe to exercise via `scripts/acceptance.py`.
   operator value its own element), add an arg-shape test in `tests/test_commands.py`, list any
   argument it validates in `ENUM_ARGS` (`tests/test_command_contract.py` — the grammar contract picks
   the builder up by itself), and classify it in `tests/test_mock_gam.py` (a write also needs a strict
-  `mock_gam.sh` handler). To surface it in the UI, wire a
+  `mock_gam.sh` handler). Call it from the app in the same change:
+  `test_mock_gam.py::test_every_builder_has_a_caller_in_the_app` fails on a builder nothing in
+  `gamgui/` references (six sat unused until plan Q11 removed them — `update_user`,
+  `unsubscribe_calendar`, `delete_forwarding_address`, and the setup trio `create_project`,
+  `oauth_create`, `create_svcacct`, which the setup screen never used: it shows those commands as
+  text). To surface it in the UI, wire a
   curated entry in `core/catalog/catalog.py` (`build.*` → `lambda`) — see the `add-builder-command`
   skill; the connector must route any mutation through `_run_write` (invariant #2). Verify a mutation
   live on a throwaway before relying on it.

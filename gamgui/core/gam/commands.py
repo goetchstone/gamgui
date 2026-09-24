@@ -59,21 +59,6 @@ class GAMCommands:
         return ["version"]
 
     @staticmethod
-    def create_project(admin: str, project_id: Optional[str] = None) -> List[str]:
-        argv = ["create", "project", admin]
-        if project_id:
-            argv += ["project", project_id]
-        return argv
-
-    @staticmethod
-    def oauth_create(admin: str) -> List[str]:
-        return ["oauth", "create", admin]
-
-    @staticmethod
-    def create_svcacct(admin: str) -> List[str]:
-        return ["create", "svcacct", admin]
-
-    @staticmethod
     def check_svcacct(admin: str) -> List[str]:
         # Verifies domain-wide delegation scopes. NOTE: the noun is `serviceaccount`
         # here (GAM uses `create svcacct` but `check serviceaccount` — not symmetric).
@@ -145,14 +130,6 @@ class GAMCommands:
         # `create|add user` rule). notifypassword carries the same temp password; it's redacted before audit.
         if notify:
             argv += ["notify", notify, "notifypassword", password]
-        return argv
-
-    @staticmethod
-    def update_user(email: str, **fields: str) -> List[str]:
-        """Generic user update. ``fields`` are GAM attribute/value pairs, e.g. ``firstname='Jo'``."""
-        argv = ["update", "user", email]
-        for key, value in fields.items():
-            argv += [key, str(value)]
         return argv
 
     @staticmethod
@@ -237,11 +214,6 @@ class GAMCommands:
         # GAM footgun: `remove calendars` deletes the calendar for everyone; `delete calendars`
         # would only unsubscribe this user (CalendarList.delete). Must impersonate an owner.
         return ["user", owner, "remove", "calendars", calendar_id]
-
-    @staticmethod
-    def unsubscribe_calendar(email: str, calendar_id: str) -> List[str]:
-        # Just remove the calendar from one user's list (CalendarList.delete) — the calendar lives on.
-        return ["user", email, "delete", "calendars", calendar_id]
 
     _EVENT_FIELDS = "id,summary,start,end,recurrence,recurringeventid,organizer,creator,status"
 
@@ -427,10 +399,6 @@ class GAMCommands:
     @staticmethod
     def add_forwarding_address(email: str, address: str) -> List[str]:
         return ["user", email, "add", "forwardingaddress", address]
-
-    @staticmethod
-    def delete_forwarding_address(email: str, address: str) -> List[str]:
-        return ["user", email, "delete", "forwardingaddress", address]
 
     @staticmethod
     def print_forwarding_addresses(email: str) -> List[str]:
