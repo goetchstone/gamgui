@@ -72,7 +72,7 @@ plan's Phase 0 F1–F3.
   `emerald-600` text and `amber-600` buttons one shade darker; `tests/test_contrast.py` holds every text
   colour in `app.css` to 4.5:1 on paper and white, and every fill under a white label; axe's
   `color-contrast` 477 → 0, the baseline 487 → 10 nodes; before/after screenshots in headless Chrome —
-  WKWebView unseen) · A2, A4, A5 (user detail's and onboarding's strips are ARIA tabs — tablist/tab/
+  WKWebView unseen) · A2, A4, A5 `d3d7d6e` (user detail's and onboarding's strips are ARIA tabs — tablist/tab/
   tabpanel, `aria-selected`, roving tabindex, Left/Right/Home/End in `app.js`; every field named — visible
   labels where the layout has room, `aria-label` on search boxes and pickers, Builder slots a
   `<label for>` with `aria-describedby`; a confirm/preview panel or error a click or submit swaps in
