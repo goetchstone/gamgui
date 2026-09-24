@@ -28,6 +28,7 @@ dev = [
     "pytest-cov>=5",
     "httpx>=0.27",
     "ruff==0.16.8",         # exact: a ruff minor release can stabilize new rules and fail unchanged code
+    "mypy==2.3.1",          # exact, for the same reason: a release can infer more and fail unchanged code
 ]
 
 [project.scripts]
@@ -64,6 +65,22 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # A one-shot CLI that blocks its own event loop while Chrome starts, before anything else runs on it.
 "scripts/readme_screenshots.py" = ["ASYNC"]
+
+[tool.mypy]
+# The app's two layers; app.py is the pywebview shell (an optional extra CI's lint job doesn't install).
+# Non-strict to start: unannotated function bodies are checked too, annotations aren't yet required.
+files = ["gamgui/core", "gamgui/web"]
+python_version = "3.10"
+platform = "darwin"      # what the app runs on, also when CI checks from Linux
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# Deliberately narrow: abapit is an optional connector backend, imported lazily and not installed.
+# Every other dependency ships its own types, so a new untyped one fails here rather than going unchecked.
+module = ["abapit", "abapit.*"]
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["gamgui"]

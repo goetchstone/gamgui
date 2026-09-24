@@ -17,7 +17,7 @@ import os
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .paths import app_data_dir
 
@@ -44,7 +44,7 @@ def default_store_path() -> Path:
 # A role is stored as {"steps": [...], "signature": "<saved template name>", "org_unit": "/Path",
 # "groups": ["team@dom"], "calendars": ["cal-id"]}; an older file's bare list of steps (or a dict
 # without the newer keys) is migrated on load (see RunbookStore._load / _as_role).
-_DEFAULT = {
+_DEFAULT: Dict[str, Any] = {
     "roles": {
         "Salesperson": {
             "steps": [

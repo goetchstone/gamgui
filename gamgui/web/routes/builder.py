@@ -71,7 +71,7 @@ async def _assemble(request: Request, cmd):
     form = await request.form()
     slots, target = {}, ""
     for slot in cmd.slots:
-        val = (form.get(slot.key) or "").strip()
+        val = str(form.get(slot.key) or "").strip()
         if slot.required and not val:
             return {}, [], "", f"{slot.label} is required."
         slots[slot.key] = val
@@ -340,8 +340,8 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     if cmd.risk == RiskLevel.READ_ONLY:
         form = await request.form()
         if form.get("td_export"):  # a new Google Sheet instead of the in-app table — a write, audited
-            owner = (form.get("td_user") or "").strip()
-            res = await conn.export_to_sheet(cmd, argv, owner, (form.get("td_title") or "").strip())
+            owner = str(form.get("td_user") or "").strip()
+            res = await conn.export_to_sheet(cmd, argv, owner, str(form.get("td_title") or "").strip())
             if not res.ok:
                 return _err(request, "The export to a Google Sheet failed.", res.detail)
             return TEMPLATES.TemplateResponse(request, "_export_result.html",

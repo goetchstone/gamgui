@@ -27,7 +27,10 @@ plan's Phase 0 F1–F3.
   that validates argv against the grammar).
 - **Phase 3** — applied: C1 `9f72c3b` (ruff lint + CI `lint` job + `make lint`; the formatter is
   not adopted — `ruff format` would rewrite ~7,000 lines — and E501 is off: 81 lines run past the
-  120 width). **Open:** C2–C7. (C4: Dependabot's `github-actions` ecosystem was already configured;
+  120 width) · C2 (mypy 2.3.1 on `gamgui/core` + `gamgui/web` at `check_untyped_defs`, in `make lint`
+  and a CI `lint` step, in the commit that marks it; 22 initial errors, all mypy failing to follow
+  correct code, bar a Builder field that 500'd on a file part the UI never posts — restructured, no
+  `# type: ignore`; the ratchet to required annotations is open). **Open:** C3–C7. (C4: Dependabot's `github-actions` ecosystem was already configured;
   the actions are still pinned by tag, not SHA.)
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9

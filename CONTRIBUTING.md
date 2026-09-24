@@ -104,6 +104,14 @@ that catch bugs (pyflakes, pycodestyle errors, bugbear, blocking calls in `async
 Ruff's formatter is not adopted — it would rewrite most files — so match the surrounding layout by
 hand. A `# noqa: CODE` carries its reason after it.
 
+It then runs [mypy](https://mypy.readthedocs.io/) over `gamgui/core` and `gamgui/web` (settings in
+`pyproject.toml`'s `[tool.mypy]`). The bar is non-strict for now: the bodies of unannotated
+functions are checked, but annotations aren't required yet. When mypy can't follow code that is
+correct, restructure it so the type is visible (bind the value to a local before narrowing it, as a
+lambda doesn't keep an `is None` check) before reaching for a narrow `# type: ignore[code]` with its
+reason after it — `warn_unused_ignores` fails one that stops being needed. Only the optional
+`abapit` backend is exempt from missing stubs; a new dependency without types fails the check.
+
 CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14. On top
 of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
 `tests/test_command_contract.py` against the real command reference, plus a non-blocking

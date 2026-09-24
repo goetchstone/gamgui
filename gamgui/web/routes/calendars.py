@@ -224,7 +224,7 @@ def _index_ctx(request: Request) -> dict:
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
     connected = _conn(request) is not None
-    ctx = {"connected": connected}
+    ctx: dict = {"connected": connected}
     if connected:
         ctx["index"] = _index_ctx(request)
     return TEMPLATES.TemplateResponse(request, "calendars.html", ctx)

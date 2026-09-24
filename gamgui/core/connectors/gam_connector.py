@@ -576,7 +576,7 @@ class GAMConnector(Connector):
             # Every error line must be tolerable: a sweep's stderr holds one line per entity, and one
             # real failure among the benign notices is a failure (GAMError.kinds, not just .kind).
             kinds = getattr(exc, "kinds", None)
-            tolerated = bool(tolerate_kinds) and bool(kinds) and kinds <= set(tolerate_kinds)
+            tolerated = bool(tolerate_kinds and kinds and kinds <= set(tolerate_kinds))
             error = redact_secrets(str(exc), secrets)
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,

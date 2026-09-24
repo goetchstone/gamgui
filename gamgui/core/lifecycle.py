@@ -12,12 +12,15 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .audit import redact_argv
 from .gam.commands import GAMCommands
 from .gam.models import GAMUser
 from .gam.runner import DOMAIN_WIDE_TIMEOUT
+
+if TYPE_CHECKING:
+    from .connectors.gam_connector import GAMConnector
 
 DEFAULT_SUBJECT = "{employee} is no longer with the company"
 DEFAULT_MESSAGE = (
@@ -168,7 +171,7 @@ class OffboardStep:
     key: str
     label: str
     summary: str  # human description shown in the preview
-    action: Callable[[object], Awaitable]  # conn -> awaitable returning a ChangeResult-like object
+    action: Callable[[GAMConnector], Awaitable]  # conn -> awaitable returning a ChangeResult-like object
     # The exact argv(s) ``action`` runs, in order, for the preview. Built from the same GAMCommands
     # builders and values as the connector call (test_offboard_preview_commands_are_what_runs).
     commands: List[List[str]] = field(default_factory=list)

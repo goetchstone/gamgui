@@ -193,7 +193,9 @@ class CalendarACL:
 
     @classmethod
     def from_json(cls, d: Dict[str, Any]) -> "CalendarACL":
-        scope = d.get("scope") if isinstance(d.get("scope"), dict) else {}
+        scope = d.get("scope")
+        if not isinstance(scope, dict):
+            scope = {}
         stype = str(scope.get("type") or "").strip()
         svalue = str(scope.get("value") or "").strip()
         if not stype:

@@ -220,7 +220,7 @@ git clone <repo-url> && cd gamgui
 make setup     # create .venv, install dev + native-window deps
 make gam       # vendor the pinned GAM7 binary into gamgui/resources/gam7 (needs network)
 make test      # offline test suite — uses a mock gam, no binary/credentials required
-make lint      # ruff, with the bug-catching rule set CI enforces
+make lint      # ruff (the bug-catching rule set) and mypy (core + web), as CI enforces
 make run       # launch the app (native window; without pywebview, a browser URL — dev only)
 ```
 
@@ -330,7 +330,7 @@ build you intend to run against a real domain.
 ### Tests & CI
 
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across
-Python 3.10, 3.12, and 3.14, and runs `ruff check` once — see
+Python 3.10, 3.12, and 3.14, and runs `ruff check` and `mypy` once — see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 **Static analysis.** CodeQL runs on every push and PR to `main`, plus weekly, over both the Python

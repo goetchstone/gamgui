@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .paths import app_data_dir
-from typing import Any, BinaryIO, Dict, Iterator, List, Optional, Sequence
+from typing import Any, BinaryIO, Dict, Iterator, List, Optional, Sequence, overload
 
 # gam argument keys whose following value must be masked in the log.
 _SENSITIVE_KEYS = {"password", "notifypassword", "signature", "recoveryemail", "recoveryphone", "alternateemail"}
@@ -34,6 +34,10 @@ RETENTION_GENERATIONS = 10
 _READ_CHUNK = 64 * 1024
 
 
+@overload
+def redact_argv(argv: None) -> None: ...
+@overload
+def redact_argv(argv: Sequence[str]) -> List[str]: ...
 def redact_argv(argv: Optional[Sequence[str]]) -> Optional[List[str]]:
     """Return a copy of ``argv`` with values after sensitive keys masked."""
     if argv is None:
@@ -234,8 +238,8 @@ def _open_generations(path: Path) -> List[BinaryIO]:
             inodes.add(key)
             handles.append(fh)
     except BaseException:
-        for fh in handles:
-            fh.close()
+        for opened in handles:
+            opened.close()
         raise
     return handles
 

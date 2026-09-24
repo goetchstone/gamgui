@@ -57,22 +57,22 @@ class AppState:
 
     async def users(self, force: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports)."""
-        if self.connector is None:
+        conn = self.connector
+        if conn is None:
             return []
         from ..core.gam.commands import CACHE_FIELDS
 
-        return await self.user_cache.get(
-            lambda: self.connector.list_users(fields=CACHE_FIELDS), force=force
-        )
+        return await self.user_cache.get(lambda: conn.list_users(fields=CACHE_FIELDS), force=force)
 
     def invalidate_users(self) -> None:
         self.user_cache.invalidate()
 
     async def groups(self, force: bool = False) -> list:
         """The cached group list (one ``gam print groups``), shared by the onboarding group picker."""
-        if self.connector is None:
+        conn = self.connector
+        if conn is None:
             return []
-        return await self.group_cache.get(lambda: self.connector.list_groups(), force=force)
+        return await self.group_cache.get(conn.list_groups, force=force)
 
     def invalidate_groups(self) -> None:
         self.group_cache.invalidate()

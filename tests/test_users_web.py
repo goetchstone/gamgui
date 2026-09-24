@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from gamgui.core.audit import AuditLog
 from gamgui.core.calendar_index import CalendarIndex, IndexedCalendar
 from gamgui.core.connectors.gam_connector import GAMConnector
+from gamgui.core.gam.models import GAMUser
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
@@ -655,6 +656,21 @@ def test_bulk_store_apply_is_single_use(client, gam_calls):
     assert len(gam_writes(gam_calls())) == 1
     r = _bulk_apply(client, token, **BULK_ALICE)                     # a replayed click
     assert "expired or was already run" in r.text and len(gam_writes(gam_calls())) == 1
+
+
+@pytest.mark.parametrize("directory", [[GAMUser("alice@example.com", suspended=True)], []],
+                         ids=["suspended", "gone"])
+def test_bulk_store_apply_refuses_someone_no_longer_active(client, gam_calls, monkeypatch, directory):
+    # Alice was active at the preview; by Apply she is suspended or deleted, so nothing is written.
+    _, token = _bulk_preview(client, **BULK_ALICE)
+
+    async def users(force=False):
+        return directory
+
+    monkeypatch.setattr(client.app.state.gamgui, "users", users)
+    r = _bulk_apply(client, token, **BULK_ALICE)
+    assert "no longer an active user" in r.text
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
 
 
 def test_bulk_store_apply_runs_as_job(client, gam_calls):

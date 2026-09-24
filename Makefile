@@ -15,7 +15,7 @@ help:
 	@echo "               override the interpreter with: make setup PYTHON=python3.13"
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
 	@echo "make test    - run the offline test suite"
-	@echo "make lint    - run ruff (the rule set CI enforces)"
+	@echo "make lint    - run ruff and mypy (the checks CI's lint job enforces)"
 	@echo "make run     - launch the app (native window; falls back to a browser URL)"
 	@echo "make app     - build the standalone macOS .app (PyInstaller, macOS only)"
 	@echo "make clean   - remove venv and build artifacts"
@@ -51,6 +51,7 @@ test:
 
 lint:
 	$(VENV)/bin/ruff check .
+	$(VENV)/bin/mypy
 
 run:
 	$(PY) -m gamgui.app

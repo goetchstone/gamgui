@@ -181,6 +181,7 @@ async def offboard_preview(
     check = await _check(st, user, manager)
     if check.errors:
         return _err(request, " ".join(check.errors))
+    assert check.user and check.manager  # check_addresses: no errors means both were found
     user, manager = check.user.primary_email, check.manager.primary_email
     if running := _running(st, user):
         return _already_running(request, running, user)

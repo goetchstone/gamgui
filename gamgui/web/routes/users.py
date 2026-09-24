@@ -422,8 +422,8 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
         current = {u.primary_email.lower(): u for u in await st.users()}
     except Exception as exc:
         return _err(request, _friendly(exc))
-    targets = [current.get(e.lower()) for e in emails_held]
-    if not targets or any(u is None or u.suspended for u in targets):
+    targets = [u for e in emails_held if (u := current.get(e.lower())) is not None and not u.suspended]
+    if not targets or len(targets) != len(emails_held):
         return _err(request, "Someone in the preview is no longer an active user — click Preview again.")
     previews = guard.changes([u.primary_email for u in targets], RiskLevel.LOW, "Set department")
     refusal = guard.enforce(previews, form, confirm_step=True)
