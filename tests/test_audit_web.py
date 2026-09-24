@@ -293,6 +293,23 @@ def test_audit_export_csv(client):
     assert "alice@example.com" in lines[1]
 
 
+def test_old_and_new_extra_keys_both_read(client):
+    # A write's other party was once filed as extra.group whatever it was (plan Q12); records written
+    # before and after the rename sit side by side in one log and both show, filter and export.
+    _seed(client.audit_path, [
+        {"ts": "2026-09-01T10:00:00+00:00", "action": "delete_event", "target": "cal@example.com",
+         "argv": ["calendar", "cal@example.com", "deleteevent", "id", "evt1"], "ok": False,
+         "extra": {"error": "old boom", "tolerated": False, "group": "evt1"}},
+        {"ts": "2026-09-24T10:00:00+00:00", "action": "delete_event", "target": "cal@example.com",
+         "argv": ["calendar", "cal@example.com", "deleteevent", "id", "evt2"], "ok": False,
+         "extra": {"event": "evt2", "error": "new boom", "tolerated": False}},
+    ])
+    rows = client.get("/audit/rows", params={"failed": "1"}).text
+    assert "old boom" in rows and "new boom" in rows
+    lines = client.get("/audit/export.csv").text.splitlines()
+    assert "new boom" in lines[1] and "old boom" in lines[2]
+
+
 def test_audit_export_csv_neutralises_formula_injection(client):
     # A target/argv that begins with =/+/-/@ must not export as a live spreadsheet formula.
     _seed(client.audit_path, [

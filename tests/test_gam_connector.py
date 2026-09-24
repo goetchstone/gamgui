@@ -91,6 +91,19 @@ async def test_apply_runs_planned_changes(connector):
     assert results[0].ok is True
 
 
+async def test_a_writes_other_party_is_audited_under_the_key_that_names_it(connector):
+    # Every such value was filed under "group" — an event id, an ACL scope, a new Drive owner (plan Q12).
+    await connector.add_group_member("sales@example.com", "carol@example.com")
+    await connector.remove_calendar_acl("alice@example.com", "user:carol@example.com")
+    await connector.transfer_data("alice@example.com", "drive", "bob@example.com")
+    await connector.apply(connector.plan_suspend(["bob@example.com"], suspend=False))
+    group, scope, transfer, suspend = connector.audit.tail()[-4:]
+    assert group["extra"] == {"group": "sales@example.com"}
+    assert scope["extra"] == {"scope": "user:carol@example.com"}
+    assert transfer["extra"] == {"new_owner": "bob@example.com"}
+    assert (suspend["action"], suspend.get("extra")) == ("apply", None)   # no catalog command to name
+
+
 async def test_connection_test_ok(connector):
     status = await connector.test()
     assert status.ok is True

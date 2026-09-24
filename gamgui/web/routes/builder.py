@@ -74,7 +74,7 @@ async def _assemble(request: Request, cmd):
 
 def _preview_of(cmd, argv, target) -> ChangePreview:
     return ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=target,
-                         summary=cmd.name, risk=cmd.risk, argv=argv)
+                         summary=cmd.name, risk=cmd.risk, argv=argv, meta={"cid": cmd.id})
 
 
 def _gam_str(argv) -> str:

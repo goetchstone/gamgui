@@ -637,6 +637,7 @@ def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
     assert gam_writes(gam_calls()) == [argv]
     rec = client.app.state.gamgui.connector.audit.tail()[-1]
     assert (rec["action"], rec["target"], rec["ok"]) == ("apply", "alice@example.com", True)
+    assert rec["extra"] == {"command": "build.set_signature"}   # which catalog command, not just `apply`
     assert rec["argv"] == ["user", "alice@example.com", "signature", "***redacted***", "html"]  # body kept out of the log
 
 
@@ -709,7 +710,9 @@ def test_sequence_add_remove_and_run(client, gam_calls):
         ["user", "alice@example.com", "signature", "Hi", "html"],
         ["user", "alice@example.com", "add", "delegate", "bob@example.com"],
     ]
-    assert [e["ok"] for e in client.app.state.gamgui.connector.audit.tail()[-2:]] == [True, True]
+    steps = client.app.state.gamgui.connector.audit.tail()[-2:]
+    assert [(e["action"], e["ok"], e["extra"]) for e in steps] == [
+        ("apply", True, {"command": "build.set_signature"}), ("apply", True, {"command": "build.add_delegate"})]
     done = client.get("/builder/sequence/status", params={"job": job.id})
     assert_ok_partial(done)
     assert "Sequence complete — 2 of 2 steps succeeded." in done.text

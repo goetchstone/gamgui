@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, build_user_query
@@ -235,11 +235,11 @@ class GAMConnector(Connector):
 
     async def add_group_member(self, group: str, member: str, role: str = "member") -> ChangeResult:
         argv = GAMCommands.add_group_member(group, member, role=role)
-        return await self._run_write("add_group_member", member, argv, RiskLevel.LOW, target_extra=group)
+        return await self._run_write("add_group_member", member, argv, RiskLevel.LOW, about={"group": group})
 
     async def remove_group_member(self, group: str, member: str) -> ChangeResult:
         argv = GAMCommands.remove_group_member(group, member)
-        return await self._run_write("remove_group_member", member, argv, RiskLevel.LOW, target_extra=group)
+        return await self._run_write("remove_group_member", member, argv, RiskLevel.LOW, about={"group": group})
 
     # --- directory profile (title = role, department) -----------------------------------
     async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:
@@ -253,11 +253,11 @@ class GAMConnector(Connector):
 
     async def add_calendar_acl(self, email: str, target: str, role: str = "reader", calendar: str = "primary") -> ChangeResult:
         argv = GAMCommands.add_calendar_acl(email, target, role=role, calendar=calendar)
-        return await self._run_write("add_calendar_acl", email, argv, RiskLevel.LOW, target_extra=target)
+        return await self._run_write("add_calendar_acl", email, argv, RiskLevel.LOW, about={"scope": target})
 
     async def remove_calendar_acl(self, email: str, scope: str, calendar: str = "primary") -> ChangeResult:
         argv = GAMCommands.delete_calendar_acl(email, scope, calendar=calendar)
-        return await self._run_write("remove_calendar_acl", email, argv, RiskLevel.LOW, target_extra=scope)
+        return await self._run_write("remove_calendar_acl", email, argv, RiskLevel.LOW, about={"scope": scope})
 
     # --- calendars / resources / events ------------------------------------------------
     async def list_resources(self, query: str = "") -> List[ResourceCalendar]:
@@ -322,15 +322,15 @@ class GAMConnector(Connector):
 
     async def add_calendar_acl_for(self, calendar_id: str, scope: str, role: str = "reader") -> ChangeResult:
         argv = GAMCommands.add_calendar_acl_cal(calendar_id, scope, role=role)
-        return await self._run_write("add_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, target_extra=scope)
+        return await self._run_write("add_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, about={"scope": scope})
 
     async def remove_calendar_acl_for(self, calendar_id: str, scope: str) -> ChangeResult:
         argv = GAMCommands.delete_calendar_acl_cal(calendar_id, scope)
-        return await self._run_write("remove_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, target_extra=scope)
+        return await self._run_write("remove_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, about={"scope": scope})
 
     async def subscribe_calendar_for(self, email: str, calendar_id: str) -> ChangeResult:
         argv = GAMCommands.subscribe_calendar(email, calendar_id)
-        return await self._run_write("subscribe_calendar", email, argv, RiskLevel.LOW, target_extra=calendar_id)
+        return await self._run_write("subscribe_calendar", email, argv, RiskLevel.LOW, about={"calendar": calendar_id})
 
     async def search_events(
         self, calendar_id: str, query: str = "", after: str = "", before: str = "", cap: int = 200
@@ -346,7 +346,7 @@ class GAMConnector(Connector):
 
     async def delete_event(self, calendar_id: str, event_id: str) -> ChangeResult:
         argv = GAMCommands.delete_event(calendar_id, event_id, doit=True)
-        return await self._run_write("delete_event", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=event_id)
+        return await self._run_write("delete_event", calendar_id, argv, RiskLevel.DESTRUCTIVE, about={"event": event_id})
 
     async def delete_calendar(self, owner: str, calendar_id: str) -> ChangeResult:
         """PERMANENTLY delete a secondary calendar (for everyone) by impersonating an owner.
@@ -355,7 +355,7 @@ class GAMConnector(Connector):
         unsubscribe. Verified against GAM7 source. Irreversible — no GAM-side undo.
         """
         argv = GAMCommands.remove_calendar(owner, calendar_id)
-        return await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, target_extra=owner)
+        return await self._run_write("delete_calendar", calendar_id, argv, RiskLevel.DESTRUCTIVE, about={"owner": owner})
 
     # --- lifecycle (offboarding) -------------------------------------------------------
     async def reset_password(self, email: str) -> ChangeResult:
@@ -374,7 +374,7 @@ class GAMConnector(Connector):
 
     async def transfer_data(self, old_owner: str, service: str, new_owner: str, privacy: str = "") -> ChangeResult:
         argv = GAMCommands.create_datatransfer(old_owner, service, new_owner, privacy=privacy)
-        return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, target_extra=new_owner)
+        return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, about={"new_owner": new_owner})
 
     async def create_onboarding_runbook(self, assignee: str, title: str, steps: List[str]) -> dict:
         """Create a Google Tasks list on ``assignee`` with one task per step; return a summary.
@@ -530,7 +530,10 @@ class GAMConnector(Connector):
             if change.connector_id != self.id or not change.argv:
                 results.append(ChangeResult(preview=change, ok=False, detail="not applicable to this connector"))
                 continue
-            results.append(await self._run_write("apply", change.target, list(change.argv), change.risk))
+            # A Builder change carries its catalog command id: the audit names the command, not just `apply`.
+            command = str(change.meta.get("cid") or "")
+            results.append(await self._run_write("apply", change.target, list(change.argv), change.risk,
+                                                 about={"command": command}))
         return results
 
     # --- internals ---------------------------------------------------------------------
@@ -540,7 +543,7 @@ class GAMConnector(Connector):
         target: str,
         argv: List[str],
         risk: RiskLevel,
-        target_extra: Optional[str] = None,
+        about: Optional[Dict[str, str]] = None,
         tolerate_kinds: tuple = (),
         audit_argv: Optional[List[str]] = None,
         secrets: Sequence[str] = (),
@@ -555,7 +558,10 @@ class GAMConnector(Connector):
         ``secrets`` are those values themselves: every occurrence is masked in the shown argv, the error
         text (GAM echoes the command line on a usage error) and the audit record. By value, so no
         neighbouring token can shift it; the positional masks in audit/errors are the second layer.
-        ``timeout`` overrides the runner's default — a domain-wide (``all users``) call needs longer."""
+        ``timeout`` overrides the runner's default — a domain-wide (``all users``) call needs longer.
+        ``about`` is what else the write concerned, recorded in the audit ``extra`` under the key that names
+        it (``group``, ``scope``, ``event``, ``command``…) — once filed as ``group`` whatever it was."""
+        named = {k: v for k, v in (about or {}).items() if v}
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
         try:
@@ -567,8 +573,7 @@ class GAMConnector(Connector):
             # changed half the domain. Record it, then let the cancellation finish.
             self.audit.record(
                 action, target=target, argv=shown, ok=False,
-                extra={"error": INTERRUPTED, "tolerated": False,
-                       **({"group": target_extra} if target_extra else {})},
+                extra={**named, "error": INTERRUPTED, "tolerated": False},
                 secrets=secrets,
             )
             raise
@@ -580,8 +585,7 @@ class GAMConnector(Connector):
             error = redact_secrets(str(exc), secrets)
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,
-                extra={"error": error, "tolerated": tolerated,
-                       **({"group": target_extra} if target_extra else {})},
+                extra={**named, "error": error, "tolerated": tolerated},
                 secrets=secrets,
             )
             if tolerated:
@@ -593,7 +597,7 @@ class GAMConnector(Connector):
                                 kind=exc.kind if isinstance(exc, GAMError) else None)
         self.audit.record(
             action, target=target, argv=shown, ok=True,
-            extra={"group": target_extra} if target_extra else None,
+            extra=named or None,
             secrets=secrets,
         )
         return ChangeResult(preview=preview, ok=True, output=redact_secrets(out, secrets))

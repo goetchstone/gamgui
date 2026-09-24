@@ -65,7 +65,10 @@ plan's Phase 0 F1–F3.
   Partly: Q10, in the commit that marks it (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
   messages unchanged; `test_route_helpers_live_once_in_common`; the one bounded job base class is
-  open). **Open:** Q9, Q12, Q13, batch-2 F#22.
+  open) · Q12, in the commit that marks it (the ternary was already gone with B2's `f97ab28`; a write's
+  other party is audited under the key that names it — `group`, `scope`, `calendar`, `event`, `owner`,
+  `new_owner` — not always `group`, and a Builder write records its catalog id as `extra.command`; old
+  records keep `group` and read as before). **Open:** Q9, Q13, batch-2 F#22.
 - **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
   `scripts/bump_gam.py`). **Open:** V1, V6; V3–V5 are new scope, and D6 says none for now.
 - **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
