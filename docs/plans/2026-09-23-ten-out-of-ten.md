@@ -62,13 +62,13 @@ plan's Phase 0 F1–F3.
   (`hx-disabled-elt` on every write and job control, `a31b146`; the nav indicator and lazy user-detail
   tabs are open). **Open:** U1, U5, U7, U8, U10, U14.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`.
-  Partly: Q10, in the commit that marks it (`web/routes/_common.py` holds `friendly`, `error_partial`,
+  Partly: Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
   messages unchanged; `test_route_helpers_live_once_in_common`; the one bounded job base class is
-  open) · Q12, in the commit that marks it (the ternary was already gone with B2's `f97ab28`; a write's
+  open) · Q12 `47142f0` (the ternary was already gone with B2's `f97ab28`; a write's
   other party is audited under the key that names it — `group`, `scope`, `calendar`, `event`, `owner`,
   `new_owner` — not always `group`, and a Builder write records its catalog id as `extra.command`; old
-  records keep `group` and read as before) · with it, the classifier (in the commit that marks it): a
+  records keep `group` and read as before) · with it, the classifier (`46a2b1f`): a
   per-user refusal that also says "not found" is `PERMISSION_DENIED`, not the `NOT_FOUND` the calendar
   sweep tolerates, and GAM's " (403/1200)" entity counter is no longer read as a status code
   (failure-log 2026-09-24). **Open:** Q9, Q13, batch-2 F#22.
