@@ -1170,6 +1170,19 @@ def test_lifecycle_page_renders(client):
     assert r.text.count('name="done"') == 8            # the re-run's "already done" boxes, one per step
 
 
+def test_lifecycle_page_intro_names_every_step_in_run_order(client):
+    # The intro read "reset password → delegate → …" after revoke and forwarding became steps of their
+    # own: the operator's first sentence about the routine left out the two that lock the leaver out.
+    from gamgui.core import lifecycle
+
+    text = unescape(client.get("/lifecycle").text)
+    intro = text[text.index("Runs the sequence in order:"):]
+    intro = intro[:intro.index("</p>")]
+    positions = [intro.find(name) for name in lifecycle.STEP_NAMES.values()]
+    assert -1 not in positions, f"the intro leaves out a step: {intro}"
+    assert positions == sorted(positions), f"the intro names the steps out of order: {intro}"
+
+
 def test_lifecycle_offboard_preview_lists_steps(client):
     r = client.post("/lifecycle/offboard/preview",
                     data={"user": LEAVER, "manager": MGR, "subject": "s", "message": "m", "days": "30"})

@@ -100,7 +100,8 @@ step (failure-log).
 | Manager reminder | (last) | — |
 
 ### Re-running after a failure
-The form has one "already done" box per step (`lifecycle.STEP_NAMES`, posted as `done`). A ticked
+The form has one "already done" box per step (`lifecycle.STEP_NAMES`, posted as `done`; the page's
+opening sentence joins the same names, in run order — it once went stale by hand). A ticked
 step is not run and **counts as succeeded** for the steps that require it; the preview shows it
 struck through, without a command, and the ticks are part of the frozen form (tick one after Preview
 and Run refuses). All eight ticked is refused ("nothing to run"). **Tick exactly the `✓` lines of the
