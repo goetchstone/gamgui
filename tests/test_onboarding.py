@@ -18,7 +18,7 @@ from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.signatures import SignatureStore
 from gamgui.web.server import AppState, create_app
 
-from .helpers import TEST_HOSTS, gam_writes
+from .helpers import TEST_HOSTS, gam_writes, wait_for_job
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
@@ -501,14 +501,42 @@ def test_bulk_run_needs_confirmation(client):
     assert "confirm" in r.text.lower()
 
 
+def _bulk_preview_token(client, csv):
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", csv.encode(), "text/csv")})
+    m = re.search(r'name="preview" value="([A-Za-z0-9_\-]+)"', r.text)
+    assert m, r.text[:300]
+    return m.group(1)
+
+
 def test_bulk_run_starts_a_job(client):
     # Only assert the polling panel started; the executor is covered by the direct tests above.
-    import re
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     csv = "role,name,email,assignee\nSales,Ada,ada@example.com,it@example.com\n"
-    r = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirmed": "1"})
+    r = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirmed": "1",
+                                               "preview": _bulk_preview_token(client, csv)})
     assert r.status_code == 200
     assert re.search(r"/onboard/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
+
+
+def test_bulk_run_executes_the_previewed_rows_and_roles(client, gam_calls):
+    # Run re-parsed whatever CSV came back and re-read the role templates: a replayed POST re-sent
+    # welcome emails, and a role edited after the preview changed what ran. Now it runs what the
+    # preview held, once.
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    csv = "role,name,email,assignee\nSales,Ada,ada@example.com,it@example.com\n"
+    token = _bulk_preview_token(client, csv)
+    edited = csv + "Sales,Zed,zed@example.com,it@example.com\n"
+    r = client.post("/onboard/bulk/run", data={"csv_text": edited, "confirmed": "1", "preview": token})
+    assert "The CSV changed after the preview" in r.text and gam_writes(gam_calls()) == []
+    token = _bulk_preview_token(client, csv)
+    client.post("/onboard/role", data={"name": "Sales", "steps": "A different step"})   # edited after preview
+    r = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirmed": "1", "preview": token})
+    job = client.app.state.gamgui.jobs[re.search(r"job=([A-Za-z0-9_\-]+)", r.text).group(1)]
+    wait_for_job(client, job)
+    assert any(w[-1] == "Set up POS" for w in gam_writes(gam_calls()))
+    assert not any("A different step" in w for w in gam_writes(gam_calls()))
+    again = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirmed": "1", "preview": token})
+    assert "expired or was already run" in again.text
 
 
 def test_bulk_status_credentials_ttl_no_store_and_done(client):
@@ -794,3 +822,31 @@ def test_preview_rejects_invalid_email(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     r = client.post("/onboard/preview", data={"role": "Sales", "name": "X", "email": "oauthuser"})
     assert "valid email" in r.text.lower()   # caught at preview, before Run
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_runbook_build_is_audited_as_interrupted(connector, monkeypatch):
+    # Quitting mid-build cancels the job: the task list already exists in the assignee's Google Tasks,
+    # so the audit log must say so. The per-step handlers caught only Exception and CancelledError
+    # (a BaseException) slipped past them, leaving no record at all.
+    import asyncio
+
+    from gamgui.core.connectors.gam_connector import INTERRUPTED
+
+    real = connector.runner.run_authenticated
+    stall = asyncio.Event()
+
+    async def run(domain, argv, **kw):
+        if "task" in argv and "tasklist" not in argv:
+            await stall.wait()                      # the first task hangs until cancelled
+        return await real(domain, argv, **kw)
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", run)
+    job = asyncio.create_task(connector.create_onboarding_runbook("it@example.com", "Onboard Ada", ["A", "B"]))
+    await asyncio.sleep(0.5)
+    job.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await job
+    [rec] = [e for e in connector.audit.tail() if e["action"] == "onboard_runbook"]
+    assert rec["ok"] is False and rec["extra"]["error"] == INTERRUPTED
+    assert rec["extra"]["tasks"] == 0 and rec["extra"]["tasklist_id"]

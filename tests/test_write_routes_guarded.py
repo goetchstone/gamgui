@@ -123,7 +123,7 @@ GATED = {
                          edit={"email": "zed@example.com"}),
     "/onboard/bulk/run": Case({"csv_text": HIRES_CSV}, "/onboard/bulk/preview", preview_data={},
                               preview_files={"csv_file": ("hires.csv", HIRES_CSV.encode(), "text/csv")},
-                              setup=_sales_role),
+                              setup=_sales_role, edit={"csv_text": HIRES_CSV + "Sales,Zed,zed@example.com,it@example.com\n"}),
     "/builder/run": Case({"cid": "build.suspend_user", "email": "alice@example.com"}, "/builder/preview",
                          edit={"email": "carol@example.com"}),
     # Sharing with a group of 10+ subscribes each member: /calendars/share resolves the group and, past
@@ -298,12 +298,12 @@ def test_a_confirm_step_that_posts_the_page_runs_only_its_preview(route, client,
         return
     assert "preview" in step.fields, f"{route}'s confirm step posts the live page but no preview token"
     assert case.edit is not None, f"{route}: name an edit made after the preview (it must write nothing)"
-    form = dict(case.bare)
+    edit = {}
     if callable(case.edit):
         case.edit(client)
     else:
-        form.update(case.edit)
-    r = client.post(route, data={**form, **step.fields, **case.typed})
+        edit = case.edit        # applied last: it wins even over a hidden copy the confirm step carries
+    r = client.post(route, data={**case.bare, **step.fields, **edit, **case.typed})
     assert r.status_code == 200 and "changed after the preview" in r.text, r.text[:300]
     assert _finish_jobs(client) == 0
     assert gam_writes(gam_calls()) == [], f"{route} ran a form edited after its preview"

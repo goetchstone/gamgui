@@ -370,13 +370,18 @@ class GAMConnector(Connector):
         """Create a Google Tasks list on ``assignee`` with one task per step; return a summary.
 
         Additive/low-risk, serialized + audited. The tasklist id comes back via ``returnidonly``;
-        each step then becomes a task on it. A step that fails is reported, not fatal."""
+        each step then becomes a task on it. A step that fails is reported, not fatal. Quitting
+        mid-build (a cancelled job) is audited as interrupted, with the tasks made so far, before the
+        cancellation propagates — like ``_run_write`` does for a single write."""
+        argv = GAMCommands.create_tasklist(assignee, title)
         try:
-            out = await self.runner.run_authenticated(
-                self.domain, GAMCommands.create_tasklist(assignee, title), serialize=True)
+            out = await self.runner.run_authenticated(self.domain, argv, serialize=True)
+        except asyncio.CancelledError:
+            self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=False,
+                              extra={"title": title, "error": INTERRUPTED, "tasks": 0})
+            raise
         except Exception as exc:  # noqa: BLE001 — record the attempt before it propagates
-            self.audit.record("onboard_runbook", target=assignee,
-                              argv=GAMCommands.create_tasklist(assignee, title), ok=False,
+            self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=False,
                               extra={"title": title, "error": str(exc)})
             raise
         lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
@@ -388,10 +393,14 @@ class GAMConnector(Connector):
                     await self.runner.run_authenticated(
                         self.domain, GAMCommands.create_task(assignee, tasklist_id, step), serialize=True)
                     created += 1
+                except asyncio.CancelledError:
+                    self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=False,
+                                      extra={"title": title, "error": INTERRUPTED, "tasks": created,
+                                             "tasklist_id": tasklist_id})
+                    raise
                 except Exception:  # noqa: BLE001 — report per-step, keep going
                     failed.append(step)
-        self.audit.record("onboard_runbook", target=assignee,
-                          argv=GAMCommands.create_tasklist(assignee, title), ok=bool(tasklist_id),
+        self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=bool(tasklist_id),
                           extra={"title": title, "tasks": created, "failed": failed})
         return {"tasklist_id": tasklist_id, "created": created, "failed": failed, "total": len(steps)}
 

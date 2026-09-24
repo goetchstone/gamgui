@@ -321,6 +321,7 @@ async def save_welcome(request: Request, subject: Annotated[str, Form()] = "", b
 # form, so ticking "Create the Google account" after a tasks-only preview created an account nobody
 # had previewed (failure-log 2026-09-23).
 _FLOW = "onboard"
+_BULK_FLOW = "onboard_bulk"
 
 
 def _form_key(role: str, name: str, email: str, manager: str, assignee: str, send_welcome: str,
@@ -490,10 +491,13 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
     rows, parse_errors = onboarding.parse_hire_csv(text)
     if not rows and not parse_errors:
         return _err(request, "No hires found in the CSV.")
-    valid, _cfgs, summary, row_errors = _bulk_summary(rows, _store(request))
+    valid, cfgs, summary, row_errors = _bulk_summary(rows, _store(request))
+    # Run executes these rows with these role templates — not a re-parse of whatever comes back, nor a
+    # role edited after the preview — under a single-use token, like every other confirm step.
+    token = _st(request).previews.hold(_BULK_FLOW, text, (valid, cfgs)) if valid else ""
     return TEMPLATES.TemplateResponse(request, "_onboard_bulk_preview.html", {
         "summary": summary, "errors": parse_errors + row_errors,
-        "csv_text": text, "can_run": bool(valid),
+        "csv_text": text, "can_run": bool(valid), "token": token,
     })
 
 
@@ -504,12 +508,18 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     if conn is None:
         return _err(request, "Not connected.")
     rows, _errs = onboarding.parse_hire_csv(csv_text)
-    valid, cfgs, _summary, _row_errors = _bulk_summary(rows, _store(request))
+    valid, _cfgs, _summary, _row_errors = _bulk_summary(rows, _store(request))
     # Bulk creation is gated behind the preview, like the single flow.
     previews = guard.changes([h.get("email") or h.get("name") or "" for h in valid], RiskLevel.LOW, "Onboard")
-    refusal = guard.enforce(previews, await request.form(), confirm_step=True)
+    form = await request.form()
+    refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
         return _err(request, refusal)
+    held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""), csv_text,
+                                     again="upload the CSV and preview it again", what="CSV")
+    if refusal:
+        return _err(request, refusal)
+    valid, cfgs = held
     if not valid:
         return _err(request, "Nothing to run — every row had an unknown role or was invalid.")
     job = register_job(st.jobs, OnboardJob(id=secrets.token_urlsafe(8), total=len(valid)))
