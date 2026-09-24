@@ -1,8 +1,9 @@
 {# One row per step (the job's window is the sequence's length): a failure says why in words, and the
    final panel puts GAM's own error one click away. #}
+{% import "_job_live.html" as live %}
 {% macro steps(job, final) %}
 {% if job.recent %}<ul class="{{ 'mt-2' if final else 'mt-3' }} space-y-1 text-xs font-mono">{% for r in job.recent %}
-  <li>{{ '✓' if r.ok else '✗' }} {{ r.item }}{% if not r.ok and r.reason %}<span class="font-sans">: {{ r.reason }}</span>{% endif %}
+  <li>{{ live.mark(r.ok) }}{{ r.item }}{% if not r.ok and r.reason %}<span class="font-sans">: {{ r.reason }}</span>{% endif %}
     {% if final and not r.ok and r.detail %}<details class="ml-4 font-sans"><summary class="cursor-pointer text-amber-900">GAM's error</summary>
       <pre class="mt-1 whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-amber-900">{{ r.detail }}</pre></details>{% endif %}
   </li>{% endfor %}</ul>{% endif %}
@@ -12,7 +13,7 @@
      hx-target="this" hx-swap="outerHTML"
      class="rounded-2xl border border-brand-blue/30 bg-brand-blue/5 p-4 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
-    <span class="spinner"></span>
+    <span class="spinner"></span>{{ live.progress(job, "Running the sequence") }}
     <span>Running… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · {{ job.current }}{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
@@ -22,7 +23,7 @@
 </div>
 {% elif job %}
 <div class="rounded-2xl border px-4 py-3 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p class="font-medium">Sequence complete — {{ job.applied }} of {{ job.total }} step{{ '' if job.total == 1 else 's' }} succeeded{% if job.failed_total %}; {{ job.failed_total }} failed{% endif %}.</p>
+  <p class="font-medium" data-announce="{{ job.id }}">Sequence complete — {{ job.applied }} of {{ job.total }} step{{ '' if job.total == 1 else 's' }} succeeded{% if job.failed_total %}; {{ job.failed_total }} failed{% endif %}.</p>
   {{ steps(job, true) }}
 </div>
 {% endif %}

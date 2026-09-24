@@ -5,16 +5,18 @@
 
 Drives scripts/preview_mock.py's app (strict mock gam, fake example.com data, a temp $HOME) through
 each screen and the states that matter (user-detail and onboarding tabs, a signature preview, a
-calendar's access, a Builder result, an offboarding preview), injects the vendored axe-core
+calendar's access, a Builder result, an offboarding preview and its run), injects the vendored axe-core
 (tests/a11y/, checksum-checked) and counts the serious/critical violations per screen and rule. It
 fails on a rule or screen the baseline (tests/a11y/baseline.json) doesn't list, on a count above it —
 and on a count below it, so a fix locks its gain in. The baseline only ever shrinks, to empty (it is).
 A second Chrome test uses the keyboard alone (real key events): the ARIA tab strips, focus landing in a
 confirm panel and coming back when it closes, and a brand focus ring on every Tab stop of every screen.
+A third runs an offboarding and reads Chrome's accessibility tree: a polled panel speaks through
+base.html's one live region, which no poll replaces (plan A3).
 
 The Chrome runs are marked a11y and deselected from the default run (pyproject addopts: they start
 Chrome); the checksum and ratchet-logic tests and the template checks (every field named, every focus
-target focusable, every tab strip an ARIA tablist) run by default. Skipped when Google Chrome
+target focusable, every tab strip an ARIA tablist, every polled panel's line and marks) run by default. Skipped when Google Chrome
 isn't installed, unless A11Y_REQUIRE_CHROME is set (CI). Chrome gets scripts/readme_screenshots.py's
 CHROME_FLAGS — --use-mock-keychain keeps it off the login Keychain (tests/test_headless_chrome.py) —
 and talks CDP over --remote-debugging-pipe: no debugging port for another local process to reach, no
@@ -223,6 +225,20 @@ class Page:
         return [v for v in self.c.js(AXE_RUN, timeout=60) if v["impact"] in GATED]
 
 
+OFFBOARD_DONE = ("/Offboarding (complete|incomplete|stopped|interrupted)/"
+                 ".test(document.querySelector('#offboard-result').innerText)")
+
+
+def _offboard_preview(p: Page) -> None:
+    """An offboarding of carol@example.com previewed, its Run's confirm() answered yes."""
+    p.goto("/lifecycle")
+    p.fill("input[name=user]", "carol@example.com")
+    p.fill("input[name=manager]", "alice@example.com")
+    p.click("button", "Preview")
+    p.settle("document.querySelector('#offboard-result code, #offboard-result pre')")
+    p.c.js("window.confirm = () => true")          # Run offboarding's hx-confirm
+
+
 def _screens(p: Page):
     """Put the app in each state worth checking; yield its name there."""
     p.goto("/")
@@ -275,12 +291,11 @@ def _screens(p: Page):
         p.settle()
         yield f"onboard/{tab}"
 
-    p.goto("/lifecycle")
-    p.fill("input[name=user]", "carol@example.com")
-    p.fill("input[name=manager]", "alice@example.com")
-    p.click("button", "Preview")
-    p.settle("document.querySelector('#offboard-result code, #offboard-result pre')")
+    _offboard_preview(p)
     yield "lifecycle"
+    p.click("button", "Run offboarding")
+    p.settle(OFFBOARD_DONE, timeout=60)
+    yield "lifecycle/run"                          # the finished panel and its ✓/✗ log (plan A3)
 
     p.goto("/reports", "!/Loading/.test(document.querySelector('#usage')?.innerText ?? 'Loading')")
     yield "reports"
@@ -495,6 +510,69 @@ def test_the_keyboard_alone_works_the_tabs_and_each_confirm_panel(page):
     assert not bare, "Tab stops with no visible focus indicator:\n  " + "\n  ".join(bare)
 
 
+# Record what #live-status is told, and each time the #busy pill (a live region too) comes on.
+LISTEN = """window.__said = []; window.__busy = 0;
+const live = document.getElementById('live-status'), busy = document.getElementById('busy');
+new MutationObserver(() => __said.push(live.textContent)).observe(live, {childList: true, characterData: true, subtree: true});
+new MutationObserver(() => { if (busy.classList.contains('on')) __busy++; }).observe(busy, {attributes: true});"""
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_a_polled_job_speaks_through_one_stable_live_region(page):
+    """Plan A3, read off Chrome's accessibility tree: an offboarding run's panel replaces itself each poll,
+    but what a screen reader hears comes from base.html's one live region — the same node throughout, told
+    the progress and then the result, never the feed — polls don't bring up the "Working…" pill, and every
+    ✓/✗ in the log is hidden behind a word."""
+    p = page
+
+    def live_regions() -> list[dict]:
+        return [n for n in p.c.cmd("Accessibility.getFullAXTree")["nodes"]
+                if not n.get("ignored") and any(pr["name"] == "live" for pr in n.get("properties", []))]
+
+    _offboard_preview(p)
+    [region] = live_regions()                          # #busy is display:none, so only #live-status
+    p.c.js(LISTEN)
+    p.click("button", "Run offboarding")
+    p.wait("document.querySelector('#offboard-result [hx-get]')")      # the running panel, polling
+    p.wait("!document.getElementById('busy').classList.contains('on')")
+    p.c.js("window.__busy = 0")                        # the Run click's own request showed it; polls mustn't
+    if p.c.js("!!document.querySelector('#offboard-result [hx-get]')"):
+        # Mid-run: the panel polling itself is no live region; the one there is is the same node as before.
+        assert [n["backendDOMNodeId"] for n in live_regions()] == [region["backendDOMNodeId"]]
+    p.settle(OFFBOARD_DONE, timeout=60)
+
+    said = p.c.js("__said")
+    final = p.c.js("document.querySelector('#offboard-result [data-announce]').innerText")
+    assert said[0] == "Offboarding: started" and said[-1] == final.strip(), said
+    assert all(re.fullmatch(r"Offboarding: \d0% done", s) for s in said[1:-1]), said
+    assert len(said) <= 12 and len(set(said)) == len(said), said          # each line once
+    assert p.c.js("__busy") == 0
+
+    nodes = p.c.cmd("Accessibility.getFullAXTree")["nodes"]
+    by_id = {n["nodeId"]: n for n in nodes}
+    [now] = [n for n in nodes if not n.get("ignored") and any(pr["name"] == "live" for pr in n.get("properties", []))]
+    assert now["backendDOMNodeId"] == region["backendDOMNodeId"]         # never replaced
+    props = {pr["name"]: pr["value"].get("value") for pr in now["properties"]}
+    assert (now["role"]["value"], props["live"], props["atomic"]) == ("status", "polite", True)
+    assert [by_id[c]["name"]["value"] for c in now["childIds"]] == [said[-1]]
+
+    texts = [n["name"]["value"] for n in nodes if not n.get("ignored") and n["role"]["value"] == "StaticText"]
+    rows = p.c.js("[...document.querySelectorAll('#offboard-result li')].map(li => li.textContent.trim()[0])")
+    assert rows and not [t for t in texts if t.strip()[:1] in ("✓", "✗")]
+    assert sorted(t for t in texts if t in ("Succeeded:", "Failed:")) == \
+        sorted({"✓": "Succeeded:", "✗": "Failed:"}[r] for r in rows if r in "✓✗")
+
+    # app.js speaks a panel's line once per job, however many polls repeat it.
+    p.c.js("""(async () => { const el = document.createElement('div'); el.dataset.announce = 'probe';
+        document.body.append(el);
+        for (const t of ['Probe: 10% done', 'Probe: 10% done', 'Probe: 20% done', 'Probe: 20% done']) {
+          el.textContent = t; el.dispatchEvent(new CustomEvent('htmx:afterSettle', {bubbles: true}));
+          await new Promise(r => setTimeout(r, 50)); }
+        el.remove(); })()""")
+    assert p.c.js("__said")[len(said):] == ["Probe: 10% done", "Probe: 20% done"]
+
+
 def _template_tags() -> list[tuple[str, int, str, dict[str, str | None], bool]]:
     """(template, line, tag, attrs, inside a <label>) for every start tag in every template. Jinja
     statements and comments are dropped, so an attribute a condition adds counts as present."""
@@ -571,6 +649,122 @@ def test_each_tab_strip_is_an_aria_tablist():
             assert panels[t["aria-controls"]]["aria-labelledby"] == t["id"], (name, t["id"])
         assert [(t["aria-selected"], t["tabindex"]) for t in tabs] == \
             [("true", "0")] + [("false", "-1")] * (len(tabs) - 1), name
+
+
+# Plan A3: each polled job panel, the context its route renders it with, what its progress says, and
+# whether its loop can stop with job.error (offboarding's and the sequence's never do).
+POLLED = {
+    "_sig_apply.html": ("job", "Applying the signature", True),
+    "_bulk_apply.html": ("job", "Setting department", True),
+    "_calendar_subscribe_job.html": ("subscribe_job", "Adding to calendars", True),
+    "_offboard_run.html": ("job", "Offboarding", False),
+    "_sequence_run.html": ("job", "Running the sequence", False),
+    "_onboard_bulk_status.html": ("job", "Onboarding", True),
+    "_calendar_index_job.html": ("job", None, True),          # a scan with no count: it says so once
+}
+
+
+def _job_states():
+    """(state, job): a run just started; 3 of 8 done with a ✓ and a ✗ in its feed and log; finished; stopped."""
+    from gamgui.web.jobs import BatchJob
+
+    def job(done: int, finished: bool = False, error: str | None = None) -> BatchJob:
+        j = BatchJob(total=8)
+        j.account_created = j.notified = 0          # onboarding's tallies
+        for i in range(done):
+            j.record(f"user{i}@example.com", ok=i != 1, reason="" if i != 1 else "Not found.")
+            j.log.append(("✓ " if i != 1 else "✗ ") + f"Step {i}" + (" — boom" if i == 1 else ""))
+        j.error = error
+        if finished:
+            j.finish()
+        return j
+    return [("started", job(0)), ("running", job(3)), ("finished", job(3, finished=True)),
+            ("stopped", job(3, finished=True, error="Account-wide failure."))]
+
+
+def _render(template: str, **ctx) -> list[tuple[str, list[tuple[str, dict]]]]:
+    """Every text run of a rendered partial: (text, its open elements as (tag, attrs), outermost first)."""
+    from gamgui.web.server import TEMPLATES
+
+    runs: list = []
+
+    class Walk(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.open: list[tuple[str, dict]] = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag not in ("input", "br", "img", "meta", "link", "hr"):
+                self.open.append((tag, dict(attrs)))
+
+        def handle_endtag(self, tag):
+            while self.open and self.open.pop()[0] != tag:
+                pass
+
+        def handle_data(self, data):
+            if data.strip():
+                runs.append((data, list(self.open)))
+
+    Walk().feed(TEMPLATES.env.get_template(template).render(**ctx))
+    return runs
+
+
+def test_each_polled_panel_says_one_line_and_names_its_marks():
+    """Plan A3: a polled panel is never a live region itself (base.html's #live-status is, outside every
+    swap); each render marks one element data-announce with the job's id — progress in 10% steps, then the
+    result — and every ✓/✗ in a feed or log row is hidden from a screen reader behind a word."""
+    for template, (key, label, stops) in POLLED.items():
+        for state, job in _job_states():
+            if state == "stopped" and not stops:
+                continue
+            runs = _render(template, **{key: job}, revoke_label="Step 1", credentials=None)
+            where = f"{template} {state}"
+            attrs = [a for _, stack in runs for _, a in stack]
+            assert not [a for a in attrs if "aria-live" in a or a.get("role") in ("status", "log", "alert")], where
+            said = {a["data-announce"] for a in attrs if "data-announce" in a}
+            assert said == {job.id}, where
+            text = " ".join(t for t, stack in runs if any("data-announce" in a for _, a in stack))
+            text = re.sub(r"\s+", " ", text).strip()
+            if label and not job.finished:
+                assert text == f"{label}: " + ("started" if state == "started" else "30% done"), where
+            elif job.finished:
+                assert "%" not in text and ("Account-wide failure." in text) == (state == "stopped"), where
+            for t, stack in runs:
+                in_row = any(tag == "li" for tag, _ in stack)
+                hidden = any(a.get("aria-hidden") == "true" for _, a in stack)
+                if in_row and t.strip()[:1] in ("✓", "✗"):
+                    assert hidden, f"{where}: a bare {t.strip()[:1]} in a row"
+            words = [t.strip() for t, stack in runs if ("span", {"class": "sr-only"}) in stack]
+            glyphs = [t.strip() for t, stack in runs if any(a.get("aria-hidden") == "true" for _, a in stack)]
+            assert [{"✓": "Succeeded:", "✗": "Failed:"}[g] for g in glyphs] == words, where
+
+
+def test_the_live_region_is_outside_every_swap_and_polls_never_flash_working():
+    """Plan A3: base.html holds the one polite, atomic status region app.js writes to; and every polled
+    panel's /status path is one app.js's isPoll recognises, so a poll doesn't show — and have the #busy live
+    region say — "Working…" every second."""
+    base = (ROOT / "gamgui" / "web" / "templates" / "base.html").read_text()
+    assert base.count('id="live-status"') == 1
+    assert re.search(r'<div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true">'
+                     r'</div>', base)
+    app_js = (ROOT / "gamgui" / "web" / "static" / "app.js").read_text()
+    poll = re.search(r"return (/.+/)\.test\(p\);", app_js).group(1)
+    assert poll == r"/\/status(\?|$)/"
+    for template in POLLED:
+        paths = re.findall(r'hx-get="([^"]+)"', (ROOT / "gamgui" / "web" / "templates" / template).read_text())
+        assert paths and all(re.search(r"/status(\?|$)", path) for path in paths), template
+
+
+def test_a_builder_command_says_its_risk_in_words():
+    """Plan A3: the catalog's coloured dot is decoration; the risk is also a word on the row."""
+    for risk in ("read", "change", "destructive"):
+        c = type("C", (), {"raw_syntax": "gam x", "risk_label": risk, "name": "gam x", "description": "Does x.",
+                           "buildable": True, "id": "x"})
+        runs = _render("_command_row.html", c=c)
+        visible = [t for t, stack in runs if not any(a.get("aria-hidden") == "true" for _, a in stack)]
+        assert risk.capitalize() in visible and " · Does x." in visible, risk
+    row = (ROOT / "gamgui" / "web" / "templates" / "_command_row.html").read_text()
+    assert re.search(r'<span aria-hidden="true" class="[^"]*rounded-full', row)
 
 
 def test_the_ratchet_fails_a_new_or_grown_count_and_asks_to_lower_a_shrunk_one():

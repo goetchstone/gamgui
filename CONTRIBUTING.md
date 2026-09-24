@@ -168,5 +168,7 @@ of the mock-backed app in headless Chrome, failing on a serious or critical viol
 `tests/a11y/baseline.json` doesn't already list — and on a count that dropped, so rewrite the
 baseline (`A11Y_UPDATE_BASELINE=1 .venv/bin/python -m pytest -m a11y`) in the commit that fixes one.
 The baseline only shrinks; it is empty now. The same job works the tab strips and the confirm panels
-with the keyboard alone and fails a Tab stop with no focus ring. The default run reads every template:
-a form field needs an accessible name, and a confirm panel's `data-focus` heading a `tabindex="-1"`.
+with the keyboard alone, fails a Tab stop with no focus ring, and runs an offboarding to check that a
+polled panel speaks through one stable live region. The default run reads every template: a form field
+needs an accessible name, a confirm panel's `data-focus` heading a `tabindex="-1"`, and a polled job
+panel one `data-announce` line and a word behind each ✓/✗ (`templates/_job_live.html`).

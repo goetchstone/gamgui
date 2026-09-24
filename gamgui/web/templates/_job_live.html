@@ -1,0 +1,20 @@
+{# Plan A3: a polled job panel for a screen reader. The panel replaces itself every second, so it can't
+   be a live region: a reader would hear nothing, or the whole feed again. Instead each render marks
+   one element data-announce="<job id>" — progress in 10% steps while it runs, then the result — and
+   app.js speaks its text through base.html's #live-status, which no swap touches, when it changes. #}
+
+{# While running: "<label>: started", then "<label>: 10% done" … (hidden: spoken, never shown). #}
+{% macro progress(job, label) -%}
+{%- set pct = (job.done * 10 // job.total * 10) if job.total else 0 -%}
+<span hidden data-announce="{{ job.id }}">{{ label }}: {{ pct ~ "% done" if pct else "started" }}</span>
+{%- endmacro %}
+
+{# A feed row's ✓/✗: the glyph for the eye, a word for a screen reader. #}
+{% macro mark(ok) -%}
+<span aria-hidden="true">{{ "✓" if ok else "✗" }} </span><span class="sr-only">{{ "Succeeded:" if ok else "Failed:" }} </span>
+{%- endmacro %}
+
+{# An offboarding log line (core/lifecycle.py writes "✓ ", "✗ " or "– " before the step). #}
+{% macro log_line(line) -%}
+<li>{% if line[:2] in ("✓ ", "✗ ") %}{{ mark(line[0] == "✓") }}{{ line[2:] }}{% else %}{{ line }}{% endif %}</li>
+{%- endmacro %}

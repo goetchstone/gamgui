@@ -1,4 +1,5 @@
 {% from "_job_failures.html" import failures %}
+{% import "_job_live.html" as live %}
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% elif not job.finished and not job.error %}
@@ -6,7 +7,7 @@
      hx-target="this" hx-swap="outerHTML"
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
-    <span class="spinner"></span>
+    <span class="spinner"></span>{{ live.progress(job, "Applying the signature") }}
     <span>Applying signature… <strong>{{ job.done }}</strong> of {{ job.total }}
       · {{ job.applied }} set{% if job.failed_total %} · <span class="text-rose-700">{{ job.failed_total }} failed</span>{% endif %}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
   </div>
@@ -17,7 +18,7 @@
   <ul class="mt-2.5 space-y-0.5 font-mono text-xs leading-relaxed" aria-label="Recently set signatures">
     {% for r in job.recent | reverse %}
     <li class="flex items-center gap-1.5">
-      {% if r.ok %}<span class="text-emerald-700" aria-hidden="true">✓</span>{% else %}<span class="text-rose-700" aria-hidden="true">✗</span>{% endif %}
+      <span class="{{ 'text-emerald-700' if r.ok else 'text-rose-700' }}">{{ live.mark(r.ok) }}</span>
       <span class="truncate {{ 'text-brand-grayink' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</span>
     </li>
     {% endfor %}
@@ -28,8 +29,8 @@
 {# Finished, or stopped at a failure every later user would share: job.error says why and how many
    were not attempted, and the failure that stopped it is in the list below with GAM's own error. #}
 <div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  {% if job.error %}{{ job.error }}<br>Applied to {{ job.applied }} of {{ job.total }} before stopping.
-  {% else %}Applied to {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.{% endif %}
+  <p data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>Applied to {{ job.applied }} of {{ job.total }} before stopping.
+  {% else %}Applied to {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.{% endif %}</p>
   {% if job.failed_total %}
   <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
   {{ failures(job) }}

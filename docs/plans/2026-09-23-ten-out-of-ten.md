@@ -82,8 +82,19 @@ plan's Phase 0 F1–F3.
   baseline 10 → 0, empty; a keyboard-only Chrome test over CDP key events — tabs, suspend/delete/calendar
   delete/Builder panels in and out, a ring on every Tab stop of 12 screens, no page errors — plus
   default-run template checks; screenshots in headless Chrome, WKWebView and a real screen reader
-  unseen). **Open:** A3, A6, A7 (A7 not started: vendoring the fonts means downloading them, which
-  waits on the operator's OK). A8 declined (D7).
+  unseen) · A3 (one `#live-status` in `base.html` — `role=status`, polite, atomic — outside every swap;
+  each render of the seven polled panels marks one `data-announce` line, `_job_live.html`'s "<label>:
+  started" / "30% done" in 10% steps then the result sentence, and `app.js` speaks it only when it
+  changed for that job; every feed/log ✓/✗ is an `aria-hidden` glyph plus an `sr-only`
+  "Succeeded:"/"Failed:"; the Builder row says "Read"/"Change"/"Destructive" beside an `aria-hidden`
+  dot; `isPoll` now covers every `…/status` poll, which had flashed `#busy`'s "Working…" live region each
+  second on six of the seven panels; default-run template tests over every panel and state, and a Chrome
+  test that runs an offboarding and reads `Accessibility.getFullAXTree` — one live region, the same node
+  throughout, "started" then the result, no poll-lit pill; axe adds the finished offboarding panel, still
+  0 — the baseline was already empty, so there was nothing to shrink; with a scratch 0.9 s/call mock it
+  said started, 10–80% and the result, each once; VoiceOver and WKWebView unheard). **Open:** A6, A7 (A7
+  not started: vendoring the fonts means downloading them, which waits on the operator's OK). A8
+  declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; `ae8d351` — the bulk
   department, calendar group fan-out and Builder sequence feeds record a capped reason per failure,
@@ -406,7 +417,7 @@ tenant without per-action permission.
   `pyproject.toml`'s `filterwarnings`; the Starlette/httpx TestClient deprecation warning.
 
 ## Phase 4 — Accessibility (3 → 9)
-*Status: A9, A1, A2, A4, A5 APPLIED; A3, A6, A7 open (A8 declined, D7). The axe baseline is empty.*
+*Status: A9, A1, A2, A3, A4, A5 APPLIED; A6, A7 open (A8 declined, D7). The axe baseline is empty.*
 - **A1 Contrast (S, global):** `brand-gray` #B2B4BB text is 2.07:1 on white (195 uses incl. headings
   and helper text); `blueink/80` 3.86:1, `/70` 3.14:1; white on `brand-blue` 3.97:1. Adjust the
   Tailwind tokens in `base.html` to ≥4.5:1 for text (keep the light gray for borders only).

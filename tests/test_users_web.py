@@ -1429,6 +1429,8 @@ def test_lifecycle_preview_shows_autoreply_block(client):
 
 OFFBOARD_AUDIT = ["reset_password", "revoke_access", "forward_off", "add_delegate", "set_vacation", "transfer_data",
                   "remove_from_all_calendars", "add_calendar_event"]   # one audited write per step
+# A log line's ✗ is for the eye; a screen reader hears "Failed:" (plan A3, _job_live.html).
+FAILED_MARK = '<span aria-hidden="true">✗ </span><span class="sr-only">Failed: </span>'
 
 
 def _offboard_writes(calls):
@@ -1507,7 +1509,7 @@ def test_offboard_a_refused_sign_out_is_a_failed_step_not_a_clean_run(client, ga
     wait_for_job(client, job)
     assert (job.failed_items, job.skipped) == (["Revoke access & sign out"], [])
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
-    assert "✗ Revoke access & sign out — " in text and "Sign Out Failed" in text
+    assert FAILED_MARK + "Revoke access & sign out — " in text and "Sign Out Failed" in text
     assert "Offboarding complete" not in text and "Offboarding incomplete" in text
     assert "may still be signed in" in text and "now has a calendar reminder" not in text
 
@@ -1678,7 +1680,7 @@ def test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_
     assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
                            "30-day reminder for alice@example.com"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
-    assert f"✗ Set delegate — GAM failed (unknown, exit=50): User: {LEAVER}, Delegate: {MGR}, Add Failed: " \
+    assert FAILED_MARK + f"Set delegate — GAM failed (unknown, exit=50): User: {LEAVER}, Delegate: {MGR}, Add Failed: " \
            "Delegate already exists." in text
     assert "Offboarding stopped" in text and "Don't delete the account" in text
     assert [w[:4] for w in gam_writes(gam_calls())][-5:] == [

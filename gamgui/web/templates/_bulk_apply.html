@@ -1,8 +1,9 @@
 {% from "_job_failures.html" import failures %}
+{% import "_job_live.html" as live %}
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% elif job and job.error %}
-<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" data-announce="{{ job.id }}">
   {{ job.error }}<br>Updated {{ job.applied }} of {{ job.total }} before stopping.
 </div>
 {% elif job and not job.finished %}
@@ -10,7 +11,7 @@
      hx-target="this" hx-swap="outerHTML"
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
-    <span class="spinner"></span>
+    <span class="spinner"></span>{{ live.progress(job, "Setting department") }}
     <span>Setting department… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
@@ -19,7 +20,7 @@
 </div>
 {% elif job %}
 <div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  Set department on {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.
+  <p data-announce="{{ job.id }}">Set department on {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.</p>
   {% if job.failed_total %}
   <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
   {{ failures(job) }}

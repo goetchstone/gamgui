@@ -133,6 +133,24 @@
     if (!(cfg.elt.hasAttribute("data-cancel") && returnFocus(zone, opener))) focusZone(zone);
   });
 
+  // Polled progress (plan A3). A job panel replaces itself every second, so it can't be a live region:
+  // a screen reader would hear nothing, or the whole feed again. Each render marks one element
+  // data-announce="<job id>" (templates/_job_live.html) — progress in 10% steps, then the result — and
+  // its text goes to base.html's #live-status, which no swap replaces, only when it changed for that job.
+  var said = {};
+  document.body.addEventListener("htmx:afterSettle", function (e) {
+    var root = e.target, live = document.getElementById("live-status");
+    if (!live || !root.querySelectorAll) return;
+    var marked = [].slice.call(root.querySelectorAll("[data-announce]"));
+    if (root.matches("[data-announce]")) marked.unshift(root);
+    marked.forEach(function (el) {
+      var text = el.innerText.replace(/\s+/g, " ").trim();   // innerText: a <br> is a break, not nothing
+      if (!text || said[el.dataset.announce] === text) return;
+      said[el.dataset.announce] = text;
+      live.textContent = text;
+    });
+  });
+
   var actions = {
     "copy": copyText,
     "hint": insertHint,
@@ -223,13 +241,13 @@
       hideTimer = null;
     }, 180);
   }
-  // The signature-apply progress panel polls itself every second and shows its own spinner +
-  // live count — don't let those background polls flicker the global pill.
+  // A job's progress panel polls its /status every second and shows its own spinner and count — don't
+  // let those background polls flicker the global pill, or its live region say "Working…" each time.
   function isPoll(evt) {
     try {
       var d = evt.detail || {};
       var p = (d.pathInfo && d.pathInfo.requestPath) || (d.requestConfig && d.requestConfig.path) || "";
-      return p.includes("/apply/status");
+      return /\/status(\?|$)/.test(p);
     } catch (e) { return false; }
   }
   function settle(e) {

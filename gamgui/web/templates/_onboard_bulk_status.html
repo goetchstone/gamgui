@@ -1,4 +1,5 @@
 {% from "_sheet_buttons.html" import sheet_buttons %}
+{% import "_job_live.html" as live %}
 {% if job is none %}
 <div class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">That bulk job is no longer available.</div>
 {% else %}
@@ -7,7 +8,8 @@
      class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
   <div class="flex items-center justify-between gap-3">
     <h3 class="font-serif text-lg text-brand-black">{% if job.finished and job.error %}Bulk onboarding — stopped{% elif job.finished %}Bulk onboarding — done{% else %}Onboarding… {{ job.done }} / {{ job.total }}{% endif %}</h3>
-    {% if not job.finished %}<span class="text-xs text-brand-grayink">refreshing every second…</span>{% endif %}
+    {% if not job.finished %}<span class="text-xs text-brand-grayink">refreshing every second…</span>{{ live.progress(job, "Onboarding") }}
+    {% else %}<span hidden data-announce="{{ job.id }}">Bulk onboarding {{ "stopped" if job.error else "done" }}: {{ job.applied }} ok, {{ job.failed_total }} failed, {{ job.account_created }} account{{ '' if job.account_created == 1 else 's' }} created.{% if job.error %} {{ job.error }}{% endif %}{% if credentials %} Their credentials are below: save them now.{% endif %}</span>{% endif %}
   </div>
 
   <div class="h-2 w-full overflow-hidden rounded-full bg-brand-gray/20">
@@ -19,7 +21,7 @@
   {% if job.recent %}
   <ul class="space-y-0.5 text-xs">
     {% for r in job.recent %}
-    <li class="{{ 'text-emerald-800' if r.ok else 'text-amber-800' }}">{{ '✓' if r.ok else '✗' }} <span class="font-mono">{{ r.item }}</span>{% if r.reason %} — {{ r.reason }}{% endif %}</li>
+    <li class="{{ 'text-emerald-800' if r.ok else 'text-amber-800' }}">{{ live.mark(r.ok) }}<span class="font-mono">{{ r.item }}</span>{% if r.reason %} — {{ r.reason }}{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}

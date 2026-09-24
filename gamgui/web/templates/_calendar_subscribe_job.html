@@ -1,8 +1,9 @@
 {# Group fan-out progress: the calendar is on each member's list only once their row lands. #}
 {% from "_job_failures.html" import failures %}
+{% import "_job_live.html" as live %}
 {% set j = subscribe_job %}
 {% if j and j.error %}
-<div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+<div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-announce="{{ j.id }}">
   {{ j.error }}<br>Added to {{ j.applied }} of {{ j.total }} members' calendars before stopping.
 </div>
 {% elif j and not j.finished %}
@@ -10,7 +11,7 @@
      hx-target="this" hx-swap="outerHTML"
      class="mt-2 rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-3 py-2.5 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
-    <span class="spinner"></span>
+    <span class="spinner"></span>{{ live.progress(j, "Adding to calendars") }}
     <span>Adding to calendars… <strong>{{ j.done }}</strong> of {{ j.total }}
       · {{ j.applied }} added{% if j.failed_total %} · <span class="text-rose-700">{{ j.failed_total }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-grayink">{{ j.current }}</span>{% endif %}</span>
   </div>
@@ -20,14 +21,14 @@
   {% if j.recent %}
   <ul class="mt-2 space-y-0.5 font-mono text-xs leading-relaxed" aria-label="Members the calendar was added for">
     {% for r in j.recent | reverse %}
-    <li class="truncate {{ 'text-brand-grayink' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ '✓' if r.ok else '✗' }} {{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</li>
+    <li class="truncate {{ 'text-brand-grayink' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ live.mark(r.ok) }}{{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}
 </div>
 {% elif j %}
 <div class="mt-2 rounded-lg border px-3 py-2 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not j.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  It now appears in {{ j.applied }} of {{ j.total }} members' Google Calendars.
+  <p data-announce="{{ j.id }}">It now appears in {{ j.applied }} of {{ j.total }} members' Google Calendars.</p>
   {% if j.failed_total %}
   <div class="mt-1 text-xs">Couldn't add it for {{ j.failed_total }} — they can add it manually:</div>
   {{ failures(j, "max-h-24") }}
