@@ -59,7 +59,14 @@ plan's Phase 0 F1–F3.
   runtime, every source module in the frozen PYZ, data files, `gam version` in a throwaway
   `HOME`/`GAMCFGDIR`; run locally in a scratch clone, the Actions run itself unseen; the app is never
   launched). **Open:** C7's `httpx2`.
-- **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
+- **Phase 4** — applied: A9 (`tests/test_a11y.py`, `make a11y`, a CI `a11y` job on macos-latest:
+  axe-core 4.13.0 vendored in `tests/a11y/` with its licences and SHA-256, run over 18 states of the
+  mock-backed app in headless Chrome over `--remote-debugging-pipe` — no websocket dependency — with
+  `--use-mock-keychain`; `tests/a11y/baseline.json` holds 487 serious/critical nodes, 477 of them
+  `color-contrast` (A1), plus `select-name` 6, `label` 2, `label-title-only` 2 (A4); a new or grown
+  count fails and so does a shrunk one until the baseline is lowered. Deselected from the default
+  run; verified locally, including in a venv from `requirements/dev.txt` alone, and by a planted
+  unlabeled input failing it; the Actions run itself unseen). **Open:** A1–A7. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; `ae8d351` — the bulk
   department, calendar group fan-out and Builder sequence feeds record a capped reason per failure,
@@ -382,7 +389,7 @@ tenant without per-action permission.
   `pyproject.toml`'s `filterwarnings`; the Starlette/httpx TestClient deprecation warning.
 
 ## Phase 4 — Accessibility (3 → 9)
-*Status: open (A8 declined, D7).*
+*Status: A9 APPLIED; A1–A7 open (A8 declined, D7). Each fix lowers `tests/a11y/baseline.json`.*
 - **A1 Contrast (S, global):** `brand-gray` #B2B4BB text is 2.07:1 on white (195 uses incl. headings
   and helper text); `blueink/80` 3.86:1, `/70` 3.14:1; white on `brand-blue` 3.97:1. Adjust the
   Tailwind tokens in `base.html` to ≥4.5:1 for text (keep the light gray for borders only).

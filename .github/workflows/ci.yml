@@ -63,6 +63,26 @@ jobs:
         if: matrix.os == 'macos-latest' && matrix.python == '3.14'
         run: pytest -q --cov --cov-report=term
 
+  a11y:
+    # tests/test_a11y.py: axe-core over every main screen of the mock-backed app in headless Chrome,
+    # its serious/critical violations held to tests/a11y/baseline.json. macos-latest ships Google
+    # Chrome; A11Y_REQUIRE_CHROME fails the job, rather than skipping the test, if it ever doesn't.
+    name: a11y (axe-core ratchet)
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install (hash-locked, wheels only)
+        run: |
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
+      - name: No new or grown serious/critical axe violation (the summary prints on success too)
+        run: pytest -q -m a11y -rP
+        env:
+          A11Y_REQUIRE_CHROME: "1"
+
   gam-compat:
     name: gam-compat (pinned binary)
     runs-on: macos-latest

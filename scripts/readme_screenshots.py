@@ -23,8 +23,6 @@ import time
 import urllib.request
 from pathlib import Path
 
-import websockets
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -129,6 +127,8 @@ CHROME_FLAGS = ["--headless=new", "--use-mock-keychain", "--no-first-run", "--no
 
 
 async def shoot():
+    import websockets  # here, not at the top: tests/test_a11y.py imports CHROME_FLAGS, and CI has no websockets
+
     prof = tempfile.mkdtemp(prefix="chrome-shots-")
     proc = subprocess.Popen([CHROME, *CHROME_FLAGS, "--remote-debugging-port=9333", f"--user-data-dir={prof}",
                              "--window-size=1280,880", "about:blank"],

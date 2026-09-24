@@ -1,4 +1,4 @@
-.PHONY: setup gam css test cov lint lock run app clean help
+.PHONY: setup gam css test cov a11y lint lock run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -17,6 +17,7 @@ help:
 	@echo "make css     - rebuild gamgui/web/static/app.css (after a template adds a Tailwind class)"
 	@echo "make test    - run the offline test suite"
 	@echo "make cov     - the suite with CI's coverage gate (floor in pyproject.toml)"
+	@echo "make a11y    - the axe-core accessibility ratchet over every screen (needs Google Chrome)"
 	@echo "make lint    - run ruff, mypy and the app.css freshness check (what CI's lint job enforces)"
 	@echo "make lock    - regenerate the hash-locked requirements/*.txt from requirements/*.in"
 	@echo "               refresh every pin with: make lock ARGS=--upgrade"
@@ -58,6 +59,9 @@ test:
 
 cov:
 	$(PY) -m pytest -q --cov --cov-report=term
+
+a11y:
+	$(PY) -m pytest -q -m a11y -rP
 
 lint:
 	$(VENV)/bin/ruff check .

@@ -44,8 +44,12 @@ testpaths = ["tests"]
 # A hung test (e.g. an asyncio subprocess deadlock seen intermittently on CI) fails with a
 # traceback after 60s instead of hanging the whole job.
 timeout = 60
+# The axe-core ratchet starts headless Chrome and takes ~30s: its own run (`pytest -m a11y`, make a11y,
+# CI's a11y job). A later -m on the command line replaces this one.
+addopts = "-m 'not a11y'"
 markers = [
     "hand_built_argv: the test sends the mock gam argv no GAMCommands builder emits, on purpose (a malformed shape the mock must refuse, a partial one that seeds its state); the session's argv grammar sweep (tests/conftest.py) skips its calls",
+    "a11y: the axe-core accessibility ratchet over the mock-backed app in headless Chrome (tests/test_a11y.py); deselected by default, run with -m a11y",
 ]
 filterwarnings = [
     # Before Python 3.13 (gh-114177) an asyncio subprocess transport GC'd after the TestClient loop

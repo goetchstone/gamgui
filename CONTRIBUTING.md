@@ -124,6 +124,7 @@ ecosystem, which regenerates them with the same flags.
 make test
 make lint
 make cov     # optional: the suite under CI's coverage gate
+make a11y    # after a template change: the accessibility ratchet (needs Google Chrome)
 ```
 
 `make lint` runs [ruff](https://docs.astral.sh/ruff/) with the rule set in `pyproject.toml`: checks
@@ -158,4 +159,9 @@ that a command we use was renamed or removed. An `app` job builds `dist/GamGUI.a
 app` does (ad-hoc signed — the runner has no identity) and runs `scripts/check_app.py` on it: the
 signature and hardened runtime, the frozen modules, the bundled data files and a `gam version` from
 the bundle. Run the same check after a local `make app` when you change `gamgui.spec`, the app lock
-or the signing scripts.
+or the signing scripts. An `a11y` job runs `make a11y`'s check on macOS:
+[axe-core](https://github.com/dequelabs/axe-core) (vendored in `tests/a11y/`) over every main screen
+of the mock-backed app in headless Chrome, failing on a serious or critical violation
+`tests/a11y/baseline.json` doesn't already list — and on a count that dropped, so rewrite the
+baseline (`A11Y_UPDATE_BASELINE=1 .venv/bin/python -m pytest -m a11y`) in the commit that fixes one.
+The baseline only shrinks.
