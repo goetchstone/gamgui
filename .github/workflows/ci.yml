@@ -5,10 +5,10 @@ on:
     branches: [main]
   pull_request:
 
-# Every job here only checks out, installs, vendors the GAM binary and runs pytest, ruff or mypy —
-# nothing writes back to the repo, so read-only content access is all GITHUB_TOKEN needs (it is also
-# what the fetch_gam.sh api.github.com calls authenticate with, purely to dodge the anonymous 60/hr
-# limit).
+# Every job here only checks out, installs, vendors the GAM binary and runs pytest, ruff or mypy, or
+# builds and checks the .app — nothing writes back to the repo, so read-only content access is all
+# GITHUB_TOKEN needs (it is also what the fetch_gam.sh api.github.com calls authenticate with, purely
+# to dodge the anonymous 60/hr limit).
 permissions:
   contents: read
 
@@ -88,6 +88,31 @@ jobs:
           PY
       - name: Command-contract test against the REAL reference
         run: pytest -q tests/test_command_contract.py
+
+  app:
+    # Freezes the .app exactly as `make app` does, so a spec, lock or signing change that breaks the
+    # bundle fails here rather than at the next local build. The runner has no signing identity, so
+    # build_app.sh signs ad-hoc (hardened runtime). The pinned gam's libpython needs macOS >= 26.5.
+    name: app (build + smoke check)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Vendor the pinned GAM7 binary (what make gam runs)
+        run: ./scripts/fetch_gam.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # authenticate api.github.com -> avoid the 60/hr 403
+      - name: Restore the committed command catalog (fetch_gam.sh replaces resources/gam7 wholesale)
+        run: git checkout -- gamgui/resources/gam7/command_catalog.json
+      - name: Build dist/GamGUI.app (a fresh venv from requirements/app.txt)
+        run: ./scripts/build_app.sh
+        env:
+          PYTHON: python
+      - name: Smoke-check the bundle (executable, signature, frozen modules, data files, gam version)
+        run: build/venv/bin/python scripts/check_app.py dist/GamGUI.app
 
   gam-latest-preview:
     # Non-blocking early warning: would the NEWEST GAM rename/remove a command we use? Does not change the pin.

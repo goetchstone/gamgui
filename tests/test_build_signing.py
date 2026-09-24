@@ -7,6 +7,7 @@ that holds the plaintext credentials.
 
 from __future__ import annotations
 
+import importlib.util
 import plistlib
 import re
 import shutil
@@ -55,6 +56,25 @@ def test_app_entitlements_are_library_validation_only():
     # A self-signed/ad-hoc signature has no Team ID, so without this every bundled dylib is refused.
     # Nothing else was needed (sign_app.sh records what was checked) — widen only with a reason.
     assert _entitlements("app.entitlements") == {DLV: True}
+
+
+def _check_app():
+    spec = importlib.util.spec_from_file_location("check_app", SCRIPTS / "check_app.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_app_smoke_check_tracks_the_source():
+    # scripts/check_app.py (CI's app job) expects every source module frozen bar NOT_FROZEN, and gam to
+    # report the pin: neither list nor the pin regex may go stale silently.
+    check = _check_app()
+    from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
+
+    assert check.pinned_gam_version() == EXPECTED_GAM_VERSION
+    mods = check.source_modules()
+    assert {"gamgui.app", "gamgui.web.server", "gamgui.core.gam.runner"} <= mods
+    assert check.NOT_FROZEN <= mods
 
 
 def test_no_entitlements_reopen_injection_or_debugging():

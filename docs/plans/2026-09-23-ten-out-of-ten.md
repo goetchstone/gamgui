@@ -47,8 +47,12 @@ plan's Phase 0 F1–F3.
   (`sonar.python.version` is 3.10–3.14; the `filterwarnings` note names the real cause — before 3.13
   (gh-114177) a GC'd subprocess transport closes its pipes on the dead TestClient loop, and CI's
   3.10 and 3.12 legs lack that fix (read in their stdlib, not run), so the filter stays; the TestClient deprecation's documented
-  fix is to install `httpx2` in place of `httpx`, a new dependency awaiting the operator's OK).
-  **Open:** C5, C7's `httpx2`.
+  fix is to install `httpx2` in place of `httpx`, a new dependency awaiting the operator's OK)
+  · C5, in the commit that marks it (a CI `app` job on macos-latest: pinned `fetch_gam.sh`, the wiped
+  catalog restored, `build_app.sh` ad-hoc signed, then `scripts/check_app.py` — signature and hardened
+  runtime, every source module in the frozen PYZ, data files, `gam version` in a throwaway
+  `HOME`/`GAMCFGDIR`; run locally in a scratch clone, the Actions run itself unseen; the app is never
+  launched). **Open:** C7's `httpx2`.
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —
@@ -319,7 +323,7 @@ tenant without per-action permission.
   canned outputs.
 
 ## Phase 3 — Tooling and supply chain
-*Status: C1–C4 and C6 APPLIED, C7 partly (its `httpx2` swap awaits the operator) — do not re-apply. C5 open.*
+*Status: C1–C6 APPLIED, C7 partly (its `httpx2` swap awaits the operator) — do not re-apply.*
 - **C1 Ruff** (lint + format) with a CI step; fix or `noqa` the initial findings in one commit.
 - **C2 mypy** on `core/` (start non-strict, ratchet), CI step.
 - **C3 Hash-locked dependencies** (`pip-compile --generate-hashes` or `uv lock`) used by CI *and*

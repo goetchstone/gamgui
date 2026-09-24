@@ -25,7 +25,7 @@ authority for each.
 | [reports](reports.md) | Read-only directory-insight buckets (2SV, inactive, admins, completeness…) plus a lazy per-user storage/mail usage report | `core/reports.py`, `web/routes/reports.py` | None directly (read-only); leans on #1, #3, #9 |
 | [web-screens-jobs](web-screens-jobs.md) | The FastAPI/HTMX screens (Users, Groups, Calendars) and the in-memory `BatchJob` registry for polled long-loop progress | `web/jobs.py`, `web/routes/users.py`, `calendars.py`, `groups.py` | #9 (bound anything polled) |
 | [web-server-security](web-server-security.md) | The loopback app factory and the one middleware that authenticates every request (per-launch token, cross-origin reject, headers) | `web/server.py`, `app.py`, `web/templates/base.html` | #6 (loopback rejects cross-origin); #8 (no `\| tojson` in a double-quoted attr) |
-| [build-packaging](build-packaging.md) | Vendors the checksum-pinned GAM binary, regenerates the catalog, builds the codesigned `.app`, and the drift guards that fail CI on a stale pin/count | `Makefile`, `scripts/fetch_gam.sh`, `scripts/bump_gam.py`, `scripts/build_app.sh` | #7 (the vendored pin fails closed); the three drift guards |
+| [build-packaging](build-packaging.md) | Vendors the checksum-pinned GAM binary, regenerates the catalog, builds the codesigned `.app`, and the drift guards that fail CI on a stale pin/count | `Makefile`, `scripts/fetch_gam.sh`, `scripts/bump_gam.py`, `scripts/build_app.sh`, `scripts/check_app.py` | #7 (the vendored pin fails closed); the three drift guards |
 
 ## By task — which runbook(s) to read first
 

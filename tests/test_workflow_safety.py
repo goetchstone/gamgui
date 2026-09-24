@@ -11,7 +11,8 @@ move `v7` to new code, which then runs in jobs holding a token (`gam-watch.yml` 
 PRs). The trailing `# vX.Y.Z` comment is what Dependabot's `github-actions` ecosystem reads to bump
 the SHA and the comment together.
 
-CI keeps a coverage floor: one test leg runs `pytest --cov` against `fail_under` in pyproject.
+CI keeps a coverage floor: one test leg runs `pytest --cov` against `fail_under` in pyproject. And
+CI builds the .app from the pinned GAM and smoke-checks the bundle (`scripts/check_app.py`).
 """
 
 from __future__ import annotations
@@ -110,3 +111,18 @@ def test_ci_enforces_the_coverage_floor():
     assert report and int(report[1]) >= 90, "the coverage floor in pyproject was removed or lowered"
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert re.search(r"^\s+run: pytest -q --cov\b", ci, re.M), "no CI step runs the suite under --cov"
+
+
+def _jobs(text: str) -> dict:
+    parts = re.split(r"^  ([\w-]+):\n", text.split("\njobs:\n", 1)[1], flags=re.M)
+    return dict(zip(parts[1::2], parts[2::2], strict=True))
+
+
+def test_ci_builds_and_smoke_checks_the_app():
+    # Nothing else in CI freezes the .app: without this job a spec, lock or signing change that breaks
+    # the bundle would surface only at the next local `make app`.
+    jobs = _jobs((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    [job] = [body for body in jobs.values() if "run: ./scripts/build_app.sh\n" in body]
+    assert "runs-on: macos-latest\n" in job and re.search(r"^    timeout-minutes: \d+", job, re.M)
+    assert "run: ./scripts/fetch_gam.sh\n" in job and "--allow-unpinned" not in job  # the pinned binary
+    assert "run: build/venv/bin/python scripts/check_app.py dist/GamGUI.app\n" in job

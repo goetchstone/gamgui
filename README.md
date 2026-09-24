@@ -245,6 +245,7 @@ checksum (the pin's source of truth is `EXPECTED_GAM_VERSION` — see "Staying c
 
 ```bash
 make app       # PyInstaller -> dist/GamGUI.app (bundles Python + the GAM7 binary)
+build/venv/bin/python scripts/check_app.py dist/GamGUI.app   # optional: CI's smoke check of the bundle
 ```
 
 For distribution to other Macs you must codesign + notarize the bundle (including the embedded gam
@@ -331,7 +332,8 @@ build you intend to run against a real domain.
 
 `pytest` is fully offline (mock gam + in-memory Keychain). CI runs it on Ubuntu and macOS across
 Python 3.10, 3.12, and 3.14 — the macOS 3.14 run under a line-coverage floor (90%, `make cov`) — and
-runs `ruff check` and `mypy` once; see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+runs `ruff check` and `mypy` once. It also builds the `.app` from the pinned GAM (ad-hoc signed) and
+smoke-checks the bundle without launching it; see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 **Static analysis.** CodeQL runs on every push and PR to `main`, plus weekly, over both the Python
 code and the workflows themselves — configured in-tree so it is reviewable rather than hidden in

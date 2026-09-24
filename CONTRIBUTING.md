@@ -50,7 +50,8 @@ tests/              # offline test suite + fixtures (incl. the mock gam)
 requirements/       # hash-locked dependencies: *.in (inputs) -> *.txt (make lock)
 scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (SHA-256 pins),
                     # build_command_catalog.py (regenerate the browse catalog after a GAM bump),
-                    # build_app.sh (PyInstaller .app), acceptance.py (read-only live check),
+                    # build_app.sh (PyInstaller .app), check_app.py (smoke-check a built .app),
+                    # acceptance.py (read-only live check),
                     # vendor_assets.sh (vendor the JS/CSS the UI loads),
                     # preview_mock.py (the UI on the mock gam, for looking at a screen)
 ```
@@ -141,4 +142,8 @@ cov` runs the same check locally. Raise the floor as tests land; don't lower it 
 On top of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
 `tests/test_command_contract.py` against the real command reference, plus a non-blocking
 `gam-latest-preview` job that runs the token contract against the *newest* GAM7 as an early warning
-that a command we use was renamed or removed.
+that a command we use was renamed or removed. An `app` job builds `dist/GamGUI.app` exactly as `make
+app` does (ad-hoc signed — the runner has no identity) and runs `scripts/check_app.py` on it: the
+signature and hardened runtime, the frozen modules, the bundled data files and a `gam version` from
+the bundle. Run the same check after a local `make app` when you change `gamgui.spec`, the app lock
+or the signing scripts.
