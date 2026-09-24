@@ -30,6 +30,36 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-09-23 — "Run executes the live form" was fixed in offboarding, then found in four more flows
+- **What happened:** offboarding's Run rebuilt its steps from the live form, so a manager retyped
+  after Preview would have been handed the mailbox unpreviewed (failure-log 2026-09-23,
+  "Offboarding's Run executed the live form, not the preview"; `46e0bea`). The fix was a single-use
+  token in that one route. A later review of the same branch found the identical shape in four
+  sibling flows — signatures (a
+  stale "Apply to 1 user" overwrote the whole company), onboarding (an account created that no
+  preview showed), the bulk department job, and the Builder (a stale Run deleted an account nobody
+  previewed) — four more failure-log entries, fixed by lifting the token into `web/previews.py`
+  (`fd41d16`, `7b7c4ef`, `23c0afc`, `49514af`, `8d4d908`); the large calendar group share was built
+  on it from the start (`412f5ce`). The signatures entry says it plainly: offboarding "had just been
+  fixed for this exact class, route by route, and the other confirm steps were not swept".
+- **Invariant in force:** #2 (builder → `ChangePreview` → `guard.evaluate()` → `_run_write`). It names
+  the stages, not that the `ChangePreview` which runs is the one the operator was shown.
+- **Why it didn't hold:** not covered, and a fix in the wrong layer. Preview and Run are two HTTP
+  requests; every flow satisfied #2 by rebuilding a fresh `ChangePreview` from the second POST. The
+  offboarding fix was local, and nothing — no skill step, no tripwire — asked where else the shape
+  lived. The guard sweep then made one sibling worse: once `confirmed=1` was unconditional
+  (`a31b146`), a stale button carried a valid confirmation (onboarding's entry).
+- **Would a rule have caught it?** Only if enforced differently. The tripwire does now:
+  `tests/test_write_routes_guarded.py` requires any confirm step that posts the page's live form to
+  carry its preview's token, fails if an edit made after the preview writes anything, and fails if a
+  replay writes twice (`ce2fb2f`) — a new flow can't ship the shape. Two candidates for the observer
+  pass: #2 wording — "… → the apply route runs the change its preview held (single-use), never one
+  rebuilt from the posted form → …"; and a post-failure step — after fixing a shape in one route,
+  search its siblings for the same shape before closing (a later review found the four; a sweep
+  at fix time would have).
+- **Enforcement home if changed:** tripwire test (done); the #2 wording (CLAUDE.md) and the sibling
+  sweep (post-failure skill, soft) are for improve-rules.
+
 ## 2026-09-23 — Invariant #2 said "every mutation goes through guard.evaluate()"; five routes only rendered it
 - **What happened:** suspend, bulk department, event delete, offboarding and signature apply ran on a
   bare POST (failure-log 2026-09-23, "Five write routes ran on a bare POST"). They did call
