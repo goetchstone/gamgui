@@ -220,7 +220,8 @@ git clone <repo-url> && cd gamgui
 make setup     # create .venv, install dev + native-window deps
 make gam       # vendor the pinned GAM7 binary into gamgui/resources/gam7 (needs network)
 make test      # offline test suite — uses a mock gam, no binary/credentials required
-make lint      # ruff (the bug-catching rule set) and mypy (core + web), as CI enforces
+make lint      # ruff (the bug-catching rule set), mypy (core + web) and app.css freshness, as CI enforces
+make css       # rebuild the UI's Tailwind CSS after a template adds a class (pinned CLI, needs network once)
 make run       # launch the app (native window; without pywebview, a browser URL — dev only)
 ```
 
@@ -350,7 +351,7 @@ swapped on the index fails the install instead of shipping.
 and — with the dependency graph enabled — opens PRs for known CVEs. The actions are pinned by commit
 SHA, not by tag, so nobody can change what CI runs by moving a tag. The vendored GAM binary is
 intentionally excluded: it is pinned by SHA-256 and bumped through its own fail-closed runbook, not by
-a bot.
+a bot. So is the Tailwind CLI that builds the UI's CSS (`scripts/tailwind_checksums.txt`).
 
 ## Email signatures
 

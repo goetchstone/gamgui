@@ -1,0 +1,5 @@
+/* GENERATED from gamgui/web/tailwind.css by scripts/build_css.sh (make css): edit the templates or
+   tailwind.config.js and rebuild; never edit gamgui/web/static/app.css by hand. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

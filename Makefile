@@ -1,4 +1,4 @@
-.PHONY: setup gam test cov lint lock run app clean help
+.PHONY: setup gam css test cov lint lock run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -14,9 +14,10 @@ help:
 	@echo "make setup   - create venv and install (dev + native window); needs Python 3.10+"
 	@echo "               override the interpreter with: make setup PYTHON=python3.13"
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
+	@echo "make css     - rebuild gamgui/web/static/app.css (after a template adds a Tailwind class)"
 	@echo "make test    - run the offline test suite"
 	@echo "make cov     - the suite with CI's coverage gate (floor in pyproject.toml)"
-	@echo "make lint    - run ruff and mypy (the checks CI's lint job enforces)"
+	@echo "make lint    - run ruff, mypy and the app.css freshness check (what CI's lint job enforces)"
 	@echo "make lock    - regenerate the hash-locked requirements/*.txt from requirements/*.in"
 	@echo "               refresh every pin with: make lock ARGS=--upgrade"
 	@echo "make run     - launch the app (native window; falls back to a browser URL)"
@@ -49,6 +50,9 @@ setup:
 gam:
 	./scripts/fetch_gam.sh $(if $(TAG),--tag $(TAG))
 
+css:
+	./scripts/build_css.sh
+
 test:
 	$(PY) -m pytest -q
 
@@ -58,6 +62,7 @@ cov:
 lint:
 	$(VENV)/bin/ruff check .
 	$(VENV)/bin/mypy
+	./scripts/build_css.sh --check
 
 # One universal lock per input, valid on every Python >= 3.10 and every OS, so the whole CI matrix
 # installs the same file. Dependabot's uv ecosystem re-runs this command from the lock's own header.

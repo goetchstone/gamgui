@@ -90,6 +90,11 @@ guarding them:
   fresh virtualenv, only from `requirements/app.txt` with `pip install --require-hashes`: every
   file, and the build backend of the one package that ships only as source, must match a committed
   SHA-256. CI installs `requirements/dev.txt` the same way, from wheels only.
+- **The UI's CSS is built ahead of time, by a pinned tool.** `scripts/build_css.sh` runs the
+  Tailwind standalone CLI only if it matches the SHA-256 committed for that platform in
+  `scripts/tailwind_checksums.txt` (no pin, no run), and the unminified output is committed, so a
+  change to it shows up in review. Apart from the Google Fonts stylesheet, the page loads only
+  same-origin files: that CSS and the SRI-pinned htmx.
 - **Every GitHub Action is pinned by commit SHA.** A tag can be moved to new code by whoever
   controls the action's repository, and the release-watch job holds a token that can push a branch
   and open a PR. `tests/test_workflow_safety.py` fails any `uses:` pinned by tag; Dependabot bumps

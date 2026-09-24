@@ -22,6 +22,11 @@ if [ ! -x "gamgui/resources/gam7/gam" ]; then
   ./scripts/fetch_gam.sh
 fi
 
+# The spec bundles gamgui/web/static as is; rebuild app.css first so the bundle's CSS matches its
+# templates even when a template changed without `make css`.
+echo "==> Building gamgui/web/static/app.css..."
+./scripts/build_css.sh
+
 echo "==> Installing the locked dependencies into a fresh build venv..."
 # Everything the bundle holds — pywebview (the WKWebView host), PyInstaller's bootloader, the web
 # stack — comes from requirements/app.txt, each file checked against its committed SHA-256. A venv

@@ -5,10 +5,10 @@ on:
     branches: [main]
   pull_request:
 
-# Every job here only checks out, installs, vendors the GAM binary and runs pytest, ruff or mypy, or
-# builds and checks the .app — nothing writes back to the repo, so read-only content access is all
-# GITHUB_TOKEN needs (it is also what the fetch_gam.sh api.github.com calls authenticate with, purely
-# to dodge the anonymous 60/hr limit).
+# Every job here only checks out, installs, vendors the GAM binary and runs pytest, ruff, mypy or the
+# app.css check, or builds and checks the .app — nothing writes back to the repo, so read-only
+# content access is all GITHUB_TOKEN needs (it is also what the fetch_gam.sh api.github.com calls
+# authenticate with, purely to dodge the anonymous 60/hr limit).
 permissions:
   contents: read
 
@@ -29,6 +29,8 @@ jobs:
         run: ruff check --output-format=github .
       - name: Mypy (scope and settings in pyproject's [tool.mypy])
         run: mypy
+      - name: app.css is what the pinned Tailwind CLI builds from the templates (checksum-verified, fails closed)
+        run: ./scripts/build_css.sh --check
 
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})

@@ -13,31 +13,7 @@
 
   <!-- Vendored locally (no runtime CDN): the UI loads no remote executable scripts, works offline,
        and a CDN compromise can't inject JS that could read the launch token. See scripts/vendor_assets.sh. -->
-  <script src="/static/vendor/tailwind-play.js"></script>
   <script src="/static/vendor/htmx-1.9.12.min.js" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            ink: "#141414",        // near-black body text (brand black is #000000)
-            paper: "#FAF9F6",      // warm off-white page
-            brand: {
-              black: "#000000",
-              white: "#FFFFFF",
-              gray: "#B2B4BB",     // warm gray
-              blue: "#69829E",     // slate blue
-              blueink: "#52647B",  // darker slate for text/hover contrast on white
-            },
-          },
-          fontFamily: {
-            serif: ['"Source Serif 4"', "Minion Pro", "Georgia", "serif"],
-            sans: ['"Source Sans 3"', "Myriad Pro", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"],
-          },
-        },
-      },
-    };
-  </script>
   <style>
     :root { color-scheme: light; }
     body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
@@ -64,6 +40,9 @@
       body.print-one .print-target { position: absolute; left: 0; top: 0; width: 100%; }
     }
   </style>
+  <!-- Tailwind, precompiled from the templates (make css). After the block above, where the in-browser
+       compiler used to inject it, so the cascade is unchanged. -->
+  <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body class="h-full bg-paper text-ink font-sans">
   <div id="loadbar"></div>

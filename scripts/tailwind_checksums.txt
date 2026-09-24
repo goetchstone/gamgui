@@ -1,0 +1,9 @@
+# Pinned SHA-256 checksums for the Tailwind standalone CLI that scripts/build_css.sh runs.
+# Taken from the release's own sha256sums.txt; the macos-arm64 and linux-x64 hashes were also checked
+# against downloads. build_css.sh refuses an asset with no line here, and a download or cached binary
+# that doesn't match. Update DELIBERATELY with TAILWIND_VERSION in build_css.sh.
+# Format: <sha256>  <tag>/<asset>
+69b1378b8133192d7d2feb12a116fa12d035594f58db3eff215879e4ad8cf39b  v3.4.17/tailwindcss-linux-arm64
+7d24f7fa191d2193b78cd5f5a42a6093e14409521908529f42d80b11fde1f1d4  v3.4.17/tailwindcss-linux-x64
+a1d0c7985759accca0bf12e51ac1dcbf0f6cf2fffb62e6e0f62d091c477a10a3  v3.4.17/tailwindcss-macos-arm64
+6cbdad74be776c087ffa5e9a057512c54898f9fe8828d3362212dfe32fc933a3  v3.4.17/tailwindcss-macos-x64

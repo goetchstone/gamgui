@@ -52,7 +52,8 @@ scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (S
                     # build_command_catalog.py (regenerate the browse catalog after a GAM bump),
                     # build_app.sh (PyInstaller .app), check_app.py (smoke-check a built .app),
                     # acceptance.py (read-only live check),
-                    # vendor_assets.sh (vendor the JS/CSS the UI loads),
+                    # vendor_assets.sh (vendor htmx), build_css.sh + tailwind_checksums.txt
+                    # (make css: build the UI's Tailwind CSS with the pinned CLI),
                     # preview_mock.py (the UI on the mock gam, for looking at a screen)
 ```
 
@@ -134,6 +135,12 @@ correct, restructure it so the type is visible (bind the value to a local before
 lambda doesn't keep an `is None` check) before reaching for a narrow `# type: ignore[code]` with its
 reason after it — `warn_unused_ignores` fails one that stops being needed. Only the optional
 `abapit` backend is exempt from missing stubs; a new dependency without types fails the check.
+
+Last, it checks that `gamgui/web/static/app.css` is current. The UI's Tailwind CSS is built ahead
+of time from the class names in the templates (and any static JS or Python that holds them): after
+adding a class, run `make css` and commit `app.css` with the template. The first run downloads the
+pinned Tailwind CLI (checksum-verified, like the GAM binary) into `build/`. Write each class name
+in full — one assembled from pieces (`'bg-' + tone`) isn't found, so it isn't styled.
 
 CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14, each
 installed from `requirements/dev.txt`. The macOS 3.14 run also measures line coverage and fails
