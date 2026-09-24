@@ -459,7 +459,7 @@ async def unshare(request: Request, cal: Annotated[str, Form()], scope: Annotate
     cal, scope = cal.strip(), scope.strip()
     result = await conn.remove_calendar_acl_for(cal, scope)
     if not result.ok:
-        return error_partial(request, f"Couldn't remove access: {result.detail}")
+        return write_failed(request, f"Couldn't remove {scope}'s access.", result)
     try:
         ctx = await _detail_ctx(request, conn, cal, label)
     except Exception as exc:
@@ -513,8 +513,7 @@ async def delete_cal(request: Request, cal: Annotated[str, Form()],
                             error="Type DELETE (in capitals) to confirm.")
     result = await conn.delete_calendar(owner, cal)
     if not result.ok:
-        return _delete_view(request, cal=cal, label=label.strip(), owner=owner,
-                            error=f"Couldn't delete the calendar: {result.detail}")
+        return write_failed(request, "Couldn't delete the calendar.", result)
     idx = request.app.state.gamgui.calendar_index
     if idx is not None:
         # Off the event loop — a sync SQLite write could block briefly if a rebuild is mid-write.
@@ -561,5 +560,5 @@ async def event_delete(request: Request, cal: Annotated[str, Form()], event_id: 
         return error_partial(request, refusal)
     result = await conn.delete_event(cal, event_id)
     if not result.ok:
-        return error_partial(request, f"Couldn't delete the event: {result.detail}")
+        return write_failed(request, "Couldn't delete the event.", result)
     return TEMPLATES.TemplateResponse(request, "_event_delete.html", {"cal": cal, "event": None, "deleted": True})

@@ -1982,9 +1982,23 @@ WRITE_FAILURES = [
 ]
 
 
+# The Calendars screen's and the groups board's writes, which headlined GAM's raw line until U9's second pass.
+WRITE_FAILURES += [
+    ("/calendars/unshare", {"cal": SEC_CAL, "scope": "user:carol@example.com"}, "remove_calendar_acl_for",
+     "Couldn't remove user:carol@example.com's access."),
+    ("/calendars/delete", {"cal": SEC_CAL, "confirm": "DELETE"}, "delete_calendar", "Couldn't delete the calendar."),
+    ("/calendars/event/delete", {"cal": SEC_CAL, "event_id": "evt-1", "confirmed": "1"}, "delete_event",
+     "Couldn't delete the event."),
+    ("/groups/members", {"group": "sales@example.com", "email": "carol@example.com", "op": "add"},
+     "add_group_member", "Couldn't add carol@example.com to sales@example.com."),
+    ("/groups/members", {"group": "sales@example.com", "email": _ALICE, "op": "remove"},
+     "remove_group_member", f"Couldn't remove {_ALICE} from sales@example.com."),
+]
+
+
 @pytest.mark.parametrize("route, form, method, what", WRITE_FAILURES,
-                         ids=[f"{r}-{f.get('suspend', '')}" for r, f, _, _ in WRITE_FAILURES])
-def test_a_failed_user_write_says_why_with_gams_error_expandable(client, monkeypatch, route, form, method, what):
+                         ids=[f"{r}-{f.get('suspend') or f.get('op', '')}" for r, f, _, _ in WRITE_FAILURES])
+def test_a_failed_write_says_why_with_gams_error_expandable(client, monkeypatch, route, form, method, what):
     # Plan U9: these once headlined GAM's raw "GAM failed (permission_denied, exit=1): …" line. Now the
     # message says what didn't happen and what to do in words; GAM's error is one click away.
     from gamgui.core.connectors.base import ChangePreview, ChangeResult, ConnectorID, RiskLevel

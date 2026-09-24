@@ -1,7 +1,7 @@
 {% if empty %}
 <p class="text-sm text-brand-gray">Pick a group, then drag people in from the right. Drag a member out to remove.</p>
 {% else %}
-{% if error %}<div class="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">{{ error }}</div>{% endif %}
+{% if error %}<div class="mb-2">{% with ok=False, message=error %}{% include "_action_result.html" %}{% endwith %}</div>{% endif %}
 <p class="text-xs text-brand-gray mb-2">{{ members | length }} member{{ "s" if members | length != 1 }} in {{ group }}</p>
 <ul class="flex flex-wrap gap-2">
   {% for m in members %}
