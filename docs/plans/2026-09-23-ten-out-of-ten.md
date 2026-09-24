@@ -77,7 +77,16 @@ plan's Phase 0 F1–F3.
   records keep `group` and read as before) · with it, the classifier (`46a2b1f`): a
   per-user refusal that also says "not found" is `PERMISSION_DENIED`, not the `NOT_FOUND` the calendar
   sweep tolerates, and GAM's " (403/1200)" entity counter is no longer read as a status code
-  (failure-log 2026-09-24). **Open:** Q9, Q13, batch-2 F#22.
+  (failure-log 2026-09-24) · Q9 `2a43ab1` `8faca00` `8d41f4c` — pure moves: onboarding's
+  `provision_hire` and its per-hire steps, `split_name` and `welcome_context` → `core/onboarding.py`;
+  the offboarding executor → `core/lifecycle.py` `run_offboard`; the bulk department loop →
+  `core/bulk.py` `set_departments`, with `stop_reason` moved there from `web/jobs.py` so core never
+  imports web (users.py keeps a thin task that drops the directory cache after it). Tests import
+  them from core; the failed-list tripwire now scans all of `gamgui/`, and the chokepoint tripwires
+  already did. Still in routes, by the item's scope: the job loops `_run_bulk_onboard`, `_run_apply`
+  (signatures), `_run_subscribe`, `_build_index`, `_run_sequence` · batch-2 F#22 `2a43ab1`
+  (`resolve_hires` → (row, role template) pairs + row errors, `tally_hires` the preview's summary;
+  bulk Run resolves only, and the preview holds the pairs the executor runs). **Open:** Q13.
 - **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
   `scripts/bump_gam.py`). **Open:** V1, V6; V3–V5 are new scope, and D6 says none for now.
 - **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
@@ -407,7 +416,7 @@ tenant without per-action permission.
   Build the CSS at `make app` time — faster first paint, and a prerequisite for Q13's CSP.
 
 ## Phase 6 — Architecture and code health
-*Status: Q10, Q11, Q12 and batch-2 F#23 APPLIED; the rest open (see Status by item).*
+*Status: Q9, Q10, Q11, Q12 and batch-2 F#22, F#23 APPLIED; Q13 open (see Status by item).*
 - **Q9** Move business logic out of routes: `_provision_hire` and helpers (`routes/onboarding.py`
   ~:79-203) → `core/onboarding.py`; `_run_offboard` → `core/lifecycle.py`; bulk store
   (`users.py` ~:277) → core. Tests then import core, not private route functions. (Supersedes
