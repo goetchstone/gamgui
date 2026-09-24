@@ -55,17 +55,23 @@ plan's Phase 0 F1–F3.
   launched). **Open:** C7's `httpx2`.
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
-  (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —
-  bulk department, calendar group fan-out, Builder sequence — still list addresses without a
-  reason) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
+  (`01d29ce`, `2c99722` — signatures and every user-detail write say why; `ae8d351` — the bulk
+  department, calendar group fan-out and Builder sequence feeds record a capped reason per failure,
+  with GAM's error expandable in each final panel; `7b3fe49` — the Calendars screen's remove-access,
+  calendar and event delete and the groups board's add/remove go through `write_failed`. Still
+  leading with GAM's raw line: the Builder's single Run result (`builder.py` ~:358), onboarding's
+  "Couldn't create the account: …" and offboarding's step log) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
   unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; the cache items are open) · U13
   (`hx-disabled-elt` on every write and job control, `a31b146`; the nav indicator and lazy user-detail
   tabs are open). **Open:** U1, U5, U7, U8, U10, U14.
-- **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`.
-  Partly: Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
+- **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
+  · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
-  messages unchanged; `test_route_helpers_live_once_in_common`; the one bounded job base class is
-  open) · Q12 `47142f0` (the ternary was already gone with B2's `f97ab28`; a write's
+  messages unchanged; `test_route_helpers_live_once_in_common`) and `ae8d351` (one bounded `Job` base
+  in `web/jobs.py` — counts, a 200-row failed sample with "+K more", a 300-char reason and raw error
+  per failure, the 12-row feed, `finished_at`, `cancel_requested` for U5, `interrupted`; signatures
+  run a plain `Job`, `OnboardJob` and `BatchJob` derive from it; `test_every_job_record_stays_bounded_at_scale`)
+  · Q12 `47142f0` (the ternary was already gone with B2's `f97ab28`; a write's
   other party is audited under the key that names it — `group`, `scope`, `calendar`, `event`, `owner`,
   `new_owner` — not always `group`, and a Builder write records its catalog id as `extra.command`; old
   records keep `group` and read as before) · with it, the classifier (`46a2b1f`): a
@@ -401,7 +407,7 @@ tenant without per-action permission.
   Build the CSS at `make app` time — faster first paint, and a prerequisite for Q13's CSP.
 
 ## Phase 6 — Architecture and code health
-*Status: Q11 and batch-2 F#23 APPLIED; the rest open.*
+*Status: Q10, Q11, Q12 and batch-2 F#23 APPLIED; the rest open (see Status by item).*
 - **Q9** Move business logic out of routes: `_provision_hire` and helpers (`routes/onboarding.py`
   ~:79-203) → `core/onboarding.py`; `_run_offboard` → `core/lifecycle.py`; bulk store
   (`users.py` ~:277) → core. Tests then import core, not private route functions. (Supersedes
