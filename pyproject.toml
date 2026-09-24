@@ -45,9 +45,10 @@ testpaths = ["tests"]
 # traceback after 60s instead of hanging the whole job.
 timeout = 60
 filterwarnings = [
-    # Python 3.9 GCs a finished asyncio subprocess transport after the TestClient loop closes
-    # (background signature-apply jobs) -> "Exception ignored in ... RuntimeError: Event loop is closed".
-    # Harmless teardown artifact; the real app's event loop is long-lived.
+    # Before Python 3.13 (gh-114177) an asyncio subprocess transport GC'd after the TestClient loop
+    # closes (a background job a test left running) closes its pipes on the dead loop -> "Exception
+    # ignored in ... RuntimeError: Event loop is closed". CI's 3.10 and 3.12 legs still hit it; 3.13+
+    # skips the close. Harmless teardown artifact; the real app's event loop is long-lived.
     "ignore:Exception ignored in:pytest.PytestUnraisableExceptionWarning",
 ]
 

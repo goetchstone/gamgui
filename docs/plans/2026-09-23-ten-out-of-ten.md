@@ -41,7 +41,12 @@ plan's Phase 0 F1–F3.
   ecosystem was already configured) · C6 (in the commit that marks it: `bump_gam.py`'s
   `attest_argv` adds `--signer-workflow GAM-team/GAM/.github/workflows/build.yml`, `--source-ref
   refs/heads/main` and `--deny-self-hosted-runners`, read off the published attestations of four
-  releases; not yet run end to end on a downloaded asset). **Open:** C5, C7.
+  releases; not yet run end to end on a downloaded asset). Partly: C7 (in the commit that marks it:
+  `sonar.python.version` is 3.10–3.14; the `filterwarnings` note names the real cause — before 3.13
+  (gh-114177) a GC'd subprocess transport closes its pipes on the dead TestClient loop — which
+  CI's 3.10 and 3.12 legs still hit, so the filter stays; the TestClient deprecation's documented
+  fix is to install `httpx2` in place of `httpx`, a new dependency awaiting the operator's OK).
+  **Open:** C5, C7's `httpx2`.
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —
