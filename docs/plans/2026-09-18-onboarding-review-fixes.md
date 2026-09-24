@@ -17,8 +17,7 @@ read `docs/domains/onboarding.md` before starting (the domain runbook).
 - Test command: `.venv/bin/python -m pytest -q` (must stay green; expect 576 passed after this).
 - Commit **directly to `main`** (no PR). A local **pre-commit hook hard-blocks any `fix:`/`fix(`
   commit unless `docs/failure-log.md` was modified within the last hour** — Step 4 below satisfies it.
-- Push as the repo owner (the active `gh` account lacks write):
-  `gh auth switch --user goetchstone && git -c credential.helper='!gh auth git-credential' push origin main && gh auth switch --user SH-Goetch`
+- Push as the repo owner (the active `gh` account may lack write access).
 - End the commit message with the `Co-Authored-By:` line your session's attribution reminder gives.
 - Docs follow code in the same commit (Step 5).
 

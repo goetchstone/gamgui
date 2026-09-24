@@ -244,3 +244,25 @@ def test_claude_md_covers_the_invariants_that_have_actually_bitten():
     text = _claude_md().lower()
     for topic in ("argv", "guard", "keychain", "o_nofollow", "origin", "tojson", "mock"):
         assert topic in text, f"CLAUDE.md no longer covers '{topic}'"
+
+
+def _tracked_text_files():
+    import subprocess
+
+    try:
+        out = subprocess.run(["git", "ls-files", "-z"], cwd=_ROOT, capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("not a git checkout")
+    for name in out.decode().split("\0"):
+        path = _ROOT / name
+        if name and path.suffix in {".md", ".txt", ".sh", ".py", ".yml", ".yaml", ".toml", ".json"}:
+            if not name.startswith("gamgui/resources/") and path.is_file():
+                yield name, path.read_text(errors="replace")
+
+
+def test_no_tracked_file_names_a_github_account_to_switch_to():
+    # Two handoff plans once shipped a pasted push line whose account switch named the operator's
+    # second GitHub account in this public repo. Say "push as the repo owner" instead.
+    switch = re.compile(r"gh\s+auth\s+switch\b[^\n]*?(?:--user|-u)[ =]\S+")
+    hits = [f"{name}: {m.group(0)}" for name, text in _tracked_text_files() for m in switch.finditer(text)]
+    assert not hits, "a tracked file names a gh account to switch to:\n" + "\n".join(hits)

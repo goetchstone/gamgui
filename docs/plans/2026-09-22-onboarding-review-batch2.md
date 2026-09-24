@@ -17,8 +17,7 @@ invariants; read `docs/domains/onboarding.md` first.
 - Tests: `.venv/bin/python -m pytest -q` (stay green).
 - Commit **directly to `main`** (no PR). A local **pre-commit hook hard-blocks a `fix:`/`fix(` commit
   unless `docs/failure-log.md` was touched in the last hour** — Batch A adds an entry, satisfying it.
-- Push as owner (active `gh` account lacks write):
-  `gh auth switch --user goetchstone && git -c credential.helper='!gh auth git-credential' push origin main && gh auth switch --user SH-Goetch`
+- Push as the repo owner (the active `gh` account may lack write access).
 - End commit messages with the `Co-Authored-By:` line from your session's attribution reminder.
 - Docs follow code in the same commit. After code changes that a running app would show, rebuild:
   `make app` (PyInstaller; verify frozen modules via the PYZ, not by grepping `.py` in the bundle).
