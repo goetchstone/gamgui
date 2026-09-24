@@ -11,7 +11,10 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import re
+import secrets
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
@@ -149,28 +152,111 @@ def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResp
     looks_tabular = text[:1] in "[{" or "," in first
     records = parse_records(out) if looks_tabular else []
     if records:
-        # Keep the full result set for the CSV download — the table itself truncates at 100 rows —
-        # and, for a sensitive read, what the download's audit record names (never the rows).
-        app_state(request).builder_last_result = {
-            "records": records, "gam": gam,
+        # The whole result set stays here: the table's filter and pager work over every row of it
+        # (plan U1 — a filter over only the rendered rows once hid row 101 on), and the CSV download
+        # takes it too; for a sensitive read, so does what the download's audit record names (never
+        # the rows). The id lets a stale table's request tell it has been replaced.
+        last = app_state(request).builder_last_result = {
+            "id": secrets.token_hex(6), "records": records, "gam": gam,
             "sensitive": {"command": cmd.id, "argv": list(argv), "target": target} if cmd.sensitive else None}
-        return TEMPLATES.TemplateResponse(request, "_records_table.html", {"records": records, "gam": gam})
+        return TEMPLATES.TemplateResponse(request, "_records_table.html",
+                                          _results_context(request, last, "", False, 1))
     return TEMPLATES.TemplateResponse(request, "_read_output.html", {"output": out, "gam": gam})
 
 
+RESULT_ROWS = 10    # result rows a page — the table sits under the command's form in the build pane
+_EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}")
+_NO_RESULT = "No results — run a read command first."
+_REPLACED = "This result was replaced by a newer run — run the command again to see it."
+
+
+def _columns_and_texts(last: dict) -> tuple:
+    """Every column any row has, the first row's first (ragged JSON: the table and the CSV show the same
+    columns), and each row's lowercased text to filter on — worked out once per result."""
+    if "texts" not in last:
+        records = last["records"]
+        last["cols"] = list(dict.fromkeys(k for r in records for k in r))
+        last["texts"] = ["\n".join(str(r.get(k, "")) for k in last["cols"]).lower() for r in records]
+    return last["cols"], last["texts"]
+
+
+def _is_external(text: str, domain: str) -> bool:
+    """The sharing-audit lens: a row that names "anyone" (a public or anyone-with-the-link share), or an
+    address outside your domain."""
+    if "anyone" in text:
+        return True
+    return bool(domain) and any(not e.endswith("@" + domain) for e in _EMAIL.findall(text))
+
+
+def _matching(request: Request, last: dict, q: str, external: bool) -> list:
+    """The result's rows that pass the filter and the External-only toggle — over every row, not a page."""
+    q = q.strip().lower()
+    st = app_state(request)
+    domain = (getattr(st.connector, "domain", "") or st.audit_domain or "").lower()
+    _, texts = _columns_and_texts(last)
+    return [r for r, t in zip(last["records"], texts, strict=True)
+            if (not q or q in t) and (not external or _is_external(t, domain))]
+
+
+def _results_context(request: Request, last: dict, q: str, external: bool, page: int) -> dict:
+    cols, _ = _columns_and_texts(last)
+    rows = _matching(request, last, q, external)
+    pages = max(1, -(-len(rows) // RESULT_ROWS))
+    page = min(max(1, page), pages)
+    start = (page - 1) * RESULT_ROWS
+    filtered = bool(q.strip()) or external
+    query = {"rid": last.get("id", ""), "q": q.strip(), "external": "1" if external else ""}
+    return {
+        "rid": last.get("id", ""), "gam": last.get("gam", ""), "cols": cols, "q": q, "external": external,
+        "rows": rows[start:start + RESULT_ROWS], "start": start, "matched": len(rows),
+        "total": len(last["records"]), "page": page, "pages": pages, "filtered": filtered,
+        "csv_url": "/builder/export.csv?" + urlencode({k: v for k, v in query.items() if v}),
+    }
+
+
+def _on(flag: str) -> bool:
+    return flag in ("1", "true", "on")
+
+
+def _last_result(request: Request, rid: str):
+    """The retained result a table's request names, or why it can't be served."""
+    last = app_state(request).builder_last_result
+    if not last or not last.get("records"):
+        return None, _NO_RESULT
+    if rid and rid != last.get("id"):
+        return None, _REPLACED
+    return last, ""
+
+
+@router.get("/results", response_class=HTMLResponse)
+async def results(request: Request, rid: str = "", q: str = "", external: str = "",
+                  page: int = 1) -> HTMLResponse:
+    """A page of the last read's rows that match the filter — the table's filter box, External-only
+    toggle and pager all ask here, so each searches the whole result, not the rows on screen."""
+    last, why = _last_result(request, rid)
+    if last is None:
+        return error_partial(request, why)
+    ctx = _results_context(request, last, q, _on(external), page)
+    # A pager button that just went disabled can't keep focus: the page line takes it, not <body>.
+    trigger = request.headers.get("HX-Trigger")
+    ctx["focus"] = (trigger == "rt-prev" and ctx["page"] == 1) or (trigger == "rt-next" and ctx["page"] == ctx["pages"])
+    ctx["oob"] = True
+    return TEMPLATES.TemplateResponse(request, "_records_page.html", ctx)
+
+
 @router.get("/export.csv")
-async def export_csv(request: Request) -> Response:
-    """Download the most recent read-command result set as CSV (all rows, not just the first 100).
+async def export_csv(request: Request, rid: str = "", q: str = "", external: str = "") -> Response:
+    """Download the most recent read-command result set as CSV — every row, or, with the table's
+    filter (``q``, ``external``), every row that matches it.
 
     The download of a sensitive read's result (backup codes, browser tokens) hands the secret out as a
     file, so it is audited like the Sheet export: ``sensitive_csv_export``, never the rows. With no
     connector to audit through, it is refused rather than served unrecorded."""
     st = app_state(request)
-    last = st.builder_last_result
-    if not last or not last.get("records"):
-        return Response("No results to export — run a read command first.",
-                        media_type="text/plain", status_code=404)
-    records = last["records"]
+    last, why = _last_result(request, rid)
+    if last is None:
+        return Response(why, media_type="text/plain", status_code=404)
+    records = _matching(request, last, q, _on(external))
     sensitive = last.get("sensitive")
     if sensitive:
         if st.connector is None:
@@ -178,23 +264,17 @@ async def export_csv(request: Request) -> Response:
                             media_type="text/plain", status_code=409)
         st.connector.audit_sensitive_csv(sensitive["command"], sensitive["argv"], sensitive["target"],
                                          rows=len(records))
-    # Column order: first record's keys, then any extras later records introduce (ragged JSON).
-    cols = list(records[0].keys())
-    seen = set(cols)
-    for r in records[1:]:
-        for k in r:
-            if k not in seen:
-                seen.add(k)
-                cols.append(k)
+    cols, _ = _columns_and_texts(last)
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([csv_safe(k) for k in cols])  # header too — every emitted cell goes through the guard
     for r in records:
         writer.writerow([csv_safe(r.get(k, "")) for k in cols])
+    name = "gam-results-filtered.csv" if q.strip() or _on(external) else "gam-results.csv"
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=gam-results.csv"},
+        headers={"Content-Disposition": f"attachment; filename={name}"},
     )
 
 
@@ -210,10 +290,8 @@ async def page(request: Request) -> HTMLResponse:
     areas = [(a, counts[a]) for a in AREA_ORDER if counts.get(a)]
     # User/group lists aren't fetched here — the slot pickers query /builder/pick on demand so the
     # page loads instantly and the picker scales to large domains (only the cached top matches render).
-    domain = getattr(st.connector, "domain", "") or st.audit_domain or ""
     return TEMPLATES.TemplateResponse(request, "builder.html", {
         "connected": True, "areas": areas, "sequence": st.builder_sequence, "row_actions": ROW_ACTIONS,
-        "domain": domain,
     })
 
 
@@ -269,7 +347,7 @@ async def catalog_list(request: Request, area: str = "", q: str = "", buildable:
         items = cat.in_area(area)
     else:
         items = cat.all_sorted()
-    if buildable in ("1", "true", "on"):
+    if _on(buildable):
         items = [c for c in items if c.buildable]
     return _paginated(request, items, q=q, page=page)
 

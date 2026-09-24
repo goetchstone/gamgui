@@ -150,7 +150,15 @@ plan's Phase 0 F1–F3.
   during a write on each loop through the strict mock; the `a11y` job opens the tray and a job's page
   (axe 0) and walks them by keys; a scratch Chrome run on a 0.9 s/call mock stopped an offboarding from
   the tray and a signature apply from its panel by keys alone — WKWebView's `confirm()`, VoiceOver and a
-  live tenant unseen. Left: "retry failures only"). **Open:** U1, U10; U5's retry.
+  live tenant unseen. Left: "retry failures only") · U1 (the Builder result's filter, External-only
+  toggle and pager ask `GET /builder/results`, which filters every row of the retained
+  `builder_last_result` server-side and answers a page of 10 matches; "N of M rows" and a CSV link of
+  just the matches follow out of band, the count spoken through base.html's live region; a table whose
+  result a newer run replaced is refused, never served the new rows; table and CSV show every column a
+  ragged result has; a sensitive result's CSV audit counts the rows downloaded. `tests/test_builder.py`
+  runs a 250-row result whose matches sit past row 100; a scratch Chrome run at 1100×760 typed a filter
+  (focus and text kept), toggled External only by Space, paged to the last page by Enter (focus to the
+  page line), axe 0, no JS error — WKWebView and a live tenant unseen). **Open:** U10; U5's retry.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
@@ -476,7 +484,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U4, U7, U8, U13, U14 APPLIED; U5, U9, U11, U12 partly (see Status by item); the rest open.*
+*Status: U1, U4, U7, U8, U13, U14 APPLIED; U5, U9, U11, U12 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows

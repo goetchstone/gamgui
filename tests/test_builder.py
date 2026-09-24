@@ -687,6 +687,115 @@ def test_export_csv_is_formula_injection_safe_and_handles_ragged_rows(client):
     assert rows[2] == ["b@x.com", "Bea", "'+more"]
 
 
+# --- the result table's filter and pager (plan U1) ---------------------------------------------
+# The table once rendered the first 100 rows and filtered only those in the browser, so a sharing audit
+# whose one external row was row 181 showed nothing. The filter now works over the whole retained result.
+
+def _big_result(client, monkeypatch, n=250):
+    rows = [f"user{i}@example.com,Doc {i},user{i}@example.com" for i in range(n)]
+    rows[180] = "user180@example.com,Doc 180,partner@elsewhere.org"    # the one outside address
+    rows[230] = "user230@example.com,Budget,anyone"                     # a public share
+
+    async def canned(domain, argv, **kw):
+        return "owner,title,sharedWith\n" + "\n".join(rows) + "\n"
+
+    monkeypatch.setattr(client.app.state.gamgui.connector.runner, "run_authenticated", canned)
+    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    return r, client.app.state.gamgui.builder_last_result["id"]
+
+
+def _rows(html: str) -> list:
+    return re.findall(r"<tr class=\"border-t[^>]*>.*?</tr>", html, re.S)
+
+
+def test_a_result_shows_a_page_of_every_row_and_counts_them_all(client, monkeypatch):
+    r, rid = _big_result(client, monkeypatch)
+    assert "250 of 250 rows" in r.text and "page 1 of 25" in r.text
+    assert len(_rows(r.text)) == 10 and "user9@example.com" in r.text and "user10@example.com" not in r.text
+    assert f'name="rid" value="{rid}"' in r.text
+    last = client.get("/builder/results", params={"rid": rid, "page": 25}).text
+    assert "Rows 241–250 · page 25 of 25" in last and "user249@example.com" in last
+    assert client.get("/builder/results", params={"rid": rid, "page": 99}).text.count("page 25 of 25") == 1
+
+
+def test_the_filter_finds_a_match_past_the_first_hundred_rows(client, monkeypatch):
+    r, rid = _big_result(client, monkeypatch)
+    assert "partner@elsewhere.org" not in r.text
+    f = client.get("/builder/results", params={"rid": rid, "q": " ELSEWHERE "}).text
+    assert len(_rows(f)) == 1 and "partner@elsewhere.org" in f
+    assert re.search(r'id="rt-count"[^>]*hx-swap-oob="true"[^>]*>1 of 250 rows<', f)
+    assert "Download this row as CSV" in f and "q=ELSEWHERE" in f and f"rid={rid}" in f
+    none = client.get("/builder/results", params={"rid": rid, "q": "nobody-has-this"}).text
+    assert "0 of 250 rows" in none and "No row of the 250 contains “nobody-has-this”." in none
+    assert re.search(r'<a id="rt-csv"[^>]* hidden>', none)   # nothing to download
+
+
+def test_external_only_searches_every_row(client, monkeypatch):
+    _, rid = _big_result(client, monkeypatch)
+    ext = client.get("/builder/results", params={"rid": rid, "external": "1"}).text
+    assert "2 of 250 rows" in ext and "partner@elsewhere.org" in ext and "user230@example.com" in ext
+    assert "Download these 2 as CSV" in ext and "external=1" in ext
+    both = client.get("/builder/results", params={"rid": rid, "external": "1", "q": "budget"}).text
+    assert "1 of 250 rows" in both and "user230@example.com" in both
+
+
+def test_the_pager_pages_over_the_matches(client, monkeypatch):
+    _, rid = _big_result(client, monkeypatch)
+    # "Doc 1" is in Doc 1, Doc 10–19 and Doc 100–199 (111 rows), 12 pages of them.
+    p2 = client.get("/builder/results", params={"rid": rid, "q": "Doc 1", "page": 2}).text
+    assert "111 of 250 rows" in p2 and "Rows 11–20 · page 2 of 12" in p2 and "data-focus" not in p2
+    assert "Doc 100" in p2 and "Doc 2<" not in p2
+    # Next on the last page goes disabled: the page line takes focus, not <body>.
+    end = client.get("/builder/results", params={"rid": rid, "q": "Doc 1", "page": 12},
+                     headers={"HX-Trigger": "rt-next"}).text
+    assert "Rows 111–111 · page 12 of 12" in end and re.search(r'tabindex="-1" data-focus>Rows 111', end)
+    assert re.search(r'id="rt-next"[^>]*disabled', end)
+
+
+def test_the_csv_download_takes_the_filtered_set(client, monkeypatch):
+    import csv as _csv
+    import io as _io
+
+    _, rid = _big_result(client, monkeypatch)
+    every = client.get("/builder/export.csv", params={"rid": rid})
+    assert len(list(_csv.reader(_io.StringIO(every.text)))) == 251
+    assert "filename=gam-results.csv" in every.headers["content-disposition"]
+    ext = client.get("/builder/export.csv", params={"rid": rid, "external": "1"})
+    assert [row[0] for row in _csv.reader(_io.StringIO(ext.text))] == ["owner", "user180@example.com",
+                                                                        "user230@example.com"]
+    assert "filename=gam-results-filtered.csv" in ext.headers["content-disposition"]
+
+
+def test_a_replaced_result_is_not_served_as_the_old_one(client, monkeypatch):
+    _, old = _big_result(client, monkeypatch)
+    _, new = _big_result(client, monkeypatch)
+    assert old != new
+    assert "replaced by a newer run" in client.get("/builder/results", params={"rid": old, "q": "x"}).text
+    assert client.get("/builder/export.csv", params={"rid": old}).status_code == 404
+    client.app.state.gamgui.builder_last_result = None
+    assert "run a read command first" in client.get("/builder/results", params={"rid": new}).text
+
+
+def test_the_table_shows_every_column_a_ragged_result_has(client):
+    client.app.state.gamgui.builder_last_result = {
+        "records": [{"email": "a@example.com"}, {"email": "b@example.com", "extra": "only-here"}],
+        "gam": "gam print users"}
+    r = client.get("/builder/results", params={"q": "only-here"}).text
+    assert '<th scope="col" class="px-2 py-1">extra</th>' in r and "1 of 2 rows" in r
+
+
+def test_a_filtered_csv_of_a_sensitive_result_audits_the_rows_it_hands_out(client, monkeypatch):
+    async def codes(domain, argv, **kw):
+        return "User,verificationCodes\nalice@example.com,11112222\nbob@example.com,55556666\n"
+
+    monkeypatch.setattr(client.app.state.gamgui.connector.runner, "run_authenticated", codes)
+    cmd = _sensitive("print backupcodes")
+    client.post("/builder/run", data={"cid": cmd.id, "a0": "alice@example.com"})
+    e = client.get("/builder/export.csv", params={"q": "bob"})
+    assert "55556666" in e.text and "11112222" not in e.text
+    assert _audit(client)[-1]["extra"] == {"command": cmd.id, "rows": 1}
+
+
 def test_browse_only_command_cannot_run(client):
     browse_id = next(c.id for c in load_catalog().commands if not c.buildable)
     assert "Browse-only" in client.get(f"/builder/command/{browse_id}").text

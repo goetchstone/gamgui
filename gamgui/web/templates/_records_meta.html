@@ -1,0 +1,4 @@
+{# How many rows match of how many, and the CSV of exactly those — in the result's tools row, and swapped
+   there out of band each time the filter answers. #}
+<span id="rt-count" data-announce="rt-count" class="text-brand-grayink"{% if oob %} hx-swap-oob="true"{% endif %}>{{ "{:,}".format(matched) }} of {{ "{:,}".format(total) }} row{{ "" if total == 1 else "s" }}</span>
+<a id="rt-csv" href="{{ csv_url }}" class="font-medium text-brand-blueink hover:text-brand-black"{% if oob %} hx-swap-oob="true"{% endif %}{% if not matched %} hidden{% endif %}>{% if filtered %}Download {{ "these " ~ "{:,}".format(matched) if matched > 1 else "this row" }} as CSV{% else %}Download CSV{% endif %} ↓</a>

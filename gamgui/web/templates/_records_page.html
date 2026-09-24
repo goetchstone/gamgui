@@ -1,0 +1,24 @@
+{# One page of a read's matching rows and its pager (_records_table.html holds the filter). #}
+{% if oob %}{% include "_records_meta.html" %}{% endif %}
+<div class="overflow-x-auto">
+  <table class="w-full text-xs">
+    <thead><tr class="text-left text-brand-grayink">{% for k in cols %}<th scope="col" class="px-2 py-1">{{ k }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="border-t border-brand-gray/15">{% for k in cols %}{% set v = r.get(k, "") | string %}
+        <td class="px-2 py-1 align-top break-all">{% if '@' in v and '.' in v and ' ' not in v %}<button type="button" class="cell-act text-brand-blueink underline decoration-dotted decoration-brand-gray/50 underline-offset-2 hover:text-brand-black" data-email="{{ v }}" title="Act on {{ v }}">{{ v }}</button>{% else %}{{ v }}{% endif %}</td>{% endfor %}</tr>
+      {% else %}
+      <tr><td colspan="{{ cols | length }}" class="px-2 py-4 text-center text-brand-grayink">No row of the {{ "{:,}".format(total) }}{% if q.strip() %} contains “{{ q.strip() }}”{% endif %}{% if external %}{{ " and" if q.strip() }} names an address outside your domain{% endif %}.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if pages > 1 %}
+<nav class="mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs" aria-label="Result pages">
+  {% for id, label, to in (("rt-prev", "‹ Prev", page - 1), ("rt-next", "Next ›", page + 1)) %}
+  {% if loop.index == 2 %}<span class="text-brand-grayink"{% if focus %} tabindex="-1" data-focus{% endif %}>Rows {{ "{:,}".format(start + 1) }}–{{ "{:,}".format(start + rows | length) }} · page {{ page }} of {{ "{:,}".format(pages) }}</span>{% endif %}
+  <button type="button" id="{{ id }}" class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
+          hx-get="/builder/results" hx-include="#rt-form" hx-vals='{"page": {{ to }}}' hx-target="#rt-body"{% if not 1 <= to <= pages %} disabled{% endif %}>{{ label }}</button>
+  {% endfor %}
+</nav>
+{% endif %}

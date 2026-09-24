@@ -70,9 +70,10 @@ Actively developed and used against live Google Workspace tenants. Working today
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
   preview → run, linear sequencing, and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
-  keeps just the rows referencing addresses outside your domain — and clicking any address in a
-  result offers pre-filled follow-ups (delegates, forwarding, vacation, signature, title/dept, reset
-  password, suspend, delete, group add/remove).
+  keeps just the rows referencing addresses outside your domain, both over every row of the result
+  and downloadable as CSV — and clicking any address in a result offers pre-filled follow-ups
+  (delegates, forwarding, vacation, signature, title/dept, reset password, suspend, delete, group
+  add/remove).
 - **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, suspended accounts, and
   directory completeness (missing title/department/phone/location), plus a **storage & mail usage**
   panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API

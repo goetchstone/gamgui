@@ -1,27 +1,16 @@
-{% if records %}
-{% set cols = records[0].keys() | list %}
+{# A read's result, sliced like grep: the filter and "External only" (anything outside your domain) ask
+   /builder/results, which works over every row of the retained result (plan U1) and answers a page of the
+   matches; the count and the CSV link follow them out of band (_records_page.html). #}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm">
-  <!-- Slice the result like grep/awk: live row filter + "external only" (anything outside your domain). -->
-  <div class="rt-tools mb-2 flex flex-wrap items-center gap-2 text-xs">
-    <input class="rt-filter w-44 rounded border border-brand-gray/50 px-2 py-1 text-xs focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" aria-label="Filter rows" placeholder="Filter rows…" />
-    <label class="flex items-center gap-1 text-brand-blueink"><input type="checkbox" class="rt-external" /> External only</label>
-    <span class="rt-count text-brand-grayink"></span>
-    <a href="/builder/export.csv" class="font-medium text-brand-blueink hover:text-brand-black">Download CSV ↓</a>
+  <div class="mb-2 flex flex-wrap items-center gap-2 text-xs">
+    <form id="rt-form" role="search" class="flex items-center gap-2" hx-get="/builder/results" hx-target="#rt-body"
+          hx-trigger="submit, input delay:250ms from:#rt-q, change from:#rt-external">
+      <input type="hidden" name="rid" value="{{ rid }}" />
+      <input id="rt-q" name="q" class="w-44 rounded border border-brand-gray/50 px-2 py-1 text-xs focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" aria-label="Filter rows" placeholder="Filter rows…" />
+      <label class="flex items-center gap-1 text-brand-blueink"><input id="rt-external" type="checkbox" name="external" value="1" /> External only</label>
+    </form>
+    {% include "_records_meta.html" %}
     <code class="ml-auto truncate text-brand-grayink">{{ gam }}</code>
   </div>
-  <div class="overflow-x-auto">
-    <table class="js-paged w-full text-xs">
-      <thead><tr class="text-left text-brand-grayink">{% for k in cols %}<th class="px-2 py-1">{{ k }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for r in records[:100] %}
-        <tr class="border-t border-brand-gray/15">{% for k in cols %}{% set v = r.get(k, "") | string %}
-          <td class="px-2 py-1 align-top break-all">{% if '@' in v and '.' in v and ' ' not in v %}<button type="button" class="cell-act text-brand-blueink underline decoration-dotted decoration-brand-gray/50 underline-offset-2 hover:text-brand-black" data-email="{{ v }}" title="Act on {{ v }}">{{ v }}</button>{% else %}{{ v }}{% endif %}</td>{% endfor %}</tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% if records | length > 100 %}<p class="mt-1 text-xs text-brand-grayink">Showing the first 100 of {{ records | length }} — the CSV download has every row.</p>{% endif %}
+  <div id="rt-body">{% include "_records_page.html" %}</div>
 </div>
-{% else %}
-<p class="text-sm text-brand-grayink">No records returned. <code>{{ gam }}</code></p>
-{% endif %}
