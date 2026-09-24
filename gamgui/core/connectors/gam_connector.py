@@ -460,6 +460,13 @@ class GAMConnector(Connector):
         self.audit.record("sensitive_read", target=target, argv=argv, ok=True, extra=extra)
         return out
 
+    def audit_sensitive_csv(self, command: str, argv: List[str], target: str, rows: int) -> None:
+        """The Builder's CSV download of a sensitive read's result: the secret leaves the app as a file,
+        so it is recorded as ``sensitive_csv_export`` — the catalog command, on whom, how many rows.
+        Never the rows. No GAM call: the rows are the ones ``catalog_read`` already returned."""
+        self.audit.record("sensitive_csv_export", target=target, argv=argv, ok=True,
+                          extra={"command": command, "rows": rows})
+
     async def export_to_sheet(self, cmd, argv: List[str], owner: str = "", title: str = "") -> ChangeResult:
         """Run a Builder read with ``todrive``: GAM writes the result to a new Google Sheet in
         ``owner``'s Drive (blank = the admin's). Creating a file is a write, so it runs through the

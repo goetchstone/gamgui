@@ -133,31 +133,47 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     })
 
 
-def _render_read(request: Request, out: str, gam: str) -> HTMLResponse:
+def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResponse:
     """Render a read command's output as a table when it looks tabular (CSV/JSON), else verbatim.
 
     Generic read commands span `print` (CSV/JSON → table) and `info`/`show` (human text → table
     would be garbage), so pick the renderer from the shape rather than forcing every read into a
     grid."""
+    gam = _gam_str(argv)
     text = (out or "").strip()
     first = text.splitlines()[0] if text else ""
     looks_tabular = text[:1] in "[{" or "," in first
     records = parse_records(out) if looks_tabular else []
     if records:
-        # Keep the full result set for the CSV download — the table itself truncates at 100 rows.
-        _st(request).builder_last_result = {"records": records, "gam": gam}
+        # Keep the full result set for the CSV download — the table itself truncates at 100 rows —
+        # and, for a sensitive read, what the download's audit record names (never the rows).
+        _st(request).builder_last_result = {
+            "records": records, "gam": gam,
+            "sensitive": {"command": cmd.id, "argv": list(argv), "target": target} if cmd.sensitive else None}
         return TEMPLATES.TemplateResponse(request, "_records_table.html", {"records": records, "gam": gam})
     return TEMPLATES.TemplateResponse(request, "_read_output.html", {"output": out, "gam": gam})
 
 
 @router.get("/export.csv")
 async def export_csv(request: Request) -> Response:
-    """Download the most recent read-command result set as CSV (all rows, not just the first 100)."""
-    last = _st(request).builder_last_result
+    """Download the most recent read-command result set as CSV (all rows, not just the first 100).
+
+    The download of a sensitive read's result (backup codes, browser tokens) hands the secret out as a
+    file, so it is audited like the Sheet export: ``sensitive_csv_export``, never the rows. With no
+    connector to audit through, it is refused rather than served unrecorded."""
+    st = _st(request)
+    last = st.builder_last_result
     if not last or not last.get("records"):
         return Response("No results to export — run a read command first.",
                         media_type="text/plain", status_code=404)
     records = last["records"]
+    sensitive = last.get("sensitive")
+    if sensitive:
+        if st.connector is None:
+            return Response("Not connected — this result can't be exported without an audit record.",
+                            media_type="text/plain", status_code=409)
+        st.connector.audit_sensitive_csv(sensitive["command"], sensitive["argv"], sensitive["target"],
+                                         rows=len(records))
     # Column order: first record's keys, then any extras later records introduce (ragged JSON).
     cols = list(records[0].keys())
     seen = set(cols)
@@ -320,7 +336,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
             out = await conn.catalog_read(cmd, argv, target)
         except Exception as exc:  # noqa: BLE001
             return _err(request, _friendly(exc), _details(exc))
-        return _render_read(request, out, _gam_str(argv))
+        return _render_read(request, out, cmd, argv, target)
     # A mutation runs only from its preview: the held command, when the live form still matches it.
     # Otherwise the answer is a fresh preview of what the form holds now, to check before running.
     form = await request.form()
@@ -384,7 +400,8 @@ async def seq_clear(request: Request) -> HTMLResponse:
 
 def _seq_previews(seq) -> list:
     return [ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=s["target"],
-                          summary=s["label"], risk=RiskLevel(s["risk"]), argv=s["argv"]) for s in seq]
+                          summary=s["label"], risk=RiskLevel(s["risk"]), argv=s["argv"],
+                          meta={"cid": s.get("cid", "")}) for s in seq]
 
 
 async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLResponse:
@@ -405,13 +422,20 @@ async def seq_preview(request: Request) -> HTMLResponse:
     return await _seq_preview_page(request, list(st.builder_sequence))
 
 
-async def _run_sequence(job, conn, previews) -> None:
+async def _run_sequence(job, conn, previews, catalog=None) -> None:
     try:
         for p in previews:
             job.current = p.summary
+            cmd = catalog.by_id(p.meta.get("cid", "")) if catalog is not None else None
             try:
-                res = (await conn.apply([p]))[0]
-                ok, detail = res.ok, res.detail
+                if cmd is not None and cmd.sensitive:
+                    # A sensitive read runs as the read it is, so it is audited as one (`sensitive_read`,
+                    # never its output) — through apply() it was filed as an `apply` like any write.
+                    await conn.catalog_read(cmd, list(p.argv), p.target)
+                    ok, detail = True, ""
+                else:
+                    res = (await conn.apply([p]))[0]
+                    ok, detail = res.ok, res.detail
             except Exception as exc:  # noqa: BLE001 — report every step, never abort the run
                 ok, detail = False, str(exc)
             line = f"{p.summary} — {p.target}" + (f": {detail}" if (not ok and detail) else "")
@@ -450,7 +474,7 @@ async def seq_run(request: Request) -> HTMLResponse:
     if refusal:
         return await _seq_preview_page(request, seq, error=refusal)
     job = start_job(st.jobs, len(previews))
-    job.task = asyncio.create_task(_run_sequence(job, conn, previews))
+    job.task = asyncio.create_task(_run_sequence(job, conn, previews, _catalog(request)))
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": job})
 
 

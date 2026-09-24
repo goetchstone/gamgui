@@ -273,6 +273,8 @@ AUDITED_OUTSIDE_RUN_WRITE = {
 # Reads that record() — never the output (plan S9, operator decision D3).
 AUDITED_READS = {
     "catalog_read": "records `sensitive_read` for a sensitive command (SECRET_READS, DOWNLOAD_VERB)",
+    "audit_sensitive_csv": "records `sensitive_csv_export` for the CSV download of a sensitive read's "
+                           "result — no GAM call",
 }
 # Functions that run an argv the tripwire can't trace to one builder, each proven a read another way.
 READ_BY_CONTRACT = {

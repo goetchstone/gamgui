@@ -416,6 +416,50 @@ async def test_a_sensitive_export_is_audited_as_such(connector, monkeypatch):
                              "boss@example.com"]
 
 
+def test_a_sensitive_read_in_a_sequence_is_audited_as_one(client):
+    # Run as a sequence step it went through apply() and was filed as `apply`, so an audit search for
+    # "sensitive" missed backup codes fetched that way.
+    cmd = _sensitive("show backupcodes")
+    client.post("/builder/sequence/add", data={"cid": cmd.id, "a0": "alice@example.com"})
+    _, token = _seq_preview(client)
+    run = client.post("/builder/sequence/run", data={"preview": token})
+    job = client.app.state.gamgui.jobs[re.search(r"status\?job=([A-Za-z0-9_\-]+)", run.text).group(1)]
+    wait_for_job(client, job)
+    assert (job.applied, job.failed) == (1, [])
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("sensitive_read", "alice@example.com", True)
+    assert entry["extra"] == {"command": cmd.id}
+    assert "11112222" not in client.app.state.gamgui.connector.audit.path.read_text()
+
+
+def _canned_backup_codes(client, monkeypatch):
+    async def codes(domain, argv, **kw):
+        return "User,verificationCodes\nalice@example.com,11112222 33334444\n"
+
+    monkeypatch.setattr(client.app.state.gamgui.connector.runner, "run_authenticated", codes)
+
+
+def test_the_csv_download_of_a_sensitive_result_is_audited(client, monkeypatch):
+    # The table's "Download CSV" hands the codes out as a file: audited like the Sheet export, never
+    # with the rows themselves.
+    _canned_backup_codes(client, monkeypatch)
+    cmd = _sensitive("print backupcodes")
+    client.post("/builder/run", data={"cid": cmd.id, "a0": "alice@example.com"})
+    e = client.get("/builder/export.csv")
+    assert e.status_code == 200 and "11112222" in e.text
+    read, export = _audit(client)
+    assert read["action"] == "sensitive_read"
+    assert (export["action"], export["target"], export["ok"]) == ("sensitive_csv_export", "alice@example.com", True)
+    assert export["argv"] == ["user", "alice@example.com", "print", "backupcodes"]
+    assert export["extra"] == {"command": cmd.id, "rows": 1}
+    assert "11112222" not in client.app.state.gamgui.connector.audit.path.read_text()
+
+
+def test_the_csv_download_of_a_plain_result_is_not_audited(client):
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    assert client.get("/builder/export.csv").status_code == 200 and _audit(client) == []
+
+
 def test_a_plain_read_writes_no_audit_entry(client):
     r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
     assert "assistant@example.com" in r.text and _audit(client) == []
