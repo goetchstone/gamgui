@@ -66,7 +66,7 @@ plan's Phase 0 F1–F3.
   `color-contrast` (A1), plus `select-name` 6, `label` 2, `label-title-only` 2 (A4); a new or grown
   count fails and so does a shrunk one until the baseline is lowered. Deselected from the default
   run; verified locally, including in a venv from `requirements/dev.txt` alone, and by a planted
-  unlabeled input failing it; the Actions run itself unseen) · A1 (`brand-gray` kept for borders; muted text
+  unlabeled input failing it; the Actions run itself unseen) · A1 `d90b043` (`brand-gray` kept for borders; muted text
   is a new `brand-grayink` #6D6E75, 4.82:1 on paper; `brand-blue` darkened #69829E → #5A728E so its text
   and white-on-blue buttons pass, 4.71 and 4.96; `blueink/70`/`/80` text → plain `blueink`, 5.75; `rose-600`,
   `emerald-600` text and `amber-600` buttons one shade darker; `tests/test_contrast.py` holds every text
