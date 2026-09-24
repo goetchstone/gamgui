@@ -44,6 +44,9 @@ testpaths = ["tests"]
 # A hung test (e.g. an asyncio subprocess deadlock seen intermittently on CI) fails with a
 # traceback after 60s instead of hanging the whole job.
 timeout = 60
+markers = [
+    "hand_built_argv: the test sends the mock gam argv no GAMCommands builder emits, on purpose (a malformed shape the mock must refuse, a partial one that seeds its state); the session's argv grammar sweep (tests/conftest.py) skips its calls",
+]
 filterwarnings = [
     # Before Python 3.13 (gh-114177) an asyncio subprocess transport GC'd after the TestClient loop
     # closes (a background job a test left running) closes its pipes on the dead loop -> "Exception

@@ -71,7 +71,7 @@
 ## Testing / live-verification status
 - `tests/test_fetch_gam.py` — hermetic: copies the script into a throwaway root, drives it with a stub `curl` on PATH, real `.tar.xz`; never touches api.github.com or the real `resources/gam7`. Covers refuse-unpinned, opt-in install, matching pin, mismatch-always-refuses, unknown-flag, and static branch/CI assertions.
 - `tests/test_bump_gam.py` — unit-tests the pure text transforms (`select_asset`, the regex rewrites) and the attestation argv so a future rename fails here instead of no-op'ing in CI. Network/subprocess orchestration is not covered.
-- `tests/test_command_contract.py` + `tests/test_polish.py` — the drift/consistency guards above. All run in the offline `pytest` suite; the token/catalog tests additionally re-run in the `gam-compat` CI job against a freshly fetched real binary.
+- `tests/test_command_contract.py` + `tests/test_polish.py` — the drift/consistency guards above. All run in the offline `pytest` suite; the whole suite re-runs in the `gam-compat` CI job (the committed catalog restored after the fetch), so the token/catalog tests and the end-of-session argv sweep (gam-runner runbook) run there against a freshly fetched real binary.
 - `tests/test_build_signing.py` — static: `sign_app.sh`'s runtime flag and sign order, `build_app.sh` signing only through it, the entitlement sets; on macOS with `gam` vendored, `gam.entitlements` against `codesign -d --entitlements` of the vendored binary (reads the signature, never runs `gam`).
 - **Coverage gate** (T6, 2026-09-24) — CI's macOS 3.14 test leg runs `pytest -q --cov` and fails below
   `fail_under` (90; a clean clone measured 90.5% of 5,357 lines, the working tree with GAM vendored

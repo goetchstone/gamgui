@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import os
 import threading
 from pathlib import Path
@@ -54,14 +55,45 @@ def connector(runner: GAMRunner, tmp_path: Path) -> GAMConnector:
     return GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
 
 
-@pytest.fixture
-def gam_calls(tmp_path: Path, monkeypatch):
-    """Record every argv the mock `gam` receives from here on; call the fixture to read them."""
+@pytest.fixture(scope="session")
+def _sent_argv(tmp_path_factory):
+    """Every distinct argv the tests sent the mock `gam`, with the first test that sent it. When the session
+    ends each must be a shape the grammar vouches for (test_command_contract.py `unshaped_argv`) — reported
+    as an error at the last test's teardown, naming every offender. A test that sends argv no builder emits
+    on purpose (a malformed shape the mock must refuse, a partial one seeding its state) says so with
+    @pytest.mark.hand_built_argv."""
+    sent: dict = {}
+    yield tmp_path_factory.mktemp("gam_argv"), itertools.count(), sent
+    from .test_command_contract import unshaped_argv
+
+    offenders = unshaped_argv(sent)
+    if offenders:
+        raise AssertionError(
+            f"{len(offenders)} argv sent to the mock gam aren't shapes the vendored grammar vouches for. Build "
+            "the argv with a GAMCommands builder (fix it against GamCommands.txt), or mark a test that sends "
+            "one on purpose @pytest.mark.hand_built_argv:\n" + "\n".join(offenders))
+
+
+@pytest.fixture(autouse=True)
+def _gam_argv_log(request, _sent_argv, monkeypatch):
+    """Record every argv the mock `gam` receives during each test (GAM_MOCK_ARGV_LOG)."""
     from .helpers import read_gam_calls
 
-    log = tmp_path / "gam_argv.log"
+    logs, n, sent = _sent_argv
+    log = logs / f"{next(n)}.log"
     monkeypatch.setenv("GAM_MOCK_ARGV_LOG", str(log))
-    return lambda: read_gam_calls(log)
+    yield log
+    if request.node.get_closest_marker("hand_built_argv") is None:
+        for argv in read_gam_calls(log):
+            sent.setdefault(tuple(argv), request.node.nodeid)
+
+
+@pytest.fixture
+def gam_calls(_gam_argv_log: Path):
+    """Every argv the mock `gam` has received in this test so far; call the fixture to read them."""
+    from .helpers import read_gam_calls
+
+    return lambda: read_gam_calls(_gam_argv_log)
 
 
 @pytest.fixture

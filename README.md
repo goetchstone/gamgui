@@ -296,8 +296,9 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
   verified provenance, no PR — so it isn't trust-on-first-use.
 - **Compat check** (`gam-compat` CI job + `tests/test_command_contract.py`) asserts every GAM
   sub-command our builders use still exists in the vendored command reference, so a renamed/removed
-  command fails CI rather than your tenant. A non-blocking `gam-latest-preview` job runs the same check
-  against the *newest* GAM as an early warning.
+  command fails CI rather than your tenant; the same job runs the whole suite, which ends by checking
+  every argv it sent the mock `gam` against that reference. A non-blocking `gam-latest-preview` job
+  runs the sub-command check against the *newest* GAM as an early warning.
 - **Runtime self-check** — if the running `gam` differs from the tested version (e.g. a
   `GAMGUI_GAM_BINARY` override in a source checkout; the packaged `.app` ignores it), the setup
   screen shows a soft warning. It never blocks.

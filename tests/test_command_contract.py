@@ -12,6 +12,8 @@ sub-command and our builders break only against a live tenant. They need no cred
   build on the next version bump.
 * ``test_pinned_version_consistent`` enforces the single source of truth: ``EXPECTED_GAM_VERSION`` must
   match ``scripts/fetch_gam.sh`` (TAG), the mock, and (if vendored) the ``VERSION`` file.
+* ``unshaped_argv`` runs the same grammar checks on what the suite really sent the mock: conftest.py
+  hands it every distinct argv when the session ends (plan T7, lite).
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import functools
 import inspect
 import itertools
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -148,18 +151,25 @@ def _matches_grammar(argv) -> bool:
     return any(_head_accepts(h, argv, enums) >= _command_words(argv) for h in heads)
 
 
+def _keywords(argv):
+    return [t for t in argv if t and not _value(t) and not t.isdigit()]
+
+
+def _is_grammar_word(tok) -> bool:
+    """A whole word in the grammar; a comma field list field by field, case-insensitively as GAM reads it."""
+    words, lower, _, _ = _grammar()
+    return all(f.lower() in lower for f in tok.split(",")) if "," in tok else tok in words
+
+
 @needs_grammar
 def test_required_command_tokens_present():
     # Every keyword any builder can emit is a whole word in the grammar (a comma field list: each
     # field, case-insensitively as GAM reads them). Generated, so an option can't go untracked.
-    words, lower, _, _ = _grammar()
     seen, missing = set(), set()
     for name, argv in builder_argvs():
-        for tok in argv:
-            if not tok or _value(tok) or tok.isdigit():
-                continue
+        for tok in _keywords(argv):
             seen.add(tok)
-            if not (all(f.lower() in lower for f in tok.split(",")) if "," in tok else tok in words):
+            if not _is_grammar_word(tok):
                 missing.add(f"{name}: {tok}")
     assert {"doit", "eventid", "returnidonly", "notifypassword", "sendupdates"} <= seen
     assert not missing, (
@@ -182,6 +192,122 @@ def test_builder_commands_match_a_grammar_line():
         f"no `gam …` line in the GAM {EXPECTED_GAM_VERSION} reference starts like these builder "
         f"commands: {sorted(unmatched)}. A GAM upgrade likely renamed/moved a sub-command."
     )
+
+
+# --- what the suite really sent the mock (plan T7, lite) -----------------------------------------
+# conftest.py records every argv each test sends the mock `gam` and hands the distinct ones to
+# `unshaped_argv` when the session ends. The grammar matcher above needs to know which tokens are values;
+# a recorded argv doesn't say, so each is traced to the shape that emits it — a builder's placeholder argv,
+# or a Builder catalog read's — whose literals are its keywords. An argv no shape accounts for is a
+# finding in itself (invariant #1: every GAM argv comes from a GAMCommands builder).
+
+MOCK_TRIGGERS = {"MOCKFAIL", "MOCKSLEEP"}   # the mock's own test verbs (mock_gam.sh), not GAM commands
+
+
+def _pattern(tok):
+    """A shape token to match a sent one: a `<param>` stands for any value (`group:<scope>` too)."""
+    if not _value(tok):
+        return tok
+    return re.compile("".join(".*" if p[:1] == "<" else re.escape(p) for p in re.split(r"(<[^<>]*>)", tok) if p),
+                      re.S)
+
+
+def _fits(argv, pattern) -> bool:
+    return len(argv) == len(pattern) and all(
+        p == a if isinstance(p, str) else p.fullmatch(a) for p, a in zip(pattern, argv, strict=True))
+
+
+@functools.lru_cache(maxsize=None)
+def _shapes():
+    """Every argv shape the app emits: each builder's, and each Builder catalog read's with every optional
+    slot given and omitted (curated catalog commands call the builders). {length: [(name, shape, pattern)]}"""
+    from gamgui.core.catalog import load_catalog
+
+    shapes = list(builder_argvs())
+    for c in load_catalog().commands:
+        if c.buildable and c.id.startswith("raw."):
+            optional = [s.key for s in c.slots if not s.required]
+            for given in itertools.product((True, False), repeat=len(optional)):
+                keys = {s.key for s in c.slots if s.required} | {k for k, g in zip(optional, given, strict=True) if g}
+                shapes.append((c.id, c.build({k: f"<{k}>" for k in keys})))
+    by_len: dict = {}
+    for name, argv in shapes:
+        by_len.setdefault(len(argv), []).append((name, tuple(argv), [_pattern(t) for t in argv]))
+    return by_len
+
+
+@functools.lru_cache(maxsize=None)
+def _offers_todrive(shape) -> bool:
+    lines, argv = GAM_COMMANDS_REF.read_text(errors="replace").splitlines(), list(shape)
+    _, _, _, enums = _grammar()
+    return any(line.startswith("gam ") and _head_accepts(line.split()[1:], argv, enums) >= _command_words(argv)
+               and "todrive" in _stanza(lines, i) for i, line in enumerate(lines))
+
+
+@functools.lru_cache(maxsize=None)
+def _shape_problem(shape, todrive: bool) -> str:
+    if not _matches_grammar(list(shape)):
+        return f"no `gam …` line starts like `{' '.join(shape[:_command_words(shape)])}`"
+    missing = [t for t in _keywords(shape) if not _is_grammar_word(t)]
+    if missing:
+        return f"not a word in the grammar: {missing}"
+    if todrive and not _offers_todrive(shape):
+        return "`todrive` after a command whose grammar line doesn't take it"
+    return ""
+
+
+def _argv_problem(argv) -> str:
+    # A Builder export is a read plus GAMCommands.todrive_args: split at each `todrive`, and each side must
+    # be a shape. Any reading that passes the grammar clears the argv.
+    problem = "no GAMCommands builder or Builder read emits this shape, so its keywords can't be told from its values"
+    by_len = _shapes()
+    for cut in [len(argv)] + [i for i, a in enumerate(argv) if a == "todrive"]:
+        head, tail = argv[:cut], argv[cut:]
+        fits = [shape for name, shape, pat in by_len.get(len(head), ()) if name not in SUFFIXES and _fits(head, pat)]
+        if not fits:
+            continue
+        if tail and not any(name in SUFFIXES and _fits(tail, pat) for name, _, pat in by_len.get(len(tail), ())):
+            problem = "a `todrive` tail GAMCommands.todrive_args doesn't emit"
+            continue
+        problems = [_shape_problem(shape, bool(tail)) for shape in fits]
+        if "" in problems:
+            return ""
+        problem = problems[0]
+    return problem
+
+
+def unshaped_argv(sent) -> list:
+    """``sent`` maps each distinct argv (a tuple) to the first test that sent it; the ones the grammar
+    doesn't vouch for, one line each, naming the test. Empty when the grammar isn't vendored."""
+    if not GAM_COMMANDS_REF.exists():
+        return []
+
+    def show(argv):
+        return " ".join(shlex.quote(a if len(a) <= 40 else a[:37] + "...") for a in argv)
+
+    return sorted(f"{test}: gam {show(argv)}\n    -> {problem}" for argv, test in sent.items()
+                  if not MOCK_TRIGGERS & set(argv[:1]) and (problem := _argv_problem(argv)))
+
+
+@needs_grammar
+def test_the_sent_argv_sweep_bites():
+    C, a = GAMCommands, "alice@example.com"
+    good = [C.set_signature(a, "Best,\nAlice"), C.add_calendar_acl(a, "group:sales@example.com", "writer"),
+            C.print_delegates(a) + C.todrive_args("boss@example.com", "Delegates"), C.print_users() + ["todrive"],
+            ["print", "groups"], ["user", a, "print", "backupcodes"],   # Builder catalog reads
+            ["MOCKFAIL", "scope"]]
+    assert unshaped_argv({tuple(argv): "t" for argv in good}) == []
+    bad = {("user", a, "vacation", "on", "subject", "S"): "no GAMCommands builder",     # hand-built
+           (*C.show_vacation(a), "todrive"): "doesn't take it",
+           (*C.info_user(a), "todrive", "tduser", "boss@example.com"): "doesn't take it",
+           (*C.print_users(), "todrive", "tdshare", "x@example.com", "writer"): "todrive_args doesn't emit",
+           (*C.print_users(), "todrive", "tdtitle", "T", "tduser", "boss@example.com"): "todrive_args doesn't emit"}
+    for argv, why in bad.items():
+        [found] = unshaped_argv({argv: "tests/test_x.py::t"})
+        assert found.startswith("tests/test_x.py::t: gam ") and why in found, found
+    # And a shape itself is held to the builder contract's two checks.
+    assert "no `gam …` line" in _shape_problem(("user", "<e>", "zzz", "delegate", "<d>"), False)
+    assert "not a word" in _shape_problem(("print", "users", "queryy", "<q>"), False)
 
 
 @needs_grammar

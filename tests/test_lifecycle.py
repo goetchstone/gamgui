@@ -132,6 +132,7 @@ def test_offboard_autoreply_is_sent_as_the_text_the_preview_shows():
 
 
 @pytest.mark.asyncio
+@pytest.mark.hand_built_argv   # the leaver's own earlier `vacation off …`, a shape set_vacation never emits
 async def test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_settings(connector, gam_state):
     # GAM merges `vacation` into the stored settings. A leaver who once answered only people in their
     # organization, only their contacts, or set a last day (now past) kept all three: customers got

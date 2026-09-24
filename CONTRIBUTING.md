@@ -139,8 +139,10 @@ CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.1
 installed from `requirements/dev.txt`. The macOS 3.14 run also measures line coverage and fails
 below `fail_under` in `pyproject.toml` (90%; the suite covered 90.5% when the gate went in) — `make
 cov` runs the same check locally. Raise the floor as tests land; don't lower it to get a PR green.
-On top of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
-`tests/test_command_contract.py` against the real command reference, plus a non-blocking
+On top of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs the whole
+suite against the real command reference — the command contract, and the end-of-session sweep that
+every argv the suite sent the mock `gam` is a shape the grammar vouches for (a test that sends a
+malformed one on purpose marks itself `@pytest.mark.hand_built_argv`) — plus a non-blocking
 `gam-latest-preview` job that runs the token contract against the *newest* GAM7 as an early warning
 that a command we use was renamed or removed. An `app` job builds `dist/GamGUI.app` exactly as `make
 app` does (ad-hoc signed — the runner has no identity) and runs `scripts/check_app.py` on it: the

@@ -128,6 +128,7 @@ async def test_mock_accepts_every_shape_the_app_emits(runner, domain, argv):
     await runner.run_authenticated(domain, argv, serialize=True)
 
 
+@pytest.mark.hand_built_argv   # partial `vacation` shapes (set_vacation names every field) to seed the merge
 async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     # GAM's setVacation updates only the fields the command names; a stateless mock (or one that
     # replaced the settings) would hide a leftover "domain only" or end date behind a green test.
@@ -182,6 +183,7 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     (C.print_users() + ["todrive", "tdtitle", "T", "tduser", "boss@example.com"], "Invalid argument: tduser"),
     (C.print_users() + ["todrive", "tduser", "a@example.com", "tduser", "b@example.com"], "Invalid argument: tduser"),
 ])
+@pytest.mark.hand_built_argv   # malformed on purpose: the grammar sweep would (rightly) refuse every one
 async def test_mock_rejects_a_malformed_shape(runner, domain, argv, needle):
     with pytest.raises(GAMError) as ei:
         await runner.run_authenticated(domain, argv, serialize=True)

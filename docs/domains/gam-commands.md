@@ -75,8 +75,9 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 - **What the contract can't see:** the order and pairing of options past the leading words
   (`vacation … html` is only checked as "`html` is a grammar word"), field-name validity per command,
   and anything about GAM's behaviour. For the writes, the strict `mock_gam.sh` handlers check option
-  order and pairing (hand-written from the grammar); a grammar-validating mock for everything is plan
-  item T7, and GAM's behaviour needs live runs.
+  order and pairing (hand-written from the grammar); the end-of-session sweep (plan T7, lite) holds
+  what the suite *sent* to these same checks, not to a full parse; a grammar-validating mock for
+  everything is still open, and GAM's behaviour needs live runs.
 
 ## Gotchas / mock-lies traps
 - **`formatjson` is not universal.** `print messages`, `print delegates`, `show vacation`,
@@ -103,7 +104,10 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 runs fully offline (mock GAM + in-memory Keychain). The grammar contract tests and
 `test_catalog_matches_grammar` **skip** when the grammar isn't vendored (a clean clone) — locally they
 run once `make gam` has vendored it, and in CI in the `gam-compat` job that fetches the real binary
-(the non-blocking latest-GAM preview runs the two contract tests too). Passing tests do NOT prove a GAM write works: every
+(the non-blocking latest-GAM preview runs the two contract tests too). With the grammar vendored, each
+test session also ends by checking every argv the suite sent the mock against it, traced to the builder
+shape that emits it — so argv assembled outside a builder fails there (gam-runner runbook, "Every argv
+the suite sends is grammar-shaped"). Passing tests do NOT prove a GAM write works: every
 mutating builder (delete_user, datatransfer, remove_calendar, group membership, signature/forward/
 vacation flags) is unproven until run against a **throwaway** tenant per the README live-verification
 status. Read-only builders are safe to exercise via `scripts/acceptance.py`.

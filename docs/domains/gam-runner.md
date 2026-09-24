@@ -9,9 +9,12 @@ and the `serialize=True` write-lock. Adjacent to #4 (secrets materialized via `E
 owned by `core/secrets/`) and #2 (the mutation chokepoint runs *through* this runner, but lives in
 `gam_connector.py`).
 **Enforcement home:** `tests/test_runner.py`, `tests/test_errors.py`, `tests/test_parser.py`,
-`tests/test_models.py` — all offline against `tests/fixtures/mock_gam.sh`. No drift guard beyond
-those; the argv-only property is structural (single `_exec`), not asserted by a lint — but who may
-call `_exec` is: `test_command_contract.py::test_gam_is_spawned_only_through_run_authenticated_or_version`
+`tests/test_models.py` — all offline against `tests/fixtures/mock_gam.sh`. What reaches that mock is
+swept when the session ends: each distinct argv any test sent must be a shape the vendored grammar
+vouches for (`tests/conftest.py` `_sent_argv` → `test_command_contract.py::unshaped_argv`; see "Every
+argv the suite sends is grammar-shaped" below). The argv-only property is structural (single `_exec`),
+not asserted by a lint — but who may call `_exec` is:
+`test_command_contract.py::test_gam_is_spawned_only_through_run_authenticated_or_version`
 fails on any caller beyond `run_authenticated`'s body and `version`. The env
 allowlist and the frozen-app binary lock are tripwired in `test_runner.py`
 (`test_the_env_allowlist_is_the_reviewed_one`, `test_gam_inherits_only_the_allowlisted_environment`,
@@ -129,9 +132,33 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   `GetTodriveParameters` reads it with `getString`, which refuses an empty value; `tdtitle` takes
   `minLen=0`; read from the vendored build). `info user`/`check serviceaccount` handlers ignore
   trailing words, so a `todrive` after them (or a `show`) is refused before the handler runs.
-- **Seeing what GAM received:** the `gam_calls` fixture (`tests/conftest.py`) sets
-  `GAM_MOCK_ARGV_LOG`; the mock appends each argv (NUL-separated) and `tests/helpers.py`
-  `read_gam_calls` parses it. `MOCKSLEEP <secs> [pidfile]` hangs on purpose for the timeout path.
+- **Seeing what GAM received:** an autouse fixture (`tests/conftest.py` `_gam_argv_log`) points
+  `GAM_MOCK_ARGV_LOG` at a per-test file for every test; the mock appends each argv (NUL-separated)
+  and `tests/helpers.py` `read_gam_calls` parses it — the `gam_calls` fixture reads the current test's.
+  `MOCKSLEEP <secs> [pidfile]` hangs on purpose for the timeout path.
+- **Every argv the suite sends is grammar-shaped** (plan T7, lite; 2026-09-24). The per-test logs feed
+  a session fixture (`_sent_argv`) that, when the session ends, hands each distinct argv (with the first
+  test that sent it) to `test_command_contract.py::unshaped_argv`, and fails — as an error at the last
+  test's teardown — listing every offender with its test. The grammar matcher needs to know which tokens
+  are values and a real argv doesn't say, so each is traced to the shape that emits it: a builder's
+  placeholder argv (`builder_argvs`) or a Builder catalog read's (`raw.*`, each optional slot given and
+  omitted), a `<param>` matching any value. That shape must match a `gam …` line and its literals must be
+  grammar words (the same checks as the builder contract tests); a `todrive …` tail must be a
+  `todrive_args` shape and follow a command whose grammar stanza takes `todrive`. An argv no shape
+  accounts for is a finding in itself (invariant #1). The mock's own `MOCKFAIL`/`MOCKSLEEP` verbs are
+  skipped; a test that sends argv no builder emits on purpose — the malformed shapes the mock must
+  refuse, or a partial `vacation` seeding the mock's state — carries `@pytest.mark.hand_built_argv`,
+  and its calls are skipped. It skips cleanly when the grammar isn't vendored (a clean clone, CI's
+  matrix), so it runs locally after `make gam` and in CI's `gam-compat` job, which runs the whole
+  suite after fetching the pinned binary. `test_the_sent_argv_sweep_bites` proves it rejects a
+  hand-built argv, a `todrive` after `show`/`info`, a tail `todrive_args` never emits, and a shape
+  with a renamed verb or an unknown keyword. Limits: a
+  background job still writing after its test's teardown goes unswept, and a value is never checked
+  (it matches any `<param>`) — a keyword passed as a value slips through. 16 Builder catalog reads
+  don't match the grammar matcher today (the `cros <x>` forms of `<CrOSTypeEntity>`, `list` on
+  `<CrOSTypeEntity>|<UserTypeEntity>`, and the `<UserItem>` Meet reads the read builder runs as
+  `user <x>`); no test runs one, and one that did would fail the sweep until the matcher learns the
+  form or the read is fixed.
 - **CSV `JSON`-column merge.** `_parse_csv` keeps plain sibling columns (owning user/key) and lets
   the JSON blob win on conflict; multi-entity output (`all users print calendars`) depends on this.
   A mock that returns a bare JSON object per row where GAM returns the `key,JSON` CSV would hide a
@@ -166,7 +193,9 @@ binary, the four classified failure kinds, per-line classification of a mixed st
 `test_cancel_kills_gam_wipes_the_config_and_frees_the_write_lock`; the sweep's own timeout via the
 mock's `SWEEPSLOW` in `test_lifecycle.py::test_offboard_sweep_timeout_is_a_clear_step_failure`), and the env
 allowlist (pinned as a literal set in the test; a real child, `/usr/bin/env`, reports exactly what it
-received, frozen and not, and the venv's Python reports any `DYLD_*`). Untrusted
+received, frozen and not, and the venv's Python reports any `DYLD_*`). With the grammar vendored,
+every session also sweeps the argv the suite sent the mock (379 distinct at 2026-09-24, in well under a
+second). Untrusted
 until run live: whether real GAM needs any variable outside the allowlist (none known), the
 real stderr wording behind each `GAMErrorKind` (only a handful of lines mocked), whether a real
 multi-entity sweep prints any stderr line beyond progress chatter and per-entity failures (one would

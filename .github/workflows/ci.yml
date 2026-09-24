@@ -86,8 +86,10 @@ jobs:
           assert EXPECTED_GAM_VERSION in v, f"vendored VERSION {v!r} != pin {EXPECTED_GAM_VERSION}"
           print("vendored:", v.split(chr(10))[0])
           PY
-      - name: Command-contract test against the REAL reference
-        run: pytest -q tests/test_command_contract.py
+      - name: Restore the committed command catalog (fetch_gam.sh replaces resources/gam7 wholesale)
+        run: git checkout -- gamgui/resources/gam7/command_catalog.json
+      - name: The whole suite against the REAL reference (the command contract, and every argv sent to the mock)
+        run: pytest -q
 
   app:
     # Freezes the .app exactly as `make app` does, so a spec, lock or signing change that breaks the
