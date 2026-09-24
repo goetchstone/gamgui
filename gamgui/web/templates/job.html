@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}GamGUI — Job{% endblock %}
+{% block content %}
+<p class="eyebrow text-brand-blue">Background job</p>
+{% if job %}
+<h1 class="mt-2 font-serif text-3xl text-brand-black">{{ job.title or "Background job" }}</h1>
+<p class="mt-2 text-sm text-brand-grayink">Its progress and result, as the screen that started it shows them. It keeps running if you leave this page; the Jobs tray above lists it.</p>
+{% if job.status_url %}
+{# The index job's panel re-renders #cal-index, as it does on the Calendars screen. #}
+<div id="{{ 'cal-index' if job.kind == 'index' else 'job-panel' }}" class="mt-6"
+     hx-get="{{ job.status_url }}" hx-trigger="load" hx-swap="innerHTML">
+  <span class="spinner"></span> <span class="text-sm text-brand-grayink">Loading…</span>
+</div>
+{% endif %}
+{% else %}
+<h1 class="mt-2 font-serif text-3xl text-brand-black">That job is no longer here</h1>
+<p class="mt-2 text-sm text-brand-grayink">GamGUI keeps the last ten finished jobs until it quits. What each one changed is in the <a class="underline" href="/audit">Audit</a> log.</p>
+{% endif %}
+{% endblock %}

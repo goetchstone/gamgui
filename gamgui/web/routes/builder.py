@@ -23,6 +23,7 @@ from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.errors import GAMError
 from ...core.gam.parser import parse_records
+from ...core.bulk import stop_requested
 from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
@@ -429,6 +430,8 @@ async def seq_preview(request: Request) -> HTMLResponse:
 async def _run_sequence(job, conn, previews, catalog=None) -> None:
     try:
         for p in previews:
+            if stop_requested(job):   # Stop, between steps (plan U5)
+                break
             job.current = p.summary
             cmd = catalog.by_id(p.meta.get("cid", "")) if catalog is not None else None
             try:
@@ -470,7 +473,9 @@ async def seq_run(request: Request) -> HTMLResponse:
     refusal = guard_mod.enforce(previews, form)
     if refusal:
         return await _seq_preview_page(request, seq, error=refusal)
-    job = start_job(st.jobs, len(previews), window=len(previews))   # every step's row: at most MAX_SEQUENCE_STEPS
+    n = len(previews)
+    job = start_job(st.jobs, n, window=n,   # every step's row: at most MAX_SEQUENCE_STEPS
+                    kind="sequence", title=f"Builder sequence — {n} step{'s' if n != 1 else ''}")
     job.task = asyncio.create_task(_run_sequence(job, conn, previews, _catalog(request)))
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": job})
 

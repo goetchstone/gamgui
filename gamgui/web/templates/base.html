@@ -72,6 +72,20 @@
           <a class="hover:text-brand-black transition-colors" href="/reports">Reports</a>
           <a class="hover:text-brand-black transition-colors" href="/audit">Audit</a>
         </nav>
+        {# The jobs tray (plan U5): a disclosure — app.js opens it, and closes it on Escape or a click outside. #}
+        {% import "_job_live.html" as live %}
+        {% set tray = jobs_tray(request) %}
+        <div id="jobs-tray" class="relative">
+          <button id="jobs-toggle" type="button" data-action="jobs-toggle" aria-expanded="false" aria-controls="jobs-panel"
+                  class="flex items-center gap-1.5 rounded-md border border-brand-gray/60 px-2.5 py-1 text-sm text-brand-blueink hover:text-brand-black transition-colors">
+            Jobs{{ live.jobs_count(tray[1]) }}
+          </button>
+          <div id="jobs-panel" hidden role="region" aria-labelledby="jobs-heading"
+               class="absolute right-0 top-full z-50 mt-2 max-h-[32rem] w-96 overflow-y-auto rounded-xl border border-brand-gray/50 bg-brand-white p-4 shadow-lg">
+            <h2 id="jobs-heading" class="eyebrow text-brand-blue">Background jobs</h2>
+            {% include "_jobs_tray.html" %}
+          </div>
+        </div>
       </div>
     </header>
     <main class="mx-auto {% block container_class %}max-w-5xl{% endblock %} px-6 py-10">

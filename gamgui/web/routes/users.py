@@ -382,7 +382,9 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
         return error_partial(request, refusal)
-    job = start_job(st.jobs, len(targets))
+    n = len(targets)
+    job = start_job(st.jobs, n, kind="department",
+                    title=f"Department “{store}” for {n} user{'s' if n != 1 else ''}")
     job.task = asyncio.create_task(_run_bulk_store(job, st, conn, targets, store))
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": job})
 

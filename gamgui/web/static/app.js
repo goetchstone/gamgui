@@ -137,22 +137,55 @@
   // a screen reader would hear nothing, or the whole feed again. Each render marks one element
   // data-announce="<job id>" (templates/_job_live.html) — progress in 10% steps, then the result — and
   // its text goes to base.html's #live-status, which no swap replaces, only when it changed for that job.
+  // The jobs tray (plan U5) marks a finished job "tray-<job id>": said only when that job's own panel
+  // isn't on the page, so its result is never talked over.
   var said = {};
+  // What the page already showed on load isn't news: only a change after it is spoken (the jobs tray's
+  // finished rows are in every page, and its next poll repeats them).
+  [].forEach.call(document.querySelectorAll("[data-announce]"), function (el) {
+    said[el.dataset.announce] = el.innerText.replace(/\s+/g, " ").trim();
+  });
   document.body.addEventListener("htmx:afterSettle", function (e) {
     var root = e.target, live = document.getElementById("live-status");
     if (!live || !root.querySelectorAll) return;
     var marked = [].slice.call(root.querySelectorAll("[data-announce]"));
     if (root.matches("[data-announce]")) marked.unshift(root);
     marked.forEach(function (el) {
+      var key = el.dataset.announce;
       var text = el.innerText.replace(/\s+/g, " ").trim();   // innerText: a <br> is a break, not nothing
-      if (!text || said[el.dataset.announce] === text) return;
-      said[el.dataset.announce] = text;
+      if (!text || said[key] === text) return;
+      said[key] = text;
+      if (key.indexOf("tray-") === 0 && document.querySelector('[data-announce="' + key.slice(5) + '"]')) return;
       live.textContent = text;
     });
   });
 
+  // The header's jobs tray (plan U5, base.html): a disclosure button and the list it shows. Escape or a
+  // click outside closes it; Escape from inside hands focus back to the button.
+  function setTray(open, refocus) {
+    var btn = document.getElementById("jobs-toggle"), panel = document.getElementById("jobs-panel");
+    if (!btn || !panel) return;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    panel.hidden = !open;
+    if (!open && refocus) btn.focus();
+  }
+  function trayOpen() {
+    var panel = document.getElementById("jobs-panel");
+    return !!panel && !panel.hidden;
+  }
+  document.addEventListener("keydown", function (e) {
+    var tray = document.getElementById("jobs-tray");
+    if (e.key === "Escape" && trayOpen() && tray.contains(document.activeElement)) setTray(false, true);
+  });
+  document.addEventListener("click", function (e) {
+    var tray = document.getElementById("jobs-tray");
+    // A target a poll just swapped out is no longer in the tray, but was clicked inside it.
+    if (trayOpen() && e.target.isConnected && !tray.contains(e.target)) setTray(false, false);
+  });
+
   var actions = {
     "copy": copyText,
+    "jobs-toggle": function (btn) { setTray(btn.getAttribute("aria-expanded") !== "true", false); },
     "hint": insertHint,
     "print-sheet": printSheet,
     // A confirm step's Cancel: empty the zone it was swapped into, and hand focus back to its opener.

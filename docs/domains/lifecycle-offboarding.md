@@ -77,6 +77,15 @@ no app-side scheduler. The final
 account **delete** is a distinct guarded action on the user detail page (`delete_user`,
 `RiskLevel.DESTRUCTIVE`).
 
+**Stop (plan U5).** The running panel and the header's jobs tray have a Stop for the run. It asks first
+(`hx-confirm`; `POST /jobs/stop` refuses an offboarding's Stop without `confirmed=1`), then only sets
+`job.cancel_requested`: `run_offboard` checks it before each step, so the step in progress always
+finishes and is audited, and every later step is logged "– <step> — not run: stopped" (in
+`job.skipped`, `job.interrupted` stays false) with "Stopped by you — N not attempted." on the panel,
+which reads "Offboarding stopped". Stopping between the reset and the revoke leaves the leaver signed
+in — the panel's revoke warning says so — so finish as after a failure: tick the `✓` steps, preview
+again, run the rest (`test_stop_ends_offboarding_between_steps_and_says_what_did_not_run`).
+
 **One offboarding per leaver at a time.** `AppState.offboard_jobs` maps a leaver to their running
 job; while it runs, a Preview or a Run for that leaver is refused with the running job's own
 progress panel (`_offboard_running.html`), the way back to it after a reload or leaving the page.
@@ -289,8 +298,10 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   writes in the app waiting behind it. Don't close the app mid-run: quitting stops the step in
   progress (GamGUI kills its `gam`, and Audit records that step failed, "interrupted … may have done
   part of its work") and the steps after it never run — the panel says "Offboarding interrupted" and
-  lists them as "not run: interrupted", never "complete". Left the page or reloaded? Enter
-  the same two addresses and Preview: it shows the running offboarding's progress instead.
+  lists them as "not run: interrupted", never "complete". Left the page or reloaded? The header's
+  **Jobs** tray lists the run and links to its panel (or enter the same two addresses and Preview:
+  it shows the running offboarding's progress instead). To halt it, use its **Stop**, which ends it
+  between steps — never quit the app for that.
 
 **After the run** — the panel should say "Offboarding complete — 8 of 8 steps succeeded"; GamGUI →
 Audit shows eight `ok` records, one per step. Then check in Google, not just in GamGUI:

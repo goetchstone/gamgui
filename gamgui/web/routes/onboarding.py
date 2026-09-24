@@ -19,7 +19,7 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from ...core import clock, guard, onboarding
-from ...core.bulk import stop_reason
+from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
 from ...core.onboarding import RoleTemplate, RunbookStore
 from ..jobs import Job, register_job
@@ -65,9 +65,11 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store,
     """Background executor: onboard each (row, role template) pair. Never raises out. Stops when an
     account create fails for a reason every later hire would share (``stop_reason``: sign-in expired,
     a scope missing); a best-effort sub-step's failure (a group, a calendar, the task list) never stops
-    it, since the accounts themselves may still be created."""
+    it, since the accounts themselves may still be created. Stop ends it between hires, never mid-hire."""
     try:
         for hire, cfg in pairs:
+            if stop_requested(job):
+                break
             if cfg is None or not cfg.steps:
                 job.record_hire({"email": hire.get("email"), "name": hire.get("name") or hire.get("email"),
                                  "role": hire["role"], "ok": False,
@@ -308,7 +310,9 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     pairs = held
     if not pairs:
         return error_partial(request, "Nothing to run — every row had an unknown role or was invalid.")
-    job = register_job(st.jobs, OnboardJob(total=len(pairs)))
+    n = len(pairs)
+    job = register_job(st.jobs, OnboardJob(total=n, kind="onboard",
+                                           title=f"Bulk onboarding — {n} hire{'s' if n != 1 else ''}"))
     job.task = asyncio.create_task(
         _run_bulk_onboard(job, conn, signature_store(request), _store(request), pairs))
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": job, "credentials": None})

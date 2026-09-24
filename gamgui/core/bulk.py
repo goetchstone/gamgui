@@ -1,4 +1,4 @@
-"""Per-user bulk loops: the stop rule every one shares, and the bulk department.
+"""Per-user bulk loops: the stop rules every one shares, and the bulk department.
 
 A loop writes into the polled progress record the web layer starts it with (``web/jobs.py``: ``record``,
 ``current``, ``error``, ``finish``) — passed in, since core never imports web.
@@ -25,15 +25,26 @@ def stop_reason(kind, remediation: str, left: int) -> Optional[str]:
     return f"Stopped: {remediation}{rest}"
 
 
+def stop_requested(job) -> bool:
+    """True, with ``job.error`` saying so, once the operator pressed Stop (plan U5). Every loop asks
+    before its next target, never during one, so the write in flight finishes and is recorded."""
+    if not job.cancel_requested:
+        return False
+    job.error = f"Stopped by you — {job.total - job.done} not attempted."
+    return True
+
+
 def _why(exc: Exception) -> str:
     return exc.remediation if isinstance(exc, GAMError) else _TRY_AGAIN
 
 
 async def set_departments(job, conn, users, department: str) -> None:
     """Set ``department`` on each of ``users``, KEEPING each existing title. Stops at a failure every
-    later user would share (``stop_reason``)."""
+    later user would share (``stop_reason``), or at Stop."""
     try:
         for u in users:
+            if stop_requested(job):
+                break
             job.current = u.primary_email
             kind, why, detail = None, "", ""
             try:

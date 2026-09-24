@@ -1,0 +1,5 @@
+{# What a Stop click swaps in for itself (routes/jobs.py): "Stopping after the current one…", or that it
+   had already finished. The job's next poll carries on from there. #}
+{% import "_job_live.html" as live %}
+{% if job.finished %}<span id="stop-{{ where }}-{{ job.id }}" tabindex="-1" data-focus class="ml-auto shrink-0 text-xs text-brand-grayink">It had already finished.</span>
+{% else %}{{ live.stop(job, where) }}{% endif %}

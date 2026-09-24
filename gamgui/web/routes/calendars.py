@@ -16,7 +16,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import guard
-from ...core.bulk import stop_reason
+from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
 from ..jobs import start_job
@@ -87,9 +87,11 @@ async def _subscribers_for(conn, target: str, known_users: set) -> "tuple[str, l
 
 async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
     """Background: put ``cal`` on each member's calendar list so it actually appears for them. Stops
-    at a failure every later member would share (``stop_reason``)."""
+    at a failure every later member would share (``stop_reason``), or at Stop."""
     try:
         for email in emails:
+            if stop_requested(job):
+                break
             job.current = email
             kind, why, detail = None, "", ""
             try:
@@ -269,7 +271,7 @@ async def index_rebuild(request: Request) -> HTMLResponse:
     existing = st.jobs.get(st.cal_index_job_id)
     if existing is not None and not existing.finished:  # don't start a second multi-minute scan
         return TEMPLATES.TemplateResponse(request, _CALENDAR_INDEX_JOB_TEMPLATE, {"job": existing})
-    job = start_job(st.jobs, 0)
+    job = start_job(st.jobs, 0, kind="index", title="Calendar index rebuild")
     st.cal_index_job_id = job.id
     job.task = asyncio.create_task(_build_index(job, st.connector, st.calendar_index, st.audit_domain))
     return TEMPLATES.TemplateResponse(request, _CALENDAR_INDEX_JOB_TEMPLATE, {"job": job})
@@ -425,7 +427,9 @@ async def _grant_and_subscribe(request: Request, conn, cal: str, target: str, ro
         # Fan out in the background: one gam call per member, so a large group would otherwise hold
         # the request open for minutes. Progress is polled, same as the index rebuild.
         st = request.app.state.gamgui
-        job = start_job(st.jobs, len(emails))
+        n = len(emails)
+        job = start_job(st.jobs, n, kind="subscribe",
+                        title=f"Calendar to {target}'s {n} member{'s' if n != 1 else ''}")
         job.task = asyncio.create_task(_run_subscribe(job, conn, cal, emails))
         notice = (f"Shared with {target} — adding it to {len(emails)} "
                   f"member{'s' if len(emails) != 1 else ''}' calendars now.")

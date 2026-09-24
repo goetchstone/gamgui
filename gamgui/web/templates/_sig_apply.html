@@ -10,6 +10,7 @@
     <span class="spinner"></span>{{ live.progress(job, "Applying the signature") }}
     <span>Applying signature… <strong>{{ job.done }}</strong> of {{ job.total }}
       · {{ job.applied }} set{% if job.failed_total %} · <span class="text-rose-700">{{ job.failed_total }} failed</span>{% endif %}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
+    {{ live.stop(job) }}
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
@@ -29,7 +30,7 @@
 {# Finished, or stopped at a failure every later user would share: job.error says why and how many
    were not attempted, and the failure that stopped it is in the list below with GAM's own error. #}
 <div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>Applied to {{ job.applied }} of {{ job.total }} before stopping.
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>Applied to {{ job.applied }} of {{ job.total }} before stopping.
   {% else %}Applied to {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.{% endif %}</p>
   {% if job.failed_total %}
   <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>

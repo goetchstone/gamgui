@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard
 from ...core import signatures as sig
-from ...core.bulk import stop_reason
+from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
 from ...core.signatures import SignatureStore
 from ..jobs import Job, register_job
@@ -62,9 +62,11 @@ def _form_key(template: str, scope_type: str, scope_value: str) -> tuple:
 
 async def _run_apply(job: Job, conn, matched, template: str) -> None:
     """Background task: set each user's signature, updating ``job`` as it goes. Stops at a failure
-    every later user would share (``stop_reason``: sign-in expired, a scope missing)."""
+    every later user would share (``stop_reason``: sign-in expired, a scope missing), or at Stop."""
     try:
         for u in matched:
+            if stop_requested(job):
+                break
             job.current = u.primary_email
             try:
                 result = await conn.set_signature(u.primary_email, sig.render_signature(template, u), html=True)
@@ -167,7 +169,9 @@ async def apply(
 
     # Run the (potentially minutes-long) per-user loop in the background and report progress by polling,
     # so the UI never looks frozen on a large apply.
-    job = register_job(st.jobs, Job(total=len(matched)))
+    n, who = len(matched), "the whole company" if scope_type == "company" else scope_value.strip()
+    job = register_job(st.jobs, Job(total=n, kind="signatures",
+                                     title=f"Signature for {who} — {n} user{'s' if n != 1 else ''}"))
     job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template))
     return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})
 

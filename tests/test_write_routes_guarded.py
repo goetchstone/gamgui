@@ -56,13 +56,14 @@ PREVIEWS = {
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
-# verify), and the calendar index (a read-only scan into a local SQLite file).
+# verify), the calendar index (a read-only scan into a local SQLite file), and a job's Stop (a flag
+# its loop reads before the next target: it can only mean fewer writes).
 LOCAL_ONLY = {
     "/builder/sequence/add", "/builder/sequence/remove", "/builder/sequence/move", "/builder/sequence/clear",
     "/signatures/templates/save", "/signatures/templates/delete",
     "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify",
-    "/calendars/index/rebuild",
+    "/calendars/index/rebuild", "/jobs/stop",
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe

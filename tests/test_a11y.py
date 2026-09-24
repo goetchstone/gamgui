@@ -316,6 +316,12 @@ def _screens(p: Page):
     p.click("button", "Run offboarding")
     p.settle(OFFBOARD_DONE, timeout=60)
     yield "lifecycle/run"                          # the finished panel and its ✓/✗ log (plan A3)
+    p.click("#jobs-toggle")
+    p.settle("!document.getElementById('jobs-panel').hidden && document.querySelector('#jobs-list a')")
+    yield "jobs/tray"                              # the header's tray, open, listing that run (plan U5)
+    p.goto(p.c.js("document.querySelector('#jobs-list a').getAttribute('href')"),
+           "document.querySelector('#job-panel [data-announce]')")
+    yield "jobs/page"                              # the run's own panel, on a page of its own
 
     p.goto("/reports", "!/Loading/.test(document.querySelector('#usage')?.innerText ?? 'Loading')")
     yield "reports"
@@ -532,6 +538,45 @@ def test_the_keyboard_alone_works_the_tabs_and_each_confirm_panel(page):
 
 @pytest.mark.a11y
 @pytest.mark.timeout(120)
+def test_the_jobs_tray_works_from_the_keyboard(page):
+    """Plan U5: the header's Jobs button is a disclosure — Enter opens it, Tab walks its rows (each a link
+    to the job's own page), Escape closes it and hands focus back, and a click outside closes it."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+    _offboard_preview(p)
+    p.click("button", "Run offboarding")
+    p.settle(OFFBOARD_DONE, timeout=60)
+
+    def expanded() -> tuple:
+        return (p.c.js("document.getElementById('jobs-toggle').getAttribute('aria-expanded')"),
+                p.c.js("!document.getElementById('jobs-panel').hidden"))
+
+    p.goto("/users")
+    p.click("#jobs-toggle", action="focus")
+    p.key("Enter")
+    assert expanded() == ("true", True)
+    p.key("Tab")
+    link = p.focused()
+    assert link["tag"] == "A" and link["id"].startswith("job-link-") and link["ring"]
+    p.key("Escape")
+    assert expanded() == ("false", False) and p.focused()["id"] == "jobs-toggle"
+    p.key("Enter")
+    p.c.js("document.querySelector('main').click()")
+    assert expanded() == ("false", False)
+    p.key("Enter")
+    p.key("Tab")
+    p.c.js("window.__a11yOld = true")
+    p.key("Enter")                                          # follow the link to the job's page
+    p.wait("!window.__a11yOld && window.htmx")
+    p.settle("document.querySelector('#job-panel [data-announce]')")
+    assert re.match(r"/jobs/[\w-]+$", p.c.js("location.pathname"))
+    assert "Offboarding complete" in p.c.js("document.getElementById('job-panel').innerText")
+    assert p.c.js("window.__errs") == []
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
 def test_the_groups_board_works_from_the_keyboard(page):
     """Plan A6 and U7, by real key events: find a group, add a person with a role through the combobox,
     and remove a member through its confirm step — no drag, no mouse — while Chrome's accessibility tree
@@ -742,15 +787,16 @@ def test_each_tab_strip_is_an_aria_tablist():
 
 
 # Plan A3: each polled job panel, the context its route renders it with, what its progress says, and
-# whether its loop can stop with job.error (offboarding's and the sequence's never do).
+# its job's kind (web/jobs.py PANELS). Every loop can end with job.error — a stop at an account-wide
+# failure, or Stop (plan U5) — and its running panel carries the Stop button.
 POLLED = {
-    "_sig_apply.html": ("job", "Applying the signature", True),
-    "_bulk_apply.html": ("job", "Setting department", True),
-    "_calendar_subscribe_job.html": ("subscribe_job", "Adding to calendars", True),
-    "_offboard_run.html": ("job", "Offboarding", False),
-    "_sequence_run.html": ("job", "Running the sequence", False),
-    "_onboard_bulk_status.html": ("job", "Onboarding", True),
-    "_calendar_index_job.html": ("job", None, True),          # a scan with no count: it says so once
+    "_sig_apply.html": ("job", "Applying the signature", "signatures"),
+    "_bulk_apply.html": ("job", "Setting department", "department"),
+    "_calendar_subscribe_job.html": ("subscribe_job", "Adding to calendars", "subscribe"),
+    "_offboard_run.html": ("job", "Offboarding", "offboard"),
+    "_sequence_run.html": ("job", "Running the sequence", "sequence"),
+    "_onboard_bulk_status.html": ("job", "Onboarding", "onboard"),
+    "_calendar_index_job.html": ("job", None, "index"),          # a scan with no count: it says so once
 }
 
 
@@ -803,10 +849,9 @@ def test_each_polled_panel_says_one_line_and_names_its_marks():
     """Plan A3: a polled panel is never a live region itself (base.html's #live-status is, outside every
     swap); each render marks one element data-announce with the job's id — progress in 10% steps, then the
     result — and every ✓/✗ in a feed or log row is hidden from a screen reader behind a word."""
-    for template, (key, label, stops) in POLLED.items():
+    for template, (key, label, kind) in POLLED.items():
         for state, job in _job_states():
-            if state == "stopped" and not stops:
-                continue
+            job.kind = kind
             runs = _render(template, **{key: job}, revoke_label="Step 1", credentials=None)
             where = f"{template} {state}"
             attrs = [a for _, stack in runs for _, a in stack]
@@ -827,6 +872,33 @@ def test_each_polled_panel_says_one_line_and_names_its_marks():
             words = [t.strip() for t, stack in runs if ("span", {"class": "sr-only"}) in stack]
             glyphs = [t.strip() for t, stack in runs if any(a.get("aria-hidden") == "true" for _, a in stack)]
             assert [{"✓": "Succeeded:", "✗": "Failed:"}[g] for g in glyphs] == words, where
+
+
+def test_the_jobs_tray_speaks_only_a_finish_and_polls_as_a_poll():
+    """Plan U5: the tray re-renders every 2s on every page, so like a job panel it holds no live region of
+    its own. A start is the operator's own click (its panel says "started"); each finished row carries one
+    hidden data-announce line, keyed "tray-<id>" so app.js can leave it to that job's panel when it is on
+    the page. Its poll path is one isPoll recognises."""
+    from gamgui.web.jobs import start_job, tray
+
+    jobs: dict = {}
+    running = start_job(jobs, 8, kind="signatures", title="Signature for the whole company — 8 users")
+    done = start_job(jobs, 3, kind="offboard", title="Offboarding carol@example.com")
+    done.record("Reset password", True)
+    done.error = "Stopped by you — 2 not attempted."
+    done.finish()
+    runs = _render("_jobs_tray.html", tray=tray(jobs), oob=True)
+    attrs = [a for _, stack in runs for _, a in stack]
+    assert not [a for a in attrs if "aria-live" in a or a.get("role") in ("status", "log", "alert")]
+    assert {a["data-announce"] for a in attrs if "data-announce" in a} == {f"tray-{done.id}"}
+    said = " ".join(t for t, stack in runs if any("data-announce" in a for _, a in stack))
+    assert re.sub(r"\s+", " ", said).strip() == ("Finished in the background: Offboarding carol@example.com — "
+                                                 "Stopped by you — 2 not attempted.")
+    assert running.id in str(attrs)                          # listed, with its Stop, but not spoken
+    tray_html = (ROOT / "gamgui" / "web" / "templates" / "_jobs_tray.html").read_text()
+    assert re.findall(r'hx-get="([^"]+)"', tray_html) == ["/jobs/status"]
+    app_js = (ROOT / "gamgui" / "web" / "static" / "app.js").read_text()
+    assert 'key.indexOf("tray-") === 0' in app_js
 
 
 def test_the_live_region_is_outside_every_swap_and_polls_never_flash_working():

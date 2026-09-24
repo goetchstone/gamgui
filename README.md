@@ -76,6 +76,11 @@ Actively developed and used against live Google Workspace tenants. Working today
   panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
   (which lags a few days).
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
+- **Jobs tray** — every background run (signatures, bulk department, onboarding CSV, offboarding,
+  calendar fan-out, Builder sequence, calendar index) is listed in the header from any page, with
+  its progress, its result and a link back to its panel. A running loop has a **Stop**: it finishes
+  the one in hand, then ends, saying how many it didn't attempt (an offboarding asks first, and marks
+  the steps after it "not run: stopped"). Jobs live in memory: quitting the app ends them.
 
 You build and run it yourself; it is not yet notarized for distribution to other Macs.
 

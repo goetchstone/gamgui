@@ -3,7 +3,7 @@
 {% import "_job_live.html" as live %}
 {% set j = subscribe_job %}
 {% if j and j.error %}
-<div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-announce="{{ j.id }}">
+<div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" {{ live.ended(j) }} data-announce="{{ j.id }}">
   {{ j.error }}<br>Added to {{ j.applied }} of {{ j.total }} members' calendars before stopping.
 </div>
 {% elif j and not j.finished %}
@@ -14,6 +14,7 @@
     <span class="spinner"></span>{{ live.progress(j, "Adding to calendars") }}
     <span>Adding to calendars… <strong>{{ j.done }}</strong> of {{ j.total }}
       · {{ j.applied }} added{% if j.failed_total %} · <span class="text-rose-700">{{ j.failed_total }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-grayink">{{ j.current }}</span>{% endif %}</span>
+    {{ live.stop(j) }}
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (j.done * 100 // j.total) if j.total else 100 }}%"></div>
@@ -28,7 +29,7 @@
 </div>
 {% elif j %}
 <div class="mt-2 rounded-lg border px-3 py-2 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not j.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p data-announce="{{ j.id }}">It now appears in {{ j.applied }} of {{ j.total }} members' Google Calendars.</p>
+  <p {{ live.ended(j) }} data-announce="{{ j.id }}">It now appears in {{ j.applied }} of {{ j.total }} members' Google Calendars.</p>
   {% if j.failed_total %}
   <div class="mt-1 text-xs">Couldn't add it for {{ j.failed_total }} — they can add it manually:</div>
   {{ failures(j, "max-h-24") }}

@@ -122,7 +122,24 @@ plan's Phase 0 F1–F3.
   GAM (`oauthuser` or a comma in a `<UserTypeEntity>`); `/groups?group=` opens one, and a user's group
   chips link there;
   `tests/test_groups_board.py` through the strict mock; screenshots in headless Chrome at 1100×760 — WKWebView,
-  a real screen reader and a live tenant unseen). **Open:** U1, U5, U8, U10.
+  a real screen reader and a live tenant unseen) · U5 partly (the jobs tray and Stop: a Jobs button in
+  `base.html`'s header, "N running", opens a disclosure listing `web/jobs.py` `tray(st.jobs)` — at most 8,
+  running first — each row a title (every job now has a `title` and a `kind`), its progress or final
+  state, and a link to `/jobs/<id>`, whose panel loads from the job's own status route; it polls
+  `/jobs/status` every 2s. Stop (`POST /jobs/stop`, `LOCAL_ONLY`: no GAM call) sets `cancel_requested`,
+  which every loop — signatures, bulk department, calendar fan-out, bulk onboarding (between hires),
+  Builder sequence, offboarding (between steps: "not run: stopped") — checks before its next target
+  (`core/bulk.py` `stop_requested`), ending with "Stopped by you — N not attempted."; the write in
+  flight finishes and is audited, and nothing cancels a task mid-`gam`. The index rebuild (one call) has
+  no Stop; an offboarding's asks first (`hx-confirm`, and the route refuses it without `confirmed=1` —
+  no preview token, since Stop holds no values to go stale). Keyboard: Enter opens, Tab walks the rows,
+  Escape closes and returns focus; focus follows Stop → "Stopping…" → the result across polls by one
+  stable id. A screen reader hears a start from its panel and a finish from the tray's `tray-<id>` line,
+  which `app.js` skips when that job's panel is on the page. `tests/test_jobs_tray.py` presses Stop
+  during a write on each loop through the strict mock; the `a11y` job opens the tray and a job's page
+  (axe 0) and walks them by keys; a scratch Chrome run on a 0.9 s/call mock stopped an offboarding from
+  the tray and a signature apply from its panel by keys alone — WKWebView's `confirm()`, VoiceOver and a
+  live tenant unseen. Left: "retry failures only"). **Open:** U1, U8, U10; U5's retry.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
@@ -448,7 +465,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U4, U7, U14 APPLIED; U9, U11, U12, U13 partly (see Status by item); the rest open.*
+*Status: U4, U7, U14 APPLIED; U5, U9, U11, U12, U13 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows

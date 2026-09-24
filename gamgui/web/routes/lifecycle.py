@@ -238,7 +238,7 @@ async def offboard_run(
     # No await from here to the registration, so two Runs can't both pass the check.
     if running := _running(st, user):
         return _already_running(request, running, user)
-    job = start_job(st.jobs, len(steps))
+    job = start_job(st.jobs, len(steps), kind="offboard", title=f"Offboarding {user}")
     st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
     st.offboard_jobs[user.lower()] = job.id
     job.task = asyncio.create_task(lifecycle.run_offboard(job, conn, steps, done=held.done))

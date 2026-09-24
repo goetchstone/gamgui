@@ -28,10 +28,20 @@ from ..core.gam.runner import GAMRunner
 from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
 from ..core.usercache import UserCache
+from .jobs import tray
 from .previews import Previews
 
 _WEB_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
+
+
+def _jobs_tray(request) -> tuple:
+    """base.html's jobs tray (plan U5), on every page; a page rendered with no app behind it lists none."""
+    app = request.scope.get("app") if isinstance(request, Request) else None
+    return tray(getattr(getattr(getattr(app, "state", None), "gamgui", None), "jobs", None) or {})
+
+
+TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
 TOKEN_COOKIE = "gamgui_token"
 
 
@@ -262,6 +272,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
     from .routes.groups import router as groups_router
+    from .routes.jobs import router as jobs_router
     from .routes.lifecycle import router as lifecycle_router
     from .routes.onboarding import router as onboarding_router
     from .routes.reports import router as reports_router
@@ -279,4 +290,5 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(builder_router)
     app.include_router(audit_router)
+    app.include_router(jobs_router)
     return app

@@ -16,6 +16,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING, Awaitable, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from .audit import redact_argv
+from .bulk import stop_requested
 from .gam.commands import GAMCommands
 from .gam.models import GAMUser
 from .gam.runner import DOMAIN_WIDE_TIMEOUT
@@ -260,12 +261,17 @@ async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str
     """Run the steps in order into ``job`` (a ``web/jobs.py`` ``BatchJob``, which the route polls). A
     step whose ``requires`` did not all succeed is not run (logged "–"), so a failed reset or delegate
     stops the routine instead of half-offboarding the account. ``done`` are the steps ticked as
-    already done by an earlier run: they satisfy ``requires``."""
+    already done by an earlier run: they satisfy ``requires``. Stop (``job.cancel_requested``) ends
+    it between steps, never during one; the rest are "not run: stopped"."""
     succeeded = set(done)
     labels = {s.key: s.label for s in steps}
     handled = 0   # steps fully accounted for (run or deliberately skipped)
+    stopped = False
     try:
         for step in steps:
+            if stop_requested(job):
+                stopped = True
+                break
             unmet = [k for k in step.requires if k not in succeeded]
             if unmet:
                 job.log.append(f"– {step.label} — not run: “{labels.get(unmet[0], unmet[0])}” didn't succeed")
@@ -287,11 +293,12 @@ async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str
                 succeeded.add(step.key)
             handled += 1
     finally:
-        # Cut off (the app quit mid-run): every step not accounted for is "not run", so the panel can't
-        # call a half-done routine complete — or tell the manager about a reminder that was never added.
-        job.interrupted = handled < len(steps)
+        # Stopped, or cut off (the app quit mid-run): every step not accounted for is "not run", so the
+        # panel can't call a half-done routine complete — or tell the manager about a reminder never added.
+        job.interrupted = handled < len(steps) and not stopped
         for i, step in enumerate(steps[handled:]):
-            cut = i == 0 and job.current == step.label
-            job.log.append(f"– {step.label} — " + ("interrupted before it finished" if cut else "not run: interrupted"))
+            cut = not stopped and i == 0 and job.current == step.label
+            why = "not run: stopped" if stopped else ("interrupted before it finished" if cut else "not run: interrupted")
+            job.log.append(f"– {step.label} — {why}")
             job.skipped.append(step.label)
         job.finish()
