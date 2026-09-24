@@ -611,7 +611,7 @@ def test_a_data_transfer_is_confirmed_like_a_destructive_change(client, gam_call
     assert "done" not in r.text and gam_writes(gam_calls()) == []
     _, token = _builder_preview(client, **form)
     assert "done" in _builder_run(client, token, **form).text
-    assert gam_writes(gam_calls()) == [["create", "datatransfer", "carol@example.com", "drive", "alice@example.com"]]
+    assert gam_writes(gam_calls()) == [["create", "datatransfer", "carol@example.com", "drive", "alice@example.com", "all"]]
 
 
 def test_builder_delete_warns_on_a_pending_data_transfer(client):

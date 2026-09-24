@@ -25,6 +25,13 @@ from .readbuilder import make_build, parse_read_template
 _ROLE_MEMBER = "member"
 GROUP_ROLES = [_ROLE_MEMBER, "manager", "owner"]
 _SERVICE_DRIVE = "drive"
+
+
+def _transfer(old_owner: str, service: str, new_owner: str) -> list:
+    # Drive names its privacy level so every file moves, private and shared — as offboarding does —
+    # rather than whatever the Data Transfer API defaults to. GAM refuses a level for calendar alone.
+    return GAMCommands.create_datatransfer(old_owner, service, new_owner,
+                                           privacy="all" if "drive" in service.split(",") else "")
 # "drive,calendar" is a <DataTransferServiceList> (one argv element) — offers "both" in one transfer,
 # avoiding the 409 you hit when two separate same-user transfers overlap. CHOICE values render as-is.
 TRANSFER_SERVICES = [_SERVICE_DRIVE, "calendar", "drive,calendar"]
@@ -237,9 +244,9 @@ def _curated() -> List[CatalogCommand]:
              [_slot("old_owner", "From user", U),
               _slot("service", "Service", SlotKind.CHOICE, choices=TRANSFER_SERVICES, default=_SERVICE_DRIVE),
               _slot("new_owner", "To user", SlotKind.USER)],
-             lambda s: GAMCommands.create_datatransfer(s["old_owner"], s.get("service") or _SERVICE_DRIVE, s.get("new_owner", "")),
-             "gam create datatransfer <old> <service> <new>",
-             "Hand a departing user's Drive or Calendar content to another user."),
+             lambda s: _transfer(s["old_owner"], s.get("service") or _SERVICE_DRIVE, s.get("new_owner", "")),
+             "gam create datatransfer <old> <service> <new> [all]",
+             "Hand a departing user's Drive (private and shared files) or Calendar content to another user."),
         _cmd("build.suspend_user", "Users", "", "Suspend account", RiskLevel.DESTRUCTIVE,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.set_suspended(s["email"], True),

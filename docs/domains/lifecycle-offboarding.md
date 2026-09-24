@@ -228,7 +228,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
   whether the files the leaver had *shared* moved — and what stays with the leaver is lost at delete,
   while the delete gate still passes on a `completed` transfer (failure-log). The mock refuses a
   privacy level on a transfer without Drive, as GAM does ("No data transfer application for key
-  PRIVACY_LEVEL"). The Builder's "Transfer Drive/Calendar ownership" still names none. GAM also
+  PRIVACY_LEVEL"). The Builder's "Transfer Drive/Calendar ownership" sends `all` too whenever Drive is in the service list (calendar alone takes no level). GAM also
   refuses a transfer to the same user (the step fails with a usage error).
 - **The auto-reply is sent as HTML** (`html`), built from the text by `lifecycle.autoreply_html`: each
   line break becomes `<br/>`, `&`/`<`/`>` are escaped and a backslash is `&#92;`, so senders read

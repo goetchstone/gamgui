@@ -77,8 +77,11 @@ def test_transfer_offers_combined_service_list():
     assert service.choices == ["drive", "calendar", "drive,calendar"]
     # The combined choice rides as ONE argv element — never split into two tokens.
     assert xfer.build({"old_owner": "a@e.com", "service": "drive,calendar", "new_owner": "b@e.com"}) == [
-        "create", "datatransfer", "a@e.com", "drive,calendar", "b@e.com",
+        "create", "datatransfer", "a@e.com", "drive,calendar", "b@e.com", "all",
     ]
+    # Drive names its privacy level (every file moves, as offboarding's transfer does); calendar alone
+    # takes none — GAM refuses one there.
+    assert xfer.build({"old_owner": "a@e.com", "service": "calendar", "new_owner": "b@e.com"})[-1] == "b@e.com"
 
 
 def test_areas_group_the_categories():
