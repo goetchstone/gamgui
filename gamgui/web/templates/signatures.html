@@ -13,16 +13,16 @@
   <div>
     <p class="eyebrow text-brand-blue">Branding</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Signature designer</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Design one signature with variables, scope it to a single user (to test), a group, an OU, a department, or the whole company, preview it for a real person, then apply it to everyone in scope.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Design one signature with variables, scope it to a single user (to test), a group, an OU, a department, or the whole company, preview it for a real person, then apply it to everyone in scope.</p>
   </div>
   {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
 
   <!-- saved templates: load a starter into the editor, or save the current editor content as a named template -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Saved templates</h2>
-    <p class="mt-1 text-xs text-brand-gray">Load a starter into the editor, tweak it, then save your own for next time.</p>
+    <h2 class="eyebrow text-brand-grayink">Saved templates</h2>
+    <p class="mt-1 text-xs text-brand-grayink">Load a starter into the editor, tweak it, then save your own for next time.</p>
     <div id="sig-templates" class="mt-3" hx-get="/signatures/templates" hx-trigger="load" hx-swap="innerHTML">
-      <p class="text-sm text-brand-gray">Loading…</p>
+      <p class="text-sm text-brand-grayink">Loading…</p>
     </div>
   </div>
 
@@ -55,11 +55,11 @@
                   class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[12.5px] font-mono text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"></textarea>
       </label>
 
-      <div class="text-xs text-brand-blueink/80">
-        <span class="text-brand-gray">Variables:</span>
+      <div class="text-xs text-brand-blueink">
+        <span class="text-brand-grayink">Variables:</span>
         {% for v, desc in variables.items() %}<code class="ml-1 rounded bg-paper border border-brand-gray/40 px-1.5 py-0.5" title="{{ desc }}">{{ v }}</code>{% endfor %}
       </div>
-      <p class="text-xs text-brand-gray">Wrap a part in <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[ … ]]</code> to drop it when a variable inside is empty — e.g. <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[{title} · ]]</code> disappears for users with no title.</p>
+      <p class="text-xs text-brand-grayink">Wrap a part in <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[ … ]]</code> to drop it when a variable inside is empty — e.g. <code class="rounded bg-paper border border-brand-gray/40 px-1 py-0.5">[[{title} · ]]</code> disappears for users with no title.</p>
 
       <button type="button" id="sig-preview-btn"
               class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
@@ -68,9 +68,9 @@
 
     <!-- preview -->
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-      <h2 class="eyebrow text-brand-gray">Preview</h2>
+      <h2 class="eyebrow text-brand-grayink">Preview</h2>
       <div id="sig-preview" class="mt-3 max-h-[26rem] overflow-y-auto">
-        <p class="text-sm text-brand-gray">Design a template and hit Preview to see it rendered for a real person.</p>
+        <p class="text-sm text-brand-grayink">Design a template and hit Preview to see it rendered for a real person.</p>
       </div>
     </div>
   </div>

@@ -18,12 +18,15 @@ module.exports = {
       colors: {
         ink: "#141414",        // near-black body text (brand black is #000000)
         paper: "#FAF9F6",      // warm off-white page
+        // Text must clear WCAG AA (4.5:1) on paper and white; tests/test_contrast.py checks every text
+        // class app.css holds. brand-gray is 2:1 there, so borders only; no /70-style opacity on text.
         brand: {
           black: "#000000",
           white: "#FFFFFF",
-          gray: "#B2B4BB",     // warm gray
-          blue: "#69829E",     // slate blue
-          blueink: "#52647B",  // darker slate for text/hover contrast on white
+          gray: "#B2B4BB",     // warm gray: borders, rules, tints — never text
+          grayink: "#6D6E75",  // the gray, darkened for text (helper text, captions, empty states)
+          blue: "#5A728E",     // slate blue, darkened from #69829E so its text and white-on-blue pass
+          blueink: "#52647B",  // darker slate for text/hover
         },
       },
       fontFamily: {

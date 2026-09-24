@@ -1,4 +1,4 @@
-{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <div class="space-y-3">
   <div class="flex items-center gap-2.5 text-sm">
     {% if vac.enabled %}
@@ -26,7 +26,7 @@
       <label class="text-sm text-brand-blueink">Start<input type="date" name="start" value="{{ vac.start }}" class="{{ input_cls }} mt-1" /></label>
       <label class="text-sm text-brand-blueink">End<input type="date" name="end" value="{{ vac.end }}" class="{{ input_cls }} mt-1" /></label>
     </div>
-    <p class="text-xs text-brand-gray">Leave a date blank for none. Every setting here is saved as shown.</p>
+    <p class="text-xs text-brand-grayink">Leave a date blank for none. Every setting here is saved as shown.</p>
     <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Save auto-reply</button>
   </form>
 </div>

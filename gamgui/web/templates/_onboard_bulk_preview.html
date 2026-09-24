@@ -3,7 +3,7 @@
   {% if summary.total %}
   <ul class="text-sm text-brand-black space-y-0.5">
     <li><strong>{{ summary.creates }}</strong> account{{ '' if summary.creates == 1 else 's' }} to create{% if summary.creates %} — {{ summary.notifies }} emailed by GAM, {{ summary.sheets }} on the printable sheet{% endif %}.</li>
-    {% if summary.per_role %}<li class="text-xs text-brand-gray">By role: {% for role, n in summary.per_role %}<span class="text-brand-blueink">{{ role }}</span> ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}</li>{% endif %}
+    {% if summary.per_role %}<li class="text-xs text-brand-grayink">By role: {% for role, n in summary.per_role %}<span class="text-brand-blueink">{{ role }}</span> ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}</li>{% endif %}
   </ul>
   {% endif %}
   {% if errors %}
@@ -20,7 +20,7 @@
     <input type="hidden" name="confirmed" value="1" />
     <input type="hidden" name="preview" value="{{ token }}" />
     <textarea name="csv_text" class="hidden" aria-hidden="true">{{ csv_text }}</textarea>
-    <button type="submit" class="rounded-lg bg-amber-600 hover:bg-amber-700 px-3.5 py-2 text-sm font-medium text-brand-white transition-colors">Run onboarding for {{ summary.total }} hire{{ '' if summary.total == 1 else 's' }}</button>
+    <button type="submit" class="rounded-lg bg-amber-700 hover:bg-amber-800 px-3.5 py-2 text-sm font-medium text-brand-white transition-colors">Run onboarding for {{ summary.total }} hire{{ '' if summary.total == 1 else 's' }}</button>
   </form>
   {% else %}
   <p class="text-sm text-red-700">No valid rows to run — fix the CSV and preview again.</p>

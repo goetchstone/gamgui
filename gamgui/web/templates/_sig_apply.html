@@ -8,7 +8,7 @@
   <div class="flex items-center gap-2">
     <span class="spinner"></span>
     <span>Applying signature… <strong>{{ job.done }}</strong> of {{ job.total }}
-      · {{ job.applied }} set{% if job.failed_total %} · <span class="text-rose-600">{{ job.failed_total }} failed</span>{% endif %}{% if job.current %} · <span class="text-brand-gray">{{ job.current }}</span>{% endif %}</span>
+      · {{ job.applied }} set{% if job.failed_total %} · <span class="text-rose-700">{{ job.failed_total }} failed</span>{% endif %}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
@@ -17,8 +17,8 @@
   <ul class="mt-2.5 space-y-0.5 font-mono text-xs leading-relaxed" aria-label="Recently set signatures">
     {% for r in job.recent | reverse %}
     <li class="flex items-center gap-1.5">
-      {% if r.ok %}<span class="text-emerald-600" aria-hidden="true">✓</span>{% else %}<span class="text-rose-600" aria-hidden="true">✗</span>{% endif %}
-      <span class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</span>
+      {% if r.ok %}<span class="text-emerald-700" aria-hidden="true">✓</span>{% else %}<span class="text-rose-700" aria-hidden="true">✗</span>{% endif %}
+      <span class="truncate {{ 'text-brand-grayink' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</span>
     </li>
     {% endfor %}
   </ul>

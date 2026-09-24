@@ -9,13 +9,13 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <!-- Fixed-height workspace: fills the window and never grows. Results scroll inside their own
      panel instead of pushing the page down, so the window stays a constant size. -->
 <div id="builder-root" data-domain="{{ domain }}" class="flex flex-col gap-2.5 h-[calc(100vh-14.5rem)] min-h-[26rem]">
   <div class="flex items-baseline gap-3 shrink-0">
     <h1 class="font-serif text-xl text-brand-black tracking-tight">Command builder</h1>
-    <p class="text-xs text-brand-gray">Browse every GAM command; build &amp; run the buildable ones, or queue a sequence.</p>
+    <p class="text-xs text-brand-grayink">Browse every GAM command; build &amp; run the buildable ones, or queue a sequence.</p>
   </div>
 
   <!-- Search-first faceted controls: search · area · buildable-only (one row, one request) -->
@@ -40,7 +40,7 @@
     <section class="min-h-0">
       <div id="catalog" class="h-full overflow-y-auto rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
            hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
-        <p class="text-sm text-brand-gray">Loading…</p>
+        <p class="text-sm text-brand-grayink">Loading…</p>
       </div>
     </section>
 
@@ -48,7 +48,7 @@
          confirm/Run button off-screen or under the sequence drawer (it scrolls into reach). -->
     <section id="build-pane" class="min-h-0 overflow-y-auto pr-0.5">
       <div id="cmd-form">
-        <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-gray">
+        <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-grayink">
           Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Click a User field to choose someone.
         </div>
       </div>
@@ -63,11 +63,11 @@
 <!-- Quick actions for an address clicked in a result table → opens that command pre-filled. -->
 <div id="row-actions" class="hidden fixed z-40 max-h-80 w-52 overflow-y-auto rounded-lg border border-brand-gray/40 bg-brand-white py-1 text-sm shadow-xl">
   <p id="row-actions-email" class="truncate px-3 pb-1 pt-0.5 text-[11px] font-medium text-brand-black"></p>
-  <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-brand-gray">As a user</p>
+  <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-brand-grayink">As a user</p>
   {% for a in row_actions if a.group == 'user' %}
   <button type="button" class="ra-item block w-full px-3 py-1.5 text-left hover:bg-paper {{ 'text-red-700 hover:bg-red-50' if a.risk == 'destructive' }}" data-cid="{{ a.cid }}" data-param="{{ a.param }}">{{ a.label }}</button>
   {% endfor %}
-  <p class="border-t border-brand-gray/15 px-3 pt-1.5 text-[10px] uppercase tracking-wide text-brand-gray">As a group</p>
+  <p class="border-t border-brand-gray/15 px-3 pt-1.5 text-[10px] uppercase tracking-wide text-brand-grayink">As a group</p>
   {% for a in row_actions if a.group == 'group' %}
   <button type="button" class="ra-item block w-full px-3 py-1.5 text-left hover:bg-paper" data-cid="{{ a.cid }}" data-param="{{ a.param }}">{{ a.label }}</button>
   {% endfor %}

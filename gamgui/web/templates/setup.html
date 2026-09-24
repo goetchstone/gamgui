@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Set up Workspace — GamGUI Console{% endblock %}
 {% block content %}
-{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% set btn_primary = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}
 <div class="space-y-8">
   <div>
     <p class="eyebrow text-brand-blue">Setup</p>
     <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Connect Google Workspace</h1>
-    <p class="text-brand-blueink/80 mt-2 text-[15px] max-w-2xl">
+    <p class="text-brand-blueink mt-2 text-[15px] max-w-2xl">
       Point the console at your GAM credentials. If you already run GAM, import its config; otherwise
       follow the guided steps. Credentials are stored in your macOS Keychain.
     </p>
@@ -29,7 +29,7 @@
 
   <!-- domain + admin (included by every step) -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Your domain</h2>
+    <h2 class="eyebrow text-brand-grayink">Your domain</h2>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
       <label class="block">
         <span class="text-sm text-brand-blueink">Primary domain</span>
@@ -44,17 +44,17 @@
 
   <!-- path A: import existing -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-    <h2 class="eyebrow text-brand-gray">Import existing credentials</h2>
-    <p class="text-sm text-brand-blueink/80 mt-2">Found these GAM config folders. Import one into the Keychain.</p>
+    <h2 class="eyebrow text-brand-grayink">Import existing credentials</h2>
+    <p class="text-sm text-brand-blueink mt-2">Found these GAM config folders. Import one into the Keychain.</p>
     <div class="mt-4 space-y-3">
       {% for d in candidate_dirs %}
         <div class="flex items-center gap-3 rounded-xl border {{ 'border-brand-blue/50' if d.has_required else 'border-brand-gray/40' }} px-4 py-3">
           <div class="min-w-0">
             <p class="text-sm text-brand-black truncate">{{ d.label }}</p>
-            <p class="text-xs text-brand-gray truncate">{{ d.path }}</p>
+            <p class="text-xs text-brand-grayink truncate">{{ d.path }}</p>
             <div class="mt-1.5 flex gap-1.5">
               {% for name, present in d.files.items() %}
-                <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-emerald-50 text-emerald-700' if present else 'bg-paper text-brand-gray' }}">{{ name }}</span>
+                <span class="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 {{ 'bg-emerald-50 text-emerald-700' if present else 'bg-paper text-brand-grayink' }}">{{ name }}</span>
               {% endfor %}
             </div>
           </div>
@@ -64,7 +64,7 @@
                   hx-vals='{"config_dir": {{ d.path | tojson }} }'>Import</button>
         </div>
       {% else %}
-        <p class="text-sm text-brand-gray">No existing GAM config found in the usual places.</p>
+        <p class="text-sm text-brand-grayink">No existing GAM config found in the usual places.</p>
       {% endfor %}
 
       <div class="flex items-end gap-3 pt-2">
@@ -81,8 +81,8 @@
 
   <!-- path B: fresh -->
   <div class="rounded-2xl border border-dashed border-brand-gray/60 p-6">
-    <h2 class="eyebrow text-brand-gray">No credentials yet?</h2>
-    <p class="text-sm text-brand-blueink/80 mt-2">Generate them fresh. We'll give you the exact commands to run in Terminal.</p>
+    <h2 class="eyebrow text-brand-grayink">No credentials yet?</h2>
+    <p class="text-sm text-brand-blueink mt-2">Generate them fresh. We'll give you the exact commands to run in Terminal.</p>
     <button class="mt-4 inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
             hx-post="/setup/fresh" hx-target="#wizard-next" hx-swap="innerHTML"
             hx-include="[name='domain'],[name='admin']">Show setup commands</button>

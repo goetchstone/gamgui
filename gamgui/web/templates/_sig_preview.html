@@ -20,9 +20,9 @@
           hx-post="/signatures/apply" hx-include="#sig-form{{ ', #sig-confirm-count' if typed_count }}" hx-target="#sig-preview" hx-swap="innerHTML"
           hx-vals='{"confirmed": "1", "preview": "{{ token }}"}' hx-disabled-elt="this"
           {% if typed_count %}disabled{% else %}hx-confirm="Apply this signature to {{ count }} user(s)? It overwrites their current Gmail signature."{% endif %}>Apply to {{ count }} user{{ "s" if count != 1 }}</button>
-  <p class="mt-1 text-xs text-brand-gray">Apply writes exactly this preview. Change the scope or the template and you'll need to preview again.</p>
+  <p class="mt-1 text-xs text-brand-grayink">Apply writes exactly this preview. Change the scope or the template and you'll need to preview again.</p>
   {% endif %}
 {% else %}
-  <p class="mt-2 text-sm text-brand-gray">No active users match this scope.</p>
+  <p class="mt-2 text-sm text-brand-grayink">No active users match this scope.</p>
 {% endif %}
 {% endif %}

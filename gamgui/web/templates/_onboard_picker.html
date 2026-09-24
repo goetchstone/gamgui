@@ -7,11 +7,11 @@
     <button type="button" data-action="ob-add" data-field="{{ field }}" data-value="{{ it.value }}"
             class="block w-full px-2.5 py-1.5 text-left hover:bg-brand-blue/10">
       <div class="truncate text-brand-black">{{ it.label }}</div>
-      {% if it.sub %}<div class="truncate font-mono text-[11px] text-brand-gray">{{ it.sub }}</div>{% endif %}
+      {% if it.sub %}<div class="truncate font-mono text-[11px] text-brand-grayink">{{ it.sub }}</div>{% endif %}
     </button>
   </li>
   {% endfor %}
 </ul>
 {% else %}
-<p class="mt-1 text-xs text-brand-gray">No matches.</p>
+<p class="mt-1 text-xs text-brand-grayink">No matches.</p>
 {% endif %}

@@ -9,7 +9,7 @@
   <input type="hidden" name="delegate" value="{{ pending }}" />
   <input type="hidden" name="confirmed" value="1" />
   <div class="mt-2 flex gap-2">
-    <button type="submit" class="rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 text-xs font-medium text-brand-white transition-colors">Add {{ pending }} anyway</button>
+    <button type="submit" class="rounded-lg bg-amber-700 hover:bg-amber-800 px-3 py-1.5 text-xs font-medium text-brand-white transition-colors">Add {{ pending }} anyway</button>
     <button type="button" hx-get="/users/delegates?email={{ email | urlencode }}" hx-target="#delegates" hx-swap="innerHTML" hx-disabled-elt="this"
             class="rounded-lg border border-amber-400/70 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-100 transition-colors">Cancel</button>
   </div>
@@ -28,11 +28,11 @@
   {% endfor %}
 </ul>
 {% else %}
-<p class="text-sm text-brand-gray">No delegates.</p>
+<p class="text-sm text-brand-grayink">No delegates.</p>
 {% endif %}
 <form class="mt-3 flex gap-2" hx-post="/users/delegate/add" hx-target="#delegates" hx-swap="innerHTML" hx-disabled-elt="find button">
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="email" name="delegate" required placeholder="delegate@example.com" value="{{ typed or '' }}"
-         class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+         class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
   <button class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors" type="submit">Add</button>
 </form>

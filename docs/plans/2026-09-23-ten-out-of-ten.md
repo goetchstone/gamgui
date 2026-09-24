@@ -66,7 +66,14 @@ plan's Phase 0 F1–F3.
   `color-contrast` (A1), plus `select-name` 6, `label` 2, `label-title-only` 2 (A4); a new or grown
   count fails and so does a shrunk one until the baseline is lowered. Deselected from the default
   run; verified locally, including in a venv from `requirements/dev.txt` alone, and by a planted
-  unlabeled input failing it; the Actions run itself unseen). **Open:** A1–A7. A8 declined (D7).
+  unlabeled input failing it; the Actions run itself unseen) · A1 (`brand-gray` kept for borders; muted text
+  is a new `brand-grayink` #6D6E75, 4.82:1 on paper; `brand-blue` darkened #69829E → #5A728E so its text
+  and white-on-blue buttons pass, 4.71 and 4.96; `blueink/70`/`/80` text → plain `blueink`, 5.75; `rose-600`,
+  `emerald-600` text and `amber-600` buttons one shade darker; `tests/test_contrast.py` holds every text
+  colour in `app.css` to 4.5:1 on paper and white, and every fill under a white label; axe's
+  `color-contrast` 477 → 0, the baseline 487 → 10 nodes; before/after screenshots in headless Chrome —
+  WKWebView unseen). **Open:** A2–A7 (A7 not started: vendoring the fonts means downloading them, which
+  waits on the operator's OK). A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; `ae8d351` — the bulk
   department, calendar group fan-out and Builder sequence feeds record a capped reason per failure,
@@ -389,7 +396,7 @@ tenant without per-action permission.
   `pyproject.toml`'s `filterwarnings`; the Starlette/httpx TestClient deprecation warning.
 
 ## Phase 4 — Accessibility (3 → 9)
-*Status: A9 APPLIED; A1–A7 open (A8 declined, D7). Each fix lowers `tests/a11y/baseline.json`.*
+*Status: A9, A1 APPLIED; A2–A7 open (A8 declined, D7). Each fix lowers `tests/a11y/baseline.json`.*
 - **A1 Contrast (S, global):** `brand-gray` #B2B4BB text is 2.07:1 on white (195 uses incl. headings
   and helper text); `blueink/80` 3.86:1, `/70` 3.14:1; white on `brand-blue` 3.97:1. Adjust the
   Tailwind tokens in `base.html` to ≥4.5:1 for text (keep the light gray for borders only).

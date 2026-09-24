@@ -1,9 +1,9 @@
 {% if signature %}
 <div class="mb-3 space-y-2">
-  <p class="text-xs text-brand-gray">Current signature — rendered</p>
+  <p class="text-xs text-brand-grayink">Current signature — rendered</p>
   <iframe sandbox title="Current Gmail signature" class="w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ signature }}"></iframe>
   <details>
-    <summary class="text-xs text-brand-gray cursor-pointer hover:text-brand-black">View HTML source</summary>
+    <summary class="text-xs text-brand-grayink cursor-pointer hover:text-brand-black">View HTML source</summary>
     <div class="copy-wrap mt-1">
       <button type="button" data-action="copy"
               class="mb-1 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors">Copy HTML</button>
@@ -12,5 +12,5 @@
   </details>
 </div>
 {% else %}
-<p class="text-sm text-brand-gray mb-3">No signature set.</p>
+<p class="text-sm text-brand-grayink mb-3">No signature set.</p>
 {% endif %}

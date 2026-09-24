@@ -1,7 +1,7 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
   <table class="w-full text-sm">
     <thead>
-      <tr class="text-left text-brand-gray border-b border-brand-gray/30">
+      <tr class="text-left text-brand-grayink border-b border-brand-gray/30">
         <th class="font-medium px-5 py-2 eyebrow">Time</th>
         <th class="font-medium px-5 py-2 eyebrow">Action</th>
         <th class="font-medium px-5 py-2 eyebrow">Target</th>
@@ -12,9 +12,9 @@
     <tbody>
       {% for r in rows %}
         <tr class="border-b border-brand-gray/15 hover:bg-paper/70 transition-colors align-top">
-          <td class="px-5 py-2 whitespace-nowrap text-brand-blueink/70 font-mono text-xs">{{ r.ts or "—" }}</td>
+          <td class="px-5 py-2 whitespace-nowrap text-brand-blueink font-mono text-xs">{{ r.ts or "—" }}</td>
           <td class="px-5 py-2 text-brand-black">{{ r.action or "—" }}</td>
-          <td class="px-5 py-2 text-brand-blueink/80">
+          <td class="px-5 py-2 text-brand-blueink">
             {% if r.target and "@" in r.target %}
               <a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ r.target | urlencode }}">{{ r.target }}</a>
             {% else %}
@@ -27,10 +27,10 @@
             {% elif r.ok == true %}
               <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-emerald-50 text-emerald-700">Ok</span>
             {% else %}
-              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-brand-gray/10 text-brand-gray">Unknown</span>
+              <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-brand-gray/10 text-brand-grayink">Unknown</span>
             {% endif %}
           </td>
-          <td class="px-5 py-2 text-brand-blueink/70">
+          <td class="px-5 py-2 text-brand-blueink">
             {% set err = (r.extra.error if r.extra is mapping else None) %}
             {% if err %}
               <span class="font-mono text-xs break-words">{{ err[:160] }}{{ "…" if err|length > 160 else "" }}</span>
@@ -43,7 +43,7 @@
         </tr>
       {% else %}
         <tr>
-          <td colspan="5" class="px-5 py-8 text-center text-brand-gray">
+          <td colspan="5" class="px-5 py-8 text-center text-brand-grayink">
             {% if q or failed %}
               No matches.
               <div class="mt-2">
@@ -59,7 +59,7 @@
     </tbody>
   </table>
 </div>
-<div class="mt-2 flex items-center justify-between text-xs text-brand-gray">
+<div class="mt-2 flex items-center justify-between text-xs text-brand-grayink">
   <span>{{ total }} total{% if q or failed %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
   {% if pages > 1 %}
   <div class="flex items-center gap-2">

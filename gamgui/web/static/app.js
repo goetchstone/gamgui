@@ -129,7 +129,7 @@
         var on = t.dataset.tab === name;
         t.classList.toggle("text-brand-black", on);
         t.classList.toggle("border-brand-blue", on);
-        t.classList.toggle("text-brand-gray", !on);
+        t.classList.toggle("text-brand-grayink", !on);
         t.classList.toggle("border-transparent", !on);
       });
     }

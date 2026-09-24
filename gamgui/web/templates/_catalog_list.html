@@ -6,7 +6,7 @@
   {% set prev = items[loop.index0 - 1] %}
   {% set prev_section = (prev.category ~ (' · ' ~ prev.subcategory if prev.subcategory else '')) if not loop.first else '' %}
   {% if loop.first or section != prev_section %}
-  <li class="px-1 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-brand-gray">{{ section }}</li>
+  <li class="px-1 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-brand-grayink">{{ section }}</li>
   {% endif %}
   {% include "_command_row.html" %}
   {% endfor %}
@@ -14,11 +14,11 @@
 <nav class="mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs shrink-0">
   <button class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
           hx-get="/builder/catalog" hx-include="#cat-controls" hx-vals='{"page": {{ page - 1 }}}' hx-target="#catalog" hx-swap="innerHTML" {{ 'disabled' if not has_prev }}>‹ Prev</button>
-  <span class="text-brand-gray">Page {{ page }} of {{ pages }} · {{ total }} command{{ '' if total == 1 else 's' }}</span>
+  <span class="text-brand-grayink">Page {{ page }} of {{ pages }} · {{ total }} command{{ '' if total == 1 else 's' }}</span>
   <button class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
           hx-get="/builder/catalog" hx-include="#cat-controls" hx-vals='{"page": {{ page + 1 }}}' hx-target="#catalog" hx-swap="innerHTML" {{ 'disabled' if not has_next }}>Next ›</button>
 </nav>
 </div>
 {% else %}
-<p class="py-6 text-center text-sm text-brand-gray">{% if q %}No commands match “{{ q }}”.{% else %}No commands here.{% endif %}</p>
+<p class="py-6 text-center text-sm text-brand-grayink">{% if q %}No commands match “{{ q }}”.{% else %}No commands here.{% endif %}</p>
 {% endif %}

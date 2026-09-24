@@ -25,9 +25,9 @@
     /* Global indeterminate loading bar (shown during HTMX requests + page navigations). */
     #loadbar { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 60; overflow: hidden; opacity: 0; transition: opacity .15s; pointer-events: none; }
     #loadbar.on { opacity: 1; }
-    #loadbar::before { content: ""; position: absolute; height: 100%; width: 35%; background: #69829E; animation: lbslide 1s ease-in-out infinite; }
+    #loadbar::before { content: ""; position: absolute; height: 100%; width: 35%; background: #5A728E; animation: lbslide 1s ease-in-out infinite; }
     @keyframes lbslide { 0% { left: -35%; } 50% { left: 50%; } 100% { left: 100%; } }
-    .spinner { display: inline-block; width: 0.9rem; height: 0.9rem; border: 2px solid rgba(105,130,158,.3); border-top-color: #69829E; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; }
+    .spinner { display: inline-block; width: 0.9rem; height: 0.9rem; border: 2px solid rgba(90,114,142,.3); border-top-color: #5A728E; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     /* Unmissable "working" pill (bottom-right) — shown whenever a request is in flight. */
     #busy { position: fixed; bottom: 1rem; right: 1rem; z-index: 70; display: none; align-items: center; gap: .5rem;
@@ -55,7 +55,7 @@
         <a href="/" class="wordmark font-serif text-lg text-brand-black">GamGUI</a>
         <span class="h-4 w-px bg-brand-gray/60"></span>
         <span class="eyebrow text-brand-blueink">Console</span>
-        <nav class="ml-auto text-sm flex items-center gap-5 text-brand-blueink/80">
+        <nav class="ml-auto text-sm flex items-center gap-5 text-brand-blueink">
           <a class="hover:text-brand-black transition-colors" href="/">Home</a>
           <a class="hover:text-brand-black transition-colors" href="/users">Users</a>
           <a class="hover:text-brand-black transition-colors" href="/groups">Groups</a>
@@ -72,7 +72,7 @@
     <main class="mx-auto {% block container_class %}max-w-5xl{% endblock %} px-6 py-10">
       {% block content %}{% endblock %}
     </main>
-    <footer class="mx-auto {{ self.container_class() }} px-6 py-8 text-xs text-brand-gray">
+    <footer class="mx-auto {{ self.container_class() }} px-6 py-8 text-xs text-brand-grayink">
       GamGUI — a local admin console for Google Workspace
     </footer>
   </div>

@@ -1,4 +1,4 @@
-{% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <form hx-post="/users/organization" hx-target="this" hx-swap="outerHTML" hx-disabled-elt="find button" class="space-y-3">
   <input type="hidden" name="email" value="{{ email }}" />
   <div class="grid grid-cols-2 gap-3">
@@ -15,6 +15,6 @@
 {% if saved %}
 {# Refresh the title/role shown elsewhere on the page — the form only swaps itself, so without these
    the header and the Title row keep the pre-save value until a full reload (looked like "didn't save"). #}
-<p id="dtl-subtitle" hx-swap-oob="true" class="text-sm text-brand-gray">{% if title %}{{ title }}{% if department %} · {{ department }}{% endif %}{% endif %}</p>
+<p id="dtl-subtitle" hx-swap-oob="true" class="text-sm text-brand-grayink">{% if title %}{{ title }}{% if department %} · {{ department }}{% endif %}{% endif %}</p>
 <dd id="dtl-title" hx-swap-oob="true" class="text-brand-black text-right">{{ title or "—" }}</dd>
 {% endif %}

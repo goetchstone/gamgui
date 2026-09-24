@@ -4,14 +4,14 @@
     {% for g in member_of %}
     <li class="inline-flex items-center gap-1.5 rounded-full bg-paper border border-brand-gray/40 pl-3 pr-1.5 py-1 text-sm">
       <a href="/groups" class="text-brand-black hover:underline">{{ g }}</a>
-      <button class="text-brand-gray hover:text-red-700 text-base leading-none" aria-label="Remove from {{ g }}"
+      <button class="text-brand-grayink hover:text-red-700 text-base leading-none" aria-label="Remove from {{ g }}"
               hx-post="/users/groups/remove" hx-target="#user-groups" hx-swap="innerHTML" hx-disabled-elt="this"
               hx-vals='{"email": {{ email | tojson }}, "group": {{ g | tojson }} }'>&times;</button>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="text-sm text-brand-gray">Not a member of any groups.</p>
+  <p class="text-sm text-brand-grayink">Not a member of any groups.</p>
   {% endif %}
 
   {% if available %}

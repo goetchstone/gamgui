@@ -6,21 +6,21 @@
         {% for name in imported %}<span class="text-[11px] uppercase tracking-wide rounded bg-emerald-50 text-emerald-700 px-1.5 py-0.5">{{ name }}</span> {% endfor %}
       </p>
     {% else %}
-      <p class="text-sm text-amber-600 mt-2">No credential files found in that folder.</p>
+      <p class="text-sm text-amber-700 mt-2">No credential files found in that folder.</p>
     {% endif %}
     {% if not ready %}
-      <p class="text-sm text-amber-600 mt-1">Missing the service-account key and/or admin token — re-check the folder.</p>
+      <p class="text-sm text-amber-700 mt-1">Missing the service-account key and/or admin token — re-check the folder.</p>
     {% endif %}
   </div>
 
   {% if ready %}
   <div class="border-t border-brand-gray/30 pt-5">
-    <h2 class="eyebrow text-brand-gray">Domain-Wide Delegation</h2>
-    <p class="text-sm text-brand-blueink/80 mt-2">
+    <h2 class="eyebrow text-brand-grayink">Domain-Wide Delegation</h2>
+    <p class="text-sm text-brand-blueink mt-2">
       One manual step Google requires: authorize this service account's client ID in the Admin Console.
     </p>
     <div class="mt-3">
-      <span class="text-xs text-brand-gray">Client ID</span>
+      <span class="text-xs text-brand-grayink">Client ID</span>
       <div class="copy-wrap mt-1 flex items-center gap-2 rounded-lg bg-paper border border-brand-gray/40 p-2.5">
         <code class="flex-1 overflow-x-auto whitespace-pre text-[12.5px] text-ink px-1">{{ dwd.client_id or "(client_id not found in oauth2service.json)" }}</code>
         <button type="button" data-action="copy"
@@ -31,7 +31,7 @@
        class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-blueink hover:text-brand-black">
       Open Admin Console → Domain-Wide Delegation ↗
     </a>
-    <p class="text-xs text-brand-gray mt-2">Paste the client ID, add the scopes GAM needs, and authorize. Then verify below.</p>
+    <p class="text-xs text-brand-grayink mt-2">Paste the client ID, add the scopes GAM needs, and authorize. Then verify below.</p>
   </div>
 
   <div class="border-t border-brand-gray/30 pt-5">

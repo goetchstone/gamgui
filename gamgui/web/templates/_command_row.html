@@ -2,7 +2,7 @@
   <span class="mt-1 inline-block h-2 w-2 shrink-0 rounded-full {{ {'read':'bg-emerald-500','change':'bg-brand-blue','destructive':'bg-red-500'}[c.risk_label] }}"></span>
   <div class="min-w-0 flex-1">
     <p class="truncate text-brand-black">{{ c.name }}</p>
-    {% if c.description %}<p class="truncate text-xs text-brand-gray">{{ c.description }}</p>{% endif %}
+    {% if c.description %}<p class="truncate text-xs text-brand-grayink">{{ c.description }}</p>{% endif %}
   </div>
   <input type="hidden" value="{{ c.raw_syntax }}" />
   {% if c.buildable %}

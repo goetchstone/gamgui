@@ -23,12 +23,12 @@
     {% if not email %}<p class="text-[11px] text-red-700">Enter the new hire's email — group &amp; calendar setup needs it.</p>{% endif %}
   </div>
   {% endif %}
-  <p class="text-sm text-brand-blueink/80">{{ steps | length }} task{{ '' if steps | length == 1 else 's' }} →
+  <p class="text-sm text-brand-blueink">{{ steps | length }} task{{ '' if steps | length == 1 else 's' }} →
     {% if assignee %}<strong>{{ assignee }}</strong>'s Google Tasks{% else %}<span class="text-red-700">enter an assignee or the new hire's email</span>{% endif %}</p>
   <ul class="list-disc pl-5 text-sm text-brand-black">{% for s in steps %}<li>{{ s }}</li>{% endfor %}</ul>
   {% if send_welcome %}
   <div class="rounded-lg border border-brand-gray/30 bg-paper p-3">
-    <p class="text-xs text-brand-gray">Welcome email to {{ email or "(no email entered)" }}:</p>
+    <p class="text-xs text-brand-grayink">Welcome email to {{ email or "(no email entered)" }}:</p>
     <p class="mt-1 text-sm font-medium text-brand-black">{{ subject }}</p>
     <pre class="mt-1 whitespace-pre-wrap break-words text-xs text-brand-blueink/90">{{ body }}</pre>
   </div>
@@ -36,8 +36,8 @@
   <form hx-post="/onboard/run" hx-include="#onboard-form" hx-target="#onboard-result" hx-swap="innerHTML" hx-disabled-elt="find button">
     <input type="hidden" name="confirmed" value="1" />
     <input type="hidden" name="preview" value="{{ token }}" />
-    <button class="rounded-lg {{ 'bg-amber-600 hover:bg-amber-700' if create_account else 'bg-brand-blue hover:bg-brand-blueink' }} px-3.5 py-2 text-sm font-medium text-brand-white transition-colors" type="submit">
+    <button class="rounded-lg {{ 'bg-amber-700 hover:bg-amber-800' if create_account else 'bg-brand-blue hover:bg-brand-blueink' }} px-3.5 py-2 text-sm font-medium text-brand-white transition-colors" type="submit">
       {% if create_account %}Create account &amp; run onboarding{% else %}Create the task list{% if send_welcome %} &amp; send the email{% endif %}{% endif %}</button>
-    <p class="mt-1 text-xs text-brand-gray">Runs exactly this preview. Change the form and you'll need to preview again.</p>
+    <p class="mt-1 text-xs text-brand-grayink">Runs exactly this preview. Change the form and you'll need to preview again.</p>
   </form>
 </div>

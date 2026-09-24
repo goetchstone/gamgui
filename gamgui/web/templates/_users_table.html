@@ -1,7 +1,7 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
   <table class="w-full text-sm">
     <thead>
-      <tr class="text-left text-brand-gray border-b border-brand-gray/30">
+      <tr class="text-left text-brand-grayink border-b border-brand-gray/30">
         <th class="font-medium px-5 py-2 eyebrow">Name</th>
         <th class="font-medium px-5 py-2 eyebrow">Email</th>
         <th class="font-medium px-5 py-2 eyebrow">Title</th>
@@ -15,9 +15,9 @@
           <td class="px-5 py-2">
             <a class="font-medium text-brand-black hover:text-brand-blueink" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
           </td>
-          <td class="px-5 py-2 text-brand-blueink/80">{{ u.primary_email }}</td>
-          <td class="px-5 py-2 text-brand-blueink/70">{{ u.title or "—" }}</td>
-          <td class="px-5 py-2 text-brand-blueink/70">{{ u.org_unit_path }}</td>
+          <td class="px-5 py-2 text-brand-blueink">{{ u.primary_email }}</td>
+          <td class="px-5 py-2 text-brand-blueink">{{ u.title or "—" }}</td>
+          <td class="px-5 py-2 text-brand-blueink">{{ u.org_unit_path }}</td>
           <td class="px-5 py-2 text-right">
             {% if u.suspended %}
               <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
@@ -28,7 +28,7 @@
         </tr>
       {% else %}
         <tr>
-          <td colspan="5" class="px-5 py-8 text-center text-brand-gray">
+          <td colspan="5" class="px-5 py-8 text-center text-brand-grayink">
             No users found.
             {% if q or scope != 'all' %}
             <div class="mt-2">
@@ -42,7 +42,7 @@
     </tbody>
   </table>
 </div>
-<div class="mt-2 flex items-center justify-between text-xs text-brand-gray">
+<div class="mt-2 flex items-center justify-between text-xs text-brand-grayink">
   <span>{{ total }} total{% if q or scope != 'all' %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
   {% if pages > 1 %}
   <div class="flex items-center gap-2">

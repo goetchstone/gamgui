@@ -7,7 +7,7 @@
   <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ count }}</summary>
   <ul class="mt-2 space-y-1 max-h-56 overflow-auto">
     {% for u in targets %}
-    <li class="text-sm"><span class="text-brand-black">{{ u.primary_email }}</span> <span class="text-brand-gray">— {{ u.department or "no dept" }} → {{ store or "?" }}</span></li>
+    <li class="text-sm"><span class="text-brand-black">{{ u.primary_email }}</span> <span class="text-brand-grayink">— {{ u.department or "no dept" }} → {{ store or "?" }}</span></li>
     {% endfor %}
   </ul>
 </details>
@@ -17,8 +17,8 @@
         hx-post="/users/bulk/apply" hx-include="#bulk-form" hx-target="#bulk-result" hx-swap="innerHTML"
         hx-vals='{"confirmed": "1", "preview": "{{ token }}"}' hx-disabled-elt="this"
         hx-confirm="Set Department to '{{ store }}' on {{ count }} user(s)? Each person's title is kept.">Apply to {{ count }} user{{ "s" if count != 1 }}</button>
-<p class="mt-1 text-xs text-brand-gray">Apply sets exactly this preview. Change the department or the people and you'll need to preview again.</p>
+<p class="mt-1 text-xs text-brand-grayink">Apply sets exactly this preview. Change the department or the people and you'll need to preview again.</p>
 {% else %}
-<p class="mt-2 text-sm text-brand-gray">Nothing to apply yet.</p>
+<p class="mt-2 text-sm text-brand-grayink">Nothing to apply yet.</p>
 {% endif %}
 {% endif %}

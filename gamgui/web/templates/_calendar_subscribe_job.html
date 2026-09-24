@@ -12,7 +12,7 @@
   <div class="flex items-center gap-2">
     <span class="spinner"></span>
     <span>Adding to calendars… <strong>{{ j.done }}</strong> of {{ j.total }}
-      · {{ j.applied }} added{% if j.failed_total %} · <span class="text-rose-600">{{ j.failed_total }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-gray">{{ j.current }}</span>{% endif %}</span>
+      · {{ j.applied }} added{% if j.failed_total %} · <span class="text-rose-700">{{ j.failed_total }} failed</span>{% endif %}{% if j.current %} · <span class="text-brand-grayink">{{ j.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (j.done * 100 // j.total) if j.total else 100 }}%"></div>
@@ -20,7 +20,7 @@
   {% if j.recent %}
   <ul class="mt-2 space-y-0.5 font-mono text-xs leading-relaxed" aria-label="Members the calendar was added for">
     {% for r in j.recent | reverse %}
-    <li class="truncate {{ 'text-brand-gray' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ '✓' if r.ok else '✗' }} {{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</li>
+    <li class="truncate {{ 'text-brand-grayink' if r.ok else 'text-rose-700' }}"{% if r.reason %} title="{{ r.reason }}"{% endif %}>{{ '✓' if r.ok else '✗' }} {{ r.item }}{% if not r.ok and r.reason %} <span class="font-sans">— {{ r.reason }}</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% endif %}

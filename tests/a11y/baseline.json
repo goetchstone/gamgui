@@ -1,64 +1,24 @@
 {
-  "audit": {
-    "color-contrast": 21
-  },
   "builder": {
-    "color-contrast": 30,
     "select-name": 1
   },
   "calendars": {
-    "color-contrast": 29,
     "label-title-only": 2,
     "select-name": 1
   },
   "groups": {
-    "color-contrast": 18,
     "select-name": 1
   },
-  "home": {
-    "color-contrast": 28
-  },
-  "lifecycle": {
-    "color-contrast": 37
-  },
   "onboard/bulk": {
-    "color-contrast": 20,
     "label": 1
-  },
-  "onboard/generate": {
-    "color-contrast": 17
-  },
-  "onboard/roles": {
-    "color-contrast": 37
   },
   "onboard/welcome": {
-    "color-contrast": 22,
     "label": 1
   },
-  "reports": {
-    "color-contrast": 38
-  },
-  "setup": {
-    "color-contrast": 20
-  },
-  "signatures": {
-    "color-contrast": 34
-  },
-  "user-detail/danger": {
-    "color-contrast": 19
-  },
-  "user-detail/mail": {
-    "color-contrast": 25
-  },
-  "user-detail/overview": {
-    "color-contrast": 32
-  },
   "user-detail/sharing": {
-    "color-contrast": 23,
     "select-name": 2
   },
   "users": {
-    "color-contrast": 27,
     "select-name": 1
   }
 }

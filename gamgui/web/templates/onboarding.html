@@ -9,19 +9,19 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
 <div class="space-y-4">
   <div>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Onboard a new hire</h1>
-    <p class="text-brand-blueink/80 text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send a welcome email. Roles &amp; the email are yours to edit.</p>
+    <p class="text-brand-blueink text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send a welcome email. Roles &amp; the email are yours to edit.</p>
   </div>
 
   <nav data-tabs class="flex gap-1 border-b border-brand-gray/30 text-sm">
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="generate">Generate</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="roles">Role templates</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="welcome">Welcome email</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="bulk">Bulk import</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="generate">Generate</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="roles">Role templates</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="welcome">Welcome email</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="bulk">Bulk import</button>
   </nav>
 
   <!-- GENERATE -->
@@ -36,7 +36,7 @@
         <select class="{{ fld }} mt-1" name="role">{% for r in roles %}<option value="{{ r.name }}">{{ r.name }} ({{ r.steps | length }} steps)</option>{% endfor %}</select></label>
       <label class="block text-sm"><span class="text-brand-blueink">Manager</span>
         <input class="{{ fld }} mt-1" type="email" name="manager" placeholder="manager@domain.com" /></label>
-      <label class="block text-sm sm:col-span-2"><span class="text-brand-blueink">Assignee — whose Google Tasks gets the checklist <span class="text-brand-gray">(blank = the new hire)</span></span>
+      <label class="block text-sm sm:col-span-2"><span class="text-brand-blueink">Assignee — whose Google Tasks gets the checklist <span class="text-brand-grayink">(blank = the new hire)</span></span>
         <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@domain.com" /></label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="send_welcome" value="1" /> Also send the welcome email to the new hire</label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="create_account" value="1" data-reveals="ob-create-fields" /> <span><strong>Create the Google account</strong> — with a temp password on a printable sheet; the user must reset it at first login. Uses the role's org unit &amp; signature.</span></label>
@@ -53,35 +53,35 @@
     </form>
     <div id="onboard-result" class="mt-4"></div>
     {% else %}
-    <div class="{{ card }} text-sm text-brand-gray">No roles yet — add one under <strong class="text-brand-blueink">Role templates</strong> first.</div>
+    <div class="{{ card }} text-sm text-brand-grayink">No roles yet — add one under <strong class="text-brand-blueink">Role templates</strong> first.</div>
     {% endif %}
   </div>
 
   <!-- ROLE TEMPLATES (editable) -->
   <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start" data-panel="roles">
     <div class="{{ card }}">
-      <h2 class="eyebrow text-brand-gray">Roles</h2>
+      <h2 class="eyebrow text-brand-grayink">Roles</h2>
       <div id="onboard-roles" class="mt-3">{% include "_onboard_roles.html" %}</div>
     </div>
     <form class="{{ card }} space-y-2" hx-post="/onboard/role" hx-target="#onboard-roles" hx-swap="innerHTML">
-      <h2 class="eyebrow text-brand-gray">Add / edit a role</h2>
-      <p class="text-xs text-brand-gray">Saving an existing role name replaces it. One step per line. Org unit &amp; signature apply only when onboarding creates the account; groups &amp; calendars apply to the new hire whenever an email is set.</p>
+      <h2 class="eyebrow text-brand-grayink">Add / edit a role</h2>
+      <p class="text-xs text-brand-grayink">Saving an existing role name replaces it. One step per line. Org unit &amp; signature apply only when onboarding creates the account; groups &amp; calendars apply to the new hire whenever an email is set.</p>
       <input class="{{ fld }}" name="name" placeholder="Role name (e.g. Salesperson)" required />
       <textarea class="{{ fld }} font-mono text-[12.5px]" name="steps" rows="6" placeholder="Set up the CRM login&#10;Order a laptop&#10;Add to the team channel"></textarea>
       <div class="grid gap-2 sm:grid-cols-2">
-        <label class="block text-xs text-brand-gray">Org unit <span class="text-brand-gray/70">(new account)</span>
+        <label class="block text-xs text-brand-grayink">Org unit (new account)
           <input class="{{ fld }} mt-1" name="org_unit" placeholder="/Sales" /></label>
-        <label class="block text-xs text-brand-gray">Signature template
+        <label class="block text-xs text-brand-grayink">Signature template
           <select class="{{ fld }} mt-1" name="signature">
             <option value="">— none —</option>
             {% for t in sig_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
           </select></label>
-        <div class="block text-xs text-brand-gray">Groups <span class="text-brand-gray/70">(search, or type one email per line)</span>
+        <div class="block text-xs text-brand-grayink">Groups (search, or type one email per line)
           <input type="search" name="q" form="ob-picker-noop" autocomplete="off" placeholder="Search your groups…" class="{{ fld }} mt-1"
                  hx-get="/onboard/search/groups" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-group-picker" hx-swap="innerHTML" />
           <div id="ob-group-picker"></div>
           <textarea class="{{ fld }} mt-1 font-mono text-[12.5px]" name="groups" rows="2" placeholder="sales@example.com&#10;all-staff@example.com"></textarea></div>
-        <div class="block text-xs text-brand-gray">Shared calendars <span class="text-brand-gray/70">(search, or type one id per line)</span>
+        <div class="block text-xs text-brand-grayink">Shared calendars (search, or type one id per line)
           <input type="search" name="q" form="ob-picker-noop" autocomplete="off" placeholder="Search shared calendars…" class="{{ fld }} mt-1"
                  hx-get="/onboard/search/calendars" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-calendar-picker" hx-swap="innerHTML" />
           <div id="ob-calendar-picker"></div>
@@ -100,8 +100,8 @@
   <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="bulk">
     <div class="{{ card }} space-y-3">
       <div>
-        <h2 class="eyebrow text-brand-gray">Import a CSV of hires</h2>
-        <p class="mt-1 text-xs text-brand-gray">One row per hire; the <span class="font-mono">role</span> column picks the template (its steps, signature, org unit, groups &amp; calendars). Columns: <span class="font-mono">role, name, email, manager, assignee, create_account, first, last, send_welcome, notify</span>.
+        <h2 class="eyebrow text-brand-grayink">Import a CSV of hires</h2>
+        <p class="mt-1 text-xs text-brand-grayink">One row per hire; the <span class="font-mono">role</span> column picks the template (its steps, signature, org unit, groups &amp; calendars). Columns: <span class="font-mono">role, name, email, manager, assignee, create_account, first, last, send_welcome, notify</span>.
           Leave <span class="font-mono">notify</span> blank to put that hire's temp password on the printable sheet, or set it to an email and GAM sends the sign-in info there directly.</p>
         <a href="/onboard/bulk/template.csv" class="mt-1 inline-block text-xs text-brand-blueink hover:underline">Download a template CSV ↓</a>
       </div>

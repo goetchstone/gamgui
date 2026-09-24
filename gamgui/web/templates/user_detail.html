@@ -2,18 +2,18 @@
 {% block title %}{{ user.full_name }} — GamGUI Console{% endblock %}
 {% block container_class %}max-w-none{% endblock %}
 {% block content %}
-{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set input_cls = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% set btn = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}
 {% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
 <div class="space-y-4">
-  <a href="/users" class="text-sm text-brand-blueink/70 hover:text-brand-black">← Users</a>
+  <a href="/users" class="text-sm text-brand-blueink hover:text-brand-black">← Users</a>
 
   <div class="flex items-center gap-4">
     <div>
       <h1 class="font-serif text-2xl text-brand-black tracking-tight">{{ user.full_name }}</h1>
-      <p class="text-brand-blueink/80">{{ user.primary_email }}</p>
+      <p class="text-brand-blueink">{{ user.primary_email }}</p>
       {# Always rendered (even when empty) so a save can refresh it out-of-band — see _org_form.html. #}
-      <p id="dtl-subtitle" class="text-sm text-brand-gray">{% if user.title %}{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}{% endif %}</p>
+      <p id="dtl-subtitle" class="text-sm text-brand-grayink">{% if user.title %}{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}{% endif %}</p>
     </div>
     <div class="flex items-center gap-2">
       {% if user.suspended %}
@@ -31,34 +31,34 @@
 
   <!-- Tabs keep this content-heavy page within the window — one section group at a time. -->
   <nav data-tabs class="flex gap-1 border-b border-brand-gray/30 text-sm">
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="overview">Overview</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="mail">Mail</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="sharing">Sharing</button>
-    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="danger">Account</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="overview">Overview</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="mail">Mail</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="sharing">Sharing</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-grayink hover:text-brand-black" data-tab="danger">Account</button>
   </nav>
 
   <!-- OVERVIEW: identity + title/department -->
   <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 space-y-4" data-panel="overview">
     <div class="grid gap-4 sm:grid-cols-2">
       <div class="{{ card }}">
-        <h2 class="eyebrow text-brand-gray">Account</h2>
+        <h2 class="eyebrow text-brand-grayink">Account</h2>
         <dl class="mt-3 text-sm space-y-2">
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Name</dt><dd class="text-brand-black text-right">{{ user.full_name or "—" }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Email</dt><dd class="text-brand-black text-right">{{ user.primary_email }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Title</dt><dd id="dtl-title" class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
-          {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
-          {% if user.location %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Location</dt><dd class="text-brand-black text-right">{{ user.location }}</dd></div>{% endif %}
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Admin</dt><dd class="text-brand-black">{{ "Super" if user.is_admin else ("Delegated" if user.is_delegated_admin else "No") }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">2-step</dt><dd class="text-brand-black">{{ "Enrolled" if user.enrolled_2sv else "Not enrolled" }}</dd></div>
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Last login</dt><dd class="text-brand-black">{{ user.last_login_time or "—" }}</dd></div>
-          {% if user.recovery_email %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Recovery</dt><dd class="text-brand-black text-right">{{ user.recovery_email }}</dd></div>{% endif %}
-          <div class="flex justify-between gap-3"><dt class="text-brand-blueink/70">Aliases</dt><dd class="text-brand-black text-right">{{ user.aliases | join(", ") or "—" }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Name</dt><dd class="text-brand-black text-right">{{ user.full_name or "—" }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Email</dt><dd class="text-brand-black text-right">{{ user.primary_email }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Title</dt><dd id="dtl-title" class="text-brand-black text-right">{{ user.title or "—" }}</dd></div>
+          {% if user.department %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink">Department</dt><dd class="text-brand-black text-right">{{ user.department }}</dd></div>{% endif %}
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Org unit</dt><dd class="text-brand-black">{{ user.org_unit_path }}</dd></div>
+          {% if user.location %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink">Location</dt><dd class="text-brand-black text-right">{{ user.location }}</dd></div>{% endif %}
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Admin</dt><dd class="text-brand-black">{{ "Super" if user.is_admin else ("Delegated" if user.is_delegated_admin else "No") }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">2-step</dt><dd class="text-brand-black">{{ "Enrolled" if user.enrolled_2sv else "Not enrolled" }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Last login</dt><dd class="text-brand-black">{{ user.last_login_time or "—" }}</dd></div>
+          {% if user.recovery_email %}<div class="flex justify-between gap-3"><dt class="text-brand-blueink">Recovery</dt><dd class="text-brand-black text-right">{{ user.recovery_email }}</dd></div>{% endif %}
+          <div class="flex justify-between gap-3"><dt class="text-brand-blueink">Aliases</dt><dd class="text-brand-black text-right">{{ user.aliases | join(", ") or "—" }}</dd></div>
         </dl>
       </div>
       <div class="{{ card }}">
-        <h2 class="eyebrow text-brand-gray">Title &amp; department</h2>
-        <p class="text-xs text-brand-blueink/70 mt-1">Title is the role shown in signatures.</p>
+        <h2 class="eyebrow text-brand-grayink">Title &amp; department</h2>
+        <p class="text-xs text-brand-blueink mt-1">Title is the role shown in signatures.</p>
         <div class="mt-3">
           {% with title=user.title, department=user.department, saved=False %}{% include "_org_form.html" %}{% endwith %}
         </div>
@@ -69,8 +69,8 @@
   <!-- MAIL: signature | delegates + vacation -->
   <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" data-panel="mail">
     <div class="{{ card }}">
-      <h2 class="eyebrow text-brand-gray">Gmail signature</h2>
-      <div id="sig-current" class="mt-3 max-h-40 overflow-y-auto" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"><p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p></div>
+      <h2 class="eyebrow text-brand-grayink">Gmail signature</h2>
+      <div id="sig-current" class="mt-3 max-h-40 overflow-y-auto" hx-get="/users/signature/current?email={{ email | urlencode }}" hx-trigger="load"><p class="text-sm text-brand-grayink flex items-center gap-2"><span class="spinner"></span> Loading…</p></div>
       <form class="mt-1 space-y-3" hx-post="/users/signature" hx-target="#sig-result" hx-swap="innerHTML" hx-disabled-elt="find button">
         <input type="hidden" name="email" value="{{ email }}" />
         <textarea name="signature" rows="3" class="{{ input_cls }}" placeholder="Best,&#10;{{ user.full_name }}"></textarea>
@@ -83,15 +83,15 @@
     </div>
     <div class="space-y-4">
       <div class="{{ card }}">
-        <h2 class="eyebrow text-brand-gray">Mailbox delegates</h2>
+        <h2 class="eyebrow text-brand-grayink">Mailbox delegates</h2>
         <div id="delegates" class="mt-3" hx-get="/users/delegates?email={{ email | urlencode }}" hx-trigger="load">
-          <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+          <p class="text-sm text-brand-grayink flex items-center gap-2"><span class="spinner"></span> Loading…</p>
         </div>
       </div>
       <div class="{{ card }}">
-        <h2 class="eyebrow text-brand-gray">Vacation responder</h2>
+        <h2 class="eyebrow text-brand-grayink">Vacation responder</h2>
         <div id="vacation" class="mt-3" hx-get="/users/vacation?email={{ email | urlencode }}" hx-trigger="load">
-          <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+          <p class="text-sm text-brand-grayink flex items-center gap-2"><span class="spinner"></span> Loading…</p>
         </div>
       </div>
     </div>
@@ -100,16 +100,16 @@
   <!-- SHARING: groups | calendar access -->
   <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" data-panel="sharing">
     <div class="{{ card }}">
-      <h2 class="eyebrow text-brand-gray">Groups</h2>
+      <h2 class="eyebrow text-brand-grayink">Groups</h2>
       <div id="user-groups" class="mt-3" hx-get="/users/groups?email={{ email | urlencode }}" hx-trigger="load">
-        <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+        <p class="text-sm text-brand-grayink flex items-center gap-2"><span class="spinner"></span> Loading…</p>
       </div>
     </div>
     <div class="{{ card }}">
-      <h2 class="eyebrow text-brand-gray">Calendar access</h2>
-      <p class="text-xs text-brand-blueink/70 mt-1">Who can see or edit this person's primary calendar.</p>
+      <h2 class="eyebrow text-brand-grayink">Calendar access</h2>
+      <p class="text-xs text-brand-blueink mt-1">Who can see or edit this person's primary calendar.</p>
       <div id="calendar" class="mt-3" hx-get="/users/calendar?email={{ email | urlencode }}" hx-trigger="load">
-        <p class="text-sm text-brand-gray flex items-center gap-2"><span class="spinner"></span> Loading…</p>
+        <p class="text-sm text-brand-grayink flex items-center gap-2"><span class="spinner"></span> Loading…</p>
       </div>
     </div>
   </div>
@@ -117,12 +117,12 @@
   <!-- ACCOUNT / DANGER: suspend + delete -->
   <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden space-y-4" data-panel="danger">
     <div class="{{ card }}">
-      <h2 class="eyebrow text-brand-gray">Suspend &amp; delete</h2>
+      <h2 class="eyebrow text-brand-grayink">Suspend &amp; delete</h2>
       <div id="suspend-zone" class="mt-3">
         {% include "_suspend_zone.html" %}
       </div>
       <div class="mt-4 pt-4 border-t border-brand-gray/20">
-        <p class="text-xs text-brand-blueink/70">End every active session — the user must sign in again everywhere. Doesn't change the password.</p>
+        <p class="text-xs text-brand-blueink">End every active session — the user must sign in again everywhere. Doesn't change the password.</p>
         <button class="mt-2 inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors"
                 hx-post="/users/signout" hx-target="#signout-result" hx-swap="innerHTML" hx-disabled-elt="this"
                 hx-vals='{"email": {{ email | tojson }} }'

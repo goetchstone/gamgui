@@ -11,7 +11,7 @@
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
   <div class="flex items-center gap-2">
     <span class="spinner"></span>
-    <span>Setting department… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-gray">{{ job.current }}</span>{% endif %}</span>
+    <span>Setting department… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
   </div>
   <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
     <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>

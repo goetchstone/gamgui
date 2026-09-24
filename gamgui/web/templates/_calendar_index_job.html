@@ -1,5 +1,5 @@
 {% if not job.finished %}
-<div class="flex items-center gap-2 text-xs text-brand-gray"
+<div class="flex items-center gap-2 text-xs text-brand-grayink"
      hx-get="/calendars/index/status?job={{ job.id }}" hx-trigger="load delay:1500ms"
      hx-target="#cal-index" hx-swap="innerHTML">
   <span class="spinner"></span> Scanning every user’s calendars… this can take a minute on a large domain. You can keep working.

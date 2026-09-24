@@ -1,26 +1,26 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-  <h2 class="eyebrow text-brand-gray">Offboarding {{ user }} — {% if done %}{{ run_count }} of {{ steps|length }} steps ({{ done|length }} ticked as already done){% else %}{{ steps|length }} steps{% endif %}</h2>
+  <h2 class="eyebrow text-brand-grayink">Offboarding {{ user }} — {% if done %}{{ run_count }} of {{ steps|length }} steps ({{ done|length }} ticked as already done){% else %}{{ steps|length }} steps{% endif %}</h2>
   {% if warnings %}
   <ul class="mt-2 space-y-1 rounded-lg border border-amber-400 bg-amber-50/60 px-3 py-2 text-sm text-amber-900" role="note">
     {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
   </ul>
   {% endif %}
-  <p class="mt-1 text-xs text-brand-blueink/70">Each step shows the exact <code>gam</code> command it will run, in order. Run executes exactly these; if you change the form, preview again.</p>
+  <p class="mt-1 text-xs text-brand-blueink">Each step shows the exact <code>gam</code> command it will run, in order. Run executes exactly these; if you change the form, preview again.</p>
   <ol class="mt-3 space-y-2 text-sm list-decimal list-inside">
     {% for s in steps %}
     {% if s.key in done %}
-    <li class="text-brand-gray"><span class="line-through">{{ s.label }}</span> — already done: not run, and counts as succeeded</li>
+    <li class="text-brand-grayink"><span class="line-through">{{ s.label }}</span> — already done: not run, and counts as succeeded</li>
     {% else %}
-    <li><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-gray">— {{ s.summary }}</span>
+    <li><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-grayink">— {{ s.summary }}</span>
       {% for line in s.command_lines %}<pre class="mt-1 whitespace-pre-wrap break-words rounded bg-paper px-2 py-1 font-mono text-xs text-brand-black">{{ line }}</pre>{% endfor %}
     </li>
     {% endif %}
     {% endfor %}
   </ol>
-  <p class="mt-2 text-xs text-brand-blueink/70">If the password reset or the delegate fails, the routine stops there; if the transfer fails, the reminder isn't added. A failed access revoke, auto-reply or calendar clean-up is reported (✗) and the rest still runs.</p>
+  <p class="mt-2 text-xs text-brand-blueink">If the password reset or the delegate fails, the routine stops there; if the transfer fails, the reminder isn't added. A failed access revoke, auto-reply or calendar clean-up is reported (✗) and the rest still runs.</p>
   <div class="mt-4">{% with subject=ar_subject, message=ar_message %}{% include "_offboard_autoreply.html" %}{% endwith %}</div>
-  <p class="mt-3 text-xs text-brand-blueink/70">The account is left active (mailbox live); deletion happens later from the user's detail page once the manager's {{ days }}-day reminder fires and they confirm with IT.</p>
-  <p class="mt-1 text-xs text-brand-blueink/70">Drive &amp; calendar transfers run in the background (~10–25 min). <strong>Don't delete the account until they finish</strong> or un-transferred data is lost — the delete screen warns if a transfer is still running.</p>
+  <p class="mt-3 text-xs text-brand-blueink">The account is left active (mailbox live); deletion happens later from the user's detail page once the manager's {{ days }}-day reminder fires and they confirm with IT.</p>
+  <p class="mt-1 text-xs text-brand-blueink">Drive &amp; calendar transfers run in the background (~10–25 min). <strong>Don't delete the account until they finish</strong> or un-transferred data is lost — the delete screen warns if a transfer is still running.</p>
   <button class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
           hx-post="/lifecycle/offboard/run" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML"
           hx-vals='{"confirmed": "1", "preview": "{{ token }}"}' hx-disabled-elt="this"

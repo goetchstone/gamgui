@@ -88,7 +88,7 @@
         var extEl = tools && tools.querySelector(".rt-external");
         var countEl = tools && tools.querySelector(".rt-count");
         var prev = btn("‹ Prev"), next = btn("Next ›"), lbl = document.createElement("span");
-        lbl.className = "text-brand-gray";
+        lbl.className = "text-brand-grayink";
         var foot = document.createElement("div");
         foot.className = "mt-2 flex items-center justify-between border-t border-brand-gray/15 pt-2 text-xs";
         foot.appendChild(prev); foot.appendChild(lbl); foot.appendChild(next);

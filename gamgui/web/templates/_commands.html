@@ -1,6 +1,6 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm mt-2">
   <h2 class="eyebrow text-brand-blue">Fresh setup — run in Terminal</h2>
-  <p class="text-sm text-brand-blueink/80 mt-2">
+  <p class="text-sm text-brand-blueink mt-2">
     Run these in order (each opens a browser / asks a few questions), then come back and import from
     the folder below. Use the copy buttons — run the commands one at a time.
   </p>
@@ -13,7 +13,7 @@
     </div>
     {% endfor %}
   </div>
-  <p class="text-xs text-brand-gray mt-3">Then authorize Domain-Wide Delegation in the Admin Console (next step shows the details).</p>
+  <p class="text-xs text-brand-grayink mt-3">Then authorize Domain-Wide Delegation in the Admin Console (next step shows the details).</p>
   <button class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
           hx-post="/setup/import" hx-target="#wizard-next" hx-swap="innerHTML"
           hx-include="[name='domain'],[name='admin']"

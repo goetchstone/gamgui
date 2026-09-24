@@ -144,7 +144,10 @@ Last, it checks that `gamgui/web/static/app.css` is current. The UI's Tailwind C
 of time from the class names in the templates (and any static JS or Python that holds them): after
 adding a class, run `make css` and commit `app.css` with the template. The first run downloads the
 pinned Tailwind CLI (checksum-verified, like the GAM binary) into `build/`. Write each class name
-in full — one assembled from pieces (`'bg-' + tone`) isn't found, so it isn't styled.
+in full — one assembled from pieces (`'bg-' + tone`) isn't found, so it isn't styled. Text takes a
+colour that reads at WCAG AA: `text-brand-grayink` for muted text, never `text-brand-gray` (the light
+gray is for borders), and no `/70`-style opacity on text. `tests/test_contrast.py` reads every text
+colour and white-label fill out of `app.css` and fails one under 4.5:1 on paper or white.
 
 CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14, each
 installed from `requirements/dev.txt`. The macOS 3.14 run also measures line coverage and fails

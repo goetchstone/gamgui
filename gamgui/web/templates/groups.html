@@ -13,7 +13,7 @@
   <div>
     <p class="eyebrow text-brand-blue">Membership</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Groups</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Pick a group, then <strong>drag people in</strong> from the right to add — drag a member onto the people list (or hit ×) to remove.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Pick a group, then <strong>drag people in</strong> from the right to add — drag a member onto the people list (or hit ×) to remove.</p>
   </div>
   {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>{% endif %}
 
@@ -26,21 +26,21 @@
         {% for g in groups %}<option value="{{ g.email }}">{{ g.name or g.email }} ({{ g.email }})</option>{% endfor %}
       </select>
       <div id="members" class="mt-4 max-h-80 min-h-[8rem] overflow-y-auto rounded-xl border-2 border-dashed border-brand-gray/40 p-3" data-drop="add">
-        <p class="text-sm text-brand-gray">Pick a group, then drag people in.</p>
+        <p class="text-sm text-brand-grayink">Pick a group, then drag people in.</p>
       </div>
     </div>
 
     <!-- people pool: source to drag from; drop a member here to REMOVE -->
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" data-drop="remove">
       <input type="search" id="people-filter" placeholder="Filter people…"
-             class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none" />
+             class="w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none" />
       <div id="people" class="mt-3 max-h-80 overflow-auto space-y-1">
         {% for u in users %}
         <div class="ucard flex items-center justify-between rounded-lg border border-brand-gray/30 px-3 py-1.5 text-sm cursor-grab hover:bg-paper"
              draggable="true" data-email="{{ u.primary_email }}" data-drag="add"
              data-search="{{ (u.full_name ~ ' ' ~ u.primary_email) | lower }}">
           <span class="text-brand-black">{{ u.full_name }}</span>
-          <span class="text-brand-gray text-xs">{{ u.primary_email }}</span>
+          <span class="text-brand-grayink text-xs">{{ u.primary_email }}</span>
         </div>
         {% endfor %}
       </div>

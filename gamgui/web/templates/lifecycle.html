@@ -9,12 +9,12 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-{% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <div class="space-y-4">
   <div>
     <p class="eyebrow text-brand-blue">Lifecycle</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Offboard a user</h1>
-    <p class="text-brand-blueink/80 mt-1 text-sm">Runs the sequence in order: {{ step_names.values() | join(" → ") }}. The account is <strong>not</strong> deleted — IT does that later from the user's detail page.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Runs the sequence in order: {{ step_names.values() | join(" → ") }}. The account is <strong>not</strong> deleted — IT does that later from the user's detail page.</p>
   </div>
 
   <form id="offboard-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
@@ -28,7 +28,7 @@
       <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
       <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea>
-      <span class="text-xs text-brand-gray"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically — see below.</span></label>
+      <span class="text-xs text-brand-grayink"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically — see below.</span></label>
 
     <!-- Live preview: fills in as soon as the departing user + manager are entered. -->
     <div id="autoreply-preview" class="mt-1"
@@ -47,7 +47,7 @@
         <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="done" value="{{ key }}" /> {{ name }}</label>
         {% endfor %}
       </div>
-      <span class="text-xs text-brand-gray">A ticked step is not run and counts as done. Don't re-run one that succeeded: GAM refuses a delegate that already exists and a second transfer while the first is running, and the reminder would be added twice.</span>
+      <span class="text-xs text-brand-grayink">A ticked step is not run and counts as done. Don't re-run one that succeeded: GAM refuses a delegate that already exists and a second transfer while the first is running, and the reminder would be added twice.</span>
     </fieldset>
     <button type="button"
             class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"

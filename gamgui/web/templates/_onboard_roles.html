@@ -13,9 +13,9 @@
                 hx-post="/onboard/role/delete" hx-vals='{"name": {{ r.name | tojson }}}' hx-target="#onboard-roles" hx-swap="innerHTML">Delete</button>
       </span>
     </div>
-    <ul class="mt-1 list-disc pl-5 text-xs text-brand-gray">{% for s in r.steps %}<li>{{ s }}</li>{% endfor %}</ul>
+    <ul class="mt-1 list-disc pl-5 text-xs text-brand-grayink">{% for s in r.steps %}<li>{{ s }}</li>{% endfor %}</ul>
     {% if r.org_unit or r.signature or r.groups or r.calendars %}
-    <p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-brand-gray/80">
+    <p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-brand-grayink">
       {% if r.org_unit %}<span>OU <span class="text-brand-blueink">{{ r.org_unit }}</span></span>{% endif %}
       {% if r.signature %}<span>signature <span class="text-brand-blueink">{{ r.signature }}</span></span>{% endif %}
       {% if r.groups %}<span><span class="text-brand-blueink">{{ r.groups | length }}</span> group{{ '' if r.groups | length == 1 else 's' }}</span>{% endif %}
@@ -26,5 +26,5 @@
   {% endfor %}
 </ul>
 {% else %}
-<p class="text-sm text-brand-gray">No roles yet — add one on the right.</p>
+<p class="text-sm text-brand-grayink">No roles yet — add one on the right.</p>
 {% endif %}
