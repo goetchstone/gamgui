@@ -69,7 +69,13 @@ plan's Phase 0 F1–F3.
   "Couldn't create the account: …" and offboarding's step log) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
   unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; the cache items are open) · U13
   (`hx-disabled-elt` on every write and job control, `a31b146`; the nav indicator and lazy user-detail
-  tabs are open). **Open:** U1, U5, U7, U8, U10, U14.
+  tabs are open) · U14 `72ab420` (Tailwind precompiled into a committed, unminified
+  `static/app.css` by the v3.4.17 CLI, pinned per platform in `scripts/tailwind_checksums.txt` and
+  refused unpinned; `tailwind-play.js` gone; CI's lint job, `make lint` and `build_app.sh` run
+  `build_css.sh`; 17 screen states in headless Chrome match the Play CDN build in every computed
+  style and, where the page text was the same, pixel for pixel, with 8 Tab stops on 5 screens too;
+  the linux-x64 CLI wrote the same bytes under Docker; a scratch PyInstaller build bundled it —
+  `make app` itself and CI's run of the check are unseen). **Open:** U1, U5, U7, U8, U10.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
@@ -387,7 +393,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U4 APPLIED; U9, U11, U12, U13 partly (see Status by item); the rest open.*
+*Status: U4, U14 APPLIED; U9, U11, U12, U13 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows
