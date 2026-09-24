@@ -49,9 +49,10 @@ Actively developed and used against live Google Workspace tenants. Working today
   person's calendars with their access role on each, see who has access and **grant or revoke it** at
   a chosen role. **Sharing also makes the calendar actually appear**, which an ACL alone does not do:
   a person is auto-subscribed, and a **group is expanded and subscribed member by member** as a
-  background job with live per-member progress (a group of ten or more asks first, naming the count) — so nobody is left saying "you shared it but I can't
-  see it", and you get the list of anyone it couldn't be added for. Also: search a calendar's events,
-  and remove a stray event or an entire orphaned secondary calendar.
+  background job with live per-member progress (a group of ten or more asks first, naming the
+  count) — so nobody is left saying "you shared it but I can't see it", and you get the list of
+  anyone it couldn't be added for. Also: search a calendar's events, and remove a stray event or an
+  entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → revoke access & sign out →
   turn off forwarding → delegate → auto-responder → transfer Drive & calendars → remove from
   everyone's calendars → reminder on the manager), with a live preview of the generated auto-reply
@@ -84,13 +85,15 @@ You build and run it yourself; it is not yet notarized for distribution to other
 > confirmation → audit-logged* path (typed for account and calendar delete, a destructive bulk run,
 > and a signature apply to more than 25 people). The server refuses a request that skipped the
 > confirmation — the page asking is not enough — and runs what the preview showed: a form edited
-> after its preview has to be previewed again. Single-target changes (a delegate, a group member, a
-> calendar share) run without a confirmation; a calendar share to a group of ten or more, which
-> subscribes each member, shows the member count and asks first. That guard is
-> well covered by tests; what tests cannot prove is that a given GAM command behaves as expected
-> against a real tenant. See [Live verification status](#live-verification-status) for which writes have been
-> confirmed against a production domain and which have not — and run anything marked *not yet*
-> once on a **throwaway user/event/calendar** before you rely on it. Account deletion is reversible
+> after its preview has to be previewed again. Every Builder write runs only from its preview, too.
+> Single-target changes on the Users, Groups and Calendars screens (a delegate, a group member, a
+> calendar share) need no server-checked confirmation — a few, like removing a delegate, ask in the
+> page; a calendar share to a group of ten or more, which subscribes each member, shows the member
+> count and asks first. That guard is well covered by tests; what tests cannot prove is that a
+> given GAM command behaves as expected against a real tenant. See
+> [Live verification status](#live-verification-status) for which writes have been confirmed
+> against a production domain and which have not — and run anything marked *not yet* once on a
+> **throwaway user/event/calendar** before you rely on it. Account deletion is reversible
 > only within Google's ~20-day window. GamGUI is provided **as-is under the MIT License, with no
 > warranty — use at your own risk**; you are responsible for what you run against your own tenant.
 
@@ -115,10 +118,10 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Remove delegate | Users, Builder | not yet |
 | Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed** without the explicit `contactsonly false domainonly false start Started end NotSpecified` it now sends (so an earlier restriction or date can't survive); with them, not yet |
 | Clear vacation | Users, Builder | not yet |
-| Reset password | Offboarding, Builder | **confirmed** |
+| Reset password (it runs no sign-out: offboarding's next step does, or *Sign out everywhere*) | Offboarding, Builder | **confirmed** |
 | Sign out everywhere | Users, Builder | not yet |
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | not yet |
-| Suspend / unsuspend | Users, Builder | not yet |
+| Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Delete an account | Users, Builder | not yet |
 | Undelete an account | Builder | not yet |
 | Transfer Drive + calendar data | Offboarding, Builder | **confirmed** as two calls; the single call offboarding now makes (with `all`: private and shared Drive files) is not yet |
@@ -138,8 +141,9 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 **Offboarding repairs awaiting a live run.** Two offboarding bugs were found in real audit logs and
 fixed, but the fixes have not themselves run live yet: Drive and calendar are now transferred in a
 *single* data-transfer call (two separate calls collided with a `409 conflict`), and "remove from
-everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to abort the sweep.
-That sweep is one domain-wide call, so it runs under a 1-hour timeout instead of the 2-minute
+everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to abort the sweep —
+along with a user who has no ACL for the leaver or no Calendar service, and nothing else. That
+sweep is one domain-wide call, so it runs under a 1-hour timeout instead of the 2-minute
 per-call default; how long it really takes on a large tenant is unmeasured. Revoking the leaver's
 access (app passwords, backup codes, connected apps' tokens, sessions) and turning off mail
 forwarding are steps of their own that have never run live. How the routine runs —
@@ -343,9 +347,11 @@ fail-closed runbook, not by a bot.
 
 The **Signatures** screen designs one HTML signature with variables, previews it rendered for a real
 person, and applies it in bulk — scoped to a single user (for testing), a group, an org unit, a
-department, a location, or the whole company. It opens on a single user, so the first apply is a
-test; applying to more than 25 people asks you to type how many, and the server checks that count
-too. Each user's current signature is also shown *rendered* on their detail page.
+department, a location, or the whole company. It opens on a single user — the admin account GamGUI
+is connected as when that is an active user, otherwise nobody chosen — so the first apply is a test
+on your own signature; applying to more than 25 people asks you to type how many, and the
+server checks that count too. Apply writes exactly the people and template the preview showed.
+Each user's current signature is also shown *rendered* on their detail page.
 
 **Template variables** (filled per user from the directory):
 `{name}` `{first}` `{last}` `{email}` `{title}` (`{role}` is an alias) `{phone}` `{department}`
