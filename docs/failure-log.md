@@ -21,6 +21,36 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
 
 ---
 
+## 2026-09-24 — An empty signature scope meant the whole company
+
+- **Symptom:** `core/signatures.match_scope` returned every active user for an OU, department,
+  location or group scope with no value — only "Specific user" was guarded. A tenant with no
+  departments leaves the "Which" select empty and hidden, so Preview on "Department" resolved to the
+  whole company (the count showed it, and more than 25 needs the typed count, but the scope was wrong).
+- **Cause:** the fall-through `return active` at the end of `match_scope`.
+- **Why not caught:** tests covered each scope *with* a value.
+- **Fix:** only `company` returns everyone; any other scope without a value, or an unknown scope,
+  matches nobody. Test `test_match_scope_with_no_value_matches_nobody` (fails on the old code). Also
+  replaced two real store-town names in `tests/test_signatures.py`/`test_reports.py` with generic ones.
+- **Prevention:** a scope resolver fails closed: "everyone" must be asked for by name.
+
+## 2026-09-24 — Bulk onboarding ran whatever came back, and a cancelled task-list build left no audit
+
+- **Symptom:** (1) `/onboard/bulk/run` re-parsed the CSV text the page posted back and re-read the
+  role templates at run time: a replayed POST re-sent welcome emails and re-created task lists, and a
+  role edited after the preview changed what ran — the last confirm step without a held preview.
+  (2) Quitting mid-build of a task list (`create_onboarding_runbook`, outside `_run_write`) left the
+  list in the assignee's Google Tasks and nothing in the audit log: its handlers caught `Exception`,
+  and cancellation is a `BaseException`.
+- **Fix:** the bulk preview holds its valid rows and role templates under a single-use token and Run
+  executes those (an edited CSV, a replay or an expired token is refused); `create_onboarding_runbook`
+  records `ok=False`, `error=INTERRUPTED` with the tasks made so far before re-raising. The generic
+  tripwire now applies an edit *after* the confirm step's own hidden fields, so an edit can't be
+  masked by a hidden copy. Tests `test_bulk_run_executes_the_previewed_rows_and_roles`,
+  `test_a_cancelled_runbook_build_is_audited_as_interrupted` (both fail on the old code).
+- **Prevention:** every confirm step runs a held preview; every audited write path handles
+  cancellation, not just `_run_write`.
+
 ## 2026-09-24 — Preview and cache expiry stopped counting while the Mac slept
 
 - **Symptom:** a re-verification measured `time.monotonic()` on the build Mac missing ~264 hours of

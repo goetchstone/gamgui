@@ -121,7 +121,9 @@ def render_signature(template: str, user: GAMUser) -> str:
 
 def match_scope(users: List[GAMUser], scope_type: str, scope_value: str = "") -> List[GAMUser]:
     """Active users matching a scope: ``user`` (a single email, for testing), ``company`` (all),
-    ``ou`` (path + children), or ``department``."""
+    ``ou`` (path + children), ``department`` or ``location``. Only ``company`` means everyone: any
+    other scope with no value (or an unknown scope) matches nobody — an empty Department or Group
+    choice once resolved to the whole company."""
     active = [u for u in users if not u.suspended]
     value = (scope_value or "").strip()
     if scope_type == "user":
@@ -135,7 +137,7 @@ def match_scope(users: List[GAMUser], scope_type: str, scope_value: str = "") ->
         return [u for u in active if (u.department or "").strip().lower() == value.lower()]
     if scope_type == "location" and value:
         return [u for u in active if (u.location or "").strip().lower() == value.lower()]
-    return active
+    return active if scope_type == "company" else []
 
 
 def scope_options(users: List[GAMUser]) -> Dict[str, List[str]]:

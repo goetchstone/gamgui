@@ -55,13 +55,22 @@ def test_match_scope_ou_includes_children_excludes_suspended():
 
 
 def test_render_and_scope_by_location():
-    glas = _u("a@e.com", locations=[{"buildingName": "Glastonbury", "type": "work", "primary": True}])
-    ches = _u("b@e.com", locations=[{"buildingName": "Cheshire", "type": "work", "primary": True}])
-    assert render_signature("Visit us in {location}", glas) == "Visit us in Glastonbury"
-    users = [glas, ches]
-    assert [u.primary_email for u in match_scope(users, "location", "Glastonbury")] == ["a@e.com"]
-    assert match_scope(users, "location", "Cheshire")[0].primary_email == "b@e.com"
-    assert "Glastonbury" in scope_options(users)["locations"]
+    river = _u("a@e.com", locations=[{"buildingName": "Riverside", "type": "work", "primary": True}])
+    hill = _u("b@e.com", locations=[{"buildingName": "Hillcrest", "type": "work", "primary": True}])
+    assert render_signature("Visit us in {location}", river) == "Visit us in Riverside"
+    users = [river, hill]
+    assert [u.primary_email for u in match_scope(users, "location", "Riverside")] == ["a@e.com"]
+    assert match_scope(users, "location", "Hillcrest")[0].primary_email == "b@e.com"
+    assert "Riverside" in scope_options(users)["locations"]
+
+
+def test_match_scope_with_no_value_matches_nobody():
+    # Only "company" means everyone. An empty Department/OU/Location/Group choice (a tenant with none
+    # set leaves the "Which" select empty) resolved to the whole company.
+    users = [_u("a@e.com"), _u("b@e.com")]
+    for scope in ("ou", "department", "location", "group", "user", "bogus"):
+        assert match_scope(users, scope, "") == [], scope
+    assert len(match_scope(users, "company")) == 2
 
 
 def test_match_scope_user_selects_single_active():
