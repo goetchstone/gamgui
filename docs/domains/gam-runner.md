@@ -123,7 +123,12 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   `GAMCommands` builder must be classified there, and its shapes must pass the mock. The stderr
   wording/exit codes are GAM7's conventions written by hand, not a live capture. The sweep's
   `SWEEPBENIGN`/`SWEEPMIXED` triggers emit a multi-line, multi-entity stderr (all tolerable / one real
-  failure among them) for the per-line classification.
+  failure among them) for the per-line classification. A Builder export's `todrive` tail passes only
+  on a print/report read and only in the shape `GAMCommands.todrive_args` emits — `todrive [tduser
+  <EmailAddress>] [tdtitle <String>]`, each once, in that order, a non-empty `tduser` (GAM's
+  `GetTodriveParameters` reads it with `getString`, which refuses an empty value; `tdtitle` takes
+  `minLen=0`; read from the vendored build). `info user`/`check serviceaccount` handlers ignore
+  trailing words, so a `todrive` after them (or a `show`) is refused before the handler runs.
 - **Seeing what GAM received:** the `gam_calls` fixture (`tests/conftest.py`) sets
   `GAM_MOCK_ARGV_LOG`; the mock appends each argv (NUL-separated) and `tests/helpers.py`
   `read_gam_calls` parses it. `MOCKSLEEP <secs> [pidfile]` hangs on purpose for the timeout path.

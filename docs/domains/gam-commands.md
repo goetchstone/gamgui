@@ -88,8 +88,8 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   fixture user has different data; an address that isn't a user fails as GAM does), and all but
   `info user` accept only the argv the app sends, so `print delegates`, `show vacation` and `show signature` reject
   `formatjson` as GAM does (and `print groups member` any option — stricter than the grammar, the
-  safe direction). A `todrive` tail is accepted only on a print/report read and only with the
-  attributes the Builder emits (`tduser`, `tdtitle`). (Its *write* handlers are strict:
+  safe direction). A `todrive` tail is accepted only on a print/report read and only in the shape
+  the Builder emits (`todrive [tduser <addr>] [tdtitle <title>]`, see gam-runner). (Its *write* handlers are strict:
   a new mutating builder needs a handler that accepts only its grammar shape, or the mock fails it —
   and `tests/test_mock_gam.py` fails until the builder is classified there.)
 - The module docstring flags the mutating sub-syntax (group membership, signature flags) as

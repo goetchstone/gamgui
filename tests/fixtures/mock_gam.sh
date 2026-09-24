@@ -41,6 +41,7 @@ usage_error() {  # GAM's usage error: the command line, then the reason; USAGE_E
   exit 2
 }
 missing_arg() { usage_error "Missing argument: Expected <$1>"; }
+empty_arg() { usage_error "Empty argument: Expected <Non-empty $1>"; }
 invalid_arg() { usage_error "Invalid argument: $1"; }
 invalid_choice() { usage_error "Invalid choice ($1): Expected <$2>"; }
 does_not_exist() {  # <entity> <name>; ENTITY_DOES_NOT_EXIST_RC
@@ -80,16 +81,18 @@ delegates_of() {  # <user>: the current list — with GAM_MOCK_STATE, the stored
   fi
 }
 has_delegate() { delegates_of "$1" | grep -qixF -- "$2"; }   # Gmail compares addresses case-insensitively
-# `todrive <ToDriveAttribute>*` (grammar 655) after a print/report read: only the attributes the Builder
-# emits (GAMCommands.todrive_args) — tduser <EmailAddress>, tdtitle <String>.
+# `todrive <ToDriveAttribute>*` (grammar 655) after a print/report read: only the shape the Builder emits
+# (GAMCommands.todrive_args) — `todrive [tduser <EmailAddress>] [tdtitle <String>]`, each once, in that order,
+# last on the line. GAM (CSVPrintFile.GetTodriveParameters, read from the vendored build) reads tduser with
+# getString, which refuses an empty value, and tdtitle with minLen=0, which doesn't.
 todrive_tail() {
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      tduser) need_value $# "EmailAddress"; shift 2 ;;
-      tdtitle) need_value $# "String"; shift 2 ;;
-      *) invalid_arg "$1" ;;
-    esac
-  done
+  if [ "${1:-}" = "tduser" ]; then
+    need_value $# "EmailAddress"
+    [ -n "$2" ] || empty_arg "EmailAddress"
+    shift 2
+  fi
+  if [ "${1:-}" = "tdtitle" ]; then need_value $# "String"; shift 2; fi
+  [ $# -eq 0 ] || invalid_arg "$1"
 }
 
 is_bool() { case "${1:-}" in true|on|yes|enabled|1|false|off|no|disabled|0) return 0 ;; esac; return 1; }
@@ -167,13 +170,20 @@ case "${1:-}" in
     ;;
 esac
 
-# A print/report read may end in `todrive …` (the Builder's export to a Sheet). Check its attributes, then
-# handle the read as without it (the canned CSV stays the output; GAM would print the Sheet's URL). A
-# `show` takes no todrive, so there the word stays and its strict handler refuses it.
-if [ "${1:-}" = "print" ] || [ "${1:-}" = "report" ] || [ "${3:-}" = "print" ]; then
+# A read may end in `todrive …` (the Builder's export to a Sheet). Only a print/report read takes it — the
+# grammar's info/show/check lines have none, and the `info user`/`check serviceaccount` handlers ignore
+# trailing words, so it is refused here. Check its attributes, then handle the read as without them (the
+# canned CSV stays the output; GAM would print the Sheet's URL). A write is left to its strict handler.
+case "${1:-}:${3:-}" in
+  print:*|report:*|*:print) td_read=print ;;
+  info:*|*:show|*:check) td_read=other ;;
+  *) td_read="" ;;
+esac
+if [ -n "$td_read" ]; then
   td=0; i=0
   for a in "$@"; do i=$((i + 1)); if [ "$a" = "todrive" ]; then td=$i; break; fi; done
   if [ "$td" -gt 0 ]; then
+    [ "$td_read" = print ] || invalid_arg todrive
     ( shift "$td"; todrive_tail "$@" ) || exit $?
     i=0
     for a in "$@"; do   # keep the words before `todrive` (the list was expanded before the loop)

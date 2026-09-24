@@ -170,12 +170,17 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     (["user", "alice@example.com", "show", "vacation", "formatjson"], "Invalid argument"),
     (["print", "groups", "member", "alice@example.com", "bogus"], "Invalid argument"),
     (["user", "alice@example.com", "print", "calendaracls", "primary", "formatjson", "x"], "Invalid argument"),
-    # `todrive <ToDriveAttribute>*`: only on a print/report read, and only the attributes the Builder emits.
+    # `todrive <ToDriveAttribute>*`: only on a print/report read, and only in the shape the Builder emits.
     (["user", "alice@example.com", "show", "vacation", "todrive"], "Invalid argument"),
+    (C.info_user("alice@example.com") + ["todrive"], "Invalid argument: todrive"),
+    (C.check_svcacct("admin@example.com") + ["todrive", "tduser", "boss@example.com"], "Invalid argument: todrive"),
     (C.print_delegates("alice@example.com") + ["todrive", "tdshare", "x@example.com", "writer"], "Invalid argument"),
     (C.print_delegates("alice@example.com") + ["todrive", "tduser"], "Missing argument"),
+    (C.print_delegates("alice@example.com") + ["todrive", "tduser", ""], "Empty argument"),
     (C.print_users() + ["todrive", "tdtitle"], "Missing argument"),
     (C.print_users() + ["todrive", "tduser", "boss@example.com", "extra"], "Invalid argument"),
+    (C.print_users() + ["todrive", "tdtitle", "T", "tduser", "boss@example.com"], "Invalid argument: tduser"),
+    (C.print_users() + ["todrive", "tduser", "a@example.com", "tduser", "b@example.com"], "Invalid argument: tduser"),
 ])
 async def test_mock_rejects_a_malformed_shape(runner, domain, argv, needle):
     with pytest.raises(GAMError) as ei:
