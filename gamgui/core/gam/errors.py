@@ -91,16 +91,18 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     # Does not exist" (exitIfNoOauth2Txt), "… Does not exist or has invalid format" (invalidOauth2TxtExit).
     (re.compile(r"oauth2(?:service)?\.(?:txt|json)\b.*(?:not found|does not exist)|OAuth2 File:.*does not exist",
                 re.I), GAMErrorKind.NOT_AUTHENTICATED),
+    # Deleting your OWN owner ACL is refused ("Cannot change your own access level" / cannotChangeOwnAcl).
+    # Its own kind, before the generic 403 pattern (GAM's line carries no "403"/"forbidden" token): the
+    # offboarding sweep tolerates exactly this refusal, never a real permission failure.
+    (re.compile(r"cannot change your own access level|cannotChangeOwnAcl", re.I), GAMErrorKind.OWN_ACL),
+    # Before not-found: a refusal that also says "not found" is a refusal. After it, such a line read as
+    # the NOT_FOUND an all-users sweep tolerates, and a real 403 passed as a benign notice.
+    (re.compile(r"forbidden|permission denied|insufficientPermissions|\b403\b", re.I), GAMErrorKind.PERMISSION_DENIED),
     (re.compile(r"does not exist|not found|notFound|resource.*not found|\b404\b", re.I), GAMErrorKind.NOT_FOUND),
     # A user without the service (GAM's userServiceNotEnabledWarning: "User: x, Calendar Service/App
     # not enabled"). Narrow on purpose: GAM's account-wide "Calendar not enabled. Please run "gam update
     # project"…" is a real failure and must stay UNKNOWN. Tolerated by the offboarding calendar sweep.
     (re.compile(r"Service/App not enabled", re.I), GAMErrorKind.SERVICE_NOT_ENABLED),
-    # Deleting your OWN owner ACL is refused ("Cannot change your own access level" / cannotChangeOwnAcl).
-    # Its own kind, before the generic 403 pattern (GAM's line carries no "403"/"forbidden" token): the
-    # offboarding sweep tolerates exactly this refusal, never a real permission failure.
-    (re.compile(r"cannot change your own access level|cannotChangeOwnAcl", re.I), GAMErrorKind.OWN_ACL),
-    (re.compile(r"forbidden|permission denied|insufficientPermissions|\b403\b", re.I), GAMErrorKind.PERMISSION_DENIED),
     (re.compile(r"please run.*oauth|no.*credentials|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
 ]
 
@@ -120,7 +122,13 @@ _SEVERITY: List[GAMErrorKind] = [
 ]
 
 
+# GAM's per-entity counter, " (403/1200)" on the 403rd of 1,200 users. Dropped before classifying: the
+# status-code patterns read it as an HTTP 403, 404 or 429.
+_ENTITY_COUNT: Pattern[str] = re.compile(r"\s*\(\d+/\d+\)")
+
+
 def _classify_line(line: str) -> GAMErrorKind:
+    line = _ENTITY_COUNT.sub("", line)
     for pattern, kind in _PATTERNS:
         if pattern.search(line):
             return kind

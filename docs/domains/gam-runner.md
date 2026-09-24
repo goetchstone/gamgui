@@ -74,7 +74,11 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   because GAM's own-ACL-deletion refusal carries no 403/forbidden token; it maps to its own kind,
   `OWN_ACL`, so the all-users calendar offboard sweep can tolerate exactly that refusal and not a
   real 403 (`PERMISSION_DENIED`, which it used to tolerate wholesale — failure-log 2026-09-23).
-  `SERVICE_NOT_ENABLED` is GAM's per-user "User: x, Calendar Service/App not enabled"
+  The 403 pattern itself sits *before* not-found, so a refusal whose text also says "not found" is
+  `PERMISSION_DENIED`, never the `NOT_FOUND` that sweep tolerates; and GAM's per-entity counter
+  (" (403/1200)", every per-user line of a multi-user run) is stripped before any pattern runs, since
+  `\b403\b`/`\b404\b`/`\b429\b` read it as a status code (failure-log 2026-09-24,
+  `test_gams_entity_counter_is_not_a_status_code`). `SERVICE_NOT_ENABLED` is GAM's per-user "User: x, Calendar Service/App not enabled"
   (`userServiceNotEnabledWarning`, exit 73); the regex is `Service/App not enabled` on purpose, so
   GAM's account-wide "Calendar not enabled. Please run "gam update project"…" stays `UNKNOWN`. A
   missing or unreadable credentials file ("Client OAuth2 File: …/oauth2.txt, Does not exist", GAM's

@@ -116,3 +116,28 @@ def test_an_address_that_is_not_a_user_is_not_found_not_an_expired_sign_in(line)
     assert GAMError.from_run(50, line).remediation.startswith("The requested user")
     assert classify_stderr("ERROR: invalid_grant: Token has been expired or revoked") is GAMErrorKind.AUTH_EXPIRED
     assert classify_stderr("ERROR: invalid_grant: Bad Request") is GAMErrorKind.AUTH_EXPIRED
+
+
+def test_a_refusal_that_also_says_not_found_is_a_refusal():
+    # The not-found pattern came first, so a per-user 403 whose text also said "not found" read as the
+    # NOT_FOUND an all-users sweep tolerates, and the offboarding step passed over a real refusal.
+    line = ("    Calendar: alice@example.com, Calendar ACL: (Scope: user:carol@example.com), "
+            "Delete Failed: 403: Forbidden - Calendar not found for this caller (2/3)")
+    assert classify_stderr(line) is GAMErrorKind.PERMISSION_DENIED
+    err = GAMError.from_run(50, _PROGRESS + _NOT_APPLICABLE + line + "\n" + _OWN_ACL)
+    assert GAMErrorKind.PERMISSION_DENIED in err.kinds and err.kind is GAMErrorKind.PERMISSION_DENIED
+
+
+@pytest.mark.parametrize("line, expected", [
+    # GAM's per-entity counter " (i/count)" is not an HTTP status: on the 403rd, 404th or 429th of a
+    # large domain's users it made a benign notice a refusal or a rate limit, and a real error a
+    # tolerable not-found.
+    ("User: bob@example.com, Service not applicable/Does not exist (403/1200)", GAMErrorKind.NOT_FOUND),
+    ("User: dave@example.com, Calendar Service/App not enabled (429/1200)", GAMErrorKind.SERVICE_NOT_ENABLED),
+    ("    Calendar: alice@example.com, Calendar ACL: (Scope: user:carol@example.com), "
+     "Delete Failed: Internal error encountered. (404/1200)", GAMErrorKind.UNKNOWN),
+    ("    Calendar: carol@example.com, Calendar ACL: (Scope: user:carol@example.com), "
+     "Delete Failed: Cannot change your own access level. (403/1200)", GAMErrorKind.OWN_ACL),
+])
+def test_gams_entity_counter_is_not_a_status_code(line, expected):
+    assert classify_stderr(line) is expected

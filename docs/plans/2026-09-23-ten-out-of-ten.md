@@ -68,7 +68,10 @@ plan's Phase 0 F1–F3.
   open) · Q12, in the commit that marks it (the ternary was already gone with B2's `f97ab28`; a write's
   other party is audited under the key that names it — `group`, `scope`, `calendar`, `event`, `owner`,
   `new_owner` — not always `group`, and a Builder write records its catalog id as `extra.command`; old
-  records keep `group` and read as before). **Open:** Q9, Q13, batch-2 F#22.
+  records keep `group` and read as before) · with it, the classifier (in the commit that marks it): a
+  per-user refusal that also says "not found" is `PERMISSION_DENIED`, not the `NOT_FOUND` the calendar
+  sweep tolerates, and GAM's " (403/1200)" entity counter is no longer read as a status code
+  (failure-log 2026-09-24). **Open:** Q9, Q13, batch-2 F#22.
 - **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
   `scripts/bump_gam.py`). **Open:** V1, V6; V3–V5 are new scope, and D6 says none for now.
 - **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
