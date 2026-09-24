@@ -275,7 +275,9 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
 - Look at the leaver's Gmail filters (Builder → Users → Gmail - Filters → Show filters): a filter
   that forwards mail keeps forwarding after the routine turns auto-forwarding off. Delete it by hand
   (Gmail settings, or the Admin console) if there is one. Builder → Users → Gmail - Forwarding →
-  Show tells you whether auto-forwarding is on now, and to where — note it if so.
+  the **Show** described "Show a user's Gmail forwarding." (`show forward|forwards`; the other
+  Show, "…a Gmail forwarding address…", lists the addresses mail *could* go to, whether or not
+  forwarding is on) tells you whether auto-forwarding is on now, and to where — note it if so.
 - Every warning is dealt with: a super-admin leaver's role revoked first (and another super admin
   exists; GamGUI isn't connected as the leaver — "Revoke access" would delete GamGUI's own token); a manager who is already a delegate → tick
   "Set delegate"; "Couldn't read … mail delegates" → fix what it quotes (Gmail off for the leaver, a
@@ -295,7 +297,8 @@ Audit shows eight `ok` records, one per step. Then check in Google, not just in 
   Reporting → Audit and investigation — lists the password change and the sign-out). The user's
   Security panel in the Admin console lists no app passwords and no connected apps. If they sign
   in through a third-party identity provider, disable them there.
-- Forwarding: Builder → Users → Gmail - Forwarding → Show says forwarding is off.
+- Forwarding: the same `show forward|forwards` Show (Builder → Users → Gmail - Forwarding) says
+  forwarding is off.
 - Mailbox: the manager's Gmail account switcher offers the leaver's mailbox (delegation can take a
   while to appear); an email to the leaver from an account **outside your domain** (a personal
   address) gets the auto-reply — outside, because a reply limited to the organization would still
