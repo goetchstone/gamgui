@@ -36,8 +36,9 @@ plan's Phase 0 F1–F3.
   `build_app.sh` builds from `app.txt` in a fresh venv, hash-checking the one sdist's build backend
   too; Dependabot moved to its `uv` ecosystem; `make lock`; `tests/test_locks.py`. The `.app` loses
   uvicorn's optional uvloop/httptools/websockets/watchfiles/PyYAML, which only the dev venv had).
-  **Open:** C4–C7. (C4: Dependabot's `github-actions` ecosystem was already configured; the actions
-  are still pinned by tag, not SHA.)
+  · C4 (in the commit that marks it: every `uses:` pinned by full commit SHA with its `# vX.Y.Z`
+  in a comment, `tests/test_workflow_safety.py` fails a tag pin; Dependabot's `github-actions`
+  ecosystem was already configured). **Open:** C5–C7.
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —

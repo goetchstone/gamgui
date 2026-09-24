@@ -88,6 +88,10 @@ guarding them:
   fresh virtualenv, only from `requirements/app.txt` with `pip install --require-hashes`: every
   file, and the build backend of the one package that ships only as source, must match a committed
   SHA-256. CI installs `requirements/dev.txt` the same way, from wheels only.
+- **Every GitHub Action is pinned by commit SHA.** A tag can be moved to new code by whoever
+  controls the action's repository, and the release-watch job holds a token that can push a branch
+  and open a PR. `tests/test_workflow_safety.py` fails any `uses:` pinned by tag; Dependabot bumps
+  the SHA and its version comment together.
 
 ## Known limitations
 

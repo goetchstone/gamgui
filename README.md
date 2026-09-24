@@ -343,7 +343,8 @@ libraries — the config explains why for each.
 (`requirements/dev.txt`, `requirements/app.txt`, `pip install --require-hashes`), so a package
 swapped on the index fails the install instead of shipping.
 [`.github/dependabot.yml`](.github/dependabot.yml) watches those locks and the GitHub Actions weekly
-and — with the dependency graph enabled — opens PRs for known CVEs. The vendored GAM binary is
+and — with the dependency graph enabled — opens PRs for known CVEs. The actions are pinned by commit
+SHA, not by tag, so nobody can change what CI runs by moving a tag. The vendored GAM binary is
 intentionally excluded: it is pinned by SHA-256 and bumped through its own fail-closed runbook, not by
 a bot.
 

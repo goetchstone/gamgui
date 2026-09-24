@@ -26,7 +26,9 @@ updates:
         update-types: ["minor", "patch"]
 
   # The workflows themselves hold a token and fetch the pinned GAM release, so their actions are part
-  # of the supply chain — keep actions/checkout, setup-python, codeql-action current.
+  # of the supply chain — keep actions/checkout, setup-python, codeql-action current. Each is pinned
+  # by commit SHA with its version in a trailing comment (`@<sha> # v7.0.1`); Dependabot moves both,
+  # and tests/test_workflow_safety.py fails a `uses:` pinned by tag.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
