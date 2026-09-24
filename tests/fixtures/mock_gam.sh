@@ -192,12 +192,15 @@ fi
 # `gam info user <addr>` -> THAT user's record, keyed on the address like GAM. An address that isn't in
 # the directory fails the way GAM does — returning Alice for anyone was the same lie as the
 # group-members bug in the failure log.
+# Like the Directory API, an address matches case-insensitively and an ALIAS resolves to the account
+# that owns it (Alice's a.anders@) — the record's primaryEmail then differs from what was asked.
 if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   [ -n "${3:-}" ] || missing_arg "UserItem"
-  case "$3" in
-    alice@example.com) cat "$GAM_MOCK_FIXTURES/info_user.json" ;;
+  addr=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+  case "$addr" in
+    alice@example.com|a.anders@example.com|alice@alias.example.net) cat "$GAM_MOCK_FIXTURES/info_user.json" ;;
     bob@example.com)   cat "$GAM_MOCK_FIXTURES/info_user_suspended.json" ;;
-    *) grep -F "\"primaryEmail\": \"$3\"" "$GAM_MOCK_FIXTURES/print_users.json" || does_not_exist "User" "$3" ;;
+    *) grep -F "\"primaryEmail\": \"$addr\"" "$GAM_MOCK_FIXTURES/print_users.json" || does_not_exist "User" "$3" ;;
   esac
   exit 0
 fi

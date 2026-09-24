@@ -123,6 +123,16 @@ class GAMConnector(Connector):
         stdout = await self.runner.run_authenticated(self.domain, argv)
         return GAMUser.from_json(parse_one(stdout))
 
+    async def primary_address(self, email: str) -> Optional[str]:
+        """The primary address GAM resolves ``email`` to — an alias (any domain's) resolves to the
+        account that owns it — or None when no user has it. Read-only; other failures raise."""
+        try:
+            return (await self.get_user(email)).primary_email
+        except GAMError as exc:
+            if exc.kind == GAMErrorKind.NOT_FOUND:
+                return None
+            raise
+
     async def list_groups(self) -> List[GAMGroup]:
         argv = GAMCommands.print_groups()
         stdout = await self.runner.run_authenticated(self.domain, argv)

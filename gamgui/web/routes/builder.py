@@ -95,14 +95,15 @@ def _gam_str(argv) -> str:
 
 async def _alias_deletes(st, decision) -> list:
     """An account delete typed as an alias would delete the account that owns it — refuse it at the
-    preview. Fails closed: a directory that can't be read can't show the address isn't an alias."""
-    if not decision.typed_emails:
+    preview. Each address is resolved by GAM itself (``info user``), so a secondary-domain alias or one
+    added minutes ago is caught too. Fails closed: an address that can't be resolved can't be ruled out."""
+    if not decision.typed_emails or st.connector is None:
         return []
     try:
-        directory = await st.users()
+        resolved = {a: await st.connector.primary_address(a) for a in decision.typed_emails}
     except Exception as exc:  # noqa: BLE001 - the message says why the delete can't be checked
-        return [f"Couldn't check the address against the directory — {_friendly(exc)}"]
-    return guard_mod.alias_deletes(directory, decision.typed_emails)
+        return [f"Couldn't confirm which account that address belongs to — {_friendly(exc)}"]
+    return guard_mod.alias_deletes(resolved)
 
 
 async def _pending_transfers(conn, decision) -> list:

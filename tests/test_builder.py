@@ -595,6 +595,10 @@ def test_builder_refuses_to_delete_by_an_alias(client, gam_calls):
     client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "A.Anders@example.com"})
     seq, _ = _seq_preview(client)
     assert "is an alias of alice@example.com" in seq and "/builder/sequence/run" not in seq
+    # GAM resolves the address itself (info user), so an alias the cached directory doesn't list — a
+    # secondary domain's, or one added minutes ago — is caught too.
+    shown, token = _builder_preview(client, cid="build.delete_user", email="alice@alias.example.net")
+    assert "is an alias of alice@example.com" in shown and not token
     assert gam_writes(gam_calls()) == []
 
 

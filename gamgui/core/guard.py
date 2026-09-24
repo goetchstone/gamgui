@@ -67,20 +67,17 @@ def deleted_account(preview: ChangePreview) -> Optional[str]:
     return argv[-1] if argv and argv == GAMCommands.delete_user(argv[-1]) else None
 
 
-def alias_deletes(directory, addresses: Sequence[str]) -> List[str]:
-    """Why each of ``addresses`` must not be deleted as typed: GAM's ``delete user`` resolves an alias
-    to the account that owns it (GamUpdate: ``no_action_if_alias`` exists to stop exactly that), so
-    typing an alias would delete an account the preview never named. ``directory`` is the cached
-    user list; an address that isn't anyone's alias passes (an unknown one just fails in GAM)."""
-    owners = {a.lower(): u.primary_email for u in directory for a in (getattr(u, "aliases", None) or [])}
-    primaries = {u.primary_email.lower() for u in directory}
+def alias_deletes(resolved: Mapping[str, Optional[str]]) -> List[str]:
+    """Why each typed address must not be deleted as typed. ``resolved`` maps it to the primary
+    address GAM resolves it to (``GAMConnector.primary_address``; None: no such user). GAM's
+    ``delete user`` deletes the account an alias belongs to (GamUpdate: ``no_action_if_alias`` exists
+    to stop exactly that), so an address that resolves to a different primary would delete an account
+    the preview never named. An unknown address passes: GAM just fails to find it."""
     problems = []
-    for address in addresses:
-        key = address.strip().lower()
-        owner = owners.get(key) if key not in primaries else None
-        if owner:
-            problems.append(f"{address} is an alias of {owner} — deleting it would delete {owner}'s account. "
-                            f"Delete that account by its primary address, from the user's page.")
+    for address, primary in resolved.items():
+        if primary and primary.strip().lower() != address.strip().lower():
+            problems.append(f"{address.strip()} is an alias of {primary} — deleting it would delete {primary}'s "
+                            f"account. Delete that account by its primary address, from the user's page.")
     return problems
 
 

@@ -538,9 +538,9 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
     refusal = guard.enforce([delete], await request.form())
     if not refusal:
         try:
-            refusal = " ".join(guard.alias_deletes(await request.app.state.gamgui.users(), [email]))
-        except Exception as exc:  # noqa: BLE001 - fail closed: an unreadable directory can't rule out an alias
-            refusal = f"Couldn't check the address against the directory — {_friendly(exc)}"
+            refusal = " ".join(guard.alias_deletes({email: await conn.primary_address(email.strip())}))
+        except Exception as exc:  # noqa: BLE001 - fail closed: an address GAM can't resolve can't be ruled out
+            refusal = f"Couldn't confirm which account that address belongs to — {_friendly(exc)}"
     if refusal:
         return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal})
     result = await conn.delete_user(email)
