@@ -8,8 +8,9 @@ every page load / keystroke. Manual refresh (force) and invalidation handle stal
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Awaitable, Callable, List, Optional
+
+from . import clock
 
 
 class UserCache:
@@ -21,7 +22,7 @@ class UserCache:
 
     async def get(self, fetch: Callable[[], Awaitable[list]], force: bool = False) -> list:
         async with self._lock:
-            now = time.monotonic()
+            now = clock.now()   # counts sleep: "fresh" means fresh in real time
             if force or self._items is None or (now - self._at) > self.ttl:
                 self._items = await fetch()
                 self._at = now
@@ -33,4 +34,4 @@ class UserCache:
 
     @property
     def age_seconds(self) -> Optional[float]:
-        return None if self._items is None else time.monotonic() - self._at
+        return None if self._items is None else clock.now() - self._at

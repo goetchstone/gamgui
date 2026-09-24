@@ -309,10 +309,10 @@ def test_credentials_sheets_share_one_print_helper_and_escape_the_copy_text(clie
     for name in ("_onboard_run.html", "_onboard_bulk_status.html"):
         src = (tpl / name).read_text()
         assert "sheet_buttons(" in src and "function " not in src and "<script" not in src, name
-    import time as _t
+    from gamgui.core import clock as _clock
     from gamgui.web.routes.onboarding import OnboardJob
     client.app.state.gamgui.jobs["j"] = OnboardJob(
-        id="j", total=1, done=1, ok=1, account_created=1, finished=True, finished_at=_t.monotonic(),
+        id="j", total=1, done=1, ok=1, account_created=1, finished=True, finished_at=_clock.now(),
         credentials=[{"name": "Ada </textarea><b>x", "email": "ada@example.com",
                       "password": "COPYpw-1", "org_unit": "/Sales"}])
     r = client.get("/onboard/bulk/status?job=j")
@@ -515,11 +515,11 @@ def test_bulk_status_credentials_ttl_no_store_and_done(client):
     # The status GET is bookmarkable/re-fetchable, so the sheet must be no-store, kept only within the
     # TTL (a refresh mustn't lose every password), and dropped by an explicit Done or once the TTL
     # lapses (invariant 4 — no stranded plaintext).
-    import time as _t
+    from gamgui.core import clock as _clock
     from gamgui.web.routes.onboarding import OnboardJob
     st = client.app.state.gamgui
     st.jobs["j1"] = OnboardJob(id="j1", total=1, done=1, ok=1, account_created=1, finished=True,
-                               finished_at=_t.monotonic(),
+                               finished_at=_clock.now(),
                                credentials=[{"name": "Ada", "email": "ada@example.com",
                                              "password": "SHEETpw-1234-5678", "org_unit": "/Sales"}])
     r1 = client.get("/onboard/bulk/status?job=j1")
@@ -529,7 +529,7 @@ def test_bulk_status_credentials_ttl_no_store_and_done(client):
     r3 = client.post("/onboard/bulk/done", data={"job": "j1"})
     assert "SHEETpw-1234-5678" not in r3.text and st.jobs["j1"].credentials == []   # Done drops it
     # a job finished longer ago than the TTL: sheet gone and cleared
-    st.jobs["j2"] = OnboardJob(id="j2", total=1, finished=True, finished_at=_t.monotonic() - 10_000,
+    st.jobs["j2"] = OnboardJob(id="j2", total=1, finished=True, finished_at=_clock.now() - 10_000,
                                credentials=[{"name": "B", "email": "b@x.com", "password": "OLDpw", "org_unit": "/"}])
     r4 = client.get("/onboard/bulk/status?job=j2")
     assert "OLDpw" not in r4.text and st.jobs["j2"].credentials == []

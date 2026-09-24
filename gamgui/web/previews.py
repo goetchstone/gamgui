@@ -14,9 +14,10 @@ the store can't grow however often the operator previews (invariant #9).
 from __future__ import annotations
 
 import secrets
-import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Hashable, Optional, Tuple
+
+from ..core import clock
 
 TOKEN_FIELD = "preview"   # what a confirm step posts back: the token its preview rendered
 PREVIEW_TTL = 15 * 60     # seconds a preview stays runnable
@@ -27,7 +28,7 @@ PREVIEWS_KEPT = 8         # per flow; the oldest goes first
 class _Held:
     form: Hashable            # the key of the form the preview was built from
     value: Any                # what the confirm step runs
-    at: float = field(default_factory=time.monotonic)
+    at: float = field(default_factory=clock.now)       # counts sleep: a lid closed mid-preview expires it
 
 
 class Previews:
@@ -39,7 +40,7 @@ class Previews:
     def hold(self, flow: str, form: Hashable, value: Any) -> str:
         """Keep ``value`` for ``flow`` under a fresh token; drop expired ones and cap the rest."""
         held = self._flows.setdefault(flow, {})
-        now = time.monotonic()
+        now = clock.now()
         for token in [t for t, h in held.items() if now - h.at > PREVIEW_TTL]:
             del held[token]
         while len(held) >= PREVIEWS_KEPT:
@@ -54,7 +55,7 @@ class Previews:
         ``(None, why not)``: ``again`` says what to click, ``what`` names the thing that changed.
         Either way the token is spent: a second run needs a new preview."""
         held = self._flows.get(flow, {}).pop(token, None) if token else None
-        if held is None or time.monotonic() - held.at > PREVIEW_TTL:
+        if held is None or clock.now() - held.at > PREVIEW_TTL:
             return None, f"That preview has expired or was already run — {again}."
         if held.form != form:
             return None, f"The {what} changed after the preview — {again}, so what runs is what you checked."

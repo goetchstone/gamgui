@@ -13,14 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-import time
 from dataclasses import dataclass, field
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from ...core import guard, onboarding
+from ...core import clock, guard, onboarding
 from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
 from ...core.gam.models import GAMUser
@@ -274,7 +273,7 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[
         job.error = str(exc)
     finally:
         job.finished = True
-        job.finished_at = time.monotonic()
+        job.finished_at = clock.now()
 
 
 @router.get("", response_class=HTMLResponse)
@@ -572,7 +571,7 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     # password at once (the old drop-on-first-render did exactly that).
     creds = None
     if j is not None and j.finished and j.credentials:
-        if time.monotonic() - j.finished_at < _CREDS_TTL:
+        if clock.now() - j.finished_at < _CREDS_TTL:
             creds = j.credentials
         else:
             j.credentials = []

@@ -42,6 +42,22 @@ def test_an_expired_preview_is_refused(monkeypatch):
     assert store.take("flow", token, ())[0] is None
 
 
+def test_time_asleep_counts_toward_expiry(monkeypatch):
+    # time.monotonic() stops while a Mac sleeps, so a preview left open over a closed lid stayed
+    # runnable hours later. Expiry reads clock.now(), which counts sleep (CLOCK_MONOTONIC on macOS).
+    import time
+
+    from gamgui.core import clock
+
+    assert clock._CLOCK in {getattr(time, "CLOCK_BOOTTIME", None), getattr(time, "CLOCK_MONOTONIC", None)}
+    start = clock.now()
+    monkeypatch.setattr(clock, "now", lambda: start)
+    store = Previews()
+    token = store.hold("flow", (), "x")
+    monkeypatch.setattr(clock, "now", lambda: start + previews.PREVIEW_TTL + 1)   # the lid was closed
+    assert store.take("flow", token, ())[0] is None
+
+
 def test_the_refusal_says_what_to_click_again():
     store = Previews()
     _, refusal = store.take("flow", "", (), again="click Preview steps again")
