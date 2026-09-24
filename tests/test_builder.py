@@ -203,7 +203,7 @@ def test_search_messages_query_has_insertable_hints(client):
     for op in ("rfc822msgid:", "from:", "after:2026/06/23", "before:2026/06/25", "newer_than:7d"):
         assert op in qslot.hints
     html = client.get("/builder/command/build.search_messages").text
-    assert 'onclick="ggHint(this)"' in html and 'data-ins="rfc822msgid:"' in html
+    assert 'data-action="hint" data-ins="rfc822msgid:"' in html
     assert "YYYY/MM/DD" in html   # the date-format note
 
 

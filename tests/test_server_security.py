@@ -211,3 +211,25 @@ def test_security_headers_on_the_forbidden_response(app):
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["Referrer-Policy"] == "no-referrer"
     assert "frame-ancestors 'none'" in r.headers["Content-Security-Policy"]
+
+
+def _csp(response) -> dict:
+    return {d.split()[0]: d.split()[1:] for d in response.headers["Content-Security-Policy"].split(";") if d.strip()}
+
+
+@pytest.mark.parametrize("path", ["/users", "/static/app.js", "/static/vendor/htmx-1.9.12.min.js"])
+def test_csp_runs_only_same_origin_script(client, path):
+    # Plan Q13: every script is a same-origin file, so an inline <script> or on*= handler that a
+    # template bug let through would not run. No 'unsafe-inline'/'unsafe-eval' for script, ever.
+    r = client.get(path)
+    assert r.status_code == 200
+    csp = _csp(r)
+    assert csp["default-src"] == ["'self'"] and csp["script-src"] == ["'self'"]
+    assert csp["connect-src"] == ["'self'"] and csp["object-src"] == ["'none'"]
+    assert csp["base-uri"] == ["'none'"] and csp["frame-ancestors"] == ["'none'"] and csp["form-action"] == ["'self'"]
+    # Signature previews render remote https logos and inline-styled HTML in a srcdoc iframe, which
+    # inherits this policy; Google Fonts is the one other origin.
+    assert csp["img-src"] == ["'self'", "https:", "data:"]
+    assert csp["style-src"] == ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
+    assert csp["font-src"] == ["'self'", "https://fonts.gstatic.com"]
+    assert "unsafe-eval" not in r.headers["Content-Security-Policy"]

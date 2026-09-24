@@ -32,7 +32,7 @@
       <div class="grid grid-cols-2 gap-3">
         <label class="block">
           <span class="text-sm text-brand-blueink">Scope</span>
-          <select name="scope_type" id="scope_type" onchange="sigPopulate()"
+          <select name="scope_type" id="scope_type"
                   class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none">
             <option value="user" selected>Specific user (test)</option>
             <option value="group">Group</option>
@@ -76,52 +76,16 @@
   </div>
 </div>
 
-<script>
-  var SIG_OUS = {{ options.ous | tojson }};
-  var SIG_DEPTS = {{ options.departments | tojson }};
-  var SIG_GROUPS = {{ groups | tojson }};
-  var SIG_USERS = {{ options.users | tojson }};
-  var SIG_LOCATIONS = {{ options.locations | tojson }};
-  // The connected admin's own address when it is an active user, else "" — the test user opens on
-  // the operator, never on whoever sorts first (a colleague whose signature Apply would overwrite).
-  var SIG_DEFAULT_USER = {{ test_user | tojson }};
-  function sigPopulate() {
-    var t = document.getElementById("scope_type").value;
-    var sel = document.getElementById("scope_value");
-    var list = t === "ou" ? SIG_OUS : (t === "department" ? SIG_DEPTS : (t === "location" ? SIG_LOCATIONS : (t === "group" ? SIG_GROUPS : (t === "user" ? SIG_USERS : []))));
-    // Build options via the DOM (value + textContent), never innerHTML string-concat: OU paths,
-    // departments and locations come from Google and may contain <, > or " — string concat would let
-    // them break out of the markup / inject an attribute. createElement escapes them safely.
-    sel.replaceChildren();
-    if (t === "user" && list.length) {
-      var blank = document.createElement("option");   // an explicit choice when the admin isn't known
-      blank.value = "";
-      blank.textContent = "Choose a user…";
-      sel.appendChild(blank);
-    }
-    list.forEach(function (v) {
-      var o = document.createElement("option");
-      o.value = v;
-      o.textContent = v;
-      o.selected = t === "user" && v === SIG_DEFAULT_USER;
-      sel.appendChild(o);
-    });
-    sel.disabled = list.length === 0;
-    sel.style.visibility = list.length ? "visible" : "hidden";
-  }
-  sigPopulate();
-
-  // Load a saved template into the editor WITHOUT a round trip: the HTML is carried in the button's
-  // data-body (Jinja attribute-escaped, so it's inert text here — never innerHTML'd), dropped straight
-  // into the textarea value, then the existing Preview button is clicked to refresh the preview.
-  function sigLoadTemplate(btn) {
-    var ta = document.querySelector("#sig-form textarea[name=template]");
-    if (!ta) return;
-    ta.value = btn.dataset.body || "";
-    ta.focus();
-    var preview = document.getElementById("sig-preview-btn");
-    if (preview) preview.click();
-  }
-</script>
+{# Each scope's "Which" choices, cloned into the select by signatures.js. Directory values are Jinja-
+   escaped element text, never a JS string: the CSP forbids inline script, and OU paths, departments
+   and locations from Google may carry <, > or ". The test user opens on the connected admin, else on
+   an explicit "Choose a user…" (review F18), never on whoever sorts first. #}
+{% for kind, values in [("user", options.users), ("group", groups), ("ou", options.ous), ("department", options.departments), ("location", options.locations)] %}
+<template data-scope="{{ kind }}">
+  {%- if kind == "user" and values %}<option value="">Choose a user…</option>{% endif %}
+  {%- for v in values %}<option value="{{ v }}"{{ " selected" if kind == "user" and v == test_user }}>{{ v }}</option>{% endfor -%}
+</template>
+{% endfor %}
 {% endif %}
 {% endblock %}
+{% block scripts %}{% if connected %}<script src="/static/signatures.js"></script>{% endif %}{% endblock %}

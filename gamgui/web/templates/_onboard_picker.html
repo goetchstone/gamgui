@@ -4,7 +4,7 @@
 <ul class="mt-1 max-h-44 overflow-y-auto rounded-lg border border-brand-gray/30 divide-y divide-brand-gray/20 bg-brand-white text-sm shadow-sm">
   {% for it in items %}
   <li>
-    <button type="button" onclick="obAddToField('{{ field }}', this.dataset.value)" data-value="{{ it.value }}"
+    <button type="button" data-action="ob-add" data-field="{{ field }}" data-value="{{ it.value }}"
             class="block w-full px-2.5 py-1.5 text-left hover:bg-brand-blue/10">
       <div class="truncate text-brand-black">{{ it.label }}</div>
       {% if it.sub %}<div class="truncate font-mono text-[11px] text-brand-gray">{{ it.sub }}</div>{% endif %}

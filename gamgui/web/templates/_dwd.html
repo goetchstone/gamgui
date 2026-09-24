@@ -23,7 +23,7 @@
       <span class="text-xs text-brand-gray">Client ID</span>
       <div class="copy-wrap mt-1 flex items-center gap-2 rounded-lg bg-paper border border-brand-gray/40 p-2.5">
         <code class="flex-1 overflow-x-auto whitespace-pre text-[12.5px] text-ink px-1">{{ dwd.client_id or "(client_id not found in oauth2service.json)" }}</code>
-        <button type="button" onclick="copyEl(this)"
+        <button type="button" data-action="copy"
                 class="copy-btn shrink-0 rounded-md border border-brand-gray/60 px-2.5 py-1 text-xs font-medium text-brand-blueink hover:bg-brand-gray/10 transition-colors">Copy</button>
       </div>
     </div>

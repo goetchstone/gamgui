@@ -43,7 +43,7 @@ lives in a temp dir that is deleted when it stops. A write there only proves the
 
 ```
 gamgui/core/        # engine: GAM runner, parser, command builders, secrets, guard, audit, connectors
-gamgui/web/         # FastAPI app + Jinja/HTMX templates (the UI)
+gamgui/web/         # FastAPI app + Jinja/HTMX templates (the UI) + static/*.js (its scripts)
 gamgui/app.py       # entry point: pywebview window wrapping the local server
 gamgui/resources/   # vendored GAM7 binary (fetched, not committed)
 tests/              # offline test suite + fixtures (incl. the mock gam)
@@ -64,6 +64,9 @@ scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (S
 - All `gam` invocations are built in `gamgui/core/gam/commands.py` as **arg lists** (never shell
   strings) — keep it that way; it's the injection-safety boundary, and the arg-shape tests pin it.
 - Mutations go through the destructive-op guard and the audit log.
+- No inline JavaScript in a template — no `<script>` body, no `onclick=`-style attribute: the
+  Content-Security-Policy allows only same-origin script files, so it wouldn't run. Give the element
+  a `data-action` and its handler in `gamgui/web/static/` (see `app.js`).
 - Add or update tests for any change; keep `pytest` green.
 
 ## Coding standards

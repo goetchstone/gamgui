@@ -20,6 +20,7 @@ from gamgui.web.server import TEMPLATES
 from .test_users_web import client  # noqa: F401  (app + connected-client fixtures)
 
 TEMPLATE_DIR = Path(TEMPLATES.env.loader.searchpath[0])
+STATIC_DIR = TEMPLATE_DIR.parent / "static"
 
 # One value carrying every character that could end an attribute or a tag.
 HOSTILE = "ev\"il' <b>on\"error=\"alert(1)\" &@example.com"
@@ -87,19 +88,21 @@ def test_people_pool_user_cannot_break_out_of_its_attribute():
 
 
 def test_drag_and_drop_still_reads_the_email_from_the_card():
-    # Behaviour guard: the handler is wired to the element, and takes the email off data-email.
+    # Behaviour guard: each card says which way it moves, each zone what it accepts, and groups.js
+    # takes the email off the card's data-email.
     pool = _render("groups.html", connected=True, users=[GAMUser(primary_email="a@example.com")], groups=[])
     board = _render("_board_members.html", group="staff@example.com", members=[GroupMember(email="a@example.com")])
 
-    assert "gqDrag(event, this, 'add')" in pool
-    assert "gqDrag(event, this, 'remove')" in board
-    assert "el.dataset.email" in pool
+    assert 'data-drag="add"' in pool and 'data-drop="add"' in pool and 'data-drop="remove"' in pool
+    assert 'data-drag="remove"' in board
+    assert '<script src="/static/groups.js">' in pool
+    assert "card.dataset.email" in (STATIC_DIR / "groups.js").read_text(encoding="utf-8")
 
 
 def test_board_renders_over_http(client):  # noqa: F811
     r = client.get("/groups/members", params={"group": "team@example.com"})
     assert r.status_code == 200
-    assert "gqDrag(event, this, 'remove')" in r.text
+    assert 'data-drag="remove"' in r.text
 
 
 # --- the durable part: no template may put `| tojson` back into a double-quoted attribute ---
@@ -146,3 +149,67 @@ def test_no_tojson_inside_a_double_quoted_attribute():
 def test_every_tojson_use_is_a_script_block_or_a_single_quoted_attribute(use):
     path, line, quote, in_script = use
     assert in_script or quote == "'", f"{path.name}:{line}: `| tojson` in an unsafe position"
+
+
+# --- the CSP's script-src 'self' (plan Q13): no inline script, handler or eval may come back ---
+# The policy (web/server.py) makes one inert anyway; these keep the templates from depending on one,
+# which would silently break a button rather than fail a test.
+
+_SCRIPT = re.compile(r"<script\b([^>]*)>(.*?)</script>", re.S | re.I)
+_HANDLER = re.compile(r"(?<![\w-])on[a-z]+\s*=", re.I)  # onclick=, oninput=, ... (not data-on…/hx-on)
+_EVAL = re.compile(r"hx-on|hx-vars|javascript:|hx-(?:vals|headers)\s*=\s*[\"']\s*js:", re.I)
+_TRIGGER = re.compile(r"hx-trigger\s*=\s*([\"'])(.*?)\1", re.S)
+
+
+def _problems(name: str, html: str) -> list[str]:
+    bad = []
+    scripts = _SCRIPT.findall(html)
+    if len(scripts) != html.lower().count("<script"):
+        bad.append(f"{name}: a <script> that isn't a plain src + </script> pair")
+    for attrs, body in scripts:
+        src = re.search(r'\ssrc="/static/([^"?#]+)"', attrs)
+        if not src or body.strip():
+            bad.append(f"{name}: inline <script>{attrs}")
+        elif not (STATIC_DIR / src.group(1)).is_file():
+            bad.append(f"{name}: <script> names a missing /static/{src.group(1)}")
+    bad += [f"{name}: inline handler {m.group(0)!r}" for m in _HANDLER.finditer(html)]
+    bad += [f"{name}: eval-only htmx/JS {m.group(0)!r}" for m in _EVAL.finditer(html)]
+    for _, spec in _TRIGGER.findall(html):  # an event filter, click[ctrlKey], is evaluated JS
+        bad += [f"{name}: trigger filter {spec!r}" for part in spec.split(",") if "[" in (part.split() or [""])[0]]
+    return bad
+
+
+def test_no_template_carries_an_inline_script_handler_or_eval():
+    bad = [b for p in sorted(TEMPLATE_DIR.rglob("*.html")) for b in _problems(p.name, p.read_text(encoding="utf-8"))]
+    assert not bad, "move it into a same-origin gamgui/web/static/*.js file (data-action + a delegated listener): " + "; ".join(bad)
+
+
+def test_only_full_pages_load_a_script():
+    # htmx's allowScriptTags is off, so a <script src> in a swapped-in partial would silently not run:
+    # a partial's behaviour belongs in a file its page already loads.
+    partials = [p.name for p in TEMPLATE_DIR.rglob("*.html")
+                if "<script" in (src := p.read_text(encoding="utf-8")) and p.name != "base.html" and "{% extends" not in src]
+    assert not partials, partials
+
+
+def test_the_scanner_sees_each_kind_of_inline_script():
+    for html in ('<button onclick="x()">', "<input oninput='x'>", "<script>x()</script>", '<script src="https://cdn.example.com/x.js"></script>',
+                 '<div hx-on:click="x()">', "<b hx-vals='js:{a: 1}'>", '<a href="javascript:x()">', '<div hx-trigger="click[ctrlKey]">'):
+        assert _problems("t", html), html
+    assert not _problems("t", '<script src="/static/app.js"></script><div data-action="copy" hx-trigger="keyup from:input[name=\'q\']">')
+
+
+@pytest.mark.parametrize("path", ["/", "/users", "/users/detail?email=alice@example.com", "/groups", "/signatures",
+                                  "/calendars", "/builder", "/onboard", "/lifecycle", "/reports", "/audit", "/setup"])
+def test_each_screen_renders_without_inline_script(client, path):  # noqa: F811
+    r = client.get(path)
+    assert r.status_code == 200
+    assert not _problems(path, r.text)
+
+
+def test_every_data_action_has_a_handler():
+    used = {a for p in TEMPLATE_DIR.rglob("*.html") for a in re.findall(r'data-action="([\w-]+)"', p.read_text(encoding="utf-8"))}
+    shared = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    pages = "".join(p.read_text(encoding="utf-8") for p in STATIC_DIR.glob("*.js"))
+    handled = set(re.findall(r'^\s*"([a-z][\w-]*)":', shared, re.M)) | set(re.findall(r'actions\["([\w-]+)"\]\s*=', pages))
+    assert used and used <= handled, f"data-action with no handler in gamgui/web/static: {sorted(used - handled)}"

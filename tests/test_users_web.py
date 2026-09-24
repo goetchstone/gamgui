@@ -299,7 +299,7 @@ def test_signatures_test_user_is_the_connected_admin(client):
     # F18). It opens on the operator's own account when that is an active user.
     _signed_in_as(client, "Carol@example.com")
     r = client.get("/signatures")
-    assert 'var SIG_DEFAULT_USER = "carol@example.com";' in r.text
+    assert '<option value="carol@example.com" selected>' in r.text
 
 
 @pytest.mark.parametrize("admin", ["tok", "outsider@example.com", "bob@example.com"])
@@ -309,7 +309,8 @@ def test_signatures_test_user_is_an_explicit_choice_otherwise(client, admin):
     if admin != "tok":
         _signed_in_as(client, admin)
     r = client.get("/signatures")
-    assert 'var SIG_DEFAULT_USER = "";' in r.text and "Choose a user" in r.text
+    users = re.search(r'<template data-scope="user">(.*?)</template>', r.text, re.S).group(1)
+    assert users.startswith('<option value="">Choose a user…</option>') and "selected" not in users
 
 
 def test_signatures_apply_over_the_threshold_needs_the_count_typed(client, gam_calls, monkeypatch):
@@ -555,8 +556,8 @@ def test_signature_current_renders(client):
     assert "Best," in r.text  # current signature read from the mailbox
     assert "<iframe" in r.text and "srcdoc=" in r.text  # rendered preview, not just source
     assert "View HTML source" in r.text                  # raw HTML still available, collapsed
-    # one-click copy of the raw HTML (copyEl copies the <pre> inside the .copy-wrap)
-    assert "copy-wrap" in r.text and 'onclick="copyEl(this)"' in r.text and "Copy HTML" in r.text
+    # one-click copy of the raw HTML (app.js copies the <pre> inside the .copy-wrap)
+    assert "copy-wrap" in r.text and 'data-action="copy"' in r.text and "Copy HTML" in r.text
 
 
 def test_user_groups_view_add_remove(client, gam_calls):

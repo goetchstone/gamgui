@@ -5,7 +5,7 @@
     <div class="flex items-center justify-between gap-2">
       <span class="font-medium text-brand-black">{{ r.name }}</span>
       <span class="flex gap-3">
-        <button type="button" class="text-xs text-brand-blueink hover:underline" onclick="obEdit(this)"
+        <button type="button" class="text-xs text-brand-blueink hover:underline" data-action="ob-edit"
                 data-name="{{ r.name }}" data-steps="{{ r.steps | join('\n') }}"
                 data-org="{{ r.org_unit }}" data-signature="{{ r.signature }}"
                 data-groups="{{ r.groups | join('\n') }}" data-calendars="{{ r.calendars | join('\n') }}">Edit</button>

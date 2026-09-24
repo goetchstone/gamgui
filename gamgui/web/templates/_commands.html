@@ -8,7 +8,7 @@
     {% for line in [info.env] + info.commands %}
     <div class="copy-wrap flex items-center gap-2 rounded-lg bg-ink p-2.5">
       <code class="flex-1 overflow-x-auto whitespace-pre text-brand-white text-[12.5px] leading-relaxed px-1">{{ line }}</code>
-      <button type="button" onclick="copyEl(this)"
+      <button type="button" data-action="copy"
               class="copy-btn shrink-0 rounded-md border border-white/20 px-2.5 py-1 text-xs font-medium text-white/90 hover:bg-white/10 transition-colors">Copy</button>
     </div>
     {% endfor %}

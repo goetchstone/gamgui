@@ -113,13 +113,31 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
     this, a page served by any other local process could fire a form POST at us — a simple request,
     so no preflight — and the browser would helpfully attach our token cookie.
 
-    Also stamps security headers on every response: a CSP locking down object/base/frame/form
-    vectors (no script-src directive — the app uses inline handlers and all scripts are now same-origin
-    vendored, so there is no remote script to constrain), nosniff, and no-referrer (so the ?token= in
-    the first URL can't leak to fonts.googleapis via the Referer header)."""
+    Also stamps security headers on every response: the CSP below, nosniff, and no-referrer (so the
+    ?token= in the first URL can't leak to fonts.googleapis via the Referer header)."""
+
+    # script-src 'self': every script is a same-origin file (no inline <script>, no on*= handler, no
+    # eval — htmx's allowEval is off), so an injected script or handler in a template is inert.
+    # style-src keeps 'unsafe-inline' because a signature preview is a srcdoc iframe, which inherits
+    # this policy, and signature HTML is styled inline (as email HTML must be); the progress bars'
+    # style= widths, base.html's <style> and htmx's indicator <style> rely on it too. img-src allows
+    # any https: image for the same previews (signature logos live on remote hosts). Google Fonts is
+    # the one other origin.
+    CSP = "; ".join((
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' https: data:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+    ))
 
     SECURITY_HEADERS = {
-        "Content-Security-Policy": "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+        "Content-Security-Policy": CSP,
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
     }

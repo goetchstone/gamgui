@@ -17,15 +17,15 @@
     <p class="text-brand-blueink/80 text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send a welcome email. Roles &amp; the email are yours to edit.</p>
   </div>
 
-  <nav class="flex gap-1 border-b border-brand-gray/30 text-sm">
-    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="generate">Generate</button>
-    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="roles">Role templates</button>
-    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="welcome">Welcome email</button>
-    <button type="button" class="ob-tab border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="bulk">Bulk import</button>
+  <nav data-tabs class="flex gap-1 border-b border-brand-gray/30 text-sm">
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="generate">Generate</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="roles">Role templates</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="welcome">Welcome email</button>
+    <button type="button" class="border-b-2 border-transparent px-3 py-2 text-brand-gray hover:text-brand-black" data-tab="bulk">Bulk import</button>
   </nav>
 
   <!-- GENERATE -->
-  <div class="ob-panel max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="generate">
+  <div class="max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="generate">
     {% if roles %}
     <form id="onboard-form" class="{{ card }} grid gap-3 sm:grid-cols-2">
       <label class="block text-sm"><span class="text-brand-blueink">New hire name</span>
@@ -39,7 +39,7 @@
       <label class="block text-sm sm:col-span-2"><span class="text-brand-blueink">Assignee — whose Google Tasks gets the checklist <span class="text-brand-gray">(blank = the new hire)</span></span>
         <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@domain.com" /></label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="send_welcome" value="1" /> Also send the welcome email to the new hire</label>
-      <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="create_account" value="1" onchange="obToggleCreate(this)" /> <span><strong>Create the Google account</strong> — with a temp password on a printable sheet; the user must reset it at first login. Uses the role's org unit &amp; signature.</span></label>
+      <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="create_account" value="1" data-reveals="ob-create-fields" /> <span><strong>Create the Google account</strong> — with a temp password on a printable sheet; the user must reset it at first login. Uses the role's org unit &amp; signature.</span></label>
       <div id="ob-create-fields" class="hidden gap-3 sm:grid-cols-2 sm:col-span-2">
         <label class="block text-sm"><span class="text-brand-blueink">First name</span>
           <input class="{{ fld }} mt-1" name="first" placeholder="Jordan" /></label>
@@ -58,7 +58,7 @@
   </div>
 
   <!-- ROLE TEMPLATES (editable) -->
-  <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start" data-tab="roles">
+  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start" data-panel="roles">
     <div class="{{ card }}">
       <h2 class="eyebrow text-brand-gray">Roles</h2>
       <div id="onboard-roles" class="mt-3">{% include "_onboard_roles.html" %}</div>
@@ -92,12 +92,12 @@
   </div>
 
   <!-- WELCOME EMAIL (editable template) -->
-  <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="welcome">
+  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="welcome">
     <div id="onboard-welcome">{% include "_onboard_welcome.html" %}</div>
   </div>
 
   <!-- BULK IMPORT (a CSV of hires) -->
-  <div class="ob-panel hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-tab="bulk">
+  <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1" data-panel="bulk">
     <div class="{{ card }} space-y-3">
       <div>
         <h2 class="eyebrow text-brand-gray">Import a CSV of hires</h2>
@@ -115,60 +115,6 @@
     </div>
   </div>
 </div>
-
-<script>
-  // Edit a role: copy its name + steps + org unit + signature + groups + calendars into the form.
-  function obEdit(btn) {
-    var f = document.querySelector('form[hx-post="/onboard/role"]');
-    if (!f) return;
-    f.querySelector('[name=name]').value = btn.dataset.name;
-    f.querySelector('[name=steps]').value = btn.dataset.steps;
-    f.querySelector('[name=org_unit]').value = btn.dataset.org || "";
-    var sig = f.querySelector('[name=signature]');
-    if (sig) sig.value = btn.dataset.signature || "";
-    var g = f.querySelector('[name=groups]');
-    if (g) g.value = btn.dataset.groups || "";
-    var c = f.querySelector('[name=calendars]');
-    if (c) c.value = btn.dataset.calendars || "";
-    f.querySelector('[name=name]').focus();
-  }
-
-  // Reveal the first/last name fields only when "Create the Google account" is ticked.
-  function obToggleCreate(cb) {
-    var box = document.getElementById("ob-create-fields");
-    if (!box) return;
-    // Toggle `grid` (not a static `sm:grid`, which a responsive utility would let win over `hidden`
-    // at desktop widths — the fields then never hid). Only one of hidden/grid is present at a time.
-    box.classList.toggle("hidden", !cb.checked);
-    box.classList.toggle("grid", cb.checked);
-  }
-
-  // Add a picked group/calendar to its textarea (deduped, one per line).
-  function obAddToField(field, value) {
-    var f = document.querySelector('form[hx-post="/onboard/role"]');
-    var ta = f && f.querySelector('[name="' + field + '"]');
-    if (!ta || !value) return;
-    var lines = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-    if (lines.indexOf(value) === -1) lines.push(value);
-    ta.value = lines.join("\n") + "\n";
-  }
-
-  (function () {
-    var tabs = document.querySelectorAll(".ob-tab");
-    var panels = document.querySelectorAll(".ob-panel");
-    function show(name) {
-      panels.forEach(function (p) { p.classList.toggle("hidden", p.dataset.tab !== name); });
-      tabs.forEach(function (t) {
-        var on = t.dataset.tab === name;
-        t.classList.toggle("text-brand-black", on);
-        t.classList.toggle("border-brand-blue", on);
-        t.classList.toggle("text-brand-gray", !on);
-        t.classList.toggle("border-transparent", !on);
-      });
-    }
-    tabs.forEach(function (t) { t.addEventListener("click", function () { show(t.dataset.tab); }); });
-    show("generate");
-  })();
-</script>
 {% endif %}
 {% endblock %}
+{% block scripts %}{% if connected %}<script src="/static/onboarding.js"></script>{% endif %}{% endblock %}

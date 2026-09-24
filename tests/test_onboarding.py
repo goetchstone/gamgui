@@ -299,12 +299,12 @@ def test_run_creates_account_and_returns_sheet(client, tmp_path, monkeypatch):
     audit = (tmp_path / "audit.jsonl").read_text()
     assert "SENTINELpw-1234-5678" not in audit and "create_user" in audit     # ...but it never reaches the audit log
     # U11: a Copy button beside Print (WKWebView may not print), copying a plain-text version of the sheet
-    assert 'onclick="copyEl(this)"' in r.text and "obPrintSheet('ob-creds-sheet')" in r.text
+    assert 'data-action="copy"' in r.text and 'data-action="print-sheet" data-sheet="ob-creds-sheet"' in r.text
     assert "Temp password: SENTINELpw-1234-5678" in r.text
 
 
 def test_credentials_sheets_share_one_print_helper_and_escape_the_copy_text(client):
-    # F#23: both one-time sheets use the shared macro + obPrintSheet, not their own copy of a print function.
+    # F#23: both one-time sheets use the shared macro + app.js's print-sheet, not their own copy of a print function.
     tpl = Path(__file__).parent.parent / "gamgui" / "web" / "templates"
     for name in ("_onboard_run.html", "_onboard_bulk_status.html"):
         src = (tpl / name).read_text()
@@ -316,7 +316,7 @@ def test_credentials_sheets_share_one_print_helper_and_escape_the_copy_text(clie
         credentials=[{"name": "Ada </textarea><b>x", "email": "ada@example.com",
                       "password": "COPYpw-1", "org_unit": "/Sales"}])
     r = client.get("/onboard/bulk/status?job=j")
-    assert "obPrintSheet('ob-bulk-creds-sheet')" in r.text and "Temp password: COPYpw-1" in r.text
+    assert 'data-sheet="ob-bulk-creds-sheet"' in r.text and "Temp password: COPYpw-1" in r.text
     assert "</textarea><b>" not in r.text and "&lt;/textarea&gt;&lt;b&gt;x" in r.text   # a name can't break out
 
 

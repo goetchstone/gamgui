@@ -92,7 +92,7 @@ def test_templates_partial_lists_seeds_with_load_buttons(client):
     assert r.status_code == 200
     for name in ("Classic", "Modern accent", "Minimal"):
         assert name in r.text
-    assert "data-body=" in r.text and "sigLoadTemplate" in r.text   # Load fills the editor XSS-safely
+    assert "data-body=" in r.text and 'data-action="sig-load"' in r.text   # Load fills the editor XSS-safely
 
 
 def test_save_current_as_appears(client):

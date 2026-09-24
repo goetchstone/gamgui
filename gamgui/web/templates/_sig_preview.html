@@ -12,7 +12,7 @@
   {# Over the threshold the count is typed, not clicked through; the server checks it too (guard.enforce). #}
   <label class="mt-3 block text-sm text-brand-blueink">This overwrites the Gmail signature of <strong>{{ count }}</strong> people. Type <strong>{{ count }}</strong> to confirm:
     <input id="sig-confirm-count" name="confirm_count" inputmode="numeric" autocomplete="off"
-           oninput="document.getElementById('sig-apply-btn').disabled = this.value.trim() !== '{{ count }}'"
+           data-unlocks="sig-apply-btn" data-expect="{{ count }}"
            class="mt-1 block w-32 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none" />
   </label>
   {% endif %}

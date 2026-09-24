@@ -9,6 +9,6 @@
   <button class="mt-0.5 shrink-0 rounded bg-brand-blue px-2 py-0.5 text-xs font-medium text-brand-white hover:bg-brand-blueink transition-colors"
           hx-get="/builder/command/{{ c.id }}" hx-target="#cmd-form" hx-swap="innerHTML">Build</button>
   {% else %}
-  <button class="mt-0.5 shrink-0 rounded border border-brand-gray/40 px-2 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors" onclick="copyEl(this)">Copy</button>
+  <button class="mt-0.5 shrink-0 rounded border border-brand-gray/40 px-2 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors" data-action="copy">Copy</button>
   {% endif %}
 </li>

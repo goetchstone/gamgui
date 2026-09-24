@@ -82,6 +82,13 @@ guarding them:
   port-scoped, so a token cookie alone would let any page on another `127.0.0.1` port drive the app;
   and every request, even the health check, must carry a `Host` of `127.0.0.1:<port>` or
   `localhost:<port>`, so a DNS-rebound page can't reach it.
+- **The page runs no inline script.** Every response carries a Content-Security-Policy with
+  `script-src 'self'` and no `'unsafe-inline'` or `'unsafe-eval'`: the app's scripts are same-origin
+  files, no template has an inline `<script>` or `on*=` handler (a test scans for them), and htmx's
+  eval features are off. So markup that directory data smuggled into a page would render but not
+  run. `style-src` still allows inline styles — signature HTML is styled inline, as email HTML must
+  be, and its preview is a sandboxed `srcdoc` frame that inherits the page's policy — and `img-src`
+  allows any `https:` image, for the logos in those signatures.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed. `scripts/bump_gam.py` writes a new pin only after
   `gh attestation verify` shows the asset was built by GAM-team/GAM's release workflow
@@ -94,7 +101,7 @@ guarding them:
   Tailwind standalone CLI only if it matches the SHA-256 committed for that platform in
   `scripts/tailwind_checksums.txt` (no pin, no run), and the unminified output is committed, so a
   change to it shows up in review. Apart from the Google Fonts stylesheet, the page loads only
-  same-origin files: that CSS and the SRI-pinned htmx.
+  same-origin files: that CSS, the app's own scripts and the SRI-pinned htmx.
 - **Every GitHub Action is pinned by commit SHA.** A tag can be moved to new code by whoever
   controls the action's repository, and the release-watch job holds a token that can push a branch
   and open a PR. `tests/test_workflow_safety.py` fails any `uses:` pinned by tag; Dependabot bumps

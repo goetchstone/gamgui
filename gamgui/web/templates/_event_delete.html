@@ -11,7 +11,7 @@
             hx-post="/calendars/event/delete" hx-target="#event-action" hx-swap="innerHTML" hx-disabled-elt="this"
             hx-vals='{"cal": {{ cal | tojson }}, "event_id": {{ event.id | tojson }}, "confirmed": "1"}'>Yes, delete</button>
     <button type="button" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
-            onclick="document.getElementById('event-action').innerHTML=''">Cancel</button>
+            data-action="clear" data-clear="event-action">Cancel</button>
   </div>
 </div>
 {% endif %}

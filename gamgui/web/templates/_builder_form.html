@@ -31,7 +31,7 @@
     {% if slot.hints %}
     <span class="mt-1.5 flex flex-wrap gap-1">
       {% for h in slot.hints %}
-      <button type="button" data-ins="{{ h }}" onclick="ggHint(this)"
+      <button type="button" data-action="hint" data-ins="{{ h }}"
               class="rounded-full border border-brand-gray/40 bg-paper px-2 py-0.5 font-mono text-[11px] text-brand-blueink hover:border-brand-blue/50 hover:bg-brand-blue/10 transition-colors">{{ h }}</button>
       {% endfor %}
     </span>
@@ -60,7 +60,7 @@
     <button type="button" class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
             hx-post="/builder/sequence/add" hx-include="#builder-form" hx-target="#sequence" hx-swap="innerHTML"
             title="Queue this command to run together with others, in order — shown in Sequence below"
-            onclick="setTimeout(function(){var s=document.getElementById('sequence');if(s)s.scrollIntoView({behavior:'smooth',block:'nearest'});},200)">+ Queue in sequence</button>
+            data-action="scroll-to" data-scroll-to="sequence">+ Queue in sequence</button>
   </div>
 </form>
 {% else %}
@@ -69,6 +69,6 @@
   {% if cmd.description %}<p class="mt-1 text-sm text-brand-blueink/90">{{ cmd.description }}</p>{% endif %}
   <p class="mt-1 text-xs text-brand-gray">Browse-only — copy the syntax and run it in GAM directly.</p>
   <code class="mt-2 block text-xs text-brand-black break-all">{{ cmd.raw_syntax }}</code>
-  <button class="mt-2 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors" onclick="copyEl(this)">Copy</button>
+  <button class="mt-2 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors" data-action="copy">Copy</button>
 </div>
 {% endif %}
