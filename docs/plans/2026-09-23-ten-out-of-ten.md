@@ -23,8 +23,8 @@ plan's Phase 0 F1–F3.
   U2 `c8eda80` `46e0bea` `0e4a960` `af7a540` (plus the offboarding work under *Beyond the plan*) ·
   U6 `041b6e2` `63e6fb2` (its optional signature backup is a ROADMAP item, not done) · U3 `88496f3`.
 - **Phase 2** — applied: T1 `ad61a8d` · T2 `ad61a8d` (every per-user read keyed on its target,
-  `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e` · T6 (in the commit that marks it:
-  `fail_under = 90` in `[tool.coverage.report]` — a clean clone measured 90.5%, not the 88% below —
+  `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e` · T6 `c66c279`
+  (`fail_under = 90` in `[tool.coverage.report]` — a clean clone measured 90.5%, not the 88% below —
   enforced by CI's macOS 3.14 leg and `make cov`; the ratchet past 90 is open). **Open:** T7 (a mock
   that validates argv against the grammar).
 - **Phase 3** — applied: C1 `9f72c3b` (ruff lint + CI `lint` job + `make lint`; the formatter is
@@ -38,15 +38,15 @@ plan's Phase 0 F1–F3.
   `build_app.sh` builds from `app.txt` in a fresh venv, hash-checking the one sdist's build backend
   too; Dependabot moved to its `uv` ecosystem; `make lock`; `tests/test_locks.py`. The `.app` loses
   uvicorn's optional uvloop/httptools/websockets/watchfiles/PyYAML, which only the dev venv had).
-  · C4 (in the commit that marks it: every `uses:` pinned by full commit SHA with its `# vX.Y.Z`
+  · C4 `d465362` (every `uses:` pinned by full commit SHA with its `# vX.Y.Z`
   in a comment, `tests/test_workflow_safety.py` fails a tag pin; Dependabot's `github-actions`
-  ecosystem was already configured) · C6 (in the commit that marks it: `bump_gam.py`'s
+  ecosystem was already configured) · C6 `1cc1350` (`bump_gam.py`'s
   `attest_argv` adds `--signer-workflow GAM-team/GAM/.github/workflows/build.yml`, `--source-ref
   refs/heads/main` and `--deny-self-hosted-runners`, read off the published attestations of four
-  releases; not yet run end to end on a downloaded asset). Partly: C7 (in the commit that marks it:
-  `sonar.python.version` is 3.10–3.14; the `filterwarnings` note names the real cause — before 3.13
-  (gh-114177) a GC'd subprocess transport closes its pipes on the dead TestClient loop — which
-  CI's 3.10 and 3.12 legs still hit, so the filter stays; the TestClient deprecation's documented
+  releases; not yet run end to end on a downloaded asset). Partly: C7 `436c813`
+  (`sonar.python.version` is 3.10–3.14; the `filterwarnings` note names the real cause — before 3.13
+  (gh-114177) a GC'd subprocess transport closes its pipes on the dead TestClient loop, and CI's
+  3.10 and 3.12 legs lack that fix (read in their stdlib, not run), so the filter stays; the TestClient deprecation's documented
   fix is to install `httpx2` in place of `httpx`, a new dependency awaiting the operator's OK).
   **Open:** C5, C7's `httpx2`.
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
@@ -319,7 +319,7 @@ tenant without per-action permission.
   canned outputs.
 
 ## Phase 3 — Tooling and supply chain
-*Status: open.*
+*Status: C1–C4 and C6 APPLIED, C7 partly (its `httpx2` swap awaits the operator) — do not re-apply. C5 open.*
 - **C1 Ruff** (lint + format) with a CI step; fix or `noqa` the initial findings in one commit.
 - **C2 mypy** on `core/` (start non-strict, ratchet), CI step.
 - **C3 Hash-locked dependencies** (`pip-compile --generate-hashes` or `uv lock`) used by CI *and*
