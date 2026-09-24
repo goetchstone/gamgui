@@ -8,7 +8,7 @@ from gamgui.web.routes.users import PAGE_SIZE, _filter_users, _table_context
 def _mk(n, suspended_every=0):
     out = []
     for i in range(n):
-        d = {"primaryEmail": f"u{i}@e.com", "name": {"givenName": f"User{i}"}}
+        d = {"primaryEmail": f"u{i}@e.com", "name": {"givenName": f"User{i:03}"}}   # the list sorts by name
         if suspended_every and i % suspended_every == 0:
             d["suspended"] = True
         out.append(GAMUser.from_json(d))

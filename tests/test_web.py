@@ -45,6 +45,20 @@ def test_wrong_token_forbidden(client):
     assert client.get("/?token=nope").status_code == 403
 
 
+def test_the_nav_marks_the_screen_you_are_on(client):
+    # Plan U13: one link says aria-current="page" — a screen's detail or sub-page counts as the screen.
+    client.get("/?token=testtoken")
+
+    def current(path: str) -> list[str]:
+        nav = client.get(path).text.split("</nav>", 1)[0]
+        return re.findall(r'href="([^"]*)" aria-current="page"', nav[nav.index("<nav"):])
+    assert current("/") == ["/"]
+    assert current("/users") == ["/users"]
+    assert current("/users/detail?email=a@example.com") == ["/users"]
+    assert current("/audit") == ["/audit"]
+    assert current("/setup") == []
+
+
 def test_home_describes_every_screen_in_the_nav(client):
     # Home once said the shipped screens "come next"; tie its list to the nav so it can't go stale again.
     html = client.get("/?token=testtoken").text

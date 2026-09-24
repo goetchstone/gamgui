@@ -13,8 +13,10 @@
 
   <!-- Vendored locally (no runtime CDN): the UI loads no remote executable scripts, works offline,
        and a CDN compromise can't inject JS that could read the launch token. See scripts/vendor_assets.sh. -->
-  <!-- htmx without eval (the CSP has no 'unsafe-eval'), and a script tag in a swapped-in partial never runs. -->
-  <meta name="htmx-config" content='{"allowEval": false, "allowScriptTags": false}' />
+  <!-- htmx without eval (the CSP has no 'unsafe-eval'), and a script tag in a swapped-in partial never runs.
+       No history cache: htmx would keep a copy of each page it changes the URL of (the Users list) in
+       localStorage, on disk; Back to one reloads it from the server instead, which renders the URL's view. -->
+  <meta name="htmx-config" content='{"allowEval": false, "allowScriptTags": false, "historyCacheSize": 0, "refreshOnHistoryMiss": true}' />
   <script src="/static/vendor/htmx-1.9.12.min.js" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"></script>
   <style>
     :root { color-scheme: light; }
@@ -60,17 +62,19 @@
         <a href="/" class="wordmark font-serif text-lg text-brand-black">GamGUI</a>
         <span class="h-4 w-px bg-brand-gray/60"></span>
         <span class="eyebrow text-brand-blueink">Console</span>
-        <nav class="ml-auto text-sm flex items-center gap-5 text-brand-blueink">
-          <a class="hover:text-brand-black transition-colors" href="/">Home</a>
-          <a class="hover:text-brand-black transition-colors" href="/users">Users</a>
-          <a class="hover:text-brand-black transition-colors" href="/groups">Groups</a>
-          <a class="hover:text-brand-black transition-colors" href="/signatures">Signatures</a>
-          <a class="hover:text-brand-black transition-colors" href="/calendars">Calendars</a>
-          <a class="hover:text-brand-black transition-colors" href="/builder">Builder</a>
-          <a class="hover:text-brand-black transition-colors" href="/onboard">Onboard</a>
-          <a class="hover:text-brand-black transition-colors" href="/lifecycle">Lifecycle</a>
-          <a class="hover:text-brand-black transition-colors" href="/reports">Reports</a>
-          <a class="hover:text-brand-black transition-colors" href="/audit">Audit</a>
+        {# The screen you're on is marked for sight and for a screen reader (plan U13): a detail page or a
+           screen's sub-page counts as its screen. #}
+        {% set here = request.url.path if request is defined else "" %}
+        <nav aria-label="Screens" class="ml-auto text-sm flex items-center gap-5 text-brand-blueink">
+          {% for href, label in (("/", "Home"), ("/users", "Users"), ("/groups", "Groups"), ("/signatures", "Signatures"),
+                                 ("/calendars", "Calendars"), ("/builder", "Builder"), ("/onboard", "Onboard"),
+                                 ("/lifecycle", "Lifecycle"), ("/reports", "Reports"), ("/audit", "Audit")) %}
+          {% if here == href or (href != "/" and here.startswith(href + "/")) %}
+          <a class="text-brand-black underline decoration-brand-blue decoration-2 underline-offset-[6px]" href="{{ href }}" aria-current="page">{{ label }}</a>
+          {% else %}
+          <a class="hover:text-brand-black transition-colors" href="{{ href }}">{{ label }}</a>
+          {% endif %}
+          {% endfor %}
         </nav>
         {# The jobs tray (plan U5): a disclosure — app.js opens it, and closes it on Escape or a click outside. #}
         {% import "_job_live.html" as live %}

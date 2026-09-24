@@ -1,24 +1,34 @@
+{# The view's sort rides with users.html's filter form (form=users-filter), so a new search keeps it; the
+   page stays out of the form — a new search starts at page 1 — and only Refresh includes it. #}
+{% set columns = (("name", "Name"), ("email", "Email"), ("title", "Title"), ("ou", "Org unit"), ("status", "Status")) %}
+<input type="hidden" form="users-filter" name="sort" value="{{ sort }}" />
+<input type="hidden" form="users-filter" name="desc" value="{{ desc }}" />
+<input type="hidden" id="users-page" name="page" value="{{ page }}" />
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
+  <div class="max-h-[calc(100vh-15rem)] overflow-y-auto">
   <table class="w-full text-sm">
-    <thead>
+    <caption class="sr-only">Users{% if q %} matching “{{ q }}”{% endif %}, sorted by {{ dict(columns)[sort] | lower }}{% if desc %}, descending{% endif %}</caption>
+    <thead class="sticky top-0 bg-brand-white">
       <tr class="text-left text-brand-grayink border-b border-brand-gray/30">
-        <th class="font-medium px-5 py-2 eyebrow">Name</th>
-        <th class="font-medium px-5 py-2 eyebrow">Email</th>
-        <th class="font-medium px-5 py-2 eyebrow">Title</th>
-        <th class="font-medium px-5 py-2 eyebrow">Org unit</th>
-        <th class="font-medium px-5 py-2 eyebrow text-right">Status</th>
+        {% for col, label in columns %}
+        {% set on = sort == col %}
+        <th scope="col" class="font-medium px-5 py-1.5{% if col == 'status' %} text-right{% endif %}"{% if on %} aria-sort="{{ 'descending' if desc else 'ascending' }}"{% endif %}>
+          <button type="button" id="sort-{{ col }}" class="eyebrow inline-flex items-center gap-1 rounded hover:text-brand-black{% if on %} text-brand-black{% endif %}"
+                  hx-get="{{ table_url(sort=col, desc=(1 - desc) if on else 0, page=1) }}" hx-target="#users-table">{{ label }}<span aria-hidden="true" class="w-2 text-[9px]">{% if on %}{{ "▼" if desc else "▲" }}{% endif %}</span></button>
+        </th>
+        {% endfor %}
       </tr>
     </thead>
     <tbody>
       {% for u in users %}
         <tr class="border-b border-brand-gray/15 hover:bg-paper/70 transition-colors">
-          <td class="px-5 py-2">
-            <a class="font-medium text-brand-black hover:text-brand-blueink" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
+          <td class="px-5 py-1">
+            <a class="font-medium text-brand-black hover:text-brand-blueink" href="/users/detail?email={{ u.primary_email | urlencode }}{% if back %}&back={{ back | urlencode }}{% endif %}">{{ u.full_name }}</a>
           </td>
-          <td class="px-5 py-2 text-brand-blueink">{{ u.primary_email }}</td>
-          <td class="px-5 py-2 text-brand-blueink">{{ u.title or "—" }}</td>
-          <td class="px-5 py-2 text-brand-blueink">{{ u.org_unit_path }}</td>
-          <td class="px-5 py-2 text-right">
+          <td class="px-5 py-1 text-brand-blueink">{{ u.primary_email }}</td>
+          <td class="px-5 py-1 text-brand-blueink">{{ u.title or "—" }}</td>
+          <td class="px-5 py-1 text-brand-blueink">{{ u.org_unit_path }}</td>
+          <td class="px-5 py-1 text-right">
             {% if u.suspended %}
               <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Suspended</span>
             {% else %}
@@ -32,8 +42,8 @@
             No users found.
             {% if q or scope != 'all' %}
             <div class="mt-2">
-              <button class="rounded border border-brand-gray/50 px-2 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors"
-                      hx-get="/users/table?q=&scope=all&page=1" hx-target="#users-table">Clear filters</button>
+              <button id="users-clear" class="rounded border border-brand-gray/50 px-2 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors"
+                      hx-get="{{ table_url(q='', scope='all', page=1) }}" hx-target="#users-table">Clear filters</button>
             </div>
             {% endif %}
           </td>
@@ -41,19 +51,18 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 <div class="mt-2 flex items-center justify-between text-xs text-brand-grayink">
-  <span>{{ total }} total{% if q or scope != 'all' %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
+  <span{% if focus %} tabindex="-1" data-focus{% endif %}>{{ total }} total{% if q or scope != 'all' %} (filtered){% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + users | length }} · page {{ page }} of {{ pages }}{% endif %}</span>
   {% if pages > 1 %}
-  <div class="flex items-center gap-2">
-    {% if page > 1 %}
-    <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/users/table?q={{ q | urlencode }}&scope={{ scope }}&page={{ page - 1 }}" hx-target="#users-table">Prev</button>
+  <nav class="flex items-center gap-2" aria-label="User pages">
+    {% for id, label, to in (("users-prev", "Prev", page - 1), ("users-next", "Next", page + 1)) %}
+    {% if 1 <= to <= pages %}
+    <button id="{{ id }}" class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
+            hx-get="{{ table_url(page=to) }}" hx-target="#users-table">{{ label }}</button>
     {% endif %}
-    {% if page < pages %}
-    <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/users/table?q={{ q | urlencode }}&scope={{ scope }}&page={{ page + 1 }}" hx-target="#users-table">Next</button>
-    {% endif %}
-  </div>
+    {% endfor %}
+  </nav>
   {% endif %}
 </div>

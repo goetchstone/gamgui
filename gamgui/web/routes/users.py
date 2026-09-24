@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import math
 from typing import Annotated
+from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -30,7 +31,20 @@ from ._common import NOT_CONNECTED, GAM_TROUBLE, connector, error_partial, frien
 
 router = APIRouter(prefix="/users")
 
-PAGE_SIZE = 10   # rows per page — sized so a page fits the fixed 13" window (Prev/Next pager)
+PAGE_SIZES = (15, 25, 50)   # rows per page: 15 fit the fixed 13" window; a longer page scrolls inside the table
+PAGE_SIZE = PAGE_SIZES[0]
+SCOPES = ("all", "active", "suspended")
+# Each sortable column's key over the cached list (plan U8). A blank (no title) sorts last either way.
+SORTS = {
+    "name": lambda u: u.full_name.casefold(),
+    "email": lambda u: u.primary_email.casefold(),
+    "title": lambda u: (u.title or "").casefold(),
+    "ou": lambda u: (u.org_unit_path or "").casefold(),
+    "status": lambda u: "suspended" if u.suspended else "active",
+}
+_DEFAULTS = {"q": "", "scope": "all", "sort": "name", "desc": 0, "size": PAGE_SIZE, "page": 1}
+# The controls whose click re-renders the whole list: focus goes to its count line, not <body>.
+_PAGER_IDS = ("users-prev", "users-next", "users-clear")
 
 _USERS_PAGE = "users.html"
 _DELETE_ZONE = "_delete_zone.html"
@@ -47,19 +61,66 @@ def _filter_users(users, q: str, scope: str):
         out = [u for u in out if u.suspended]
     q = (q or "").strip().lower()
     if q:
-        out = [u for u in out if q in u.primary_email.lower() or q in u.full_name.lower() or q in (u.title or "").lower()]
+        out = [u for u in out if any(q in (field or "").lower() for field in (
+            u.primary_email, u.full_name, u.title, u.department, u.org_unit_path))]
     return out
 
 
-def _table_context(users, q: str = "", scope: str = "all", page: int = 1) -> dict:
-    filtered = _filter_users(users, q, scope)
-    total = len(filtered)
-    pages = max(1, math.ceil(total / PAGE_SIZE))
-    page = max(1, min(page, pages))
-    start = (page - 1) * PAGE_SIZE
+def _sort_users(users, sort: str, desc: bool):
+    """Sorted by one column, ties by name then address whichever way it runs; blanks last."""
+    key = SORTS[sort]
+    rows = sorted(users, key=lambda u: (u.full_name.casefold(), u.primary_email.casefold()))
+    blank = [u for u in rows if not key(u)]
+    rows = [u for u in rows if key(u)]
+    rows.sort(key=key, reverse=desc)   # stable, so the tie order above survives a reverse
+    return rows + blank
+
+
+def _as_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _list_state(q="", scope="all", sort="name", desc=0, size=PAGE_SIZE, page=1) -> dict:
+    """The list's view with every value checked: an unknown scope, column or size is the default."""
+    size = _as_int(size, PAGE_SIZE)
     return {
-        "users": filtered[start:start + PAGE_SIZE],
-        "q": q, "scope": scope, "page": page, "pages": pages, "total": total,
+        "q": (q or "").strip(),
+        "scope": scope if scope in SCOPES else "all",
+        "sort": sort if sort in SORTS else "name",
+        "desc": 1 if _as_int(desc, 0) else 0,
+        "size": size if size in PAGE_SIZES else PAGE_SIZE,
+        "page": max(1, _as_int(page, 1)),
+    }
+
+
+def _list_url(path: str, state: dict, **changes) -> str:
+    """``path`` with the view as its query — only what differs from the default, so /users stays /users."""
+    query = urlencode({k: v for k, v in {**state, **changes}.items() if v != _DEFAULTS[k]})
+    return f"{path}?{query}" if query else path
+
+
+def _list_url_from(back: str) -> str:
+    """/users as a detail link's ``back`` query left it. Only the list's own keys pass, each re-checked,
+    so the link can only ever reopen the list."""
+    got = {k: v[-1] for k, v in parse_qs(back or "").items() if k in _DEFAULTS}
+    return _list_url("/users", _list_state(**got))
+
+
+def _table_context(users, q: str = "", scope: str = "all", page: int = 1, sort: str = "name",
+                   desc: int = 0, size: int = PAGE_SIZE) -> dict:
+    state = _list_state(q, scope, sort, desc, size, page)
+    rows = _sort_users(_filter_users(users, state["q"], state["scope"]), state["sort"], bool(state["desc"]))
+    size, total = state["size"], len(rows)
+    pages = max(1, math.ceil(total / size))
+    state["page"] = min(state["page"], pages)
+    start = (state["page"] - 1) * size
+    return {
+        **state, "users": rows[start:start + size], "pages": pages, "total": total, "start": start,
+        "sizes": PAGE_SIZES, "list_url": _list_url("/users", state), "back": _list_url("", state).lstrip("?"),
+        "table_url": lambda **changes: _list_url("/users/table", state, **changes),
     }
 
 
@@ -69,25 +130,30 @@ def _error_page(request: Request, message: str) -> HTMLResponse:
 
 
 @router.get("", response_class=HTMLResponse)
-async def users_page(request: Request) -> HTMLResponse:
+async def users_page(request: Request, q: str = "", scope: str = "all", page: int = 1, sort: str = "name",
+                     desc: int = 0, size: int = PAGE_SIZE) -> HTMLResponse:
+    """The list, opened at the view its URL names (the table's requests keep the URL current)."""
     st = request.app.state.gamgui
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _USERS_PAGE, {"connected": False})
+    view = (q, scope, page, sort, desc, size)
     try:
         users = await st.users()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _USERS_PAGE,
-            {"connected": True, "domain": st.connector.domain, "error": friendly(exc, _TRY_AGAIN), **_table_context([])},
+            {"connected": True, "domain": st.connector.domain, "error": friendly(exc, _TRY_AGAIN),
+             **_table_context([], *view)},
         )
     return TEMPLATES.TemplateResponse(
-        request, _USERS_PAGE, {"connected": True, "domain": st.connector.domain, **_table_context(users)}
+        request, _USERS_PAGE, {"connected": True, "domain": st.connector.domain, **_table_context(users, *view)}
     )
 
 
 @router.get("/table", response_class=HTMLResponse)
 async def users_table(
-    request: Request, q: str = "", scope: str = "all", page: int = 1, refresh: int = 0
+    request: Request, q: str = "", scope: str = "all", page: int = 1, sort: str = "name", desc: int = 0,
+    size: int = PAGE_SIZE, refresh: int = 0,
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
@@ -96,11 +162,15 @@ async def users_table(
         users = await st.users(force=bool(refresh))
     except Exception as exc:
         return error_partial(request, friendly(exc, _TRY_AGAIN))
-    return TEMPLATES.TemplateResponse(request, "_users_table.html", _table_context(users, q, scope, page))
+    ctx = _table_context(users, q, scope, page, sort, desc, size)
+    ctx["focus"] = request.headers.get("HX-Trigger") in _PAGER_IDS
+    # The address bar follows the view (plan U8), so Back from a user, or a reload, reopens it. Replaced,
+    # not pushed: a search typed a pause at a time would otherwise leave a Back step per pause.
+    return TEMPLATES.TemplateResponse(request, "_users_table.html", ctx, headers={"HX-Replace-Url": ctx["list_url"]})
 
 
 @router.get("/detail", response_class=HTMLResponse)
-async def user_detail(request: Request, email: str) -> HTMLResponse:
+async def user_detail(request: Request, email: str, back: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
@@ -117,7 +187,7 @@ async def user_detail(request: Request, email: str) -> HTMLResponse:
         return _error_page(request, friendly(exc, _TRY_AGAIN))
     return TEMPLATES.TemplateResponse(
         request, "user_detail.html",
-        {"user": user, "email": user.primary_email, "suspended": user.suspended},
+        {"user": user, "email": user.primary_email, "suspended": user.suspended, "list_url": _list_url_from(back)},
     )
 
 

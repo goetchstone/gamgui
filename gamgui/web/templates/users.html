@@ -10,36 +10,40 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-  <div class="space-y-6">
-    <div class="flex items-end justify-between gap-4">
+  {% set field = "rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+  {# One header row for the title and the filters, so fifteen rows fit the 1100×760 window (plan U8). The
+     table's sort and page ride along as hidden fields of this form (_users_table.html, form=users-filter). #}
+  <div class="space-y-4">
+    <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div>
         <p class="eyebrow text-brand-blue">Directory</p>
-        <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Users</h1>
+        <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Users <span class="ml-1 font-sans text-sm tracking-normal text-brand-grayink">{{ domain }}</span></h1>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <form id="users-filter" hx-get="/users/table" hx-target="#users-table" hx-trigger="input changed delay:300ms, change"
+              class="flex items-center gap-2">
+          <input type="search" name="q" value="{{ q }}" aria-label="Search users" placeholder="Search name, email, title, dept, OU…"
+                 class="w-72 {{ field }} text-[15px] placeholder:text-brand-grayink" />
+          <select name="scope" aria-label="Status" class="{{ field }} text-sm">
+            {% for value, label in (("all", "All"), ("active", "Active only"), ("suspended", "Suspended")) %}
+            <option value="{{ value }}"{% if scope == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <select name="size" aria-label="Rows per page" class="{{ field }} text-sm">
+            {% for n in sizes %}<option value="{{ n }}"{% if size == n %} selected{% endif %}>{{ n }} per page</option>{% endfor %}
+          </select>
+          <button type="button" title="Reload from Google"
+                  class="rounded-lg border border-brand-gray/60 px-3 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+                  hx-get="/users/table" hx-vals='{"refresh": "1"}' hx-include="#users-filter, #users-page"
+                  hx-target="#users-table">Refresh</button>
+        </form>
         <a href="/users/bulk" class="text-sm font-medium text-brand-blueink hover:text-brand-black">Bulk: set department →</a>
-        <span class="text-sm text-brand-grayink">{{ domain }}</span>
       </div>
     </div>
 
     {% if error %}
     <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
     {% endif %}
-
-    <form hx-get="/users/table" hx-target="#users-table" hx-trigger="input changed delay:300ms, change"
-          class="flex gap-3">
-      <input type="search" name="q" aria-label="Search users" placeholder="Search name, email, or title…"
-             class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
-      <select name="scope" aria-label="Status" class="rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
-        <option value="all">All</option>
-        <option value="active">Active only</option>
-        <option value="suspended">Suspended</option>
-      </select>
-      <button type="button" title="Reload from Google"
-              class="rounded-lg border border-brand-gray/60 px-3 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
-              hx-get="/users/table" hx-vals='{"refresh": "1"}' hx-include="[name='q'],[name='scope']"
-              hx-target="#users-table">Refresh</button>
-    </form>
 
     <div id="users-table">
       {% include "_users_table.html" %}

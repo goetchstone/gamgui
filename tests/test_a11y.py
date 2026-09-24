@@ -13,7 +13,9 @@ its gain in. The baseline only ever shrinks, to empty (it is).
 A second Chrome test uses the keyboard alone (real key events): the ARIA tab strips, focus landing in a
 confirm panel and coming back when it closes, and a brand focus ring on every Tab stop of every screen.
 Another works the Groups board by keys alone — find a group, add a person with a role through its
-combobox, remove a member through its confirm step (plan A6). A last one runs an offboarding and
+combobox, remove a member through its confirm step (plan A6). One goes Back from a user to the Users
+list and finds it as left, and opens user-detail tabs to see each load on first open (plans U8, U13).
+A last one runs an offboarding and
 reads Chrome's accessibility tree: a polled panel speaks through base.html's one live region, which no
 poll replaces (plan A3).
 
@@ -642,6 +644,66 @@ def test_the_groups_board_works_from_the_keyboard(page):
     p.key("Enter")
     p.settle("/Removed bob@example.com/.test(document.getElementById('member-list').innerText)")
     assert p.focused()["panel"] and p.focused()["text"] == "Removed bob@example.com from staff@example.com."
+    assert p.c.js("window.__errs") == []
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_back_from_a_user_reopens_the_list_as_left(page):
+    """Plans U8 and U13 in the browser: a search and a sort (by keys) ride in the URL, so Back from a user
+    and the detail page's "← Users" both reopen the list as it was left; the open tab is the #hash, and a
+    tab's GAM reads load the first time it opens — the Overview asks for none."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+    view = "?q=staff&sort=email&desc=1"
+
+    def emails() -> list[str]:
+        return p.c.js("[...document.querySelectorAll('#users-table tbody td:nth-child(2)')].map(td => td.textContent.trim())")
+
+    def fetched(path: str) -> bool:
+        return p.c.js(f"performance.getEntriesByType('resource').some(e => new URL(e.name).pathname === {json.dumps(path)})")
+
+    def the_list_as_left() -> None:
+        p.settle("location.pathname === '/users' && document.querySelectorAll('#users-table tbody tr').length === 2")
+        assert p.c.js("location.search") == view
+        assert p.c.js("document.querySelector('input[name=q]').value") == "staff"
+        assert emails() == ["bob@example.com", "alice@example.com"]
+        assert p.c.js("document.querySelector('th[aria-sort]').textContent.trim()") == "Email▼"
+
+    p.goto("/users", "document.querySelectorAll('#users-table tbody tr').length === 3")
+    p.fill("input[name=q]", "staff")                          # matches the org unit /Staff: Alice and Bob
+    p.settle("location.search === '?q=staff' && document.querySelectorAll('#users-table tbody tr').length === 2")
+    p.click("#sort-email", action="focus")
+    for want in ("?q=staff&sort=email", view):                # Enter sorts by email, Enter again reverses it
+        p.key("Enter")
+        p.settle(f"location.search === {json.dumps(want)}")
+        assert p.focused()["id"] == "sort-email"               # htmx hands focus to the re-rendered header
+    the_list_as_left()
+
+    p.click("#users-table a", "Bob Brown")
+    p.settle("location.pathname === '/users/detail'")
+    assert p.c.js("document.querySelector('main a').getAttribute('href')") == "/users" + view
+    assert not any(fetched(f"/users/{x}") for x in ("delegates", "vacation", "signature/current", "groups", "calendar"))
+    p.click("#tab-mail")
+    p.settle("!/Loading/.test(document.getElementById('panel-mail').innerText)")
+    assert p.c.js("location.hash") == "#mail"
+    assert all(fetched(f"/users/{x}") for x in ("delegates", "vacation", "signature/current"))
+    assert not fetched("/users/groups") and not fetched("/users/calendar")
+
+    p.c.js("history.back()")
+    the_list_as_left()
+    p.c.js("history.forward()")
+    p.settle("location.pathname === '/users/detail' && !/Loading/.test(document.getElementById('panel-mail').innerText)")
+    assert p.c.js("location.hash") == "#mail"
+    assert p.c.js("document.querySelector('[role=tab][aria-selected=true]').id") == "tab-mail"
+    p.click("main a", "← Users")
+    the_list_as_left()
+
+    p.goto("/users/detail?email=alice%40example.com#sharing")     # a fresh load opens the #hash's tab
+    p.settle("!/Loading/.test(document.getElementById('panel-sharing').innerText)")
+    assert p.c.js("document.querySelector('[role=tab][aria-selected=true]').id") == "tab-sharing"
+    assert fetched("/users/groups") and fetched("/users/calendar") and not fetched("/users/delegates")
     assert p.c.js("window.__errs") == []
 
 

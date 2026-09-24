@@ -34,10 +34,12 @@ Actively developed and used against live Google Workspace tenants. Working today
   `~/.gam`, and its own setup dir, shows which credential files each one holds, and moves them into
   the Keychain) or follow the guided fresh GAM project / OAuth flow; then the manual
   domain-wide-delegation step and a verify.
-- **Users** — fast list/search/detail (cached + paginated), profile editing (title/department —
-  location is shown but not editable) with a bulk "set department" tool, mailbox **delegates**,
-  **vacation responders**, group membership, per-user calendar sharing (grant/revoke access to that
-  person's own calendar), **sign out everywhere**, and a guarded **suspend**.
+- **Users** — a fast, cached list (search name, email, title, department or org unit; sort any
+  column; 15–50 a page; opening a person and coming back keeps your place) and detail, profile
+  editing (title/department — location is shown but not editable) with a bulk "set department"
+  tool, mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
+  (grant/revoke access to that person's own calendar), **sign out everywhere**, and a guarded
+  **suspend**.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.

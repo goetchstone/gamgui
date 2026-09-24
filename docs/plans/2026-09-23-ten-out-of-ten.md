@@ -105,9 +105,20 @@ plan's Phase 0 F1–F3.
   calendar and event delete and the groups board's add/remove go through `write_failed`. Still
   leading with GAM's raw line: the Builder's single Run result (`builder.py` ~:358), onboarding's
   "Couldn't create the account: …" and offboarding's step log) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
-  unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; the cache items are open) · U13
-  (`hx-disabled-elt` on every write and job control, `a31b146`; the nav indicator and lazy user-detail
-  tabs are open) · U14 `72ab420` (Tailwind precompiled into a committed, unminified
+  unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; the cache items are open) · U8 and U13
+  (the Users list's view is its URL: `/users/table` answers `HX-Replace-Url` — replaced, not pushed, or a search
+  typed a pause at a time leaves a Back step per pause — and `/users` renders any view it is given; each row's
+  detail link carries the view as `back`, so "← Users", the native window's only Back, reopens it, only the
+  list's own keys passing, re-checked; the search adds department and org unit; name, email, title, OU and
+  status sort both ways over the whole cached list, a blank title last; 15/25/50 a page, 15 fitting 1100×760
+  with the filters on the title row, a longer page scrolling inside the table under a sticky header; user
+  detail's tab is the `#hash`; htmx's history cache is off (`historyCacheSize` 0, `refreshOnHistoryMiss`), so
+  no page's directory data lands in `localStorage`. U13: the nav's `aria-current="page"`, a detail or
+  sub-page counting as its screen; user detail's Mail and Sharing reads load the first time their tab opens —
+  the Overview makes no GAM call past the cached directory; `hx-disabled-elt` (`a31b146`) unchanged, its test
+  green. `tests/test_users_list.py`; a Chrome test searches, sorts by keys, opens a user, goes Back and Forward
+  and "← Users", loads a `#sharing` link and reads which GAM reads went out — Back re-rendered the list from
+  its URL, no back-forward cache; axe still 0; WKWebView unseen) · U14 `72ab420` (Tailwind precompiled into a committed, unminified
   `static/app.css` by the v3.4.17 CLI, pinned per platform in `scripts/tailwind_checksums.txt` and
   refused unpinned; `tailwind-play.js` gone; CI's lint job, `make lint` and `build_app.sh` run
   `build_css.sh`; 17 screen states in headless Chrome match the Play CDN build in every computed
@@ -139,7 +150,7 @@ plan's Phase 0 F1–F3.
   during a write on each loop through the strict mock; the `a11y` job opens the tray and a job's page
   (axe 0) and walks them by keys; a scratch Chrome run on a 0.9 s/call mock stopped an offboarding from
   the tray and a signature apply from its panel by keys alone — WKWebView's `confirm()`, VoiceOver and a
-  live tenant unseen. Left: "retry failures only"). **Open:** U1, U8, U10; U5's retry.
+  live tenant unseen. Left: "retry failures only"). **Open:** U1, U10; U5's retry.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
@@ -465,7 +476,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U4, U7, U14 APPLIED; U5, U9, U11, U12, U13 partly (see Status by item); the rest open.*
+*Status: U4, U7, U8, U13, U14 APPLIED; U5, U9, U11, U12 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows

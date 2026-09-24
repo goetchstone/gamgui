@@ -224,9 +224,17 @@
   // Tabs (user detail, onboarding): show one panel at a time so a content-heavy page fits the window.
   // ARIA tabs (plan A2): only the selected tab is in the Tab order (roving tabindex); Left/Right (wrapping),
   // Home and End move to a tab and show its panel, as a click does.
+  // A panel's [data-lazy] regions (hx-trigger="tab-shown") load the first time their tab shows, not all
+  // with the page (plan U13). A strip marked data-hash keeps its tab in the URL's #hash — replaced, not a
+  // new history entry — so Back or a reload reopens the same tab (plan U8).
+  function whenBound(fn) {   // htmx binds the page on DOMContentLoaded, before this listener runs
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);
+    else fn();
+  }
   document.querySelectorAll("[role=tablist]").forEach(function (bar) {
     var tabs = [].slice.call(bar.querySelectorAll("[role=tab]"));
-    function show(tab) {
+    var name = function (t) { return t.id.replace(/^tab-/, ""); };
+    function show(tab, remember) {
       tabs.forEach(function (t) {
         var on = t === tab;
         t.setAttribute("aria-selected", on ? "true" : "false");
@@ -238,10 +246,15 @@
         var panel = document.getElementById(t.getAttribute("aria-controls"));
         if (panel) panel.classList.toggle("hidden", !on);
       });
+      var shown = document.getElementById(tab.getAttribute("aria-controls"));
+      var lazy = shown ? [].slice.call(shown.querySelectorAll("[data-lazy]")) : [];
+      lazy.forEach(function (el) { el.removeAttribute("data-lazy"); });
+      if (lazy.length) whenBound(function () { lazy.forEach(function (el) { htmx.trigger(el, "tab-shown"); }); });
+      if (remember && bar.hasAttribute("data-hash")) history.replaceState(history.state, "", "#" + name(tab));
     }
     bar.addEventListener("click", function (e) {
       var t = e.target.closest("[role=tab]");
-      if (t) show(t);
+      if (t) show(t, true);
     });
     bar.addEventListener("keydown", function (e) {
       var i = tabs.indexOf(e.target);
@@ -249,10 +262,11 @@
       if (i < 0 || to === undefined || e.altKey || e.ctrlKey || e.metaKey) return;   // Cmd+Left is Back
       e.preventDefault();
       var t = tabs[(to + tabs.length) % tabs.length];
-      show(t);
+      show(t, true);
       t.focus();
     });
-    if (tabs.length) show(bar.querySelector("[aria-selected=true]") || tabs[0]);
+    var hashed = bar.hasAttribute("data-hash") && tabs.filter(function (t) { return "#" + name(t) === location.hash; })[0];
+    if (tabs.length) show(hashed || bar.querySelector("[aria-selected=true]") || tabs[0], false);
   });
 
   // Global activity indicators: a top bar + a "Working…" pill, shown during HTMX requests and

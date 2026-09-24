@@ -58,7 +58,7 @@ def test_users_empty_state_offers_clear_filters(client):
     assert r.status_code == 200
     assert "No users found" in r.text
     assert "Clear filters" in r.text
-    assert 'hx-get="/users/table?q=&amp;scope=all&amp;page=1"' in r.text or "/users/table?q=&scope=all&page=1" in r.text
+    assert 'id="users-clear"' in r.text and 'hx-get="/users/table"' in r.text   # the default view: no filter
 
 
 def test_users_no_filters_no_clear_button(client):

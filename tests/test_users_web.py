@@ -118,6 +118,22 @@ def test_a_detail_panel_reads_the_user_it_is_for(client, gam_calls, route):
         assert carols in r.text and alices not in r.text
 
 
+def test_user_detail_reads_each_tab_only_when_it_first_opens(client, gam_calls):
+    # Plan U13: the Overview comes whole from the cached directory; each other tab's GAM reads wait for
+    # the tab (app.js fires "tab-shown" at its [data-lazy] regions), not all five on page load.
+    page = client.get("/users/detail", params={"email": "alice@example.com"}).text
+    assert [argv[:2] for argv in gam_calls()] == [["print", "users"]]        # the directory, and nothing else
+    assert 'hx-trigger="load"' not in page
+    lazy, panel = {}, None
+    for m in re.finditer(r'id="panel-(\w+)"|hx-get="(/users/[\w/]+)\?email=[^"]*" hx-trigger="tab-shown" data-lazy', page):
+        panel = m.group(1) or panel
+        if m.group(2):
+            lazy[m.group(2)] = panel
+    assert lazy == {"/users/signature/current": "mail", "/users/delegates": "mail", "/users/vacation": "mail",
+                    "/users/groups": "sharing", "/users/calendar": "sharing"}
+    assert 'role="tablist" aria-label="Account sections" data-hash' in page      # the open tab lives in the #hash
+
+
 def test_user_detail_lazy_loads_delegates(client):
     # The detail page renders before the delegates gam call; delegates arrive via a lazy endpoint.
     page = client.get("/users/detail", params={"email": "alice@example.com"})
