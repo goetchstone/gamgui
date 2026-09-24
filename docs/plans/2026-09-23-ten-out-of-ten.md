@@ -59,7 +59,7 @@ plan's Phase 0 F1–F3.
   runtime, every source module in the frozen PYZ, data files, `gam version` in a throwaway
   `HOME`/`GAMCFGDIR`; run locally in a scratch clone, the Actions run itself unseen; the app is never
   launched). **Open:** C7's `httpx2`.
-- **Phase 4** — applied: A9 (`tests/test_a11y.py`, `make a11y`, a CI `a11y` job on macos-latest:
+- **Phase 4** — applied: A9 `837d672` (`tests/test_a11y.py`, `make a11y`, a CI `a11y` job on macos-latest:
   axe-core 4.13.0 vendored in `tests/a11y/` with its licences and SHA-256, run over 18 states of the
   mock-backed app in headless Chrome over `--remote-debugging-pipe` — no websocket dependency — with
   `--use-mock-keychain`; `tests/a11y/baseline.json` holds 487 serious/critical nodes, 477 of them
