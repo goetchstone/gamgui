@@ -84,6 +84,10 @@ guarding them:
   `localhost:<port>`, so a DNS-rebound page can't reach it.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed.
+- **The `.app`'s Python dependencies are hash-locked.** `scripts/build_app.sh` installs them, in a
+  fresh virtualenv, only from `requirements/app.txt` with `pip install --require-hashes`: every
+  file, and the build backend of the one package that ships only as source, must match a committed
+  SHA-256. CI installs `requirements/dev.txt` the same way, from wheels only.
 
 ## Known limitations
 

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Build the standalone GamGUI.app (macOS) with PyInstaller.
-# Prereqs: `make setup` (a .venv with deps). Vendors GAM7 automatically if missing.
+# Prereqs: a Python 3.10+ to freeze — `make setup`'s .venv, or PYTHON=/path/to/python3.x. Vendors
+# GAM7 automatically if missing.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PY="${PYTHON:-.venv/bin/python}"
-if [ ! -x "$PY" ]; then
-  echo "No virtualenv at .venv — run 'make setup' first." >&2
+if ! command -v "$PY" >/dev/null; then
+  echo "No virtualenv at .venv — run 'make setup' first, or set PYTHON." >&2
   exit 1
 fi
 
@@ -21,13 +22,20 @@ if [ ! -x "gamgui/resources/gam7/gam" ]; then
   ./scripts/fetch_gam.sh
 fi
 
-echo "==> Installing PyInstaller (and the native window) into the venv..."
-# Pinned: this is the path that actually builds the shipped .app, so an unpinned upgrade here would
-# put an unreviewed pywebview (the WKWebView host) and PyInstaller bootloader inside the bundle.
-"$PY" -m pip install -q --upgrade "pyinstaller==6.21.0" "pywebview==6.2.1"
+echo "==> Installing the locked dependencies into a fresh build venv..."
+# Everything the bundle holds — pywebview (the WKWebView host), PyInstaller's bootloader, the web
+# stack — comes from requirements/app.txt, each file checked against its committed SHA-256. A venv
+# of its own, so nothing the dev venv happens to have ends up in the .app. The lock doubles as the
+# build constraint: pywebview's proxy-tools ships only as source, and this hash-checks the setuptools
+# that builds it. --build-constraint needs pip >= 25.3 (the one bundled with Python 3.14 has it).
+BUILD_VENV="build/venv"
+rm -rf "$BUILD_VENV"
+"$PY" -m venv "$BUILD_VENV"
+"$BUILD_VENV/bin/python" -m pip install -q --require-hashes \
+  --build-constraint requirements/app.txt -r requirements/app.txt
 
 echo "==> Building..."
-"$PY" -m PyInstaller --noconfirm --clean gamgui.spec
+"$BUILD_VENV/bin/python" -m PyInstaller --noconfirm --clean gamgui.spec
 
 APP="dist/GamGUI.app"
 # Sign with a STABLE self-signed identity so macOS "Always Allow" sticks across rebuilds and the

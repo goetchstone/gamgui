@@ -233,10 +233,9 @@ python3.14 -m venv .venv && .venv/bin/pip install -e ".[dev,desktop]"
 ```
 
 `make help` lists all targets. Prefer raw commands? `pip install -e ".[dev,desktop]"`, then
-`scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`. `pip install -r requirements.txt` is an
-exact pinned **runtime + basic test** install; the rest of the dev extra (`pytest-timeout`, which the
-60s per-test timeout in `pyproject.toml` needs, and `pytest-cov`) only comes with
-`pip install -e ".[dev]"`.
+`scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`. That installs `pyproject.toml`'s flexible
+ranges; CI installs the exact, hash-locked set instead —
+`pip install --require-hashes -r requirements/dev.txt` reproduces it (see CONTRIBUTING.md).
 
 The GAM7 binary is **not committed** (platform-specific, large) — `make gam` / `scripts/fetch_gam.sh`
 fetches the pinned, tested version from the official releases and verifies it against the committed
@@ -340,10 +339,13 @@ repository settings: [`.github/workflows/codeql.yml`](.github/workflows/codeql.y
 `security-extended` suite, and skips `tests/`, the vendored GAM release, and vendored browser
 libraries — the config explains why for each.
 
-**Dependencies.** [`.github/dependabot.yml`](.github/dependabot.yml) watches the Python packages and
-the GitHub Actions weekly and — with the dependency graph enabled — opens PRs for known CVEs. The
-vendored GAM binary is intentionally excluded: it is pinned by SHA-256 and bumped through its own
-fail-closed runbook, not by a bot.
+**Dependencies.** CI and the `.app` build install Python packages only from hash-locked files
+(`requirements/dev.txt`, `requirements/app.txt`, `pip install --require-hashes`), so a package
+swapped on the index fails the install instead of shipping.
+[`.github/dependabot.yml`](.github/dependabot.yml) watches those locks and the GitHub Actions weekly
+and — with the dependency graph enabled — opens PRs for known CVEs. The vendored GAM binary is
+intentionally excluded: it is pinned by SHA-256 and bumped through its own fail-closed runbook, not by
+a bot.
 
 ## Email signatures
 

@@ -1,4 +1,4 @@
-.PHONY: setup gam test lint run app clean help
+.PHONY: setup gam test lint lock run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -16,6 +16,8 @@ help:
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
 	@echo "make test    - run the offline test suite"
 	@echo "make lint    - run ruff and mypy (the checks CI's lint job enforces)"
+	@echo "make lock    - regenerate the hash-locked requirements/*.txt from requirements/*.in"
+	@echo "               refresh every pin with: make lock ARGS=--upgrade"
 	@echo "make run     - launch the app (native window; falls back to a browser URL)"
 	@echo "make app     - build the standalone macOS .app (PyInstaller, macOS only)"
 	@echo "make clean   - remove venv and build artifacts"
@@ -52,6 +54,15 @@ test:
 lint:
 	$(VENV)/bin/ruff check .
 	$(VENV)/bin/mypy
+
+# One universal lock per input, valid on every Python >= 3.10 and every OS, so the whole CI matrix
+# installs the same file. Dependabot's uv ecosystem re-runs this command from the lock's own header.
+lock:
+	@test -x $(VENV)/bin/uv || { echo "make lock: no uv in $(VENV) (run make setup)" >&2; exit 1; }
+	for f in app dev; do \
+	  $(VENV)/bin/uv pip compile --quiet --universal --generate-hashes --python-version 3.10 $(ARGS) \
+	    --output-file=requirements/$$f.txt requirements/$$f.in || exit 1; \
+	done
 
 run:
 	$(PY) -m gamgui.app

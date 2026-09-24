@@ -196,9 +196,13 @@ def test_pywebview_is_pinned():
     # is 3.10. pywebview hosts the WKWebView, so an unpinned floor would pull an unreviewed
     # version into the shipped .app.
     text = (REPO_ROOT / "pyproject.toml").read_text()
-    assert re.search(r'^\s*"pywebview==[\d.]+"', text, re.MULTILINE), text
+    pin = re.search(r'^\s*"pywebview==([\d.]+)"', text, re.MULTILINE)
+    assert pin, text
 
-    # build_app.sh is the path that actually builds the bundle, so it must pin too.
+    # build_app.sh builds the bundle from requirements/app.txt alone (tests/test_locks.py), so the
+    # lock's input pins the same pywebview, and the PyInstaller whose bootloader ships in the .app.
+    app_in = (REPO_ROOT / "requirements" / "app.in").read_text()
+    assert re.search(rf"^pywebview=={re.escape(pin[1])}$", app_in, re.MULTILINE), app_in
+    assert re.search(r"^pyinstaller==[\d.]+$", app_in, re.MULTILINE), app_in
     build = (REPO_ROOT / "scripts" / "build_app.sh").read_text()
-    assert "pywebview>=" not in build, build
-    assert re.search(r'"pywebview==[\d.]+"', build), build
+    assert not re.search(r"(pywebview|pyinstaller)[=<>~]", build, re.IGNORECASE), build

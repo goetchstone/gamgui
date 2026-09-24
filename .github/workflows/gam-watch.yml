@@ -57,9 +57,10 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Install the package (for the catalog regen + tests)
+      - name: Install the locked dev dependencies (for the catalog regen + tests)
         if: steps.check.outputs.todo == 'true'
-        run: pip install -e ".[dev]"
+        run: |
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
 
       - name: Bump — attest, pin, vendor, regenerate
         if: steps.check.outputs.todo == 'true'

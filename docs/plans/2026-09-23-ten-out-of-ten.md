@@ -30,8 +30,14 @@ plan's Phase 0 F1–F3.
   120 width) · C2 `913cd87` (mypy 2.3.1 on `gamgui/core` + `gamgui/web` at `check_untyped_defs`, in
   `make lint` and a CI `lint` step; 22 initial errors, all mypy failing to follow correct code, bar
   a Builder field that 500'd on a file part the UI never posts — restructured, no `# type: ignore`;
-  the ratchet to required annotations is open). **Open:** C3–C7. (C4: Dependabot's `github-actions`
-  ecosystem was already configured; the actions are still pinned by tag, not SHA.)
+  the ratchet to required annotations is open) · C3 (in the commit that marks it: universal
+  `uv pip compile --generate-hashes` locks `requirements/app.txt` + `dev.txt` from `.in` files kept
+  equal to pyproject; CI installs `dev.txt` with `--require-hashes --only-binary :all:`;
+  `build_app.sh` builds from `app.txt` in a fresh venv, hash-checking the one sdist's build backend
+  too; Dependabot moved to its `uv` ecosystem; `make lock`; `tests/test_locks.py`. The `.app` loses
+  uvicorn's optional uvloop/httptools/websockets/watchfiles/PyYAML, which only the dev venv had).
+  **Open:** C4–C7. (C4: Dependabot's `github-actions` ecosystem was already configured; the actions
+  are still pinned by tag, not SHA.)
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —

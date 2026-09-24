@@ -22,10 +22,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - name: Install (ruff's and mypy's versions are pinned in pyproject's dev extra)
+      - name: Install (hash-locked, wheels only; ruff and mypy are exact pins in the lock)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
       - name: Ruff
         run: ruff check --output-format=github .
       - name: Mypy (scope and settings in pyproject's [tool.mypy])
@@ -47,10 +46,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install (flexible deps from pyproject)
+      - name: Install (hash-locked, wheels only; one universal lock serves every OS and Python here)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
 
       - name: Run tests
         # Uses the mock gam binary; needs no vendored GAM7 and no credentials.
@@ -65,10 +63,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - name: Install
+      - name: Install (hash-locked, wheels only)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
       - name: Vendor the pinned GAM7 binary + command reference
         run: ./scripts/fetch_gam.sh
         env:
@@ -96,10 +93,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - name: Install
+      - name: Install (hash-locked, wheels only)
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
       - name: Vendor the LATEST GAM7 (preview only)
         # --allow-unpinned: a newer-than-pinned asset has no committed checksum by definition. Safe
         # only because this job is a throwaway preview — never add it to the gam-compat job above.

@@ -1,0 +1,11 @@
+# What the .app ships, and the PyInstaller that freezes it. Locked into app.txt by `make lock`;
+# scripts/build_app.sh installs only that lock. Keep these in step with pyproject.toml's
+# dependencies and desktop extra (tests/test_locks.py fails if they drift).
+fastapi>=0.141
+starlette>=1.3.1
+uvicorn>=0.29
+jinja2>=3.1
+python-multipart>=0.0.31
+keyring>=24
+pywebview==6.2.1
+pyinstaller==6.21.0

@@ -6,8 +6,12 @@
 # SHA-256 in scripts/gam_checksums.txt and bumped through its own fail-closed runbook (see the README).
 version: 2
 updates:
-  # Python runtime + test deps (requirements.txt and pyproject.toml at the repo root).
-  - package-ecosystem: "pip"
+  # Python deps: the hash-locked requirements/*.txt, compiled from requirements/*.in by `uv pip compile`
+  # (`make lock`). The uv ecosystem, not pip: it re-runs uv with the lock header's --universal and
+  # --python-version, where pip's would re-run pip-compile and leave a lock for one Python only.
+  # It bumps the .in and its .txt together; a matching range in pyproject.toml may need a hand edit
+  # (tests/test_locks.py says which).
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"

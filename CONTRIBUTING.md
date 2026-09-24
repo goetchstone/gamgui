@@ -47,6 +47,7 @@ gamgui/web/         # FastAPI app + Jinja/HTMX templates (the UI)
 gamgui/app.py       # entry point: pywebview window wrapping the local server
 gamgui/resources/   # vendored GAM7 binary (fetched, not committed)
 tests/              # offline test suite + fixtures (incl. the mock gam)
+requirements/       # hash-locked dependencies: *.in (inputs) -> *.txt (make lock)
 scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (SHA-256 pins),
                     # build_command_catalog.py (regenerate the browse catalog after a GAM bump),
                     # build_app.sh (PyInstaller .app), acceptance.py (read-only live check),
@@ -92,6 +93,26 @@ that can write must be hand-curated in `GAMCommands` — the generic grammar-der
 `core/catalog/readbuilder.py`, which does assemble argv from the vendored grammar line, is attached
 only to commands confidently classified `RiskLevel.READ_ONLY`.
 
+## Dependencies
+
+`pyproject.toml` holds the flexible ranges, and `make setup` installs from them. What CI runs and
+what the `.app` ships are hash-locked instead: `requirements/dev.txt` (the runtime dependencies plus
+the test and lint tools) and `requirements/app.txt` (the runtime dependencies plus pywebview and
+PyInstaller), each compiled from the `.in` file beside it and installed with
+`pip install --require-hashes`. To add, remove or re-range a dependency:
+
+1. edit `pyproject.toml` **and** the matching `requirements/*.in` — `tests/test_locks.py` fails on
+   either one alone;
+2. run `make lock` (it uses the uv pinned in the dev extra; it keeps every other pin, and
+   `make lock ARGS=--upgrade` refreshes them all);
+3. commit the `.in` and `.txt` together.
+
+The locks are made with `uv pip compile --universal` rather than pip-tools because one file then
+installs on Linux and macOS across Python 3.10–3.14 (`pip-compile` locks for the interpreter it runs
+on, and would need a file per CI job). `pip install --require-hashes -r requirements/dev.txt` in a
+fresh venv gives you exactly CI's environment. Dependabot keeps both locks current through its `uv`
+ecosystem, which regenerates them with the same flags.
+
 ## Before opening a PR
 
 ```bash
@@ -112,7 +133,8 @@ lambda doesn't keep an `is None` check) before reaching for a narrow `# type: ig
 reason after it — `warn_unused_ignores` fails one that stops being needed. Only the optional
 `abapit` backend is exempt from missing stubs; a new dependency without types fails the check.
 
-CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14. On top
+CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14, each
+installed from `requirements/dev.txt`. On top
 of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
 `tests/test_command_contract.py` against the real command reference, plus a non-blocking
 `gam-latest-preview` job that runs the token contract against the *newest* GAM7 as an early warning
