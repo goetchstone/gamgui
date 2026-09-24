@@ -288,8 +288,9 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
 `scripts/fetch_gam.sh`. It never auto-upgrades; you bump deliberately, and three guards keep that safe:
 
 - **Release-watch** (`.github/workflows/gam-watch.yml`, weekly) does the mechanical bump when GAM
-  ships a newer version and **opens a PR** — the asset's GitHub build attestation verified, pinned,
-  vendored, catalog regenerated, suite run. It never merges: you review the changelog, run the live
+  ships a newer version and **opens a PR** — the asset's GitHub build attestation verified (signed
+  by GAM-team's release workflow on `main`, nothing else in their repo), pinned, vendored, catalog
+  regenerated, suite run. It never merges: you review the changelog, run the live
   acceptance pass, and merge. Automatic pinning is safe *because* the attestation check gates it — no
   verified provenance, no PR — so it isn't trust-on-first-use.
 - **Compat check** (`gam-compat` CI job + `tests/test_command_contract.py`) asserts every GAM

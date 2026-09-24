@@ -4,9 +4,10 @@
 The mechanical steps a maintainer used to do by hand, in order:
 
   1. download the release asset and **verify GitHub's build attestation** for it
-     (`gh attestation verify --repo GAM-team/GAM`) — this is the trust anchor that lets the pin be
-     written automatically without becoming trust-on-first-use: we are not trusting "whatever we
-     downloaded", we are trusting a Sigstore-signed provenance statement that GAM-team's CI built it;
+     (`gh attestation verify`, signed by GAM-team/GAM's release workflow on its main branch) — this
+     is the trust anchor that lets the pin be written automatically without becoming
+     trust-on-first-use: we are not trusting "whatever we downloaded", we are trusting a
+     Sigstore-signed provenance statement that GAM-team's release build produced it;
   2. write that asset's SHA-256 into `scripts/gam_checksums.txt`;
   3. re-vendor through `scripts/fetch_gam.sh`, which now verifies the download against that pin;
   4. bump `EXPECTED_GAM_VERSION` and `TAG`;
@@ -40,6 +41,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "GAM-team/GAM"
+# The one workflow, ref and runner kind that sign GAM's release assets (checked on 7.47.00, 7.48.00,
+# 7.48.11 and 7.48.12). `--repo` alone accepts an attestation from *any* workflow in the repo — a test
+# or PR workflow, or one run from a branch — so pin all three; if GAM-team moves its build, the bump
+# fails closed and a human looks.
+SIGNER_WORKFLOW = f"{REPO}/.github/workflows/build.yml"
+SOURCE_REF = "refs/heads/main"
 CHECKSUMS = ROOT / "scripts" / "gam_checksums.txt"
 FETCH = ROOT / "scripts" / "fetch_gam.sh"
 COMMANDS_PY = ROOT / "gamgui" / "core" / "gam" / "commands.py"
@@ -68,6 +75,12 @@ def select_asset(release: dict, arch: str) -> "tuple[str, str]":
     cands.sort()
     _, name, url = cands[-1]
     return name, url
+
+
+def attest_argv(blob: "Path | str") -> list:
+    """The `gh attestation verify` call that gates the pin."""
+    return ["gh", "attestation", "verify", str(blob), "--repo", REPO,
+            "--signer-workflow", SIGNER_WORKFLOW, "--source-ref", SOURCE_REF, "--deny-self-hosted-runners"]
 
 
 def bump_version_strings(version: str) -> None:
@@ -178,8 +191,8 @@ def main() -> int:
             print("==> verifying GitHub build attestation…")
             # Fail closed: no verified provenance -> no pin, no PR. This is what makes writing the pin
             # automatically safe. `gh attestation verify` exits non-zero if the bundle is missing or
-            # does not chain to GAM-team/GAM's CI identity.
-            _run(["gh", "attestation", "verify", str(blob), "--repo", REPO])
+            # was not signed by GAM-team's release workflow on main, on a GitHub-hosted runner.
+            _run(attest_argv(blob))
             print("    attestation OK.")
 
         sha = _sha256(blob)

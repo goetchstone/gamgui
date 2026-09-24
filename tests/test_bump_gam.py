@@ -42,6 +42,19 @@ def test_select_asset_is_arch_specific():
     assert bump.select_asset(release, "x86_64")[1] == "intel"
 
 
+def test_attestation_trusts_only_gam_teams_release_workflow():
+    # `--repo` alone accepts an attestation signed by any workflow in GAM-team/GAM, from any ref.
+    argv = bump.attest_argv("/tmp/gam.tar.xz")
+    assert argv[:4] == ["gh", "attestation", "verify", "/tmp/gam.tar.xz"]
+    assert argv[-1] == "--deny-self-hosted-runners"
+    opts = dict(zip(argv[4:-1:2], argv[5:-1:2], strict=True))
+    assert opts == {"--repo": "GAM-team/GAM",
+                    "--signer-workflow": "GAM-team/GAM/.github/workflows/build.yml",
+                    "--source-ref": "refs/heads/main"}
+    src = (ROOT / "scripts" / "bump_gam.py").read_text()
+    assert src.count('"attestation", "verify"') == 1 and "_run(attest_argv(blob))" in src
+
+
 def test_select_asset_raises_when_nothing_matches():
     with pytest.raises(SystemExit):
         bump.select_asset({"assets": [{"name": "gam-linux.tar.xz", "browser_download_url": "u"}]}, "arm64")

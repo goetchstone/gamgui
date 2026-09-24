@@ -38,7 +38,10 @@ plan's Phase 0 F1–F3.
   uvicorn's optional uvloop/httptools/websockets/watchfiles/PyYAML, which only the dev venv had).
   · C4 (in the commit that marks it: every `uses:` pinned by full commit SHA with its `# vX.Y.Z`
   in a comment, `tests/test_workflow_safety.py` fails a tag pin; Dependabot's `github-actions`
-  ecosystem was already configured). **Open:** C5–C7.
+  ecosystem was already configured) · C6 (in the commit that marks it: `bump_gam.py`'s
+  `attest_argv` adds `--signer-workflow GAM-team/GAM/.github/workflows/build.yml`, `--source-ref
+  refs/heads/main` and `--deny-self-hosted-runners`, read off the published attestations of four
+  releases; not yet run end to end on a downloaded asset). **Open:** C5, C7.
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —

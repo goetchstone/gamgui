@@ -83,7 +83,9 @@ guarding them:
   and every request, even the health check, must carry a `Host` of `127.0.0.1:<port>` or
   `localhost:<port>`, so a DNS-rebound page can't reach it.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
-  committed pin is refused, not installed.
+  committed pin is refused, not installed. `scripts/bump_gam.py` writes a new pin only after
+  `gh attestation verify` shows the asset was built by GAM-team/GAM's release workflow
+  (`build.yml`, from `main`, on a GitHub-hosted runner) — not by any other workflow in that repo.
 - **The `.app`'s Python dependencies are hash-locked.** `scripts/build_app.sh` installs them, in a
   fresh virtualenv, only from `requirements/app.txt` with `pip install --require-hashes`: every
   file, and the build backend of the one package that ships only as source, must match a committed

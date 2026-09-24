@@ -7,9 +7,9 @@ name: GAM release watch
 # renamed/removed command into a red PR rather than a silent live break.
 #
 # The pin is written automatically ONLY because scripts/bump_gam.py verifies GitHub's Sigstore build
-# attestation for the asset first (gh attestation verify --repo GAM-team/GAM). No verified
-# provenance -> the script fails -> no PR. That is what keeps automatic pinning from being
-# trust-on-first-use (see the fail-closed pin invariant in CLAUDE.md).
+# attestation for the asset first (gh attestation verify, signed by GAM-team/GAM's build.yml on main,
+# on a GitHub-hosted runner). No verified provenance -> the script fails -> no PR. That is what keeps
+# automatic pinning from being trust-on-first-use (see the fail-closed pin invariant in CLAUDE.md).
 on:
   schedule:
     - cron: "0 14 * * 1" # Mondays 14:00 UTC
@@ -96,13 +96,13 @@ jobs:
           STATUS=$([ "$TESTS_RC" = "0" ] && echo "✅ offline suite green" || echo "❌ offline suite RED — needs code changes before merge")
           git commit -q -m "GAM: bump $PIN -> $LATEST (automated)
 
-          Asset attested (gh attestation verify --repo GAM-team/GAM), pinned, vendored, catalog
+          Asset attested (gh attestation verify, GAM-team/GAM build.yml on main), pinned, vendored, catalog
           regenerated, mock + doc counts refreshed by scripts/bump_gam.py. $STATUS"
           git push -u origin "$BR"
           gh pr create --title "GAM $LATEST (automated bump)" --head "$BR" --body \
           "Automated bump of the vendored GAM, **$PIN → $LATEST**, via \`scripts/bump_gam.py\`.
 
-          - Asset **build-attestation verified** against \`GAM-team/GAM\` before the pin was written.
+          - Asset **build-attestation verified** (signed by \`GAM-team/GAM\`'s release workflow on \`main\`) before the pin was written.
           - Pin, version strings, test mock, browse catalog and the counts in CLAUDE.md, README and ROADMAP updated mechanically.
           - $STATUS
 
