@@ -92,7 +92,7 @@ plan's Phase 0 F1–F3.
   test that runs an offboarding and reads `Accessibility.getFullAXTree` — one live region, the same node
   throughout, "started" then the result, no poll-lit pill; axe adds the finished offboarding panel, still
   0 — the baseline was already empty, so there was nothing to shrink; with a scratch 0.9 s/call mock it
-  said started, 10–80% and the result, each once; VoiceOver and WKWebView unheard) · A6 with U7 (below: the
+  said started, 10–80% and the result, each once; VoiceOver and WKWebView unheard) · A6 with U7 `8a3c535` (below: the
   Groups board's add is a combobox and a form, no drag; a Chrome test adds and removes by keys alone and reads
   the accessibility tree; axe walks the open combobox and the remove step, still 0 — the baseline was already
   empty, so there was nothing to shrink). **Open:** A7 (A7
@@ -113,7 +113,7 @@ plan's Phase 0 F1–F3.
   `build_css.sh`; 17 screen states in headless Chrome match the Play CDN build in every computed
   style and, where the page text was the same, pixel for pixel, with 8 Tab stops on 5 screens too;
   the linux-x64 CLI wrote the same bytes under Docker; a scratch PyInstaller build bundled it —
-  `make app` itself and CI's run of the check are unseen) · U7 with A6 (the Groups board rebuilt in the
+  `make app` itself and CI's run of the check are unseen) · U7 with A6 `8a3c535` (the Groups board rebuilt in the
   window: a group finder and an add-member type-ahead, each capped at 15 matches server-side from the cached
   `st.groups()`/`st.users()` — no directory in the page, no live `print groups` per visit; members a page of
   50 at a time with a role column, owners first, and a filter; add with a member/manager/owner select the
