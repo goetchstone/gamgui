@@ -17,8 +17,10 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard
 from ...core.connectors.base import RiskLevel
+from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ..jobs import start_job, stop_reason
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/calendars")
@@ -34,6 +36,10 @@ _SUBSCRIBE_JOB_TEMPLATE = "_calendar_subscribe_job.html"
 SECONDARY_SUFFIX = "@group.calendar.google.com"
 # Most-recent per-member lines kept while a group subscribe runs (bounds the polled partial).
 _SUBSCRIBE_LOG_WINDOW = 12
+# A group share past the bulk threshold confirms first; its confirm step holds the resolved members
+# under a single-use token (web/previews.py) and posts the live share form back.
+_SHARE_FLOW = "calendar_share_group"
+_CONFIRM_SAMPLE = 10   # members named in the confirm step (the count is always the full one)
 
 
 def _is_secondary(cal: str) -> bool:
@@ -171,6 +177,12 @@ def _friendly(exc: Exception) -> str:
 
 def _err(request: Request, message: str) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
+
+
+def _failed(request: Request, what: str, result) -> HTMLResponse:
+    """A failed write: what didn't happen and the remediation in words, GAM's error one click away."""
+    return TEMPLATES.TemplateResponse(request, "_action_result.html", {
+        "ok": False, "message": f"{what} {result.remediation}".strip(), "details": result.detail})
 
 
 def _humanize_age(seconds: float) -> str:
@@ -357,22 +369,78 @@ async def detail(request: Request, cal: str, label: str = "") -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
 
 
+def _fanout(emails: list) -> list:
+    """The guard's view of a group share: one additive subscribe per member (the ACL grant is one more)."""
+    return guard.changes(emails, RiskLevel.LOW, "Add the calendar to their list")
+
+
+def _share_key(cal: str, target: str, role: str) -> tuple:
+    return (cal.strip(), target.strip().lower(), role)
+
+
 @router.post("/share", response_class=HTMLResponse)
 async def share(request: Request, cal: Annotated[str, Form()], target: Annotated[str, Form()],
                 role: Annotated[str, Form()] = "reader", label: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Grant access, then put the calendar on the person's (or each group member's) list. A group of
+    DEFAULT_BULK_THRESHOLD or more members is resolved first and answered with a confirm step naming
+    the count (``/share/group`` runs it), not written: the fan-out is one write per member."""
     conn = _conn(request)
     if conn is None:
         return _err(request, _NOT_CONNECTED)
     cal, target = cal.strip(), target.strip()
     if not target:
         return _err(request, "Enter a person or group to share with.")
+    try:   # the builder's <CalendarACLRole> check, before any confirm step; this runs nothing
+        GAMCommands.add_calendar_acl_cal(cal, target, role=role)
+    except ValueError as exc:
+        return _err(request, f"Couldn't share calendar: {exc}.")
+    kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
+    decision = guard.evaluate(_fanout(emails)) if kind == "group" else None
+    if decision is not None and decision.requires_confirmation:
+        st = request.app.state.gamgui
+        token = st.previews.hold(_SHARE_FLOW, _share_key(cal, target, role), (cal, target, role, emails))
+        try:
+            ctx = await _detail_ctx(request, conn, cal, label)
+        except Exception as exc:
+            return _err(request, _friendly(exc))
+        ctx.update(share_target=target, share_role=role, share_confirm={
+            "target": target, "count": len(emails), "sample": emails[:_CONFIRM_SAMPLE],
+            "warnings": decision.warnings, "token": token})
+        return TEMPLATES.TemplateResponse(request, "_calendar_detail.html", ctx)
+    return await _grant_and_subscribe(request, conn, cal, target, role, label, kind, emails)
+
+
+@router.post("/share/group", response_class=HTMLResponse)
+async def share_group(request: Request, cal: Annotated[str, Form()] = "", target: Annotated[str, Form()] = "",
+                      role: Annotated[str, Form()] = "reader", label: Annotated[str, Form()] = "") -> HTMLResponse:
+    """The confirm step of a group share past the bulk threshold: runs the members its preview resolved
+    (held under the token), only when the live share form still names that calendar, group and role,
+    and only with ``confirmed=1`` — checked here, not just drawn by the template."""
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return _err(request, _NOT_CONNECTED)
+    form = await request.form()
+    held, refusal = st.previews.take(_SHARE_FLOW, str(form.get(TOKEN_FIELD) or ""),
+                                     _share_key(cal, target, role), again="click Share again")
+    if refusal:
+        return _err(request, refusal)
+    cal, target, role, emails = held
+    refusal = guard.enforce(_fanout(emails), form, confirm_step=True)
+    if refusal:
+        return _err(request, refusal)
+    return await _grant_and_subscribe(request, conn, cal, target, role, label, "group", emails)
+
+
+async def _grant_and_subscribe(request: Request, conn, cal: str, target: str, role: str, label: str,
+                               kind: str, emails: list) -> HTMLResponse:
+    """Add the ACL, then subscribe: one person inline, a group's members as a polled background job."""
     try:
         result = await conn.add_calendar_acl_for(cal, target, role=role)
     except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
         return _err(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
-        return _err(request, f"Couldn't share calendar: {result.detail}")
-    kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
+        return _failed(request, f"Couldn't share the calendar with {target}.", result)
     notice, job = "", None
     if kind == "user" and emails:
         sub = await conn.subscribe_calendar_for(emails[0], cal)

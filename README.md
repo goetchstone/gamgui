@@ -49,7 +49,7 @@ Actively developed and used against live Google Workspace tenants. Working today
   person's calendars with their access role on each, see who has access and **grant or revoke it** at
   a chosen role. **Sharing also makes the calendar actually appear**, which an ACL alone does not do:
   a person is auto-subscribed, and a **group is expanded and subscribed member by member** as a
-  background job with live per-member progress — so nobody is left saying "you shared it but I can't
+  background job with live per-member progress (a group of ten or more asks first, naming the count) — so nobody is left saying "you shared it but I can't
   see it", and you get the list of anyone it couldn't be added for. Also: search a calendar's events,
   and remove a stray event or an entire orphaned secondary calendar.
 - **Lifecycle** — a guided **offboarding** routine (reset password → revoke access & sign out →
@@ -85,7 +85,8 @@ You build and run it yourself; it is not yet notarized for distribution to other
 > and a signature apply to more than 25 people). The server refuses a request that skipped the
 > confirmation — the page asking is not enough — and runs what the preview showed: a form edited
 > after its preview has to be previewed again. Single-target changes (a delegate, a group member, a
-> calendar share — to a group, one subscribe per member) run without a confirmation. That guard is
+> calendar share) run without a confirmation; a calendar share to a group of ten or more, which
+> subscribes each member, shows the member count and asks first. That guard is
 > well covered by tests; what tests cannot prove is that a given GAM command behaves as expected
 > against a real tenant. See [Live verification status](#live-verification-status) for which writes have been
 > confirmed against a production domain and which have not — and run anything marked *not yet*

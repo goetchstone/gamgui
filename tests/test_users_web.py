@@ -976,6 +976,38 @@ def test_calendars_share_bare_group_address_also_fans_out(client, monkeypatch):
     assert _fanout_job_rendered(r.text)
 
 
+ALLHANDS = [f"member{i:02d}@example.com" for i in range(1, 13)]   # the mock's 12-member group
+
+
+def test_calendars_share_to_a_large_group_asks_first_with_the_member_count(client, gam_calls):
+    # Sharing with a group subscribes every member, one write each. Past the bulk threshold (10) the
+    # guard wants a confirm; the route once started the job straight from the Share button.
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "group:allhands@example.com",
+                                              "role": "reader", "label": "Training"})
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.jobs == {}
+    text = unescape(r.text)
+    assert "adds it to 12 members' calendars" in text and 'hx-post="/calendars/share/group"' in r.text
+    assert 'value="group:allhands@example.com"' in r.text          # the form keeps what was typed
+    token = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', text).group(1)
+    form = {"cal": SEC_CAL, "target": "group:allhands@example.com", "role": "reader", "label": "Training"}
+    refused = client.post("/calendars/share/group", data={**form, "preview": token})
+    assert "needs confirmation" in refused.text and gam_writes(gam_calls()) == []
+    r = client.post("/calendars/share", data=form)                  # a fresh confirm step
+    token = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', unescape(r.text)).group(1)
+    done = client.post("/calendars/share/group", data={**form, "preview": token, "confirmed": "1"})
+    job = _job(client, done.text, "/calendars/share/status")
+    wait_for_job(client, job)
+    writes = gam_writes(gam_calls())
+    assert writes[0] == ["calendars", SEC_CAL, "add", "calendaracls", "reader", "group:allhands@example.com"]
+    assert [w[1] for w in writes[1:]] == ALLHANDS and (job.applied, job.total) == (12, 12)
+
+
+def test_calendars_share_to_a_small_group_needs_no_confirm(client, monkeypatch):
+    _stub_subscribe(client, monkeypatch)
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "group:team@example.com"})
+    assert "/calendars/share/group" not in r.text and _fanout_job_rendered(r.text)
+
+
 def test_calendars_share_known_user_is_never_treated_as_a_group(client):
     # The regression this guards: mistaking a person for a group skips the subscribe entirely, which
     # is the exact bug the feature exists to fix. A cached directory account wins over any lookup.

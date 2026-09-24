@@ -27,19 +27,38 @@
     {% else %}
     <p class="mt-2 text-sm text-brand-gray">No access rules returned.</p>
     {% endif %}
-    <form class="mt-3 flex flex-wrap gap-2" hx-post="/calendars/share" hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="find button">
+    {% set _role = share_role or "reader" %}
+    <form id="cal-share-form" class="mt-3 flex flex-wrap gap-2" hx-post="/calendars/share" hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="find button">
       <input type="hidden" name="cal" value="{{ cal }}" />
       <input type="hidden" name="label" value="{{ label }}" />
-      <input type="email" name="target" required placeholder="share with person@domain.com"
+      <input type="email" name="target" required placeholder="share with person@domain.com" value="{{ share_target or '' }}"
              class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-gray focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
       <select name="role" class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none">
-        <option value="reader">See all details</option>
-        <option value="freebusyreader">Free/busy only</option>
-        <option value="writer">Make changes</option>
-        <option value="owner">Make changes &amp; manage</option>
+        {% for value, text in [("reader", "See all details"), ("freebusyreader", "Free/busy only"), ("writer", "Make changes"), ("owner", "Make changes & manage")] %}
+        <option value="{{ value }}"{% if value == _role %} selected{% endif %}>{{ text }}</option>
+        {% endfor %}
       </select>
       <button class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors" type="submit">Share</button>
     </form>
+    {% if share_confirm %}
+    {# A group past the bulk threshold: the fan-out is one write per member, so it is confirmed first.
+       Confirm posts the share form above (hx-include) with the preview's single-use token: a group,
+       role or calendar changed since is refused, and the members run are the ones counted here. #}
+    <div class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <p>Sharing with <strong>{{ share_confirm.target }}</strong> adds it to {{ share_confirm.count }} members' calendars — one change per member, as a background job.</p>
+      <p class="mt-1 text-xs break-words">{{ share_confirm.sample | join(", ") }}{% if share_confirm.count > (share_confirm.sample | length) %} … and {{ share_confirm.count - (share_confirm.sample | length) }} more{% endif %}</p>
+      {% for w in share_confirm.warnings %}<p class="mt-1 text-xs font-medium">{{ w }}</p>{% endfor %}
+      <div class="mt-2 flex gap-2">
+        <button type="button" hx-post="/calendars/share/group" hx-include="#cal-share-form"
+                hx-vals='{"confirmed": "1", "preview": {{ share_confirm.token | tojson }} }'
+                hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="this"
+                class="rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 text-xs font-medium text-brand-white transition-colors">Confirm: share and add it for all {{ share_confirm.count }}</button>
+        <button type="button" hx-get="/calendars/detail" hx-vals='{"cal": {{ cal | tojson }}, "label": {{ label | tojson }} }'
+                hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="this"
+                class="rounded-lg border border-amber-400/70 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-100 transition-colors">Cancel</button>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <div>

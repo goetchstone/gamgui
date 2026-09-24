@@ -208,6 +208,8 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   case "$*" in
     *sales@example.com*|*staff@example.com*|*it@example.com*|*team@example.com*)
       cat "$GAM_MOCK_FIXTURES/group_members.json" ;;
+    *allhands@example.com*)
+      cat "$GAM_MOCK_FIXTURES/group_members_allhands.json" ;;   # 12 members: past the bulk threshold
     *empty-group@example.com*)
       printf 'email\n' ;;          # a real, but memberless, group
     *)

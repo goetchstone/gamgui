@@ -64,7 +64,8 @@ LOCAL_ONLY = {
     "/calendars/index/rebuild",
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
-# for them. (/calendars/share to a group also fans out an additive subscribe to its members.)
+# for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe
+# to its members; a larger group renders the /calendars/share/group confirm step instead, GATED below.)
 LOW_WRITES = {
     "/users/signature", "/users/signout", "/users/groups/add", "/users/groups/remove",
     "/users/delegate/add", "/users/delegate/remove", "/users/organization",
@@ -125,6 +126,11 @@ GATED = {
                               setup=_sales_role),
     "/builder/run": Case({"cid": "build.suspend_user", "email": "alice@example.com"}, "/builder/preview",
                          edit={"email": "carol@example.com"}),
+    # Sharing with a group of 10+ subscribes each member: /calendars/share resolves the group and, past
+    # the bulk threshold, renders this confirm step instead of writing.
+    "/calendars/share/group": Case({"cal": SEC_CAL, "target": "group:allhands@example.com", "role": "reader",
+                                    "label": "Team Calendar"}, "/calendars/share",
+                                   edit={"target": "group:staff@example.com"}),
     "/builder/sequence/run": Case({}, "/builder/sequence/preview",
                                   typed={"confirm": "confirm", "confirm_email": "carol@example.com"},
                                   setup=_ten_deletes, edit=_another_step),
