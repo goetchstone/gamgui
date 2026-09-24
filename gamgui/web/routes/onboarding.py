@@ -350,7 +350,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
     if cfg is None or not cfg.steps:
         return _err(request, "That role has no steps yet — add some in Role templates.")
     w, ctx = store.welcome(), _ctx(name, email, role, manager)
-    f, l = _split_name(name, first, last)
+    given, family = _split_name(name, first, last)
     hire = {"role": role, "name": name, "email": email.strip(), "manager": manager, "assignee": assignee,
             "create_account": bool(create_account), "first": first, "last": last,
             "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
@@ -361,7 +361,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
         "token": token,
         "role": role, "steps": cfg.steps, "assignee": (assignee or email).strip(), "name": name, "email": email,
         "manager": manager, "send_welcome": bool(send_welcome),
-        "create_account": bool(create_account), "first": f, "last": l,
+        "create_account": bool(create_account), "first": given, "last": family,
         "org_unit": cfg.org_unit or "/", "signature": cfg.signature,
         "groups": cfg.groups, "calendars": cfg.calendars,
         "subject": onboarding.render(w["subject"], ctx), "body": onboarding.render(w["body"], ctx),
@@ -390,12 +390,11 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
 
     # Validate everything that does NOT write BEFORE any mutation, so a bad assignee (or any later
     # step) can't strand a just-created account's one-time password (it exists nowhere else).
-    f = l = ""
     if make_account:
         if not email:
             return _err(request, "Enter the new hire's email to create the account.")
-        f, l = _split_name(name, first, last)
-        if not f or not l:
+        given, family = _split_name(name, first, last)
+        if not given or not family:
             return _err(request, "Enter the new hire's first and last name to create the account.")
     assignee = assignee.strip() or email
     if not assignee:

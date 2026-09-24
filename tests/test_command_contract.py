@@ -138,7 +138,7 @@ def _command_words(argv) -> int:
     """How many leading elements name the command: an entity prefix, then the next two elements
     through the last keyword among them (`user <e> print calendaracls`, `update user`, `vacation on`)."""
     start = next((len(p) for p in ENTITY_PREFIXES if len(argv) >= len(p)
-                  and all(w == a or (w is None and _value(a)) for w, a in zip(p, argv))), 0)
+                  and all(w == a or (w is None and _value(a)) for w, a in zip(p, argv, strict=False))), 0)
     return max((j + 1 for j in range(start, min(start + 2, len(argv))) if not _value(argv[j])),
                default=start)
 

@@ -1,4 +1,4 @@
-.PHONY: setup gam test run app clean help
+.PHONY: setup gam test lint run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -15,6 +15,7 @@ help:
 	@echo "               override the interpreter with: make setup PYTHON=python3.13"
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
 	@echo "make test    - run the offline test suite"
+	@echo "make lint    - run ruff (the rule set CI enforces)"
 	@echo "make run     - launch the app (native window; falls back to a browser URL)"
 	@echo "make app     - build the standalone macOS .app (PyInstaller, macOS only)"
 	@echo "make clean   - remove venv and build artifacts"
@@ -47,6 +48,9 @@ gam:
 
 test:
 	$(PY) -m pytest -q
+
+lint:
+	$(VENV)/bin/ruff check .
 
 run:
 	$(PY) -m gamgui.app

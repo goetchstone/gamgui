@@ -25,8 +25,10 @@ plan's Phase 0 F1–F3.
 - **Phase 2** — applied: T1 `ad61a8d` · T2 `ad61a8d` (every per-user read keyed on its target,
   `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e`. **Open:** T6 (coverage gate), T7 (a mock
   that validates argv against the grammar).
-- **Phase 3** — **open:** C1–C7. (C4: Dependabot's `github-actions` ecosystem was already
-  configured; the actions are still pinned by tag, not SHA.)
+- **Phase 3** — applied: C1 (ruff lint + CI `lint` job + `make lint`, in the commit that marks it;
+  the formatter is not adopted — `ruff format` would rewrite ~7,000 lines — and E501 is off: 81
+  lines run past the 120 width). **Open:** C2–C7. (C4: Dependabot's `github-actions` ecosystem was
+  already configured; the actions are still pinned by tag, not SHA.)
 - **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —

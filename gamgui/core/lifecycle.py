@@ -80,7 +80,7 @@ def command_line(argv: Sequence[str]) -> str:
     after a sensitive key is masked as the audit log masks it, except GAM's own password keywords."""
     masked = redact_argv(argv)
     shown = [raw if i and argv[i - 1].lower() == "password" and raw in _PASSWORD_KEYWORDS else m
-             for i, (raw, m) in enumerate(zip(argv, masked))]
+             for i, (raw, m) in enumerate(zip(argv, masked, strict=True))]
     return "gam " + " ".join(_quote(a) for a in shown)
 
 

@@ -452,7 +452,7 @@ async def test_provision_hire_account_failure_is_fatal_for_that_row(connector, t
 @pytest.mark.asyncio
 async def test_run_bulk_onboard_executor(connector, tmp_path):
     # Drive the executor directly (never under TestClient — the bg task + mock-gam can deadlock).
-    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard, _RECENT_WINDOW
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
     store = RunbookStore(tmp_path / "ob.json")
     store.set_role("Sales", ["Set up POS"], groups=["sales@example.com"])
     sig_store = SignatureStore(tmp_path / "sig.json")

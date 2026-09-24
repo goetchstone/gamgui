@@ -375,7 +375,7 @@ async def test_an_interrupted_offboard_marks_what_it_never_reached(connector, mo
     steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
     task = asyncio.create_task(_run_offboard(job, connector, steps))
-    while job.current != "Remove from everyone's calendars":
+    while job.current != "Remove from everyone's calendars":  # noqa: ASYNC110 — polls the job as the UI does
         await asyncio.sleep(0.05)
     await asyncio.sleep(0.3)
     task.cancel()

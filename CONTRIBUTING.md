@@ -96,9 +96,16 @@ only to commands confidently classified `RiskLevel.READ_ONLY`.
 
 ```bash
 make test
+make lint
 ```
 
-CI runs the same suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14. On top of that there's
-a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs `tests/test_command_contract.py`
-against the real command reference, plus a non-blocking `gam-latest-preview` job that runs the token
-contract against the *newest* GAM7 as an early warning that a command we use was renamed or removed.
+`make lint` runs [ruff](https://docs.astral.sh/ruff/) with the rule set in `pyproject.toml`: checks
+that catch bugs (pyflakes, pycodestyle errors, bugbear, blocking calls in `async` code), not style.
+Ruff's formatter is not adopted — it would rewrite most files — so match the surrounding layout by
+hand. A `# noqa: CODE` carries its reason after it.
+
+CI runs the lint once, and the suite on Ubuntu and macOS across Python 3.10, 3.12 and 3.14. On top
+of that there's a macOS `gam-compat` job that vendors the *pinned* GAM7 and runs
+`tests/test_command_contract.py` against the real command reference, plus a non-blocking
+`gam-latest-preview` job that runs the token contract against the *newest* GAM7 as an early warning
+that a command we use was renamed or removed.

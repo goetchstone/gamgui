@@ -5,13 +5,29 @@ on:
     branches: [main]
   pull_request:
 
-# Every job here only checks out, installs, vendors the GAM binary and runs pytest — nothing writes
-# back to the repo, so read-only content access is all GITHUB_TOKEN needs (it is also what the
+# Every job here only checks out, installs, vendors the GAM binary and runs pytest or ruff — nothing
+# writes back to the repo, so read-only content access is all GITHUB_TOKEN needs (it is also what the
 # fetch_gam.sh api.github.com calls authenticate with, purely to dodge the anonymous 60/hr limit).
 permissions:
   contents: read
 
 jobs:
+  lint:
+    name: lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install (ruff's version is pinned in pyproject's dev extra)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff
+        run: ruff check --output-format=github .
+
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
     timeout-minutes: 15   # a hung test fails the job fast instead of burning the 6h default

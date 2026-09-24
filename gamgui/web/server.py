@@ -10,7 +10,6 @@ HTTP layer offline.
 
 from __future__ import annotations
 
-import asyncio
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field

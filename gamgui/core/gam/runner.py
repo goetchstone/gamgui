@@ -12,7 +12,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from ..secrets.ephemeral import EphemeralConfig
 from ..secrets.vault import SecretsVault
@@ -145,7 +145,7 @@ class GAMRunner:
             # Killed mid-run: say so, since a multi-entity command may have done part of its work.
             raise GAMError(GAMErrorKind.TIMEOUT, exit_code=None, argv=list(argv),
                            stderr=f"timed out after {_duration(timeout)} and was stopped; "
-                                  "it may have done part of its work")
+                                  "it may have done part of its work") from None
         except BaseException:
             # Cancelled — the app quitting cancels in-flight jobs (server._lifespan). CancelledError
             # is a BaseException, so without this gam kept running on the credentials it had loaded

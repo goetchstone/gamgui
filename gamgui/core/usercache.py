@@ -8,7 +8,7 @@ every page load / keystroke. Manual refresh (force) and invalidation handle stal
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Callable, List, Optional
+from typing import Awaitable, Callable, Optional
 
 from . import clock
 

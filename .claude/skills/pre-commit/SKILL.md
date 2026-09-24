@@ -12,8 +12,9 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
 
 ## Always
 
-1. **The offline suite is green.** `.venv/bin/python -m pytest -q`. A red or
-   unrun suite is not committable. (`make setup` first if there's no `.venv`.)
+1. **The offline suite is green and lint is clean.** `.venv/bin/python -m pytest -q`
+   and `make lint` (ruff). A red or unrun suite is not committable. (`make setup`
+   first if there's no `.venv`.)
 2. **Read before you wrote.** You opened the file/function you changed rather
    than editing from memory. Verify claims against the code, not against a doc
    or a recollection.
