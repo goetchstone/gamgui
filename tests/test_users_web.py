@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1743,6 +1744,55 @@ def test_add_delegate_failure_is_reported(client, monkeypatch):
     r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "carol@example.com"})
     assert "add the delegate. Check the admin role." in r.text and "403 permission denied" in r.text
     assert 'value="carol@example.com"' in r.text        # the typed address stays in the box
+
+
+# Each user-detail write, how it is posted, the connector call behind it, and what its failure says.
+_ALICE = "alice@example.com"
+WRITE_FAILURES = [
+    ("/users/groups/add", {"email": _ALICE, "group": "sales@example.com"}, "add_group_member",
+     f"Couldn't add {_ALICE} to sales@example.com."),
+    ("/users/groups/remove", {"email": _ALICE, "group": "sales@example.com"}, "remove_group_member",
+     f"Couldn't remove {_ALICE} from sales@example.com."),
+    ("/users/organization", {"email": _ALICE, "title": "Lead", "department": "IT"}, "set_organization",
+     "Couldn't update the title and department."),
+    ("/users/calendar/add", {"email": _ALICE, "target": "carol@example.com", "role": "reader"}, "add_calendar_acl",
+     "Couldn't share the calendar with carol@example.com."),
+    ("/users/calendar/remove", {"email": _ALICE, "scope": "user:carol@example.com"}, "remove_calendar_acl",
+     "Couldn't remove user:carol@example.com's access."),
+    ("/users/vacation/set", {"email": _ALICE, "subject": "Away", "message": "Back soon"}, "set_vacation",
+     "Couldn't turn on the auto-reply."),
+    ("/users/vacation/off", {"email": _ALICE}, "clear_vacation", "Couldn't turn off the auto-reply."),
+    ("/users/signout", {"email": _ALICE}, "signout_user", f"Couldn't sign {_ALICE} out."),
+    ("/users/suspend/apply", {"email": _ALICE, "suspend": "on", "confirmed": "1"}, "apply",
+     f"Couldn't suspend {_ALICE}."),
+    ("/users/suspend/apply", {"email": _ALICE, "suspend": "off", "confirmed": "1"}, "apply",
+     f"Couldn't unsuspend {_ALICE}."),
+    ("/users/delete/apply", {"email": _ALICE, "confirmed": "1", "confirm_email": _ALICE}, "delete_user",
+     f"Couldn't delete {_ALICE}."),
+]
+
+
+@pytest.mark.parametrize("route, form, method, what", WRITE_FAILURES,
+                         ids=[f"{r}-{f.get('suspend', '')}" for r, f, _, _ in WRITE_FAILURES])
+def test_a_failed_user_write_says_why_with_gams_error_expandable(client, monkeypatch, route, form, method, what):
+    # Plan U9: these once headlined GAM's raw "GAM failed (permission_denied, exit=1): …" line. Now the
+    # message says what didn't happen and what to do in words; GAM's error is one click away.
+    from gamgui.core.connectors.base import ChangePreview, ChangeResult, ConnectorID, RiskLevel
+
+    raw = "GAM failed (permission_denied, exit=1): ERROR: 403: Forbidden - insufficientPermissions"
+    why = "The authorized account lacks permission for this action. Check the admin role and scopes."
+
+    async def fail(*_a, **_k):
+        preview = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=_ALICE, summary="x",
+                                risk=RiskLevel.LOW)
+        result = ChangeResult(preview=preview, ok=False, detail=raw, remediation=why)
+        return [result] if method == "apply" else result
+
+    monkeypatch.setattr(client.app.state.gamgui.connector, method, fail)
+    r = client.post(route, data=form)
+    headline, _, expandable = r.text.partition("<details")
+    assert f"{what} {why}" in unescape(headline) and "GAM failed" not in headline
+    assert "GAM's error" in expandable and "insufficientPermissions" in expandable
 
 
 def test_add_delegate_empty_rejected(client):

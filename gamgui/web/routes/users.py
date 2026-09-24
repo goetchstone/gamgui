@@ -72,6 +72,15 @@ def _err(request: Request, message: str) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": False, "message": message})
 
 
+def _failed(request: Request, what: str, result) -> HTMLResponse:
+    """A failed write: what didn't happen and what to do about it in words (``remediation``), with
+    GAM's raw error one click away (``_action_result.html``'s details) — never GAM's line as the
+    headline (plan U9)."""
+    message = f"{what} {result.remediation}".strip()
+    return TEMPLATES.TemplateResponse(request, "_action_result.html",
+                                      {"ok": False, "message": message, "details": result.detail})
+
+
 def _error_page(request: Request, message: str) -> HTMLResponse:
     """A full-page friendly error (for full-page GET routes)."""
     return TEMPLATES.TemplateResponse(request, "error.html", {"message": message})
@@ -165,10 +174,10 @@ async def signout_user(request: Request, email: Annotated[str, Form()]) -> HTMLR
     if conn is None:
         return _err(request, _NOT_CONNECTED)
     result = await conn.signout_user(email)
+    if not result.ok:
+        return _failed(request, f"Couldn't sign {email} out.", result)
     return TEMPLATES.TemplateResponse(
-        request, "_action_result.html",
-        {"ok": result.ok, "message": f"Signed {email} out of all sessions." if result.ok else result.detail},
-    )
+        request, "_action_result.html", {"ok": True, "message": f"Signed {email} out of all sessions."})
 
 
 @router.get("/signature/current", response_class=HTMLResponse)
@@ -212,7 +221,7 @@ async def groups_add(request: Request, email: Annotated[str, Form()], group: Ann
         return _err(request, _NOT_CONNECTED)
     result = await conn.add_group_member(group.strip(), email)
     if not result.ok:
-        return _err(request, f"Couldn't add to group: {result.detail}")
+        return _failed(request, f"Couldn't add {email} to {group.strip()}.", result)
     return await _groups_partial(request, conn, email)
 
 
@@ -223,7 +232,7 @@ async def groups_remove(request: Request, email: Annotated[str, Form()], group: 
         return _err(request, _NOT_CONNECTED)
     result = await conn.remove_group_member(group.strip(), email)
     if not result.ok:
-        return _err(request, f"Couldn't remove from group: {result.detail}")
+        return _failed(request, f"Couldn't remove {email} from {group.strip()}.", result)
     return await _groups_partial(request, conn, email)
 
 
@@ -299,7 +308,7 @@ async def set_organization(
     title, department = title.strip(), department.strip()
     result = await conn.set_organization(email, title=title, department=department)
     if not result.ok:
-        return _err(request, f"Couldn't update title/department: {result.detail}")
+        return _failed(request, "Couldn't update the title and department.", result)
     st.invalidate_users()  # title/department changed -> cached directory is stale
     return TEMPLATES.TemplateResponse(
         request, "_org_form.html", {"email": email, "title": title, "department": department, "saved": True}
@@ -485,7 +494,7 @@ async def calendar_add(
     except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
         return _err(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
-        return _err(request, f"Couldn't share calendar: {result.detail}")
+        return _failed(request, f"Couldn't share the calendar with {target}.", result)
     return await _calendar_partial(request, conn, email)
 
 
@@ -496,7 +505,7 @@ async def calendar_remove(request: Request, email: Annotated[str, Form()], scope
         return _err(request, _NOT_CONNECTED)
     result = await conn.remove_calendar_acl(email, scope.strip())
     if not result.ok:
-        return _err(request, f"Couldn't remove access: {result.detail}")
+        return _failed(request, f"Couldn't remove {scope.strip()}'s access.", result)
     return await _calendar_partial(request, conn, email)
 
 
@@ -531,7 +540,7 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
         return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal})
     result = await conn.delete_user(email)
     if not result.ok:
-        return _err(request, f"Couldn't delete the account: {result.detail}")
+        return _failed(request, f"Couldn't delete {email}.", result)
     request.app.state.gamgui.invalidate_users()
     return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "deleted": True})
 
@@ -573,7 +582,7 @@ async def vacation_set(
         contacts_only=(contactsonly == "on"), domain_only=(domainonly == "on"),
     )
     if not result.ok:
-        return _err(request, f"Couldn't set auto-reply: {result.detail}")
+        return _failed(request, "Couldn't turn on the auto-reply.", result)
     return await _vacation_partial(request, conn, email)
 
 
@@ -584,7 +593,7 @@ async def vacation_off(request: Request, email: Annotated[str, Form()]) -> HTMLR
         return _err(request, _NOT_CONNECTED)
     result = await conn.clear_vacation(email)
     if not result.ok:
-        return _err(request, f"Couldn't turn off auto-reply: {result.detail}")
+        return _failed(request, "Couldn't turn off the auto-reply.", result)
     return await _vacation_partial(request, conn, email)
 
 
@@ -621,9 +630,10 @@ async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend
         results = await conn.apply(previews)
     except Exception as exc:
         return _err(request, _friendly(exc))
-    if not (results and all(r.ok for r in results)):
-        detail = results[0].detail if results else "no change applied"
-        return _err(request, f"Failed: {detail}")
+    failed = next((r for r in results if not r.ok), None)
+    if not results or failed is not None:
+        what = f"Couldn't {'suspend' if want_suspend else 'unsuspend'} {email}."
+        return _failed(request, what, failed) if failed is not None else _err(request, what)
     request.app.state.gamgui.invalidate_users()  # status changed -> cached list is stale
     return TEMPLATES.TemplateResponse(
         request, "_suspend_zone.html", {"email": email, "suspended": want_suspend}
