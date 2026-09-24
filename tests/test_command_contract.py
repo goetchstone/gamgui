@@ -201,6 +201,47 @@ def test_catalog_matches_grammar():
     assert len(data["commands"]) == len(fresh), "command_catalog.json is stale — regenerate it after the GAM bump"
 
 
+# GAM options that write a command's output to a local file (or pick where it lands).
+_LOCAL_FILE_OPTIONS = {"targetfolder", "targetname", "drivedir", "downloadfile", "saveattachments"}
+
+
+def _stanza(lines, i):
+    """Grammar line ``i`` (a `gam …` head) with its indented continuation lines, as one string."""
+    out = [lines[i]]
+    for line in lines[i + 1:]:
+        if not line[:1].isspace() or not line.strip():
+            break
+        out.append(line)
+    return " ".join(out)
+
+
+@needs_grammar
+def test_the_download_verb_is_what_saves_a_local_file():
+    """The sensitive-read audit flags downloads by GAM's verb (catalog.DOWNLOAD_VERB), not a hand list
+    (review F4/F27). Both halves of that rule, against the grammar: every `get` stanza takes
+    `targetfolder <FilePath>` (it saves a file — to GAM's drive_dir when none is given), and no other
+    buildable read can reach a local-file option, because the read builder emits only a head line's
+    required tokens (`info cros … [downloadfile …]`, `show messages … [saveattachments …]`)."""
+    from gamgui.core.catalog import load_catalog
+    from gamgui.core.catalog.catalog import DOWNLOAD_VERB
+    from gamgui.core.connectors.base import RiskLevel
+
+    lines = GAM_COMMANDS_REF.read_text(errors="replace").splitlines()
+    heads = [i for i, line in enumerate(lines) if line.startswith("gam ")]
+    gets = [i for i in heads if DOWNLOAD_VERB in lines[i].split()]
+    assert gets and all("targetfolder" in _stanza(lines, i) for i in gets), [lines[i] for i in gets]
+    for c in load_catalog().commands:
+        if not (c.buildable and c.risk == RiskLevel.READ_ONLY and c.id.startswith("raw.")):
+            continue
+        n = int(c.id.split(".")[1])
+        assert lines[n] == c.raw_syntax, c.id          # the id is the grammar line the command came from
+        argv = c.build({s.key: f"<{s.key}>" for s in c.slots})
+        if c.verb == DOWNLOAD_VERB:
+            assert c.sensitive, c.raw_syntax
+        else:
+            assert not _LOCAL_FILE_OPTIONS & set(argv), (c.raw_syntax, argv)
+
+
 def test_calendar_acl_roles_match_grammar_and_mock():
     # The builders validate against CALENDAR_ACL_ROLES; the strict mock must reject exactly the same
     # set, and (when vendored) the grammar's every <CalendarACLRole> definition must equal it.
@@ -231,7 +272,7 @@ AUDITED_OUTSIDE_RUN_WRITE = {
 }
 # Reads that record() — never the output (plan S9, operator decision D3).
 AUDITED_READS = {
-    "catalog_read": "records `sensitive_read` for a SENSITIVE_READS command",
+    "catalog_read": "records `sensitive_read` for a sensitive command (SECRET_READS, DOWNLOAD_VERB)",
 }
 # Functions that run an argv the tripwire can't trace to one builder, each proven a read another way.
 READ_BY_CONTRACT = {

@@ -323,14 +323,27 @@ def test_a_failed_export_is_audited_and_shown(client, monkeypatch):
     assert (entry["action"], entry["target"], entry["ok"]) == ("export_to_sheet", "boss@example.com", False)
 
 
-SENSITIVE_HEADS = {
+# Reads whose output is itself a secret: named in catalog.SECRET_READS (nothing in the grammar marks one).
+SECRET_HEADS = {
     "gam <UserTypeEntity> show backupcodes|verificationcodes",
     "gam <UserTypeEntity> print backupcodes|verificationcodes",
     "gam show browsertokens",
     "gam print browsertokens",
+}
+# Downloads: every read with GAM's download verb `get` (catalog.DOWNLOAD_VERB), by rule. Listed here only
+# so a GAM bump that adds or drops one fails, and SECURITY.md's list is updated with it.
+DOWNLOAD_HEADS = {
     "gam <UserTypeEntity> get drivefile <DriveFileEntity>",
     "gam <UserTypeEntity> get document <DriveFileEntity>",
+    "gam <UserTypeEntity> get noteattachments <NotesNameEntity>",
+    "gam get devicefile <CrOSEntity>",
+    "gam <CrOSTypeEntity> get devicefile",
+    "gam <UserTypeEntity> get photo",
+    "gam <UserTypeEntity> get profilephoto",
+    "gam get contactphotos <ContactEntity>|<ContactSelection>",
+    "gam <UserTypeEntity> get contactphotos",
 }
+SENSITIVE_HEADS = SECRET_HEADS | DOWNLOAD_HEADS
 
 
 def _sensitive(needle):
@@ -344,6 +357,28 @@ def test_sensitive_reads_are_flagged_and_still_buildable():
     assert {c.raw_syntax.split("[")[0].strip() for c in flagged} == SENSITIVE_HEADS
     assert len(flagged) == len(SENSITIVE_HEADS)
     assert all(c.buildable and c.risk == RiskLevel.READ_ONLY for c in flagged)
+
+
+def test_every_download_read_is_sensitive_by_rule():
+    # A hand list once named `get drivefile`/`get document` and missed a user's Keep note attachments,
+    # ChromeOS device files and photos (review F4/F27): the same download, run with no audit record.
+    # The rule is the verb, so a `get` read a GAM bump adds is audited from its first run.
+    from gamgui.core.catalog.catalog import DOWNLOAD_VERB, SECRET_READS
+
+    reads = [c for c in load_catalog().commands if c.buildable and c.risk == RiskLevel.READ_ONLY]
+    downloads = [c for c in reads if c.verb == DOWNLOAD_VERB]
+    assert downloads and all(c.sensitive for c in downloads)
+    others = {c.raw_syntax.split("[")[0].strip() for c in reads if c.sensitive and c.verb != DOWNLOAD_VERB}
+    assert others == SECRET_HEADS and {v for v, _ in SECRET_READS} == {"show", "print"}
+
+
+def test_a_note_attachment_download_is_audited(client):
+    cmd = _sensitive("get noteattachments")
+    client.post("/builder/run", data={"cid": cmd.id, "a0": "alice@example.com", "a1": "notes/abc123"})
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"]) == ("sensitive_read", "alice@example.com")
+    assert entry["argv"] == ["user", "alice@example.com", "get", "noteattachments", "notes/abc123"]
+    assert entry["extra"]["command"] == cmd.id
 
 
 def test_a_sensitive_read_is_audited_without_its_output(client):

@@ -444,7 +444,7 @@ class GAMConnector(Connector):
         """Run a Builder catalog read and return its output. Refuses anything the catalog doesn't mark
         READ_ONLY (the Builder sends a write to ``apply``), so this can't become a second write path.
 
-        A ``cmd.sensitive`` read (backup codes, browser tokens, a file download) is audited as
+        A ``cmd.sensitive`` read (backup codes, browser tokens, any ``get`` download) is audited as
         ``sensitive_read``: which command, on whom, whether it ran — never the output, which is the
         secret itself."""
         _require_read(cmd)

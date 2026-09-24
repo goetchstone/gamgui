@@ -285,20 +285,31 @@ def _make_reads_buildable(commands: List[CatalogCommand]) -> None:
         c.buildable = True
 
 
-# Reads whose output is account-takeover material or a file's contents: 2SV backup codes, Chrome
-# browser enrollment tokens, a Drive file / Doc download. They stay buildable (operator decision D3)
-# and every run is audited. Matched on the grammar's verb + object, since the raw.<line> ids move on a
-# GAM bump; test_sensitive_reads_are_flagged_and_still_buildable pins what this resolves to.
-SENSITIVE_READS = {("show", "backupcodes"), ("print", "backupcodes"), ("show", "browsertokens"),
-                   ("print", "browsertokens"), ("get", "drivefile"), ("get", "document")}
+# Sensitive reads stay buildable (operator decision D3) and every run is audited. Two kinds:
+#
+# Downloads, by rule: `get` is GAM's download verb. Every `gam … get <object>` stanza in the grammar
+# saves what it fetches to a local file (each takes `[targetfolder <FilePath>]`; without it the file
+# lands in GAM's drive_dir): a user's Drive file or Doc, Keep note attachments, ChromeOS device files,
+# user and contact photos. A hand list once named only drivefile/document and missed the rest (review
+# F4/F27), so the verb decides, and a `get` read a GAM bump adds is audited from its first run.
+# test_command_contract.py::test_the_download_verb_is_what_saves_a_local_file pins the premise.
+DOWNLOAD_VERB = "get"
+# Secrets, by name: reads whose output is itself account-takeover material — 2SV backup codes and
+# Chrome browser enrollment tokens. Nothing in the grammar marks a secret, so these are named, on the
+# grammar's verb + object (the raw.<line> ids move on a GAM bump).
+SECRET_READS = {("show", "backupcodes"), ("print", "backupcodes"), ("show", "browsertokens"),
+                ("print", "browsertokens")}
+# test_builder.py::test_sensitive_reads_are_flagged_and_still_buildable pins what both resolve to.
 
 
 def _is_sensitive(c: CatalogCommand) -> bool:
     toks = c.raw_syntax.split()
     if c.risk != RiskLevel.READ_ONLY or c.verb not in toks[:-1]:
         return False
+    if c.verb == DOWNLOAD_VERB:
+        return True
     obj = toks[toks.index(c.verb) + 1]
-    return any((c.verb, alt) in SENSITIVE_READS for alt in obj.split("|"))
+    return any((c.verb, alt) in SECRET_READS for alt in obj.split("|"))
 
 
 def load_catalog() -> Catalog:
