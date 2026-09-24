@@ -1,16 +1,20 @@
 # Screenshots
 
-Drop PNGs here, then uncomment the image block near the top of the root `README.md`.
+The four images the root `README.md` shows. Regenerate them — never capture by hand from a real
+tenant (hand captures once put the operator's company name and an internal calendar name in this
+public repo):
 
-Recommended captures (point the app at a **test/throwaway tenant** so no real names/emails leak into
-a public screenshot — blur or use demo data):
+```bash
+.venv/bin/python scripts/readme_screenshots.py
+```
+
+It runs the mock-backed app (`scripts/preview_mock.py`: strict mock `gam`, fake example.com data)
+and drives headless Google Chrome at 1280 px wide, 2x. Needs Google Chrome installed. Look at each
+image before committing — the pre-commit hook's private-term check can't read pixels.
 
 | File | Screen | Why it sells the tool |
 | --- | --- | --- |
-| `users.png` | Users list + a user detail | the core: search, profile, delegates, suspend |
+| `users.png` | Users list | the core: search, status, bulk department |
 | `signatures.png` | Signature designer with the live preview | the headline use case for many visitors |
 | `calendars.png` | Calendars — a name-search result + "who has access" | the "find/clean up shared calendars" win |
-| `lifecycle.png` | Offboarding preview with the generated auto-reply | shows the guided, guarded automation |
-
-Tips: capture at a normal window size (the app opens ~1100×760), use Retina (`Cmd-Shift-4` then
-`Space` to grab the window), and keep them under ~500 KB each.
+| `lifecycle.png` | Offboarding preview: the auto-reply and each step's exact `gam` command | shows the guided, guarded automation |
