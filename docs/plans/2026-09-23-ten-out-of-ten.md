@@ -55,7 +55,7 @@ reminder's invitee (`4296aef` `73f349a` `ccd0d62` `3687c64` `d6d7338` `3f08323` 
 classifications (`4cc4d90` `3a0acf5`); a write cut off by quitting stops its `gam` and is audited
 (`dd0e3f4`); bounded zeroing on wipe (`e9d7820`); `run_in_cfgdir` removed (`7b46225`); a bulk loop
 stops at an account-wide failure (`bebcdaa`); add delegate checks the address (`dd2cddc`); sharper
-tripwires (`ce2fb2f` `4361675` `223a048` `24092ad`).
+tripwires (`ce2fb2f` `4361675` `223a048` `24092ad`). A third, narrower re-verification round (2026-09-24) added: an interrupted offboarding never reads "complete", the sweep no longer waits on the delegate, and the admin GamGUI is connected as can't be offboarded (`a9576bd`); an account delete typed as an alias is refused (`c64d083`); every TTL counts time asleep (`f5a66c2`); an empty signature scope matches nobody (`4a31728`); bulk onboarding runs its held preview and a cancelled task-list build is audited (`c667dc9`); a Builder Drive transfer sends `all` (`5fb551d`); README screenshots regenerated from mock data by `scripts/readme_screenshots.py` (`312cf0e`).
 
 ## How this was produced
 A three-lens review on 2026-09-23: an adversarial **security** reviewer that proved findings with
@@ -68,7 +68,7 @@ code or read directly in the source; **PLAUSIBLE** = reasoned, not demonstrated.
 session-scratch and are not kept — each item says how to reproduce.
 
 ## Scorecard
-*"Now" is as reviewed at `d5d775b`, before `harden-2026-09-23`; not re-scored since.*
+*"Now" is as reviewed at `d5d775b`, before `harden-2026-09-23`. **Estimated after the branch** (the orchestrator's estimate, not a fresh review): Security 9 · Code quality 7.5 · Test quality 8.5 · Mock fidelity 7 · Tooling/CI 6.5 · Usability 7 · Accessibility 3 (untouched) · Docs 7 · Value 6.5 · Agent framework 9. The biggest remaining gaps are Phase 4 (accessibility), Phase 3 (lint/type/locks) and Phase 8 (live verification).*
 
 | Dimension | Now | Realistic target | What caps it below 10 |
 |---|---|---|---|
