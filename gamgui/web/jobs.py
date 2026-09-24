@@ -31,6 +31,7 @@ class BatchJob:
     finished: bool = False
     error: Optional[str] = None
     log: List[str] = field(default_factory=list)  # per-step outcome lines (multi-step routines)
+    interrupted: bool = False  # cut off (the app quit) before every step was accounted for
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
     def fail(self, item: str) -> None:

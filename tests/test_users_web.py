@@ -1433,11 +1433,18 @@ def test_offboard_interrupted_panel_is_not_complete(client):
 
     job = start_job(client.app.state.gamgui.jobs, 3)
     job.applied, job.done, job.finished = 2, 2, True
-    job.skipped = ["30-day reminder for mgr@example.com"]
+    job.skipped, job.interrupted = ["30-day reminder for mgr@example.com"], True
     job.log = ["✓ Reset password", "✓ Set delegate", "– 30-day reminder for mgr@example.com — not run: interrupted"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
     assert "Offboarding interrupted — 2 of 3 steps succeeded" in text
     assert "now has a calendar reminder" not in text and "Don't delete the account" in text
+
+    # A failed step whose GAM message happens to say "interrupted" is a failure, not a cut-off run.
+    failed = start_job(client.app.state.gamgui.jobs, 1)
+    failed.done, failed.finished, failed.log = 1, True, ["✗ Reset password — Connection interrupted by peer"]
+    failed.fail("Reset password")
+    text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": failed.id}).text)
+    assert "Offboarding incomplete" in text and "Offboarding interrupted" not in text
 
 
 def test_offboard_panel_warns_when_revoke_never_ran(client):

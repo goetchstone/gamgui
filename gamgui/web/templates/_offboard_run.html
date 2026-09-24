@@ -13,7 +13,7 @@
 </div>
 {% elif job %}
 {% set clean = not job.failed_total and not job.skipped and job.applied == job.total %}
-{% set interrupted = job.log and "interrupted" in job.log[-1] %}
+{% set interrupted = job.interrupted %}
 <div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if clean else 'border-amber-300 bg-amber-50 text-amber-800' }}">
   <p class="font-medium">Offboarding {{ "complete" if clean else ("interrupted" if interrupted else ("stopped" if job.skipped else "incomplete")) }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.</p>
   {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}

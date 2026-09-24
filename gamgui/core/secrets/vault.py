@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from typing import Dict, Optional, Protocol, Tuple
+
+from .. import clock
 
 # Logical credential name -> the filename GAM expects inside GAMCFGDIR.
 FILENAMES: Dict[str, str] = {
@@ -112,21 +113,21 @@ class SecretsVault:
         _check_name(name)
         key = (domain, name)
         if self._cache_ttl:
-            now = time.monotonic()
+            now = clock.now()
             hit = self._cache.get(key)
             if hit is not None and hit[1] > now:
                 self._cache[key] = (hit[0], now + self._cache_ttl)  # sliding: extend on use
                 return hit[0]
         value = self.backend.get_password(self._service(domain), name)
         if self._cache_ttl:
-            self._cache[key] = (value, time.monotonic() + self._cache_ttl)
+            self._cache[key] = (value, clock.now() + self._cache_ttl)
         return value
 
     def set(self, domain: str, name: str, value: str) -> None:
         _check_name(name)
         self.backend.set_password(self._service(domain), name, value)
         if self._cache_ttl:
-            self._cache[(domain, name)] = (value, time.monotonic() + self._cache_ttl)
+            self._cache[(domain, name)] = (value, clock.now() + self._cache_ttl)
         self._register_domain(domain)
 
     def delete(self, domain: str, name: str) -> None:

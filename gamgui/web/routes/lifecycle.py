@@ -253,6 +253,7 @@ async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) ->
     finally:
         # Cut off (the app quit mid-run): every step not accounted for is "not run", so the panel can't
         # call a half-done routine complete — or tell the manager about a reminder that was never added.
+        job.interrupted = handled < len(steps)
         for i, step in enumerate(steps[handled:]):
             cut = i == 0 and job.current == step.label
             job.log.append(f"– {step.label} — " + ("interrupted before it finished" if cut else "not run: interrupted"))
