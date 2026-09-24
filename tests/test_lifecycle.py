@@ -318,7 +318,7 @@ def test_offboard_step_dependencies_are_the_documented_ones():
     assert {s.key: s.requires for s in steps} == {
         "password": (), "revoke": ("password",), "forward": ("password",), "delegate": ("password",),
         "vacation": ("password", "delegate"),
-        "transfer": ("password", "delegate"), "calacls": ("password", "delegate"),
+        "transfer": ("password", "delegate"), "calacls": ("password",),
         "reminder": ("password", "delegate", "transfer"),
     }
 
@@ -347,13 +347,56 @@ async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
 
 
 @pytest.mark.asyncio
-async def test_offboard_failed_delegate_stops_before_the_rest(connector, gam_calls):
-    # The first write to the manager failed; the transfer and the reminder go to the same account.
+async def test_offboard_failed_delegate_stops_the_hand_over_but_not_the_sweep(connector, gam_calls):
+    # The first write to the manager failed; the auto-reply names them and the transfer and the
+    # reminder go to the same account, so those stop. The calendar sweep never touches the manager —
+    # it still takes the leaver off colleagues' calendars.
     job = await _offboard(connector, "leaver@example.com", manager="missing-mgr@example.com")
-    assert (job.applied, job.failed) == (3, ["Set delegate"]) and len(job.skipped) == 4
+    assert (job.applied, job.failed) == (4, ["Set delegate"])
+    assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
+                           "30-day reminder for missing-mgr@example.com"]
     assert [w[:4] for w in gam_writes(gam_calls())] == [
         ["update", "user", "leaver@example.com", "password"], ["user", "leaver@example.com", "deprovision", "signout"],
-        ["user", "leaver@example.com", "forward", "off"], ["user", "leaver@example.com", "add", "delegate"]]
+        ["user", "leaver@example.com", "forward", "off"], ["user", "leaver@example.com", "add", "delegate"],
+        ["all", "users", "delete", "calendaracls"]]
+
+
+@pytest.mark.asyncio
+async def test_an_interrupted_offboard_marks_what_it_never_reached(connector, monkeypatch):
+    # Quitting mid-run cancels the job. Every step it never finished must be "not run", so the panel
+    # can't say "complete" or promise the manager a reminder that was never added.
+    import asyncio
+
+    from gamgui.core.connectors import gam_connector
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.lifecycle import _run_offboard
+
+    monkeypatch.setattr(gam_connector, "DOMAIN_WIDE_TIMEOUT", 30)
+    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    job = start_job({}, len(steps))
+    task = asyncio.create_task(_run_offboard(job, connector, steps))
+    while job.current != "Remove from everyone's calendars":
+        await asyncio.sleep(0.05)
+    await asyncio.sleep(0.3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert job.finished and job.applied == len(steps) - 2
+    assert job.skipped == ["Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
+    assert job.log[-2:] == ["– Remove from everyone's calendars — interrupted before it finished",
+                            "– 30-day reminder for mgr@example.com — not run: interrupted"]
+
+
+def test_the_connected_admin_cannot_be_offboarded():
+    # Revoking the account GamGUI is connected as deletes GamGUI's own OAuth token mid-run.
+    from gamgui.core.gam.models import GAMUser
+    from gamgui.core.lifecycle import check_addresses
+
+    directory = [GAMUser(primary_email="admin@example.com", is_admin=True),
+                 GAMUser(primary_email="mgr@example.com")]
+    check = check_addresses(directory, "Admin@example.com", "mgr@example.com", connected_admin="admin@example.com")
+    assert check.errors and "GamGUI is connected as admin@example.com" in check.errors[0]
+    assert not check_addresses(directory, "admin@example.com", "mgr@example.com").errors
 
 
 @pytest.mark.asyncio

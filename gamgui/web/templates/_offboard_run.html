@@ -12,12 +12,13 @@
   {% if job.log %}<ul class="mt-3 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
 </div>
 {% elif job %}
-{% set clean = not job.failed_total and not job.skipped %}
+{% set clean = not job.failed_total and not job.skipped and job.applied == job.total %}
+{% set interrupted = job.log and "interrupted" in job.log[-1] %}
 <div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if clean else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p class="font-medium">Offboarding {{ "complete" if clean else ("stopped" if job.skipped else "incomplete") }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.</p>
+  <p class="font-medium">Offboarding {{ "complete" if clean else ("interrupted" if interrupted else ("stopped" if job.skipped else "incomplete")) }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.</p>
   {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
-  {% if revoke_label and revoke_label in job.failed %}
-  <p class="mt-3 text-xs"><strong>The leaver may still be signed in</strong>, and their app passwords and connected apps may still work: “{{ revoke_label }}” didn't finish. Fix what it reports and run it again (it is safe to repeat); “Sign out everywhere” on the user's page ends the sessions on its own.</p>
+  {% if revoke_label and (revoke_label in job.failed or revoke_label in job.skipped) %}
+  <p class="mt-3 text-xs"><strong>The leaver may still be signed in</strong>, and their app passwords and connected apps may still work: “{{ revoke_label }}” didn't run to completion. Fix what the log reports and run it again (it is safe to repeat); “Sign out everywhere” on the user's page ends the sessions on its own.</p>
   {% endif %}
   {% if not clean %}
   <p class="mt-3 text-xs">To finish: fix what the failed step reports, tick the steps marked ✓ as already done, preview again and run the rest. <strong>Don't delete the account</strong> until the Drive &amp; Calendar transfer has succeeded and finished.</p>

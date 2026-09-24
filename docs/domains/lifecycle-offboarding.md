@@ -2,7 +2,7 @@
 
 **One line:** The ordered "a user is leaving" routine — reset password, revoke access (sessions, app
 passwords, backup codes, OAuth tokens), turn off mail forwarding, delegate + auto-reply the mailbox, transfer Drive/Calendar,
-sweep the user off everyone's calendars, and drop a dated reminder on the manager — plus the
+sweep the user off every active user's primary calendar, and drop a dated reminder on the manager — plus the
 separate, gated account **delete** that IT runs later.
 
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on
@@ -93,10 +93,10 @@ step (failure-log).
 | Reset password | **stop** — nothing else runs | The lock is the point. Nothing may announce the departure or move data while the old password still works, and a first-step failure (wrong credentials, a missing user) usually fails every step. |
 | Revoke access & sign out | continue — `✗`, and the run is not "complete" | Runs straight after the reset, before anything is handed over, and nothing but the reset can stop it. It gates nothing: the reset has already stopped new sign-ins, and its likeliest failure (a missing `admin.directory.user.security` scope) would otherwise strand the mailbox with no delegate. The panel says the leaver may still be signed in. Until 2026-09-23 the sign-out rode inside the reset and a failure was swallowed (failure-log). |
 | Turn off forwarding | continue — `✗`, and the run is not "complete" | Like the revoke: straight after the reset, stopped by nothing but the reset, gating nothing. Runs whether or not forwarding was on — the leaver can switch it on until the sign-out, so a preview read could be stale. |
-| Set delegate | **stop** — nothing else runs | The first write to the manager, who also receives the transfer and the reminder. |
+| Set delegate | **stop the hand-over** — the auto-reply, the transfer and the reminder don't run; the calendar sweep still does | The first write to the manager, whom the auto-reply names and who receives the transfer and the reminder. The sweep never touches the manager, so there is no reason to leave the leaver on colleagues' calendars (until 2026-09-24 a failed delegate skipped it too). |
 | Auto-reply | continue | Nothing depends on it; senders get no auto-reply until it's re-run. |
 | Transfer Drive & Calendar | continue, **but no reminder** | The reminder asks the manager to approve deletion, and deleting before the transfer loses the files for good. A transfer that was never created leaves nothing for the delete screen's pending-transfer warning to find. |
-| Remove from everyone's calendars | continue | The account is locked, so a leftover share grants nothing; the reminder doesn't depend on it. |
+| Remove from everyone's calendars | continue | Needs only the reset. The account is locked, so a leftover share grants nothing; the reminder doesn't depend on it. **Scope:** every *active* user's *primary* calendar — secondary calendars other users shared with the leaver, and suspended users' calendars, are not swept. |
 | Manager reminder | (last) | — |
 
 ### Re-running after a failure
@@ -279,7 +279,7 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
   Show, "…a Gmail forwarding address…", lists the addresses mail *could* go to, whether or not
   forwarding is on) tells you whether auto-forwarding is on now, and to where — note it if so.
 - Every warning is dealt with: a super-admin leaver's role revoked first (and another super admin
-  exists; GamGUI isn't connected as the leaver — "Revoke access" would delete GamGUI's own token); a manager who is already a delegate → tick
+  exists — GamGUI refuses to offboard the admin it is connected as, since "Revoke access" would delete its own token mid-run); a manager who is already a delegate → tick
   "Set delegate"; "Couldn't read … mail delegates" → fix what it quotes (Gmail off for the leaver, a
   missing Gmail scope) and preview again, or the delegate step fails after the reset.
 - Each `gam` line: the leaver everywhere, the manager in the delegate, transfer and reminder;
@@ -288,7 +288,8 @@ Offboarding a real user is the live test (plan D8). Keep this page open.
 - Expect the calendar sweep to take minutes (one call that visits every user; up to 1 h), with other
   writes in the app waiting behind it. Don't close the app mid-run: quitting stops the step in
   progress (GamGUI kills its `gam`, and Audit records that step failed, "interrupted … may have done
-  part of its work") and the steps after it never run. Left the page or reloaded? Enter
+  part of its work") and the steps after it never run — the panel says "Offboarding interrupted" and
+  lists them as "not run: interrupted", never "complete". Left the page or reloaded? Enter
   the same two addresses and Preview: it shows the running offboarding's progress instead.
 
 **After the run** — the panel should say "Offboarding complete — 8 of 8 steps succeeded"; GamGUI →

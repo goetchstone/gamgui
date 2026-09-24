@@ -88,7 +88,8 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
         directory = await st.users()
     except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why
         return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {_friendly(exc)}"])
-    return lifecycle.check_addresses(directory, user, manager)
+    admin = st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None and st.connector else ""
+    return lifecycle.check_addresses(directory, user, manager, connected_admin=admin)
 
 
 async def _delegate_warning(conn, user: str, manager: str) -> str:
@@ -223,6 +224,7 @@ async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) ->
     are the steps ticked as already done by an earlier run: they satisfy ``requires``."""
     succeeded = set(done)
     labels = {s.key: s.label for s in steps}
+    handled = 0   # steps fully accounted for (run or deliberately skipped)
     try:
         for step in steps:
             unmet = [k for k in step.requires if k not in succeeded]
@@ -230,6 +232,7 @@ async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) ->
                 job.log.append(f"– {step.label} — not run: “{labels.get(unmet[0], unmet[0])}” didn't succeed")
                 job.skipped.append(step.label)
                 job.done += 1
+                handled += 1
                 continue
             job.current = step.label
             try:
@@ -246,7 +249,14 @@ async def _run_offboard(job, conn, steps, done: FrozenSet[str] = frozenset()) ->
             else:
                 job.fail(step.label)
             job.done += 1
+            handled += 1
     finally:
+        # Cut off (the app quit mid-run): every step not accounted for is "not run", so the panel can't
+        # call a half-done routine complete — or tell the manager about a reminder that was never added.
+        for i, step in enumerate(steps[handled:]):
+            cut = i == 0 and job.current == step.label
+            job.log.append(f"– {step.label} — " + ("interrupted before it finished" if cut else "not run: interrupted"))
+            job.skipped.append(step.label)
         job.current = ""
         job.finished = True
 

@@ -37,13 +37,14 @@ TRANSFER_PRIVACY = "all"
 # it rather than half-offboarding the account (the runbook's "When a step fails" table):
 #   - the reset gates everything: nothing announces the departure or moves data while the account can
 #     still sign in, and a first-step failure usually means every later step would fail too;
-#   - the delegate is the first write to the manager, who also receives the transfer and the
-#     reminder, so it gates the rest;
+#   - the delegate is the first write to the manager, who also receives the auto-reply's contact
+#     line, the transfer and the reminder, so it gates those;
 #   - the reminder asks the manager to approve deletion, and deleting before the transfer loses the
 #     leaver's files for good — so no transfer, no reminder.
 # Revoking access (sessions, app passwords, tokens), turning off forwarding, the auto-reply and the
 # calendar sweep gate nothing: their failure is reported (✗, and the run isn't "complete") and the
-# routine goes on. The revoke and the forwarding run straight after the reset, before anything is
+# routine goes on. The sweep needs only the reset — it takes the leaver off colleagues' calendars and
+# never touches the manager, so a failed delegate is no reason to leave those shares in place. The revoke and the forwarding run straight after the reset, before anything is
 # handed over, so a failed delegate can't stop them; they don't gate the hand-over either — the reset
 # has already stopped new sign-ins, and the likeliest cause (a missing scope) would otherwise strand
 # the mailbox with no delegate.
@@ -54,7 +55,7 @@ REQUIRES: Dict[str, Tuple[str, ...]] = {
     "delegate": ("password",),
     "vacation": ("password", "delegate"),
     "transfer": ("password", "delegate"),
-    "calacls": ("password", "delegate"),
+    "calacls": ("password",),
     "reminder": ("password", "delegate", "transfer"),
 }
 # The steps as the form's "already done" boxes name them (a re-run skips a ticked step).
@@ -110,12 +111,15 @@ class AddressCheck:
     warnings: List[str] = field(default_factory=list)
 
 
-def check_addresses(directory: Sequence[GAMUser], user: str, manager: str) -> AddressCheck:
+def check_addresses(directory: Sequence[GAMUser], user: str, manager: str,
+                    connected_admin: str = "") -> AddressCheck:
     """Find the departing user and the manager in the directory, by primary address.
 
     Unknown is an error: a typo'd manager would have the mailbox, Drive and reminder handed to nobody
     after the password was already reset. So is an alias (the calendar sweep matches ACLs by primary
-    address) and the same person twice (GAM refuses a transfer to oneself)."""
+    address), the same person twice (GAM refuses a transfer to oneself), and the admin GamGUI is
+    connected as (``connected_admin``): revoking that account's access deletes GamGUI's own OAuth
+    token mid-run, so every step after it would fail."""
     by_email = {u.primary_email.lower(): u for u in directory}
     by_alias = {a.lower(): u for u in directory for a in u.aliases}
     check = AddressCheck()
@@ -133,6 +137,11 @@ def check_addresses(directory: Sequence[GAMUser], user: str, manager: str) -> Ad
 
     check.user, check.manager = find(user, "departing user"), find(manager, "manager")
     leaver, mgr = check.user, check.manager
+    if leaver and connected_admin and leaver.primary_email.lower() == connected_admin.lower():
+        check.errors.append(f"GamGUI is connected as {leaver.primary_email}, so it can't offboard that account: "
+                            f"revoking its access would delete GamGUI's own authorization partway through. "
+                            f"Run the offboarding from another admin's GamGUI setup.")
+        return check
     if leaver and mgr and leaver.primary_email.lower() == mgr.primary_email.lower():
         check.errors.append("The departing user and the manager are the same account — enter the manager "
                             "who takes over the mailbox and files.")
@@ -223,9 +232,10 @@ def build_offboard_steps(
                      lambda c: c.transfer_data(user, TRANSFER_SERVICES, manager, privacy=TRANSFER_PRIVACY),
                      [GAMCommands.create_datatransfer(user, TRANSFER_SERVICES, manager, privacy=TRANSFER_PRIVACY)]),
         OffboardStep("calacls", "Remove from everyone's calendars",
-                     f"Remove {user} from other users' calendars — one domain-wide call that visits "
-                     f"every user, so it can take many minutes (stopped and reported failed after "
-                     f"{DOMAIN_WIDE_TIMEOUT / 60:g} min)",
+                     f"Remove {user}'s access to every active user's primary calendar — one "
+                     f"domain-wide call that visits every user, so it can take many minutes (stopped and "
+                     f"reported failed after {DOMAIN_WIDE_TIMEOUT / 60:g} min). Secondary calendars "
+                     f"shared with {user}, and suspended users' calendars, are not swept",
                      lambda c: c.remove_from_all_calendars(user),
                      [GAMCommands.remove_all_calendar_acls(user)]),
         OffboardStep("reminder", f"{days}-day reminder for {manager}",

@@ -1417,6 +1417,41 @@ def test_offboard_stopped_panel_says_what_did_not_run(client):
     assert "Don't delete the account" in text and "now has a calendar reminder" not in text
 
 
+def test_offboard_interrupted_panel_is_not_complete(client):
+    # A run cut off by quitting once read "complete" and promised the manager a reminder.
+    import html
+
+    from gamgui.web.jobs import start_job
+
+    job = start_job(client.app.state.gamgui.jobs, 3)
+    job.applied, job.done, job.finished = 2, 2, True
+    job.skipped = ["30-day reminder for mgr@example.com"]
+    job.log = ["✓ Reset password", "✓ Set delegate", "– 30-day reminder for mgr@example.com — not run: interrupted"]
+    text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
+    assert "Offboarding interrupted — 2 of 3 steps succeeded" in text
+    assert "now has a calendar reminder" not in text and "Don't delete the account" in text
+
+
+def test_offboard_panel_warns_when_revoke_never_ran(client):
+    # A failed reset skips the revoke: the leaver's sessions and app passwords were never touched.
+    import html
+
+    from gamgui.web.jobs import start_job
+
+    job = start_job(client.app.state.gamgui.jobs, 2)
+    job.done, job.finished, job.skipped = 2, True, ["Revoke access & sign out"]
+    job.fail("Reset password")
+    text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
+    assert "The leaver may still be signed in" in text
+
+
+def test_offboard_refuses_the_connected_admin(client, gam_calls):
+    _signed_in_as(client, LEAVER)
+    r = client.post("/lifecycle/offboard/preview", data=OFFBOARD_FORM)
+    assert f"GamGUI is connected as {LEAVER}" in r.text and "preview" not in re.findall(r'"preview"', r.text)
+    assert gam_writes(gam_calls()) == []
+
+
 def test_offboard_run_executes_exactly_the_previewed_commands(client, gam_calls):
     # Run once rebuilt the steps from the live form; now it runs the ones built for the preview.
     import html
@@ -1515,17 +1550,18 @@ def test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_
     assert f"{MGR} already has delegate access to {LEAVER}" in html.unescape(shown.text)
     job = _job(client, _offboard_run(client, token).text, "/lifecycle/offboard/status")
     wait_for_job(client, job)
-    assert job.failed == ["Set delegate"] and job.applied == 3
+    assert job.failed == ["Set delegate"] and job.applied == 4          # the calendar sweep still ran
     assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
-                           "Remove from everyone's calendars", "30-day reminder for alice@example.com"]
+                           "30-day reminder for alice@example.com"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
     assert f"✗ Set delegate — GAM failed (unknown, exit=50): User: {LEAVER}, Delegate: {MGR}, Add Failed: " \
            "Delegate already exists." in text
     assert "Offboarding stopped" in text and "Don't delete the account" in text
-    assert [w[:4] for w in gam_writes(gam_calls())][-4:] == [
+    assert [w[:4] for w in gam_writes(gam_calls())][-5:] == [
         ["update", "user", LEAVER, "password"], ["user", LEAVER, "deprovision", "signout"],
-        ["user", LEAVER, "forward", "off"], ["user", LEAVER, "add", "delegate"]]
-    assert _audited(client, 1) == [("add_delegate", LEAVER, False)]
+        ["user", LEAVER, "forward", "off"], ["user", LEAVER, "add", "delegate"],
+        ["all", "users", "delete", "calendaracls"]]
+    assert _audited(client, 2)[0] == ("add_delegate", LEAVER, False)
 
     done = ["password", "revoke", "forward", "delegate"]
     shown, token = _offboard_preview(client, done=done)
