@@ -98,7 +98,15 @@ plan's Phase 0 F1–F3.
   already did. Still in routes, by the item's scope: the job loops `_run_bulk_onboard`, `_run_apply`
   (signatures), `_run_subscribe`, `_build_index`, `_run_sequence` · batch-2 F#22 `2a43ab1`
   (`resolve_hires` → (row, role template) pairs + row errors, `tally_hires` the preview's summary;
-  bulk Run resolves only, and the preview holds the pairs the executor runs). **Open:** Q13.
+  bulk Run resolves only, and the preview holds the pairs the executor runs) · Q13 `7a3f34c` (every
+  inline `<script>` and `on*=` handler moved to `static/app.js` — a delegated `data-action` listener,
+  typed confirms, tabs, busy indicators — and per-page `builder.js`, `groups.js`, `onboarding.js`,
+  `signatures.js`; the CSP is `default-src 'self'; script-src 'self'` with `img-src 'self' https:
+  data:`, `style-src 'unsafe-inline'` (inline-styled signature HTML in its inheriting srcdoc preview,
+  the progress bars) and Google Fonts in `style-src`/`font-src` rather than the item's `font-src
+  'self'`; htmx eval and script tags off; a header test and a template/screen scanner; headless
+  Chrome over 12 screens and the key flows logged zero violations — WKWebView and the pywebview
+  print path unseen). **Open:** none.
 - **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
   `scripts/bump_gam.py`). **Open:** V1, V6; V3–V5 are new scope, and D6 says none for now.
 - **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
@@ -428,7 +436,7 @@ tenant without per-action permission.
   Build the CSS at `make app` time — faster first paint, and a prerequisite for Q13's CSP.
 
 ## Phase 6 — Architecture and code health
-*Status: Q9, Q10, Q11, Q12 and batch-2 F#22, F#23 APPLIED; Q13 open (see Status by item).*
+*Status: Q9–Q13 and batch-2 F#22, F#23 APPLIED (see Status by item).*
 - **Q9** Move business logic out of routes: `_provision_hire` and helpers (`routes/onboarding.py`
   ~:79-203) → `core/onboarding.py`; `_run_offboard` → `core/lifecycle.py`; bulk store
   (`users.py` ~:277) → core. Tests then import core, not private route functions. (Supersedes
