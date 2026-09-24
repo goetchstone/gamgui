@@ -1,10 +1,11 @@
 # Plan: onboarding review — batch 2 (24 verified findings)
 
 **Status: MOSTLY APPLIED — do not re-apply.** Batches A–E and Batch F #4/#8 landed in
-`ce8640d..7e8b49e`; the "replace this exact block" snippets no longer match. **Still open:** Batch F
-#11 (move the per-hire helpers into `core/`), #21 (`parse_hire_csv` iterates outside its `try`, so a
-`csv.Error` mid-file — e.g. an oversized field — escapes as a 500), #22 (`_bulk_summary` split), #23
-(one print-sheet helper). Originally written against `37b2e22` for a reader with no session context.
+`ce8640d..7e8b49e`; the "replace this exact block" snippets no longer match. Batch F #21
+(`parse_hire_csv`'s `csv.Error`, `5a3298b`) and #23 (one print-sheet helper, `a32acb1`) landed on
+`harden-2026-09-23`. **Still open:** Batch F #11 (move the per-hire helpers into `core/` — the 10/10
+plan's Q9 supersedes it) and #22 (`_bulk_summary` split). Originally written against `37b2e22` for a
+reader with no session context.
 
 ## Context
 A five-lens adversarial code review of the onboarding feature (commits `d78a1ef..37b2e22`) produced

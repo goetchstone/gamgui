@@ -1,8 +1,61 @@
 # Plan: GamGUI to 10/10 — security, quality, usability, value
 
-**Status: NOT STARTED** (written 2026-09-23 at `d5d775b`; 597 passed, 1 skipped). Self-contained for
-a reader with no session context. `CLAUDE.md` is auto-loaded — honor its invariants. Before each
-item, read the `docs/domains/` runbook for its area (index: `docs/domains/README.md`).
+**Status: IN PROGRESS — partly APPLIED on branch `harden-2026-09-23`. Do not re-apply an item that
+[Status by item](#status-by-item) marks applied:** its file:line pointers and snippets no longer
+match the code. Written 2026-09-23 at `d5d775b` (597 passed, 1 skipped). Self-contained for a reader
+with no session context. `CLAUDE.md` is auto-loaded — honor its invariants. Before each item, read
+the `docs/domains/` runbook for its area (index: `docs/domains/README.md`). When a commit closes an
+item, update its line below in the same commit.
+
+## Status by item
+Derived from `git log main..harden-2026-09-23` and `docs/failure-log.md`, which cite the items they
+close. Commits and failure-log entries that cite **"review F<n>"** or **"Finding F<n>"** answer a
+*second* review of this branch (28 findings, kept in session scratch, not in the repo) — not this
+plan's Phase 0 F1–F3.
+
+- **Phase 0** — applied: F2 `87dcc12` (the gitignored `.claude/launch.json` points at it); F3 (the
+  local hook; its term list is gitignored, so no commit). **Open: F1** — `/improve-rules` has still
+  never run; `docs/RULE-FEEDBACK.md` holds its evidence.
+- **Phase 1** — all applied: S3 `0336a38` · S1 `4576a9c` · S7 `61f2397` · S6 `5d4367a` · S5
+  `d9d54f9` · S8 `47265d2` · S2 as D2 decided (a printed warning and a SECURITY.md note, `39a441a`) ·
+  S4 `a31b146` · S9 as D3 decided (`f759dc2`; every `get` download by rule `61cf51c`; sequence and
+  CSV paths `3c82841`) · Q6 `f842c8c` · Q8 `0644f09` · Q7 `bdeeb6f` · B1 `5a3298b` · B2 `f97ab28` ·
+  U2 `c8eda80` `46e0bea` `0e4a960` `af7a540` (plus the offboarding work under *Beyond the plan*) ·
+  U6 `041b6e2` `63e6fb2` (its optional signature backup is a ROADMAP item, not done) · U3 `88496f3`.
+- **Phase 2** — applied: T1 `ad61a8d` · T2 `ad61a8d` (every per-user read keyed on its target,
+  `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e`. **Open:** T6 (coverage gate), T7 (a mock
+  that validates argv against the grammar).
+- **Phase 3** — **open:** C1–C7. (C4: Dependabot's `github-actions` ecosystem was already
+  configured; the actions are still pinned by tag, not SHA.)
+- **Phase 4** — **open:** A1–A7, A9. A8 declined (D7).
+- **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
+  (`01d29ce`, `2c99722` — signatures and every user-detail write say why; the `BatchJob` feeds —
+  bulk department, calendar group fan-out, Builder sequence — still list addresses without a
+  reason) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
+  unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; the cache items are open) · U13
+  (`hx-disabled-elt` on every write and job control, `a31b146`; the nav indicator and lazy user-detail
+  tabs are open). **Open:** U1, U5, U7, U8, U10, U14.
+- **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`.
+  **Open:** Q9, Q10, Q12, Q13, batch-2 F#22.
+- **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
+  `scripts/bump_gam.py`). **Open:** V1, V6; V3–V5 are new scope, and D6 says none for now.
+- **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
+  "Live verification status" marks every step still unproven, and
+  `docs/domains/lifecycle-offboarding.md` has the first live run checklist.
+
+**Beyond the plan**, also on the branch (each has a failure-log entry): every confirm step runs what
+its preview held, under a single-use token — offboarding, signatures, onboarding, bulk department,
+Builder run and sequence, a calendar share to a large group (`46e0bea` `fd41d16` `7b7c4ef` `23c0afc`
+`49514af` `8d4d908` `412f5ce`); every account delete needs its address typed (`fd792ca`); a Builder
+data transfer is destructive (`125970e`); offboarding revokes access and turns off forwarding as
+steps of their own, runs once per leaver at a time, warns when delegates can't be read, names every
+vacation setting, keeps the auto-reply's line breaks, transfers `all` Drive files and invites the
+reminder's invitee (`4296aef` `73f349a` `ccd0d62` `3687c64` `d6d7338` `3f08323` `97c0baa`
+`a46e72f`); the calendar sweep tolerates a user without Calendar (`99abf64`); two error
+classifications (`4cc4d90` `3a0acf5`); a write cut off by quitting stops its `gam` and is audited
+(`dd0e3f4`); bounded zeroing on wipe (`e9d7820`); `run_in_cfgdir` removed (`7b46225`); a bulk loop
+stops at an account-wide failure (`bebcdaa`); add delegate checks the address (`dd2cddc`); sharper
+tripwires (`ce2fb2f` `4361675` `223a048` `24092ad`).
 
 ## How this was produced
 A three-lens review on 2026-09-23: an adversarial **security** reviewer that proved findings with
@@ -15,6 +68,7 @@ code or read directly in the source; **PLAUSIBLE** = reasoned, not demonstrated.
 session-scratch and are not kept — each item says how to reproduce.
 
 ## Scorecard
+*"Now" is as reviewed at `d5d775b`, before `harden-2026-09-23`; not re-scored since.*
 
 | Dimension | Now | Realistic target | What caps it below 10 |
 |---|---|---|---|
@@ -98,6 +152,7 @@ tenant without per-action permission.
 ---
 
 ## Phase 0 — Agent framework follow-ups (S each)
+*Status: F2, F3 APPLIED — do not re-apply. F1 open.*
 - **F1 Run `/improve-rules`.** 7 `fix:` commits since 2026-08-12 have never had an observer pass —
   the nudge fired but the hook's output was invisible until 2026-09-23 (failure-log entry). The
   RULE-FEEDBACK #2-wording item and the "guard is UI-only on five routes" finding (S4) are the
@@ -111,6 +166,7 @@ tenant without per-action permission.
   That leak happened (U3) despite a de-branding rule that lived only in memory.
 
 ## Phase 1 — Exposure and safety (mostly S; do first)
+*Status: APPLIED on `harden-2026-09-23` — do not re-apply (see Status by item).*
 - **S3 `gam-watch.yml` expression injection — CONFIRMED.** `.github/workflows/gam-watch.yml:62`
   expands `${{ steps.check.outputs.latest }}` (an upstream release tag) into a `run:` script, in a job
   with `contents: write` + `pull-requests: write`, before attestation runs. A legal tag like
@@ -202,6 +258,7 @@ tenant without per-action permission.
   strings; rewriting history is not proposed.)
 
 ## Phase 2 — Make the tests honest (mock fidelity 4 → 8)
+*Status: T1–T5 APPLIED — do not re-apply. T6, T7 open.*
 - **T1 The mock's catch-all succeeds — CONFIRMED.** `tests/fixtures/mock_gam.sh:299-304` exits 0 for
   any unhandled argv, including `delete user`, `remove calendars` and `delete events` without
   `doit`. 23 of 33 used write builders have no handler; making the catch-all fail broke 20 tests
@@ -240,6 +297,7 @@ tenant without per-action permission.
   canned outputs.
 
 ## Phase 3 — Tooling and supply chain
+*Status: open.*
 - **C1 Ruff** (lint + format) with a CI step; fix or `noqa` the initial findings in one commit.
 - **C2 mypy** on `core/` (start non-strict, ratchet), CI step.
 - **C3 Hash-locked dependencies** (`pip-compile --generate-hashes` or `uv lock`) used by CI *and*
@@ -254,6 +312,7 @@ tenant without per-action permission.
   `pyproject.toml`'s `filterwarnings`; the Starlette/httpx TestClient deprecation warning.
 
 ## Phase 4 — Accessibility (3 → 9)
+*Status: open (A8 declined, D7).*
 - **A1 Contrast (S, global):** `brand-gray` #B2B4BB text is 2.07:1 on white (195 uses incl. headings
   and helper text); `blueink/80` 3.86:1, `/70` 3.14:1; white on `brand-blue` 3.97:1. Adjust the
   Tailwind tokens in `base.html` to ≥4.5:1 for text (keep the light gray for borders only).
@@ -272,6 +331,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
+*Status: U4 APPLIED; U9, U11, U12, U13 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows
@@ -306,6 +366,7 @@ tenant without per-action permission.
   Build the CSS at `make app` time — faster first paint, and a prerequisite for Q13's CSP.
 
 ## Phase 6 — Architecture and code health
+*Status: Q11 and batch-2 F#23 APPLIED; the rest open.*
 - **Q9** Move business logic out of routes: `_provision_hire` and helpers (`routes/onboarding.py`
   ~:79-203) → `core/onboarding.py`; `_run_offboard` → `core/lifecycle.py`; bulk store
   (`users.py` ~:277) → core. Tests then import core, not private route functions. (Supersedes
@@ -325,6 +386,7 @@ tenant without per-action permission.
 - **Batch-2 leftovers:** F#22 (`_bulk_summary` split), F#23 (one print-sheet helper).
 
 ## Phase 7 — Distribution and value (depends on D1, D6)
+*Status: V2 APPLIED; the rest open.*
 - **V1 GitHub Release `.app`** built by CI from the hash-locked deps (C3), hardened runtime (S1c);
   Developer-ID signed + notarized if **D1**. Two-line install at the top of the README. This is the
   single biggest gap versus the paid competitor.
@@ -341,6 +403,7 @@ tenant without per-action permission.
   roll out a signature, audit external sharing.
 
 ## Phase 8 — Live verification (gates every "10" involving GAM writes; needs D8)
+*Status: open — the first real offboarding is its first live test (D8).*
 Walk README "Live verification status" on a throwaway user/group/calendar, one write at a time, with
 the operator's per-action permission: account create/delete/undelete, suspend, reset password,
 datatransfer, calendar ACL add/remove, event delete, signature set, delegate add/remove, group

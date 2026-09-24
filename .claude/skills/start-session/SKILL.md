@@ -42,7 +42,8 @@ including its failure history. If the area has entries in
 - [ROADMAP.md](../../../ROADMAP.md) — the ranked backlog and deliberate
   trade-offs.
 - `docs/plans/` holds handoff plans. Each opens with a **Status** line; never
-  re-apply one marked APPLIED — its snippets no longer match the code.
+  re-apply a plan, or an item of one, that its Status marks APPLIED — its
+  snippets no longer match the code.
 - If the rules-improver hook prints a nudge, mention it to the operator and move
   on; [improve-rules](../improve-rules/SKILL.md) is a separate observer pass,
   not this session's work.

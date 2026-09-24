@@ -1,10 +1,11 @@
 # Handoff plan: onboarding code-review fixes
 
 **Status: APPLIED — do not re-apply.** Steps 1–6 landed in `37b2e22`. Of the "Additional
-suggestions", #1, #2, #4 and #5 have since landed (see the batch-2 plan) and #3 landed for
-`create task` and `sendemail`. Still open: #3 for signature-set (it still falls through the mock's
-permissive catch-all) and #6 (consolidate the three job types). Originally written against `38d1fa4` for a reader with no prior session
-context.
+suggestions", #1, #2, #4 and #5 have since landed (see the batch-2 plan), and #3 landed for
+`create task` and `sendemail` and then for every write (`ad61a8d` on `harden-2026-09-23`: a strict
+mock handler per write, `signature` included, and a catch-all that fails). Still open: #6
+(consolidate the three job types — now the 10/10 plan's Q10). Originally written against `38d1fa4`
+for a reader with no prior session context.
 
 ## Context
 A code review of the 2026-09-15 onboarding work (commits `d78a1ef..38d1fa4`: account creation,

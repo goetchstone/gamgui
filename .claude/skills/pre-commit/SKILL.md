@@ -22,7 +22,10 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    regression? Add a [failure-log](../../../docs/failure-log.md) entry — the
    pre-commit hook hard-blocks a `fix:`/`fix(` commit that skipped it (bypass
    with `no-failure-log:` in the body for a non-regression fix). See
-   [post-failure](../post-failure/SKILL.md).
+   [post-failure](../post-failure/SKILL.md). Closed an item of a
+   [docs/plans](../../../docs/plans) plan? Update its **Status** in this commit —
+   sessions trust that line and skip what it marks applied (a plan once read
+   "NOT STARTED" after thirty of its items had landed).
 
 ## If your diff touches GAM
 
