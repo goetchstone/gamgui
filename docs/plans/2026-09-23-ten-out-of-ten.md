@@ -150,7 +150,7 @@ plan's Phase 0 F1–F3.
   during a write on each loop through the strict mock; the `a11y` job opens the tray and a job's page
   (axe 0) and walks them by keys; a scratch Chrome run on a 0.9 s/call mock stopped an offboarding from
   the tray and a signature apply from its panel by keys alone — WKWebView's `confirm()`, VoiceOver and a
-  live tenant unseen. Left: "retry failures only") · U1 (the Builder result's filter, External-only
+  live tenant unseen. Left: "retry failures only") · U1 `dddd06d` (the Builder result's filter, External-only
   toggle and pager ask `GET /builder/results`, which filters every row of the retained
   `builder_last_result` server-side and answers a page of 10 matches; "N of M rows" and a CSV link of
   just the matches follow out of band, the count spoken through base.html's live region; a table whose
