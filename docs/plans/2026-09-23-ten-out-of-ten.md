@@ -25,8 +25,14 @@ plan's Phase 0 F1–F3.
 - **Phase 2** — applied: T1 `ad61a8d` · T2 `ad61a8d` (every per-user read keyed on its target,
   `b4b6a4d`) · T3 `ef96578` · T4 `57ace45` · T5 `2a6147e` · T6 `c66c279`
   (`fail_under = 90` in `[tool.coverage.report]` — a clean clone measured 90.5%, not the 88% below —
-  enforced by CI's macOS 3.14 leg and `make cov`; the ratchet past 90 is open). **Open:** T7 (a mock
-  that validates argv against the grammar).
+  enforced by CI's macOS 3.14 leg and `make cov`; the ratchet past 90 is open). Partly: T7 as a
+  lite sweep instead of a second mock — `58d9ccd` (a `todrive` tail passes the mock only in
+  `todrive_args`'s shape and only after print/report) and `57b3b0e` (every argv the suite sends the
+  mock is traced to a builder or Builder-read shape and held to the grammar contract when the session
+  ends; tests that send malformed argv on purpose are marked `hand_built_argv`; CI's `gam-compat` job
+  now runs the whole suite, unseen in Actions). **Open:** the Python mock that parses argv against
+  the grammar in place of the hand-written handlers, and 16 Builder reads the matcher can't vouch for
+  (gam-runner runbook).
 - **Phase 3** — applied: C1 `9f72c3b` (ruff lint + CI `lint` job + `make lint`; the formatter is
   not adopted — `ruff format` would rewrite ~7,000 lines — and E501 is off: 81 lines run past the
   120 width) · C2 `913cd87` (mypy 2.3.1 on `gamgui/core` + `gamgui/web` at `check_untyped_defs`, in
@@ -308,7 +314,7 @@ tenant without per-action permission.
   strings; rewriting history is not proposed.)
 
 ## Phase 2 — Make the tests honest (mock fidelity 4 → 8)
-*Status: T1–T6 APPLIED — do not re-apply. T7 open.*
+*Status: T1–T6 APPLIED — do not re-apply. T7 partly (a lite sweep, `58d9ccd` `57b3b0e`); its full mock is open.*
 - **T1 The mock's catch-all succeeds — CONFIRMED.** `tests/fixtures/mock_gam.sh:299-304` exits 0 for
   any unhandled argv, including `delete user`, `remove calendars` and `delete events` without
   `doit`. 23 of 33 used write builders have no handler; making the catch-all fail broke 20 tests
