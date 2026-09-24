@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
-from ..jobs import start_job
+from ..jobs import start_job, stop_reason
 from ..server import TEMPLATES
 
 router = APIRouter(prefix="/calendars")
@@ -82,15 +82,19 @@ async def _subscribers_for(conn, target: str, known_users: set) -> "tuple[str, l
 
 
 async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
-    """Background: put ``cal`` on each member's calendar list so it actually appears for them."""
+    """Background: put ``cal`` on each member's calendar list so it actually appears for them. Stops
+    at a failure every later member would share (``stop_reason``)."""
     try:
         for email in emails:
             job.current = email
+            kind, why = None, ""
             try:
                 res = await conn.subscribe_calendar_for(email, cal)
                 ok = bool(getattr(res, "ok", False))
-            except Exception:                   # noqa: BLE001 — one member must not stop the rest
-                ok = False
+                if not ok:
+                    kind, why = getattr(res, "kind", None), getattr(res, "remediation", "")
+            except Exception as exc:            # noqa: BLE001 — one member must not stop the rest
+                ok, kind, why = False, getattr(exc, "kind", None), _friendly(exc)
             if ok:
                 job.applied += 1
             else:
@@ -98,6 +102,10 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
             job.log.append(f"{'✓' if ok else '✗'} {email}")
             del job.log[:-_SUBSCRIBE_LOG_WINDOW]  # bounded: a big group must not bloat each poll
             job.done += 1
+            stop = stop_reason(kind, why, job.total - job.done)
+            if stop:
+                job.error = stop
+                break
     except Exception as exc:                    # noqa: BLE001 — whole-batch failure (auth expired)
         job.error = _friendly(exc)
     finally:

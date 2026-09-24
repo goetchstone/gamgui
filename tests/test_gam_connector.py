@@ -65,6 +65,19 @@ async def test_a_failed_write_says_why_in_words_and_keeps_gams_error(connector, 
     assert res.remediation.startswith("Something went wrong talking to GAM") and "/nowhere/gam" in res.detail
 
 
+@pytest.mark.parametrize("fail, kind", [("auth", "AUTH_EXPIRED"), ("scope", "SCOPE_MISSING"),
+                                        ("notfound", "NOT_FOUND")])
+async def test_a_failed_write_carries_its_error_kind(connector, fail, kind):
+    # A bulk loop reads it to stop on a failure every later call would share (sign-in expired, a
+    # scope missing) instead of reporting the same cause once per remaining user.
+    from gamgui.core.gam.errors import GAMErrorKind
+
+    res = await connector._run_write("probe", "alice@example.com", ["MOCKFAIL", fail], RiskLevel.LOW)
+    assert res.ok is False and res.kind is GAMErrorKind[kind]
+    ok = await connector.set_signature("alice@example.com", "Hi", html=True)
+    assert ok.ok and ok.kind is None
+
+
 async def test_plan_suspend_is_destructive(connector):
     previews = connector.plan_suspend(["alice@example.com"])
     assert len(previews) == 1

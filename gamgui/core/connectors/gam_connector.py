@@ -570,7 +570,8 @@ class GAMConnector(Connector):
                                     detail="Completed (best-effort — per-user 'not shared', 'no Calendar' "
                                            "and own-calendar notices are expected and were skipped).")
             remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
-            return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation)
+            return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation,
+                                kind=exc.kind if isinstance(exc, GAMError) else None)
         self.audit.record(
             action, target=target, argv=shown, ok=True,
             extra={"group": target_extra} if target_extra else None,

@@ -24,7 +24,7 @@ from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
-from ..jobs import start_job
+from ..jobs import start_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
@@ -333,20 +333,28 @@ async def _bulk_targets(st, group: str, emails_raw: str):
 
 
 async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
-    """Background task: set the department per user, KEEPING each existing title."""
+    """Background task: set the department per user, KEEPING each existing title. Stops at a failure
+    every later user would share (``stop_reason``)."""
     try:
         for u in targets:
             job.current = u.primary_email
+            kind, why = None, ""
             try:
                 res = await conn.set_organization(u.primary_email, title=u.title or "", department=store)
                 ok = bool(getattr(res, "ok", False))
-            except Exception:
-                ok = False
+                if not ok:
+                    kind, why = getattr(res, "kind", None), getattr(res, "remediation", "")
+            except Exception as exc:  # noqa: BLE001 — one user must not stop the rest
+                ok, kind, why = False, getattr(exc, "kind", None), _friendly(exc)
             if ok:
                 job.applied += 1
             else:
                 job.fail(u.primary_email)
             job.done += 1
+            stop = stop_reason(kind, why, job.total - job.done)
+            if stop:
+                job.error = stop
+                break
     except Exception as exc:
         job.error = _friendly(exc)
     finally:

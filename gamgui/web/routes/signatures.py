@@ -15,6 +15,7 @@ from ...core import signatures as sig
 from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
+from ..jobs import stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
@@ -132,15 +133,22 @@ def _prune_jobs(st, keep: int = 10) -> None:
 
 
 async def _run_apply(job: ApplyJob, conn, matched, template: str) -> None:
-    """Background task: set each user's signature, updating ``job`` as it goes."""
+    """Background task: set each user's signature, updating ``job`` as it goes. Stops at a failure
+    every later user would share (``stop_reason``: sign-in expired, a scope missing)."""
     try:
         for u in matched:
             job.current = u.primary_email
             try:
                 result = await conn.set_signature(u.primary_email, sig.render_signature(template, u), html=True)
                 job.record(u.primary_email, result.ok, result.remediation, result.detail)
+                kind, why = (None if result.ok else result.kind), result.remediation
             except Exception as exc:  # noqa: BLE001 — _run_write reports GAM's failures; this is anything else
                 job.record(u.primary_email, False, _friendly(exc), str(exc))
+                kind, why = getattr(exc, "kind", None), _friendly(exc)
+            stop = stop_reason(kind, why, job.total - job.done)
+            if stop:
+                job.error = stop
+                break
     except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
         job.error = _friendly(exc)
     finally:

@@ -42,6 +42,13 @@ class GAMErrorKind(enum.Enum):
     UNKNOWN = "unknown"
 
 
+# Failures about the connection, not the one target: an expired admin sign-in, GAM not set up, an API
+# scope not granted. Every later call in a bulk loop would fail the same way, so the loop stops at the
+# first one (web/jobs.py `stop_reason`) instead of reporting one cause once per remaining target.
+ACCOUNT_WIDE_KINDS = frozenset({GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTHENTICATED,
+                                GAMErrorKind.SCOPE_MISSING})
+
+
 # Human remediation text shown alongside the raw error.
 _REMEDIATION = {
     GAMErrorKind.AUTH_EXPIRED: "Your sign-in expired. Re-run setup to refresh authorization.",

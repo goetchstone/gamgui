@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set
 
 if TYPE_CHECKING:  # avoid a runtime import cycle; annotations are strings under `from __future__`
+    from ..gam.errors import GAMErrorKind
     from .person import ConnectorAccount, Person
 
 
@@ -73,6 +74,9 @@ class ChangeResult:
     detail: str = ""         # on a failure, GAM's raw error (redacted) — for a "details" disclosure
     output: str = ""         # the command's stdout on success (e.g. the Sheet URL a todrive export prints)
     remediation: str = ""    # on a failure, what to do about it in words (GAMError.remediation) — show this first
+    # On a failure GAM reported, its classification; None on success or an error that wasn't GAM's.
+    # A bulk loop stops on an account-wide kind (gam.errors.ACCOUNT_WIDE_KINDS).
+    kind: Optional["GAMErrorKind"] = None
 
 
 class Connector:

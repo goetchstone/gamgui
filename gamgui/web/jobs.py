@@ -11,6 +11,8 @@ import secrets
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from ..core.gam.errors import ACCOUNT_WIDE_KINDS
+
 # Invariant #9: a run where thousands genuinely fail keeps the full count but only a sample of names,
 # so the final summary (and each poll) stays small. Same cap as signatures' ApplyJob / OnboardJob.
 FAILED_SAMPLE_CAP = 200
@@ -35,6 +37,17 @@ class BatchJob:
         self.failed_total += 1
         if len(self.failed) < FAILED_SAMPLE_CAP:
             self.failed.append(item)
+
+
+def stop_reason(kind, remediation: str, left: int) -> Optional[str]:
+    """Why a bulk loop stops here, or None to carry on. A failure of an ``ACCOUNT_WIDE_KINDS`` kind
+    (sign-in expired, GAM not set up, a scope not granted) fails every remaining target the same way,
+    so running on only buries the one cause under ``left`` identical failures. Every per-user loop
+    (signatures, bulk department, calendar fan-out, bulk onboarding) asks this after each write."""
+    if kind not in ACCOUNT_WIDE_KINDS:
+        return None
+    rest = f" The remaining {left} {'was' if left == 1 else 'were'} not attempted." if left > 0 else ""
+    return f"Stopped: {remediation}{rest}"
 
 
 def register_job(jobs: dict, job, keep: int = 10):

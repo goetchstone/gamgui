@@ -26,7 +26,7 @@ from ...core.connectors.base import RiskLevel
 from ...core.gam.models import GAMUser
 from ...core.onboarding import RunbookStore
 from ...core.signatures import SignatureStore
-from ..jobs import register_job
+from ..jobs import register_job, stop_reason
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 
@@ -147,9 +147,13 @@ async def _provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             cr = await conn.create_user(email, first, last, pw, change_password=True,
                                         org_unit=(cfg.org_unit or None), notify=notify)
         except Exception as exc:  # noqa: BLE001
-            res["ok"] = False; res["errors"].append("create: " + str(getattr(exc, "remediation", exc))); return res
+            res["ok"] = False; res["errors"].append("create: " + str(getattr(exc, "remediation", exc)))
+            res["stop"] = (getattr(exc, "kind", None), str(getattr(exc, "remediation", exc)))
+            return res
         if not cr.ok:
-            res["ok"] = False; res["errors"].append("create: " + (cr.detail or "failed")); return res
+            res["ok"] = False; res["errors"].append("create: " + (cr.detail or "failed"))
+            res["stop"] = (cr.kind, cr.remediation)   # the bulk executor stops on an account-wide kind
+            return res
         res["account_created"] = True
         if notify:
             res["notified"] = True          # GAM emailed the sign-in info; the pw lives only in that email
@@ -247,7 +251,10 @@ class OnboardJob:
 
 
 async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[dict], cfgs: dict) -> None:
-    """Background executor: onboard each parsed row via its role cfg. Never raises out."""
+    """Background executor: onboard each parsed row via its role cfg. Never raises out. Stops when an
+    account create fails for a reason every later hire would share (``stop_reason``: sign-in expired,
+    a scope missing); a best-effort sub-step's failure (a group, a calendar, the task list) never stops
+    it, since the accounts themselves may still be created."""
     try:
         for hire in rows:
             cfg = cfgs.get(hire["role"])
@@ -256,7 +263,13 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store, rows: List[
                             "role": hire["role"], "ok": False,
                             "errors": ["unknown role or role has no steps"]})
                 continue
-            job.record(await _provision_hire(conn, sig_store, store, cfg, hire))
+            res = await _provision_hire(conn, sig_store, store, cfg, hire)
+            job.record(res)
+            kind, why = res.get("stop") or (None, "")
+            stop = stop_reason(kind, why, job.total - job.done)
+            if stop:
+                job.error = stop
+                break
     except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
         job.error = str(exc)
     finally:

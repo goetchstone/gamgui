@@ -492,6 +492,31 @@ def test_signatures_apply_failure_keeps_a_reason_per_user(client):
     assert "✗" in live and f"— {not_found}" in live and "Does not exist" not in live
 
 
+def test_signatures_apply_stops_when_the_sign_in_has_expired(client, gam_calls, monkeypatch):
+    # An expired admin sign-in fails every user the same way; the loop once kept going through the
+    # whole company, burying the cause under one identical failure per mailbox.
+    from gamgui.core.gam.errors import GAMError
+
+    runner = client.app.state.gamgui.connector.runner
+    real = runner.run_authenticated
+
+    async def expired_writes(domain, argv, **kw):
+        if kw.get("serialize"):
+            raise GAMError.from_run(1, "ERROR: invalid_grant: Token has been expired or revoked", argv)
+        return await real(domain, argv, **kw)
+
+    monkeypatch.setattr(runner, "run_authenticated", expired_writes)
+    r = _start_apply(client, {"template": "{name}", "scope_type": "company", "scope_value": ""})
+    job = _job(client, r.text, "/signatures/apply/status")
+    wait_for_job(client, job)
+    assert (job.done, job.applied, job.failed_total) == (1, 0, 1)      # alice tried; carol never was
+    assert _audited(client, 1) == [("set_signature", "alice@example.com", False)]
+    done = client.get("/signatures/apply/status", params={"job": job.id}).text
+    assert "Stopped: Your sign-in expired. Re-run setup to refresh authorization." in done
+    assert "The remaining 1 was not attempted." in done and "Applied to 0 of 2 before stopping." in done
+    assert "<details" in done and "invalid_grant" in done               # GAM's own error, one click away
+
+
 def test_signature_set_failure_says_why_with_gams_error_expandable(client):
     r = client.post("/users/signature", data={"email": "gone-missing@example.com", "signature": "Hi"})
     headline, _, raw = r.text.partition("<details")

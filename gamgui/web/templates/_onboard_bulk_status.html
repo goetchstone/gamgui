@@ -6,7 +6,7 @@
      {% if not job.finished %}hx-get="/onboard/bulk/status?job={{ job.id }}" hx-trigger="load delay:1s" hx-swap="outerHTML"{% endif %}
      class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
   <div class="flex items-center justify-between gap-3">
-    <h3 class="font-serif text-lg text-brand-black">{% if job.finished %}Bulk onboarding — done{% else %}Onboarding… {{ job.done }} / {{ job.total }}{% endif %}</h3>
+    <h3 class="font-serif text-lg text-brand-black">{% if job.finished and job.error %}Bulk onboarding — stopped{% elif job.finished %}Bulk onboarding — done{% else %}Onboarding… {{ job.done }} / {{ job.total }}{% endif %}</h3>
     {% if not job.finished %}<span class="text-xs text-brand-gray">refreshing every second…</span>{% endif %}
   </div>
 
@@ -25,7 +25,7 @@
   {% endif %}
 
   {% if job.finished %}
-    {% if job.error %}<p class="text-xs text-red-700">Job error: {{ job.error }}</p>{% endif %}
+    {% if job.error %}<p class="text-sm text-red-700">{{ job.error }}</p>{% endif %}
     {% if job.failed %}
     <details class="text-xs text-amber-900"><summary class="cursor-pointer">{{ job.failed_total }} failed{% if job.failed_total > job.failed | length %} (showing first {{ job.failed | length }}){% endif %}</summary>
       <ul class="mt-1 list-disc pl-5">{% for f in job.failed %}<li>{{ f }}</li>{% endfor %}</ul>
