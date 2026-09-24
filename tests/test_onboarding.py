@@ -518,6 +518,19 @@ def test_bulk_run_starts_a_job(client):
     assert re.search(r"/onboard/bulk/status\?job=[A-Za-z0-9_\-]+", r.text), r.text[:200]
 
 
+def test_bulk_run_accepts_a_crlf_csv_after_the_textarea_round_trip(client):
+    # Excel and Sheets save CRLF; the preview page posts the CSV back from a <textarea>, whose value
+    # a browser rewrites to LF (and drops a leading newline) — so such a file never matched its own
+    # preview and every Run was refused. Replay what the browser sends.
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    crlf = "role,name,email,assignee\r\nSales,Ada,ada@example.com,it@example.com\r\n"
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", crlf.encode(), "text/csv")})
+    token = re.search(r'name="preview" value="([A-Za-z0-9_\-]+)"', r.text).group(1)
+    posted = crlf.replace("\r\n", "\n")                     # what the textarea's value holds
+    run = client.post("/onboard/bulk/run", data={"csv_text": posted, "confirmed": "1", "preview": token})
+    assert re.search(r"/onboard/bulk/status\?job=", run.text), run.text[:300]
+
+
 def test_bulk_run_executes_the_previewed_rows_and_roles(client, gam_calls):
     # Run re-parsed whatever CSV came back and re-read the role templates: a replayed POST re-sent
     # welcome emails, and a role edited after the preview changed what ran. Now it runs what the

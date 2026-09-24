@@ -324,6 +324,13 @@ _FLOW = "onboard"
 _BULK_FLOW = "onboard_bulk"
 
 
+def _csv_key(text: str) -> str:
+    """The CSV as the preview holds it and Run compares it: LF line endings, no blank edge lines. The
+    page posts it back from a <textarea>, whose value a browser rewrites (CRLF and CR become LF, a
+    leading newline is dropped) — so a CSV saved by Excel or Sheets never matched its own preview."""
+    return "\n".join(text.splitlines()).strip("\n")
+
+
 def _form_key(role: str, name: str, email: str, manager: str, assignee: str, send_welcome: str,
               create_account: str, first: str, last: str) -> tuple:
     return (role, name.strip(), email.strip().lower(), manager.strip().lower(), assignee.strip().lower(),
@@ -487,7 +494,7 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
     if len(data) > _MAX_CSV_BYTES:
         return _err(request, "That file is over 1 MB — a hire list should be far smaller. Split it into "
                              "several CSVs, or check you picked the right file.")
-    text = data.decode("utf-8-sig", errors="replace")
+    text = _csv_key(data.decode("utf-8-sig", errors="replace"))
     rows, parse_errors = onboarding.parse_hire_csv(text)
     if not rows and not parse_errors:
         return _err(request, "No hires found in the CSV.")
@@ -515,7 +522,7 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
         return _err(request, refusal)
-    held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""), csv_text,
+    held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""), _csv_key(csv_text),
                                      again="upload the CSV and preview it again", what="CSV")
     if refusal:
         return _err(request, refusal)
