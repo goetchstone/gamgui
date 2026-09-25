@@ -58,7 +58,7 @@
       <div class="mx-auto {{ self.container_class() }} px-6 py-4 flex items-center gap-4">
         <a href="/" class="wordmark font-serif text-lg text-brand-black">GamGUI</a>
         <span class="h-4 w-px bg-brand-gray/60"></span>
-        <span class="eyebrow text-brand-blueink">Console</span>
+        {% include "_tenant.html" %}
         {# The screen you're on is marked for sight and for a screen reader (plan U13): a detail page or a
            screen's sub-page counts as its screen. #}
         {% set here = request.url.path if request is defined else "" %}

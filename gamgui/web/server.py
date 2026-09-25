@@ -41,7 +41,23 @@ def _jobs_tray(request) -> tuple:
     return tray(getattr(getattr(getattr(app, "state", None), "gamgui", None), "jobs", None) or {})
 
 
+def _active_tenant(request) -> tuple:
+    """base.html's tenant (plan U10b), on every page: the connected domain and, when its ``oauth2.txt``
+    names one, the admin — ("", "") with no connector, or no app behind the page."""
+    app = request.scope.get("app") if isinstance(request, Request) else None
+    st = getattr(getattr(app, "state", None), "gamgui", None)
+    conn = getattr(st, "connector", None)
+    if st is None or conn is None:
+        return "", ""
+    try:
+        admin = st.vault.oauth_admin_email(conn.domain)
+    except Exception:  # a locked or unreadable Keychain must not break every page
+        admin = ""
+    return conn.domain, admin
+
+
 TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
+TEMPLATES.env.globals["active_tenant"] = _active_tenant
 TOKEN_COOKIE = "gamgui_token"
 
 
@@ -92,6 +108,8 @@ class AppState:
         sweep_stale_configs()  # clean up any credential temp dirs orphaned by a prior crash/kill
         vault = vault or SecretsVault()
         runner = GAMRunner(vault=vault)
+        # With credentials for several domains the first (sorted) starts active: every page's header
+        # names it, and /setup switches to another through the same verify (plan U10b).
         domains = vault.list_domains()
         domain = domains[0] if domains else ""
         connector = GAMConnector(runner=runner, domain=domain) if domain else None

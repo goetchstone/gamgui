@@ -2,7 +2,9 @@
 
 A small HTMX flow: collect domain + admin, then either import an existing GAM config dir or follow
 the guided fresh-setup commands; do the manual Domain-Wide Delegation step; verify. On a passing
-verify the Google Workspace connector is activated on the app state.
+verify the Google Workspace connector is activated on the app state. With credentials for more than
+one domain in the Keychain, the page also offers a switcher, which activates another through that
+same verify (plan U10b).
 """
 
 from __future__ import annotations
@@ -37,6 +39,8 @@ async def setup_page(request: Request) -> HTMLResponse:
             "gam_version_warning": await svc.engine_version_warning(),
             "binary_present": st.runner.binary_exists(),
             "candidate_dirs": svc.candidate_dirs(),
+            "domains": st.vault.list_domains(),
+            "active": st.connector.domain if st.connector else "",
         },
     )
 
@@ -106,14 +110,41 @@ async def verify(
         return TEMPLATES.TemplateResponse(
             request, "_error.html", {"message": "Domain and super-admin email are required to verify."}
         )
+    return await _verify_and_activate(request, domain, admin)
+
+
+@router.post("/switch", response_class=HTMLResponse)
+async def switch(
+    request: Request,
+    tenant: Annotated[str, Form()] = "",
+    admin: Annotated[str, Form()] = "",
+) -> HTMLResponse:
+    """Activate another domain the Keychain holds credentials for — by the same verify, so a switch
+    is a `check serviceaccount` read, the connector only changes on a pass, and the caches are busted.
+    The admin is the one its ``oauth2.txt`` names, else the one typed in "Your domain"."""
     st = request.app.state.gamgui
-    svc = _service(request)
-    result = await svc.verify(domain, admin)
+    tenant = tenant.strip()
+    if tenant not in st.vault.list_domains():
+        return TEMPLATES.TemplateResponse(
+            request, "_error.html", {"message": "No credentials for that domain in the Keychain."}
+        )
+    admin = st.vault.oauth_admin_email(tenant) or admin.strip()
+    if not admin:
+        return TEMPLATES.TemplateResponse(
+            request, "_error.html",
+            {"message": f"Enter {tenant}'s super-admin email in \"Your domain\" above, then switch."},
+        )
+    return await _verify_and_activate(request, tenant, admin, switched=True)
+
+
+async def _verify_and_activate(request: Request, domain: str, admin: str, switched: bool = False) -> HTMLResponse:
+    st = request.app.state.gamgui
+    result = await _service(request).verify(domain, admin)
     if result.ok:
         st.connector = GAMConnector(runner=st.runner, domain=domain)
         st.audit_domain = domain
         st.invalidate_users()   # caches aren't domain-tagged; a tenant switch must bust them
         st.invalidate_groups()  # (the calendar index self-checks its stored domain, so it's already safe)
     return TEMPLATES.TemplateResponse(
-        request, "_verify.html", {"result": result, "domain": domain, "admin": admin}
+        request, "_verify.html", {"result": result, "domain": domain, "admin": admin, "switched": switched}
     )

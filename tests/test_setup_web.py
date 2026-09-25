@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.setup import SetupService, _root_is_sane
@@ -663,3 +664,88 @@ def test_fresh_shows_commands(ctx):
     assert "create project" in r.text
     assert "GAMCFGDIR" in r.text
     assert 'data-action="copy"' in r.text  # each command has a copy button
+
+
+# --- U10b: the active tenant in the header, and an explicit pick among several ----------------------
+
+def _oauth2_for(admin: str) -> str:
+    return json.dumps({"token": "tok", "decoded_id_token": {"email": admin}})
+
+
+def _store(vault, domain: str, admin: str) -> None:
+    vault.set_all(domain, {"oauth2": _oauth2_for(admin), "oauth2service": json.dumps({"client_id": "x"})})
+
+
+def test_header_names_the_active_tenant_and_its_admin_on_every_screen(ctx):
+    client, _, vault, state = ctx
+    assert "Not connected" in client.get("/audit").text          # no connector yet: the header says so
+    _store(vault, "example.com", "Admin@Example.com")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    for path in ("/", "/audit", "/setup"):
+        head = client.get(path).text.split("</header>")[0]
+        assert 'id="tenant"' in head and "example.com" in head
+        assert "admin@example.com" in head                          # the admin oauth2.txt names, lowercased
+
+
+def test_one_domain_offers_no_switcher(ctx):
+    client, _, vault, _ = ctx
+    _store(vault, "example.com", "admin@example.com")
+    r = client.get("/setup")
+    assert 'id="tenant-switch"' not in r.text
+
+
+def test_two_domains_offer_a_switcher_and_switching_verifies_and_busts_the_caches(ctx, monkeypatch):
+    from gamgui.core.setup import VerifyResult
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    _store(vault, "example.org", "boss@example.org")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    state.audit_domain = "example.com"
+    r = client.get("/setup")
+    assert 'id="tenant-switch"' in r.text
+    assert '<option value="example.com" selected>example.com (active)</option>' in r.text
+    assert '<option value="example.org">' in r.text
+
+    state.user_cache._items, state.group_cache._items = ["u"], ["g"]  # primed with example.com's rows
+    seen = []
+
+    async def ok_verify(self, domain, admin):
+        seen.append((domain, admin))
+        return VerifyResult(ok=True, summary="verified")
+    monkeypatch.setattr("gamgui.core.setup.SetupService.verify", ok_verify)
+    r = client.post("/setup/switch", data={"tenant": "example.org"})
+    assert seen == [("example.org", "boss@example.org")]           # the same verify, as its own admin
+    assert state.connector.domain == "example.org" and state.audit_domain == "example.org"
+    assert state.user_cache._items is None and state.group_cache._items is None
+    assert 'hx-swap-oob="true"' in r.text and "boss@example.org" in r.text   # the header follows
+
+
+def test_a_failed_switch_keeps_the_active_tenant(ctx, monkeypatch):
+    from gamgui.core.setup import VerifyResult
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    _store(vault, "example.org", "boss@example.org")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+
+    async def failed_verify(self, domain, admin):
+        return VerifyResult(ok=False, summary="not authorized")
+    monkeypatch.setattr("gamgui.core.setup.SetupService.verify", failed_verify)
+    r = client.post("/setup/switch", data={"tenant": "example.org"})
+    assert state.connector.domain == "example.com"
+    assert 'hx-post="/setup/switch"' in r.text                     # Verify again retries the switch
+
+
+def test_switch_refuses_a_domain_without_credentials(ctx):
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    r = client.post("/setup/switch", data={"tenant": "example.net", "admin": "a@example.net"})
+    assert "No credentials" in r.text and state.connector is None
+
+
+def test_switch_needs_an_admin_when_oauth2_names_none(ctx):
+    client, _, vault, state = ctx
+    vault.set_all("example.org", {"oauth2": "tok", "oauth2service": json.dumps({"client_id": "x"})})
+    r = client.post("/setup/switch", data={"tenant": "example.org"})
+    assert "super-admin email" in r.text and state.connector is None
+    r = client.post("/setup/switch", data={"tenant": "example.org", "admin": "a@example.org"})
+    assert state.connector is not None and state.connector.domain == "example.org"   # the typed one, via the mock

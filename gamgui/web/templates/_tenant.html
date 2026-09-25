@@ -1,0 +1,14 @@
+{# The active tenant (plan U10b), in every page's header: the domain, and the admin its oauth2.txt names.
+   A verify that switches it sends this back out of band, so the header never names the old one. #}
+{% set t = active_tenant(request) %}
+<a id="tenant" href="/setup"{% if tenant_oob %} hx-swap-oob="true"{% endif %}
+   class="min-w-0 max-w-[13rem] leading-tight hover:text-brand-black transition-colors"
+   title="{{ (t[0] ~ (' as ' ~ t[1] if t[1] else '') ~ ' — switch or reconnect on Setup') if t[0] else 'Connect Google Workspace on Setup' }}">
+  {% if t[0] %}
+  <span class="sr-only">Connected tenant: </span>
+  <span class="block truncate text-sm text-brand-black">{{ t[0] }}</span>
+  {% if t[1] %}<span class="sr-only">, as </span><span class="block truncate text-[11px] text-brand-grayink">{{ t[1] }}</span>{% endif %}
+  {% else %}
+  <span class="eyebrow text-brand-grayink">Not connected</span>
+  {% endif %}
+</a>

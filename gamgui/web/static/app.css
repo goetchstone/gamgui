@@ -1042,6 +1042,10 @@ video {
   max-width: 64rem;
 }
 
+.max-w-\[13rem\] {
+  max-width: 13rem;
+}
+
 .max-w-none {
   max-width: none;
 }
@@ -1895,6 +1899,10 @@ video {
 
 .leading-snug {
   line-height: 1.375;
+}
+
+.leading-tight {
+  line-height: 1.25;
 }
 
 .tracking-normal {

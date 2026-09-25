@@ -27,6 +27,25 @@
   <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ gam_version_warning }}</div>
   {% endif %}
 
+  {% if domains | length > 1 %}
+  <!-- tenant switcher (plan U10b): the Keychain holds several domains; switching is a verify -->
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <h2 class="eyebrow text-brand-grayink">Switch tenant</h2>
+    <p class="text-sm text-brand-blueink mt-2">The Keychain holds credentials for {{ domains | length }} domains. Switching verifies the one you pick, then makes it active.</p>
+    <div id="tenant-switch" class="mt-4 flex items-end gap-3">
+      <label class="block">
+        <span class="text-sm text-brand-blueink">Domain</span>
+        <select class="{{ input_cls }} mt-1.5" name="tenant">
+          {% for d in domains %}<option value="{{ d }}"{% if d == active %} selected{% endif %}>{{ d }}{% if d == active %} (active){% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="{{ btn_primary }}" hx-post="/setup/switch" hx-target="#tenant-result" hx-swap="innerHTML"
+              hx-include="[name='tenant'],[name='admin']">Switch</button>
+    </div>
+    <div id="tenant-result"></div>
+  </div>
+  {% endif %}
+
   <!-- domain + admin (included by every step) -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <h2 class="eyebrow text-brand-grayink">Your domain</h2>

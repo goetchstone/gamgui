@@ -165,8 +165,13 @@ plan's Phase 0 F1–F3.
   client-access scope (admin token, `gam oauth create`), so the step reads it off `oauth2.txt` and says
   so; the offboarding runbook's "re-do the DWD step" advice for it was corrected. Tests in
   `test_setup*.py`; scratch Chrome at 1100 wide: inference, the rendered step, axe 0 — a real Admin
-  console and `oauth2.txt` unseen). **Open:** U10b (active tenant in the header, explicit
-  `list_domains()` pick); U5's retry.
+  console and `oauth2.txt` unseen) · U10b (every page's header names the active domain and the
+  admin its `oauth2.txt` names, where "Console" stood — `_tenant.html`, truncating before the nav moves;
+  with more than one domain in the Keychain `/setup` shows a switcher whose `POST /setup/switch` runs the
+  same verify, so the connector changes only on a pass, the caches are busted and the header follows out
+  of band; the startup pick is still the first sorted domain, now named, not persisted. Tests in
+  `test_setup_web.py`; scratch Chrome at 1100×760: switched by the UI, no overflow, axe 0 — WKWebView and
+  a real second tenant unseen). **Open:** U5's retry.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
