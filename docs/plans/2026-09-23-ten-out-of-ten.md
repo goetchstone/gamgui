@@ -95,8 +95,7 @@ plan's Phase 0 F1–F3.
   said started, 10–80% and the result, each once; VoiceOver and WKWebView unheard) · A6 with U7 `8a3c535` (below: the
   Groups board's add is a combobox and a form, no drag; a Chrome test adds and removes by keys alone and reads
   the accessibility tree; axe walks the open combobox and the remove step, still 0 — the baseline was already
-  empty, so there was nothing to shrink). **Open:** A7 (A7
-  not started: vendoring the fonts means downloading them, which waits on the operator's OK). A8
+  empty, so there was nothing to shrink). A7 applied after the operator's OK (the two fonts bundled as woff2, `font-src`/`style-src` `'self'`). A8
   declined (D7).
 - **Phase 5** — applied: U4 as a text fix (`a9d0a7b`; the dashboard option is open). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; `ae8d351` — the bulk
@@ -465,7 +464,7 @@ tenant without per-action permission.
   `pyproject.toml`'s `filterwarnings`; the Starlette/httpx TestClient deprecation warning.
 
 ## Phase 4 — Accessibility (3 → 9)
-*Status: A9, A1, A2, A3, A4, A5, A6 APPLIED; A7 open (A8 declined, D7). The axe baseline is empty.*
+*Status: A9, A1, A2, A3, A4, A5, A6, A7 APPLIED (A8 declined, D7). The axe baseline is empty.*
 - **A1 Contrast (S, global):** `brand-gray` #B2B4BB text is 2.07:1 on white (195 uses incl. headings
   and helper text); `blueink/80` 3.86:1, `/70` 3.14:1; white on `brand-blue` 3.97:1. Adjust the
   Tailwind tokens in `base.html` to ≥4.5:1 for text (keep the light gray for borders only).

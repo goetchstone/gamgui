@@ -100,8 +100,9 @@ guarding them:
 - **The UI's CSS is built ahead of time, by a pinned tool.** `scripts/build_css.sh` runs the
   Tailwind standalone CLI only if it matches the SHA-256 committed for that platform in
   `scripts/tailwind_checksums.txt` (no pin, no run), and the unminified output is committed, so a
-  change to it shows up in review. Apart from the Google Fonts stylesheet, the page loads only
-  same-origin files: that CSS, the app's own scripts and the SRI-pinned htmx.
+  change to it shows up in review. The page loads only same-origin files: that CSS, the bundled
+  fonts (`static/fonts`, OFL, SHA-256s in `SHA256SUMS`), the app's own scripts and the SRI-pinned htmx.
+  Nothing but `gam`'s own calls leaves the machine (`font-src 'self'`).
 - **Every GitHub Action is pinned by commit SHA.** A tag can be moved to new code by whoever
   controls the action's repository, and the release-watch job holds a token that can push a branch
   and open a PR. `tests/test_workflow_safety.py` fails any `uses:` pinned by tag; Dependabot bumps

@@ -124,20 +124,20 @@ class TokenGateMiddleware(BaseHTTPMiddleware):
     so no preflight — and the browser would helpfully attach our token cookie.
 
     Also stamps security headers on every response: the CSP below, nosniff, and no-referrer (so the
-    ?token= in the first URL can't leak to fonts.googleapis via the Referer header)."""
+    ?token= in the first URL can't leak to another origin via the Referer header)."""
 
     # script-src 'self': every script is a same-origin file (no inline <script>, no on*= handler, no
     # eval — htmx's allowEval is off), so an injected script or handler in a template is inert.
     # style-src keeps 'unsafe-inline' because a signature preview is a srcdoc iframe, which inherits
     # this policy, and signature HTML is styled inline (as email HTML must be); the progress bars'
     # style= widths, base.html's <style> and htmx's indicator <style> rely on it too. img-src allows
-    # any https: image for the same previews (signature logos live on remote hosts). Google Fonts is
-    # the one other origin.
+    # any https: image for the same previews (signature logos live on remote hosts). The fonts are
+    # bundled under /static/fonts, so no other origin is allowed.
     CSP = "; ".join((
         "default-src 'self'",
         "script-src 'self'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com",
+        "style-src 'self' 'unsafe-inline'",
+        "font-src 'self'",
         "img-src 'self' https: data:",
         "connect-src 'self'",
         "object-src 'none'",

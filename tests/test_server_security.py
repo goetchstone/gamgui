@@ -228,8 +228,22 @@ def test_csp_runs_only_same_origin_script(client, path):
     assert csp["connect-src"] == ["'self'"] and csp["object-src"] == ["'none'"]
     assert csp["base-uri"] == ["'none'"] and csp["frame-ancestors"] == ["'none'"] and csp["form-action"] == ["'self'"]
     # Signature previews render remote https logos and inline-styled HTML in a srcdoc iframe, which
-    # inherits this policy; Google Fonts is the one other origin.
+    # inherits this policy. The fonts are bundled (plan A7), so no other origin is allowed.
     assert csp["img-src"] == ["'self'", "https:", "data:"]
-    assert csp["style-src"] == ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"]
-    assert csp["font-src"] == ["'self'", "https://fonts.gstatic.com"]
+    assert csp["style-src"] == ["'self'", "'unsafe-inline'"]
+    assert csp["font-src"] == ["'self'"]
     assert "unsafe-eval" not in r.headers["Content-Security-Policy"]
+
+
+def test_the_fonts_are_bundled_not_fetched_from_google():
+    # Plan A7: base.html loaded Source Sans 3 / Source Serif 4 from fonts.googleapis.com on every page,
+    # the one request that left the machine besides GAM's own calls to Google. They ship as woff2 now.
+    root = Path(__file__).resolve().parent.parent
+    templates = root / "gamgui" / "web" / "templates"
+    assert not [f.name for f in templates.rglob("*.html") if "fonts.g" in f.read_text()]
+    fonts = root / "gamgui" / "web" / "static" / "fonts"
+    woff2 = sorted(fonts.glob("*.woff2"))
+    assert len(woff2) == 8 and all(f.read_bytes()[:4] == b"wOF2" for f in woff2)
+    css = (root / "gamgui" / "web" / "static" / "app.css").read_text()
+    assert all(f"/static/fonts/{f.name}" in css for f in woff2)
+    assert (fonts / "OFL-SourceSans3.txt").exists() and (fonts / "OFL-SourceSerif4.txt").exists()

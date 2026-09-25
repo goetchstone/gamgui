@@ -163,7 +163,8 @@ step.
 
 ## Design goals
 
-- **Local & native** — a single bundled `.app`; no cloud service, nothing leaves your machine. The
+- **Local & native** — a single bundled `.app`; no cloud service, nothing leaves your machine except
+  GAM's own calls to Google (the fonts and scripts are bundled too). The
   UI is served by a loopback-only local server on a random port, gated by a per-launch token (see
   [Security model](#security-model)).
 - **Secure** — secrets live in the macOS Keychain; GAM's plaintext credential files are

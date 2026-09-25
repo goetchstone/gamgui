@@ -1,0 +1,13 @@
+# Bundled fonts (plan A7). Downloaded 2026-09-24 from Google Fonts (fonts.gstatic.com, via the css2 API
+# for the weights base.html used) and the licences from github.com/google/fonts (ofl/sourcesans3,
+# ofl/sourceserif4). SIL Open Font License 1.1. SHA-256:
+09746787287a289323b0ec3cff4d1a4a801331b82b7207c1e186f5d26619a392  OFL-SourceSans3.txt
+5f94c3fd3a23131a417ab5a0c8452de57e70c3cfb9f604d88241f7065ebf9fd9  OFL-SourceSerif4.txt
+ad993632172f340cc262d617146a83c9664bbde7b2ab55c2eaf2bedacd1b6969  SourceSans3-italic-latin-ext.woff2
+b9b0f6feec1c0386ed03cc9a118fcfea00ee05b4ccb7654400000fb5b3010d98  SourceSans3-italic-latin.woff2
+ed3571ea9ff752f1c846f1c9ad2b0006de42f478a2db9163a74db0729a4eb281  SourceSans3-normal-latin-ext.woff2
+ac057a5593cbe3df0d2585da5dd5f33b8efa84aa30550c710fe061b37fc5c54b  SourceSans3-normal-latin.woff2
+3eff7682cb08de3fbd2f411e05dc3f68fbd3ce721ec554ffafa7b0397214e76f  SourceSerif4-italic-latin-ext.woff2
+419703e180143eb9033e02651331fcf3cc8558d42f1041140a0b24e5be0933bb  SourceSerif4-italic-latin.woff2
+a0cd390d017200f91327781204458ff918999584bece8902497ba6c08472178d  SourceSerif4-normal-latin-ext.woff2
+2a24bad466f09b88b8e9cbc488bf774117c912e66374c57bf4716855849143f8  SourceSerif4-normal-latin.woff2
