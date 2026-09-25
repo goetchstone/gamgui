@@ -77,7 +77,7 @@ def _screen_words(patterns: list[str]) -> set[str]:
                 for part in re.split(r"\{%.*?%\}", piece.replace("&amp;", "&")):
                     # "Retry the {{ n }} that failed" reads as N; "Jobs{{ count }}" is the word Jobs.
                     for text in (re.sub(r"\{\{.*?\}\}", "N", part), *re.split(r"\{\{.*?\}\}", part)):
-                        text = " ".join(text.split()).rstrip(" ↓↗…")
+                        text = " ".join(text.split()).rstrip(" →↓↗…")
                         if text:
                             words.add(text)
     return words

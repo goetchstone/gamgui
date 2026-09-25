@@ -127,7 +127,7 @@ them their own preview and confirm step — just those people.
 ## Share a calendar
 
 **Calendars** → **Find a calendar by name**. The first time, click **Build index**: a one-time
-background scan, minutes on a large domain. Open the calendar to see **Who has access**, then share
+background scan, minutes on a large domain. Click **View access & events** to see **Who has access**, then share
 with a person or group at a role and click **Share**.
 
 ![Calendars: search and who has access](screenshots/calendars.png)

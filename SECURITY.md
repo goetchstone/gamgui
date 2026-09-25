@@ -126,6 +126,18 @@ Accepted and documented rather than fixed; reports that only restate these will 
   close it. The real boundary against same-user code is the Keychain item's access control, which
   asks before any other app reads the credentials at rest.
 
+## Which Python a CVE report is about
+
+GamGUI runs on exactly two interpreters, both of which it ships: the one frozen into the `.app` (the
+Python that built `.venv` — python.org 3.14.x today; `scripts/build_app.sh` makes its build venv from
+it) and the one inside the bundled `gam` binary (GAM-team's build; `gam version` prints it). Other
+Pythons on the Mac — Apple's `/usr/bin/python3` (3.9, from the command-line tools), an older
+python.org install — are never used, so a machine-wide scanner's CPython CVEs for them don't touch
+GamGUI (triaged 2026-09-25: none of a 16-CVE report applied to 3.14.6 or GAM's 3.14.7). To check a
+CPython CVE: `.venv/bin/python --version` and `gam version`, then the CVE's fixed versions. After a
+CPython security release, rebuild `.venv` from the new python.org 3.14.x (`make setup`) and run
+`make app`; GAM's own interpreter moves with a GAM bump.
+
 ## Using it safely
 
 - Destructive operations are guarded, but a guard cannot prove that a given GAM command does what

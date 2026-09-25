@@ -141,7 +141,10 @@ Every write is audited, so this table comes from real audit logs rather than mem
 means the operation has succeeded at least once against a production Google Workspace domain. **Not
 yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
 it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
-reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`).
+reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
+2026-09-25 on GAM 7.48.11, together with setup's scoped `check serviceaccount scopes …`, `print domains`
+for the Builder's External-only filter, and reading the connected admin and its granted scopes from
+`oauth2.txt`).
 
 | Write | Where | Live |
 |---|---|---|
@@ -150,12 +153,12 @@ reads are confirmed (a read-only pass over the parsers ships as `scripts/accepta
 | Welcome email | Onboard | not yet |
 | Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
-| Add group member | Groups, Users, Onboard, Builder | not yet |
+| Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed** |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
-| Remove delegate | Users, Builder | not yet |
-| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed** without the explicit `contactsonly false domainonly false start Started end NotSpecified` it now sends (so an earlier restriction or date can't survive); with them, not yet |
-| Clear vacation | Users, Builder | not yet |
+| Remove delegate | Users, Builder | **confirmed** |
+| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed**, including the explicit `contactsonly false domainonly false` and dated `start`/`end` the user page sends; offboarding's "starts now, no end" `start Started end NotSpecified`, not yet |
+| Clear vacation | Users, Builder | **confirmed** |
 | Reset password (it runs no sign-out: offboarding's next step does, or *Sign out everywhere*) | Offboarding, Builder | **confirmed** |
 | Sign out everywhere | Users, Builder | not yet |
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | not yet |
