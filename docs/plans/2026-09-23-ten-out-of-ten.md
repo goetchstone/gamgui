@@ -97,7 +97,7 @@ plan's Phase 0 F1–F3.
   the accessibility tree; axe walks the open combobox and the remove step, still 0 — the baseline was already
   empty, so there was nothing to shrink). A7 applied after the operator's OK (the two fonts bundled as woff2, `font-src`/`style-src` `'self'`). A8
   declined (D7).
-- **Phase 5** — applied: U4 as a text fix (`a9d0a7b`), then as the dashboard (U4a: the tenant, Find a user and three task links; directory and report-bucket counts from the cache with a Load control when it is cold — no `gam` on load but the local `version`; the jobs tray's newest four; the last three failed audit records, linking Audit filtered to failures). Partly: U9
+- **Phase 5** — applied: U4 as a text fix (`a9d0a7b`), then as the dashboard (U4a `d652b66`: the tenant, Find a user and three task links; directory and report-bucket counts from the cache with a Load control when it is cold — no `gam` on load but the local `version`; the jobs tray's newest four; the last three failed audit records, linking Audit filtered to failures). Partly: U9
   (`01d29ce`, `2c99722` — signatures and every user-detail write say why; `ae8d351` — the bulk
   department, calendar group fan-out and Builder sequence feeds record a capped reason per failure,
   with GAM's error expandable in each final panel; `7b3fe49` — the Calendars screen's remove-access,
