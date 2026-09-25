@@ -13,6 +13,7 @@ import re
 import shlex
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Awaitable, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from .audit import redact_argv
@@ -105,6 +106,42 @@ def autoreply_html(text: str) -> str:
     operator typed text, not markup) and a backslash is ``&#92;`` (a typed ``\\n`` stays text)."""
     lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
     return "<br/>".join(html.escape(line, quote=False).replace("\\", "&#92;") for line in lines)
+
+
+class _BodyText(HTMLParser):
+    """Collects an HTML body's text: ``<br>`` is a line break, a ``<div>``/``<p>`` edge starts a line."""
+
+    def __init__(self) -> None:
+        super().__init__()   # convert_charrefs: the text arrives unescaped
+        self.out: List[str] = []
+
+    def _new_line(self) -> None:
+        if self.out and not self.out[-1].endswith("\n"):
+            self.out.append("\n")
+
+    def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+        if tag == "br":
+            self.out.append("\n")
+        elif tag in ("div", "p", "li"):
+            self._new_line()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("div", "p", "li"):
+            self._new_line()
+
+    def handle_data(self, data: str) -> None:
+        self.out.append(data)
+
+
+def autoreply_text(body: str) -> str:
+    """The inverse of ``autoreply_html``, for a form pre-filled from ``show vacation`` (which prints the
+    stored HTML body): each ``<br>`` back to a line break, other tags dropped, entities unescaped — so
+    the operator edits the text, and saving it unchanged sends the same body, not an escaped copy of
+    its markup. A body written in Gmail (``<div>`` per line) reads the same way."""
+    parser = _BodyText()
+    parser.feed(body or "")
+    parser.close()
+    return "".join(parser.out).strip()
 
 
 @dataclass

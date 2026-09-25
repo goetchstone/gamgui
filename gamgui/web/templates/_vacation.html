@@ -16,7 +16,7 @@
   <form class="space-y-3" hx-post="/users/vacation/set" hx-target="#vacation" hx-swap="innerHTML" hx-disabled-elt="find button">
     <input type="hidden" name="email" value="{{ email }}" />
     <label class="block text-sm text-brand-blueink">Subject<input type="text" name="subject" value="{{ vac.subject }}" class="{{ input_cls }} mt-1" /></label>
-    <label class="block text-sm text-brand-blueink">Message<textarea name="message" rows="3" placeholder="Auto-reply message" class="{{ input_cls }} mt-1">{% if vac.enabled %}{{ vac.message }}{% endif %}</textarea></label>
+    <label class="block text-sm text-brand-blueink">Message<textarea name="message" rows="3" placeholder="Auto-reply message" class="{{ input_cls }} mt-1">{{ message }}</textarea></label>
     <div class="flex flex-wrap items-center gap-4 text-sm text-brand-blueink">
       <label class="flex items-center gap-2"><input type="checkbox" name="contactsonly" value="on" {{ "checked" if vac.contacts_only }} /> Contacts only</label>
       <label class="flex items-center gap-2"><input type="checkbox" name="domainonly" value="on" {{ "checked" if vac.domain_only }} /> Domain only</label>

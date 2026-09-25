@@ -7,8 +7,8 @@ import pytest
 import shlex
 
 from gamgui.core.gam.commands import GAMCommands
-from gamgui.core.lifecycle import (DEFAULT_MESSAGE, DEFAULT_SUBJECT, STEP_NAMES, build_offboard_steps, command_line,
-                                   run_offboard)
+from gamgui.core.lifecycle import (DEFAULT_MESSAGE, DEFAULT_SUBJECT, STEP_NAMES, autoreply_html, autoreply_text,
+                                   build_offboard_steps, command_line, run_offboard)
 
 from .helpers import gam_writes
 
@@ -129,6 +129,18 @@ def test_offboard_autoreply_is_sent_as_the_text_the_preview_shows():
         "Line one.<br/><br/>Ask Mo Gr (mgr@e.com) &lt;IT&gt; &amp; co.<br/>C:&#92;new")
     assert argv[argv.index("message") + 2] == "html"
     assert "Line one.\r\n\r\nAsk Mo Gr (mgr@e.com) <IT> & co." in vac.summary       # the preview: the text
+
+
+@pytest.mark.parametrize("text", ["Line one.\n\nAsk <IT> & co.\nC:\\new", "one line", "&amp; is text", ""])
+def test_autoreply_text_reads_back_what_autoreply_html_sent(text):
+    # The user page's Vacation form is pre-filled from `show vacation`, which prints the stored HTML.
+    assert autoreply_text(autoreply_html(text)) == text
+
+
+def test_autoreply_text_reads_a_body_written_in_gmail():
+    # Gmail's editor writes a <div> per line and <div><br></div> for a blank one.
+    body = '<div dir="ltr">Away until Monday.<div><br></div><div>Ask Bob &amp; co.</div></div>'
+    assert autoreply_text(body) == "Away until Monday.\n\nAsk Bob & co."
 
 
 @pytest.mark.asyncio

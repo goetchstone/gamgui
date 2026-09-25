@@ -182,6 +182,24 @@ def test_vacation_form_unticks_and_round_trips_its_dates(client, gam_state):
     assert 'value="2026-07-01"' not in r.text and 'value="2026-07-10"' not in r.text
 
 
+def test_vacation_form_sends_its_line_breaks_and_prefills_them_back(client, gam_state, gam_calls):
+    # The form sends HTML (`html`), where a raw line break is a space: the typed paragraphs went out as
+    # one. And `show vacation` prints the stored HTML body, so the form came back showing the markup.
+    email = "alice@example.com"
+    typed = "Line one.\r\n\r\nFish & <chips>\r\nC:\\new"
+    r = client.post("/users/vacation/set", data={"email": email, "subject": "OOO", "message": typed})
+    assert_ok_partial(r)
+    [sent] = gam_writes(gam_calls())
+    assert sent[sent.index("message") + 1] == "Line one.<br/><br/>Fish &amp; &lt;chips&gt;<br/>C:&#92;new"
+    shown = unescape(re.search(r'<textarea name="message"[^>]*>(.*?)</textarea>', r.text, re.S).group(1))
+    assert shown == "Line one.\n\nFish & <chips>\nC:\\new"          # the text, not the stored markup
+    # Saving it unchanged (a browser submits \r\n) sends the same body — not an escaped copy.
+    r = client.post("/users/vacation/set", data={"email": email, "subject": "OOO",
+                                                 "message": shown.replace("\n", "\r\n")})
+    assert_ok_partial(r)
+    assert gam_writes(gam_calls())[-1] == sent
+
+
 def test_users_list_has_title_column(client):
     r = client.get("/users")
     assert "Title" in r.text and "IT Director" in r.text

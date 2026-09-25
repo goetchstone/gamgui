@@ -14,7 +14,9 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 
 ## Files
 - `gamgui/core/lifecycle.py` — pure step builder. `build_offboard_steps(...)`, `fill_autoreply`,
-  `autoreply_html` (the text → the HTML body sent),
+  `autoreply_html` (the text → the HTML body sent; the user page's Vacation form sends it too) and
+  its inverse `autoreply_text` (the stored HTML body `show vacation` prints → the text that form is
+  pre-filled with, so an unchanged save sends the same body),
   `OffboardStep` dataclass (its `commands` = the exact argv(s) it runs), `command_line` (argv → the
   quoted, redacted `gam …` line the preview shows), `check_addresses` (both addresses against the
   directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`, and the step

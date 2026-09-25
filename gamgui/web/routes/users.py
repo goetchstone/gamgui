@@ -22,6 +22,7 @@ from fastapi.responses import HTMLResponse
 from ...core import bulk, guard
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
+from ...core.lifecycle import autoreply_html, autoreply_text
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
 from ..jobs import start_job
@@ -596,7 +597,9 @@ async def _vacation_partial(request: Request, conn, email: str) -> HTMLResponse:
         vac = await conn.get_vacation(email)
     except Exception as exc:
         return error_partial(request, friendly(exc, _TRY_AGAIN))
-    return TEMPLATES.TemplateResponse(request, "_vacation.html", {"vac": vac, "email": email})
+    # The stored body is HTML (the form sends it so); the textarea edits its text.
+    message = autoreply_text(vac.message) if vac.enabled else ""
+    return TEMPLATES.TemplateResponse(request, "_vacation.html", {"vac": vac, "email": email, "message": message})
 
 
 @router.post("/vacation/set", response_class=HTMLResponse)
@@ -613,8 +616,8 @@ async def vacation_set(
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
-    result = await conn.set_vacation(
-        email, subject, message, html=True,
+    result = await conn.set_vacation(   # HTML, so what was typed goes out with its line breaks
+        email, subject, autoreply_html(message), html=True,
         start=start.strip() or None, end=end.strip() or None,
         contacts_only=(contactsonly == "on"), domain_only=(domainonly == "on"),
     )
