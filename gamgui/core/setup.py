@@ -742,8 +742,16 @@ def _check_result(out: str, exited_ok: bool = True) -> VerifyResult:
     failed = (not exited_ok) or ("FAILED" in up) or ("DISABLED!" in up) or any(s == "FAIL" for _, s in lines)
     ok = bool(lines) and not failed
     scopes = [status for label, status in lines if label.startswith("https://")]
+    # A failing row that isn't a scope (the system clock, the service-account key) is not a delegation
+    # problem: GAM stops before the scope table and prints no link, so name the check that failed.
+    checks_failed = [label for label, status in lines if status == "FAIL" and not label.startswith("https://")]
     if ok:
         summary = "All scopes authorized."
+    elif checks_failed:
+        summary = (f"GAM's service-account check failed: {'; '.join(checks_failed)}. A rejected key means the "
+                   "service account's key was deleted or rotated — import a current one; a failed clock check "
+                   "means this Mac's time is off. Then verify again.")
+        return VerifyResult(ok=False, summary=summary, lines=lines, raw=out, auth_url="")
     elif "FAIL" in scopes:
         summary = (f"Domain-Wide Delegation isn't authorized for {scopes.count('FAIL')} of {len(scopes)} "
                    "scopes yet — use the link below, then verify again.")

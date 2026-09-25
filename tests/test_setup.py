@@ -552,3 +552,14 @@ def test_gam_error_carries_stdout_scrubbed_and_out_of_its_repr():
     err = GAMError.from_run(1, "", ["user", "a@x"], stdout="User: a@x, password hunter2 set")
     assert "hunter2" not in err.stdout and "User: a@x" in err.stdout
     assert "User: a@x" not in repr(err) and "User: a@x" not in err.message
+
+
+@pytest.mark.asyncio
+async def test_verify_names_a_rejected_key_instead_of_asking_for_delegation(runner, vault, domain):
+    # A rejected service-account key makes `check serviceaccount` exit 1 with a FAIL row too — but it
+    # isn't a delegation problem, and GAM prints no link. It once read "Domain-Wide Delegation isn't
+    # authorized yet — use the link below" with no link, sending the operator to the wrong fix.
+    result = await SetupService(vault, runner).verify(domain, "badkey-admin@example.com")
+    assert not result.ok and not result.auth_url
+    assert "Service Account Private Key Authentication" in result.summary
+    assert "Domain-Wide Delegation" not in result.summary

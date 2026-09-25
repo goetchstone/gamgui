@@ -479,6 +479,14 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccou
   [ -n "$asked" ] || asked="$SA_AUTHORIZED $SA_OTHER"
   checked=$(printf '%s\n' $asked | sort -u)
   n=$(printf '%s\n' "$checked" | wc -l | tr -d ' ')
+  # A rejected service-account key (deleted or rotated in the Cloud console): the key row FAILs and GAM
+  # stops before any scope is checked — exit 1, nothing on stderr, no delegation table and no link.
+  case "$sa_user" in
+    *badkey*)
+      printf '%-73s %s\n' "System time status" "PASS" \
+        "Service Account Private Key Authentication" "FAIL"
+      exit 1 ;;
+  esac
   printf '%-73s %s\n' "System time status" "PASS" \
     "Service Account Private Key Authentication" "PASS" \
     "Service Account Private Key age; Google recommends rotating keys on a routine basis" "PASS"
