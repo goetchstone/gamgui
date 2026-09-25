@@ -141,10 +141,7 @@ async def _verify_and_activate(request: Request, domain: str, admin: str, switch
     st = request.app.state.gamgui
     result = await _service(request).verify(domain, admin)
     if result.ok:
-        st.connector = GAMConnector(runner=st.runner, domain=domain)
-        st.audit_domain = domain
-        st.invalidate_users()   # caches aren't domain-tagged; a tenant switch must bust them
-        st.invalidate_groups()  # (the calendar index self-checks its stored domain, so it's already safe)
+        st.activate(GAMConnector(runner=st.runner, domain=domain))   # busts what the old tenant left
     return TEMPLATES.TemplateResponse(
         request, "_verify.html", {"result": result, "domain": domain, "admin": admin, "switched": switched}
     )

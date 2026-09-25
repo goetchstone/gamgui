@@ -95,6 +95,28 @@ class AppState:
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
 
+    def __post_init__(self) -> None:
+        self.previews.bind(self._tenant)
+
+    def _tenant(self) -> str:
+        """The active domain, lowercased — what a held preview is bound to (``Previews.bind``)."""
+        return (getattr(self.connector, "domain", "") or "").lower()
+
+    def activate(self, connector: GAMConnector) -> None:
+        """Make ``connector`` the active tenant (a verify that passed; a switch, plan U10b). The directory
+        caches are dropped either way; another domain also drops every held preview and the Builder's
+        last result, so nothing read or previewed on the old tenant is served or run on the new one
+        (review 2: R5, R11). The calendar index checks its own stored domain; ``tenant_domains`` and the
+        caches' generation (``UserCache.get``) are keyed to the connector, so they follow on their own."""
+        changed = self._tenant() != connector.domain.lower()
+        self.connector = connector
+        self.audit_domain = connector.domain
+        self.invalidate_users()
+        self.invalidate_groups()
+        if changed:
+            self.previews.clear()
+            self.builder_last_result = None
+
     async def users(self, force: bool = False, stale_ok: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports). ``stale_ok`` only
         for a page that shows its age (``as_of`` in the template): past the TTL it gets the old list while

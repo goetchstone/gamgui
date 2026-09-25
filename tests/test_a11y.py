@@ -448,6 +448,8 @@ def test_the_keyboard_alone_works_the_tabs_and_each_confirm_panel(page):
 
     p.goto("/users/detail?email=alice%40example.com")
     p.click('main a[href="/users"]', action="focus")
+    p.key("Tab")                          # the directory's "as of … · Refresh" link sits under the name
+    assert "refresh=1" in p.c.js("document.activeElement.getAttribute('href') || ''")
     p.key("Tab")
     assert p.focused()["id"] == "tab-overview"
     for key, tab in (("ArrowRight", "mail"), ("End", "danger"), ("Home", "overview"), ("ArrowLeft", "danger")):

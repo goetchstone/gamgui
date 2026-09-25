@@ -172,24 +172,33 @@ async def users_table(
 
 
 @router.get("/detail", response_class=HTMLResponse)
-async def user_detail(request: Request, email: str, back: str = "") -> HTMLResponse:
+async def user_detail(request: Request, email: str, back: str = "", refresh: int = 0) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
         return TEMPLATES.TemplateResponse(request, _USERS_PAGE, {"connected": False, "users": []})
+    age: dict = {}
     try:
         # Serve identity/role/security from the cached directory (reliable JSON path) so opening a
-        # user is instant. Delegates and mail settings load lazily. Fall back to a direct lookup
-        # only for a user not in the cached list (e.g. a deep link).
-        users = await st.users()
-        user = next((u for u in users if u.primary_email.lower() == email.lower()), None)
+        # user is instant, past the TTL too: the page says how old the list is while one refresh runs
+        # behind it (plan U12b), as Users and Reports do. Delegates and mail settings load lazily.
+        # Refresh — or a user not in the cached list (a deep link) — is a direct lookup of that one
+        # account, never a full `print users`.
+        user = None
+        if not refresh:
+            users = await st.users(stale_ok=True)
+            user = next((u for u in users if u.primary_email.lower() == email.lower()), None)
+            age = as_of(st.user_cache) if user is not None else {}
         if user is None:
             user = await conn.get_user(email)
     except Exception as exc:
         return _error_page(request, friendly(exc, _TRY_AGAIN))
+    refresh_url = "/users/detail?" + urlencode({"email": user.primary_email, **({"back": back} if back else {}),
+                                                 "refresh": 1})
     return TEMPLATES.TemplateResponse(
         request, "user_detail.html",
-        {"user": user, "email": user.primary_email, "suspended": user.suspended, "list_url": _list_url_from(back)},
+        {"user": user, "email": user.primary_email, "suspended": user.suspended, "list_url": _list_url_from(back),
+         "refresh_url": refresh_url, **age},
     )
 
 

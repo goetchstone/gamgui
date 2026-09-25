@@ -15,6 +15,11 @@
       <p class="text-brand-blueink">{{ user.primary_email }}</p>
       {# Always rendered (even when empty) so a save can refresh it out-of-band — see _org_form.html. #}
       <p id="dtl-subtitle" class="text-sm text-brand-grayink">{% if user.title %}{{ user.title }}{% if user.department %} · {{ user.department }}{% endif %}{% endif %}</p>
+      {# Served from the cached directory, past its TTL too (plan U12b): say how old, and offer this account fresh. #}
+      {% if as_of is defined %}
+      <p class="text-xs text-brand-grayink">Directory {% include "_as_of.html" %} ·
+        <a href="{{ refresh_url }}" title="Reload this account from Google" class="underline hover:text-brand-black">Refresh</a></p>
+      {% endif %}
     </div>
     <div class="flex items-center gap-2">
       {% if user.suspended %}

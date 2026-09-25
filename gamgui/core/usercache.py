@@ -36,7 +36,14 @@ class UserCache:
     async def get(self, fetch: Callable[[], Awaitable[list]], force: bool = False, stale_ok: bool = False) -> list:
         """The list. Within the TTL it is served as it is. Past it, ``stale_ok`` serves it anyway and starts
         a background refresh (only for a caller that shows the list's age); otherwise it is re-read first,
-        and a failed read raises — a safety check never decides on stale data. ``force`` always re-reads."""
+        and a failed read raises — a safety check never decides on stale data. ``force`` always re-reads.
+
+        The generation is read on entry, not once the lock is held: the caller bound ``fetch`` to its
+        connector before calling, so a patch or an invalidate (a tenant switch) that lands while this
+        call waits on the lock voids its read just as one landing mid-fetch does. Such a read is
+        returned to its caller but never stored — else a request queued across a switch would cache
+        the old tenant's list as the new one's (review 2, R9)."""
+        gen = self._gen
         items = self._items
         if not force and items is not None and (stale_ok or not self._expired()):
             if self._expired():
@@ -44,9 +51,9 @@ class UserCache:
             return items
         async with self._lock:
             if force or self._items is None or self._expired():
-                gen, started = self._gen, clock.now()
+                started = clock.now()
                 items = await fetch()
-                if gen != self._gen:   # a write landed mid-fetch: the list may predate it
+                if gen != self._gen:   # a write or a switch landed since this call began: not this list
                     return items
                 self._items, self._at = items, started
             return self._items

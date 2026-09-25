@@ -243,9 +243,18 @@ async def offboard_run(
     job = start_job(st.jobs, len(steps), kind="offboard", title=f"Offboarding {user}")
     st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
     st.offboard_jobs[user.lower()] = job.id
-    job.task = asyncio.create_task(lifecycle.run_offboard(job, conn, steps, done=held.done))
-    st.invalidate_users()  # password/org/etc. changed
+    job.task = asyncio.create_task(_run_offboard(st, job, conn, steps, held.done))
+    st.invalidate_users()  # password/org/etc. are about to change
     return _panel(request, job, user)
+
+
+async def _run_offboard(st, job, conn, steps: List[lifecycle.OffboardStep], done: FrozenSet[str]) -> None:
+    """The run, then the directory list dropped again: a page loaded while it ran re-read the leaver as
+    they were before it (suspended state, org unit, aliases), and the list must not keep that for its TTL."""
+    try:
+        await lifecycle.run_offboard(job, conn, steps, done=done)
+    finally:
+        st.invalidate_users()
 
 
 @router.get("/offboard/status", response_class=HTMLResponse)
