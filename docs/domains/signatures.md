@@ -7,7 +7,7 @@
 
 ## Files
 - `gamgui/core/signatures.py` — render engine (`render_signature`, `_expand_optional`), `match_scope`, `scope_options`, `smart_quote_warning`/`_curly_quote_in_tag`, and `SignatureStore` (JSON persistence + 3 seeds).
-- `gamgui/web/routes/signatures.py` — routes: `page`, `preview`, `apply` (spawns bg task), `apply_status` (poll target), `list_templates`/`save_template`/`delete_template`; the apply's progress is a plain `web/jobs.py` `Job`.
+- `gamgui/web/routes/signatures.py` — routes: `page`, `preview`, `retry` (the preview for a finished apply's failed people, plan U5 — see web-screens-jobs), `apply` (spawns bg task; with `retry=<job id>` it takes that retry's held preview), `apply_status` (poll target), `list_templates`/`save_template`/`delete_template`; the apply's progress is a plain `web/jobs.py` `Job`.
 - `gamgui/core/gam/commands.py` — `GAMCommands.set_signature` (argv `["user", email, "signature", <body>, "html"]`) and `show_signature` (`["user", email, "show", "signature"]`).
 - `gamgui/core/connectors/gam_connector.py` — `set_signature` (→ `_run_write`, `RiskLevel.LOW`), `get_signature`, and `_parse_signature` (scrapes `Signature:` from text output).
 - `gamgui/web/routes/users.py` — `/users/signature` (single-user set) and `/users/signature/current` reuse the same connector + `smart_quote_warning`. A failed set shows `ChangeResult.remediation` as the message and GAM's raw `detail` in `_action_result.html`'s collapsed "GAM's error" disclosure.

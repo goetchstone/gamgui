@@ -1,12 +1,8 @@
-{% from "_job_failures.html" import failures %}
+{% from "_job_failures.html" import failures, retry %}
 {% import "_job_live.html" as live %}
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
-{% elif job and job.error %}
-<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" {{ live.ended(job) }} data-announce="{{ job.id }}">
-  {{ job.error }}<br>Updated {{ job.applied }} of {{ job.total }} before stopping.
-</div>
-{% elif job and not job.finished %}
+{% elif job and not job.finished and not job.error %}
 <div hx-get="/users/bulk/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
      hx-target="this" hx-swap="outerHTML"
      class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
@@ -20,11 +16,14 @@
   </div>
 </div>
 {% elif job %}
-<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not job.failed_total else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p {{ live.ended(job) }} data-announce="{{ job.id }}">Set department on {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.</p>
+{# Finished, or stopped (at Stop, or a failure every later user would share): job.error says why. #}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>Updated {{ job.applied }} of {{ job.total }} before stopping.
+  {% else %}Set department on {{ job.applied }} of {{ job.total }} user{{ "s" if job.total != 1 }}.{% endif %}</p>
   {% if job.failed_total %}
   <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
   {{ failures(job) }}
+  {{ retry(job, "/users/bulk/retry") }}
   {% endif %}
 </div>
 {% endif %}

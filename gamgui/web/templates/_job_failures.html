@@ -11,3 +11,15 @@
 </ul>
 {% if job.more %}<div class="mt-1 text-xs">… +{{ job.more }} more</div>{% endif %}
 {% endmacro %}
+
+{# "Retry the N that failed" (plan U5): opens the run's own preview and confirm step, single-use token
+   and all, for exactly those people, in the button's place — it never writes by itself. Only when the
+   sample holds every failure: past the cap (#9) a retry of the sample would pass for a retry of all. #}
+{% macro retry(job, url) %}
+{% if job.can_retry %}
+<button type="button" hx-post="{{ url }}" hx-vals='{"job": "{{ job.id }}"}' hx-target="this" hx-swap="outerHTML" hx-disabled-elt="this"
+        class="mt-2 rounded-lg border border-amber-400/70 px-3 py-1.5 text-xs text-amber-900 hover:bg-amber-100 transition-colors">Retry the {{ job.failed_total }} that failed</button>
+{% elif job.finished and job.more %}
+<p class="mt-2 text-xs">Only {{ job.failed | length }} of the {{ job.failed_total }} failures were kept, so there is no retry of them all — fix the cause, then run it again from the start.</p>
+{% endif %}
+{% endmacro %}

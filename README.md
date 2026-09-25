@@ -84,7 +84,9 @@ Actively developed and used against live Google Workspace tenants. Working today
   calendar fan-out, Builder sequence, calendar index) is listed in the header from any page, with
   its progress, its result and a link back to its panel. A running loop has a **Stop**: it finishes
   the one in hand, then ends, saying how many it didn't attempt (an offboarding asks first, and marks
-  the steps after it "not run: stopped"). Jobs live in memory: quitting the app ends them.
+  the steps after it "not run: stopped"). A signature apply or bulk department run that failed for
+  some people offers **Retry the N that failed**: the same preview and confirm step, for just them
+  (not past the 200 failures a job keeps). Jobs live in memory: quitting the app ends them.
 
 You build and run it yourself; it is not yet notarized for distribution to other Macs.
 

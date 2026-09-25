@@ -65,6 +65,7 @@ class Job:
     interrupted: bool = False        # cut off (the app quit) before every step was accounted for
     title: str = ""                  # what the tray calls it ("Offboarding carol@example.com")
     kind: str = ""                   # a PANELS key: which screen's panel shows it
+    retry: object = None             # what "Retry the N that failed" re-runs: a signature's template, a department
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 
     def record(self, item: str, ok: bool, reason: str = "", detail: str = "") -> None:
@@ -94,6 +95,12 @@ class Job:
     @property
     def failed_items(self) -> List[str]:
         return [f.item for f in self.failed]
+
+    @property
+    def can_retry(self) -> bool:
+        """A finished run whose failed sample holds every failure (#9 caps it): only then is a retry of
+        the sample a retry of all of them."""
+        return self.finished and self.failed_total > 0 and not self.more and self.retry is not None
 
     @property
     def status_url(self) -> str:
@@ -130,6 +137,24 @@ def start_job(jobs: dict, total: int, keep: int = 10, window: int = RECENT_WINDO
               title: str = "", kind: str = "") -> BatchJob:
     """Register a fresh ``BatchJob`` whose live feed keeps its newest ``window`` rows."""
     return register_job(jobs, BatchJob(total=total, window=window, title=title, kind=kind), keep=keep)
+
+
+def retry_key(job_id: str) -> Tuple[str, str]:
+    """The preview-store form key a retry's preview holds its people under — the job, not a live form."""
+    return ("retry", job_id)
+
+
+def retry_of(jobs: dict, job_id: str, kind: str) -> Tuple[Optional[Job], Optional[str]]:
+    """The finished ``kind`` job whose failures a retry previews (plan U5), or why there is none."""
+    job = jobs.get(job_id)
+    if job is None or job.kind != kind or not job.finished or job.retry is None:
+        return None, "That run is no longer available — run it again from the start."
+    if job.more:
+        return None, (f"Only {len(job.failed)} of the {job.failed_total} failures were kept, so a retry "
+                      "can't cover them all — run it again from the start.")
+    if not job.failed_total:
+        return None, "Nothing failed in that run."
+    return job, None
 
 
 def tray(jobs: dict) -> Tuple[List[Job], int, int]:

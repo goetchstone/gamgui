@@ -1,7 +1,10 @@
+{# A retry (plan U5) renders this same confirm step in its button's place, for a failed run's people. #}
+{% if retry %}<div id="retry-{{ retry }}" class="mt-2">{% endif %}
 {% if error %}
 <div tabindex="-1" data-focus class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% else %}
 <p tabindex="-1" data-focus class="text-sm text-brand-blueink">Will set Department to <strong>{{ store or "—" }}</strong> on <strong>{{ count }}</strong> active user{{ "s" if count != 1 }}{% if not store %} (enter a department first){% endif %}. Each person's title is preserved.</p>
+{% if gone %}<p class="mt-1 text-xs text-brand-grayink">{{ gone }} of those that failed {{ "is" if gone == 1 else "are" }} no longer an active user and {{ "is" if gone == 1 else "are" }} left out.</p>{% endif %}
 {% if targets %}
 <details class="mt-2">
   <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ count }}</summary>
@@ -14,11 +17,13 @@
 {% endif %}
 {% if count and store %}
 <button class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
-        hx-post="/users/bulk/apply" hx-include="#bulk-form" hx-target="#bulk-result" hx-swap="innerHTML"
-        hx-vals='{"confirmed": "1", "preview": "{{ token }}"}' hx-disabled-elt="this"
+        hx-post="/users/bulk/apply" hx-disabled-elt="this"
+        {% if retry %}hx-target="#retry-{{ retry }}" hx-swap="innerHTML" hx-vals='{"confirmed": "1", "preview": "{{ token }}", "retry": "{{ retry }}"}'
+        {% else %}hx-include="#bulk-form" hx-target="#bulk-result" hx-swap="innerHTML" hx-vals='{"confirmed": "1", "preview": "{{ token }}"}'{% endif %}
         hx-confirm="Set Department to '{{ store }}' on {{ count }} user(s)? Each person's title is kept.">Apply to {{ count }} user{{ "s" if count != 1 }}</button>
-<p class="mt-1 text-xs text-brand-grayink">Apply sets exactly this preview. Change the department or the people and you'll need to preview again.</p>
+<p class="mt-1 text-xs text-brand-grayink">{% if retry %}Apply sets exactly this preview: that run's department, on the people it failed for.{% else %}Apply sets exactly this preview. Change the department or the people and you'll need to preview again.{% endif %}</p>
 {% else %}
 <p class="mt-2 text-sm text-brand-grayink">Nothing to apply yet.</p>
 {% endif %}
 {% endif %}
+{% if retry %}</div>{% endif %}

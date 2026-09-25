@@ -53,6 +53,7 @@ PREVIEWS = {
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
     "/groups/members/remove/preview", "/users/groups/remove/preview",
+    "/signatures/retry", "/users/bulk/retry",   # a finished run's failures, previewed (plan U5)
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only

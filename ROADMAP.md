@@ -14,10 +14,6 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
   (inactive 90+ days, no 2SV, suspended, missing recovery). Every one is currently a dead end you
   can only click through one user at a time. The bulk executor and the guard already handle exactly
   this shape of operation.
-- **Job control: retry-only-the-failures.** Half there: every background job is in the header's
-  Jobs tray from any page, and a loop has a Stop that ends it before its next target. Left: a run
-  with 40 transient failures can only be redone in full. Every job keeps a capped sample of its
-  failures (`web/jobs.py`); the missing piece is a scope that means "just these users."
 - **Offboarding: skip a step that doesn't apply.** Half there: each step has an "already done" box,
   so a re-run skips the steps that succeeded, and preview and run stay in sync off the step `key`s.
   Left: a "doesn't apply" choice (transferring 40 GB of Drive nobody wants) that the preview shows

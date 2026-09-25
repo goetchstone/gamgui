@@ -1,4 +1,4 @@
-{% from "_job_failures.html" import failures %}
+{% from "_job_failures.html" import failures, retry %}
 {% import "_job_live.html" as live %}
 {% if error %}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
@@ -35,6 +35,7 @@
   {% if job.failed_total %}
   <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
   {{ failures(job) }}
+  {{ retry(job, "/signatures/retry") }}
   {% endif %}
 </div>
 {% endif %}

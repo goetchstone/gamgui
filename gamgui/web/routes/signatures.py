@@ -13,7 +13,7 @@ from ...core import signatures as sig
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
 from ...core.signatures import SignatureStore
-from ..jobs import Job, register_job
+from ..jobs import Job, register_job, retry_key, retry_of
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, friendly, signature_store
@@ -132,16 +132,39 @@ async def preview(
     except Exception as exc:
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": friendly(exc)})
     matched = await _matched(st, users, scope_type, scope_value)
+    return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL,
+                                      _preview_ctx(st, template, matched, _form_key(template, scope_type, scope_value)))
+
+
+def _preview_ctx(st, template: str, matched, key) -> dict:
+    """The confirm step for ``template`` on ``matched``, both held under a single-use token for ``key``."""
     sample = matched[0] if matched else None
     decision = guard.evaluate(_previews(matched), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
-    token = (st.previews.hold(_FLOW, _form_key(template, scope_type, scope_value), (template, matched))
-             if matched else "")
-    return TEMPLATES.TemplateResponse(
-        request, _PREVIEW_PARTIAL,
-        {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),
-         "sample": sample, "warning": sig.smart_quote_warning(template),
-         "typed_count": decision.requires_typed_count, "token": token},
-    )
+    return {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),
+            "sample": sample, "warning": sig.smart_quote_warning(template),
+            "typed_count": decision.requires_typed_count,
+            "token": st.previews.hold(_FLOW, key, (template, matched)) if matched else ""}
+
+
+@router.post("/retry", response_class=HTMLResponse)
+async def retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Retry the N that failed (plan U5): the normal preview and confirm step for exactly a finished
+    apply's failed people, with the template it ran. It writes nothing; its Apply is ``/apply``'s."""
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": NOT_CONNECTED, "retry": job})
+    done, refusal = retry_of(st.jobs, job, "signatures")
+    if done is None:
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": refusal, "retry": job})
+    try:
+        users = await st.users()
+    except Exception as exc:
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": friendly(exc), "retry": job})
+    failed = {e.lower() for e in done.failed_items}
+    matched = [u for u in users if u.primary_email.lower() in failed and not u.suspended]
+    ctx = _preview_ctx(st, str(done.retry), matched, retry_key(done.id))
+    return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL,
+                                      {**ctx, "retry": done.id, "gone": len(failed) - len(matched)})
 
 
 @router.post("/apply", response_class=HTMLResponse)
@@ -156,9 +179,12 @@ async def apply(
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": NOT_CONNECTED})
     form = await request.form()
     # The previewed template and people, or nothing: a used, expired or missing preview, or a scope or
-    # template edited since, is refused rather than run on values the preview never showed.
-    held, refusal = st.previews.take(_FLOW, str(form.get(TOKEN_FIELD) or ""),
-                                     _form_key(template, scope_type, scope_value), again="click Preview again")
+    # template edited since, is refused rather than run on values the preview never showed. A retry's
+    # preview held its people under the failed job, not the live form.
+    retried = str(form.get("retry") or "")
+    key = retry_key(retried) if retried else _form_key(template, scope_type, scope_value)
+    held, refusal = st.previews.take(_FLOW, str(form.get(TOKEN_FIELD) or ""), key,
+                                     again="click Retry again" if retried else "click Preview again")
     if refusal:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
     template, matched = held
@@ -170,8 +196,9 @@ async def apply(
     # Run the (potentially minutes-long) per-user loop in the background and report progress by polling,
     # so the UI never looks frozen on a large apply.
     n, who = len(matched), "the whole company" if scope_type == "company" else scope_value.strip()
-    job = register_job(st.jobs, Job(total=n, kind="signatures",
-                                     title=f"Signature for {who} — {n} user{'s' if n != 1 else ''}"))
+    users_n = f"{n} user{'s' if n != 1 else ''}"
+    job = register_job(st.jobs, Job(total=n, kind="signatures", retry=template,
+                                     title=f"Signature retry — {users_n}" if retried else f"Signature for {who} — {users_n}"))
     job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template))
     return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})
 

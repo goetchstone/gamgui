@@ -1,3 +1,5 @@
+{# A retry (plan U5) renders this same confirm step in its button's place, for a failed run's people. #}
+{% if retry %}<div id="retry-{{ retry }}" class="mt-2">{% endif %}
 {% if error %}
 <div tabindex="-1" data-focus class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
 {% else %}
@@ -5,6 +7,7 @@
 <div tabindex="-1" data-focus class="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ warning }}</div>
 {% endif %}
 <p tabindex="-1" data-focus class="text-sm text-brand-blueink">Applies to <strong>{{ count }}</strong> user{{ "s" if count != 1 }}{% if sample %} · previewing as {{ sample.full_name }}{% endif %}</p>
+{% if gone %}<p class="mt-1 text-xs text-brand-grayink">{{ gone }} of those that failed {{ "is" if gone == 1 else "are" }} no longer an active user and {{ "is" if gone == 1 else "are" }} left out.</p>{% endif %}
 {% if sample %}
   <iframe sandbox title="Signature preview" class="mt-3 w-full h-44 rounded-lg border border-brand-gray/40 bg-white" srcdoc="{{ rendered }}"></iframe>
   {% if count %}
@@ -17,12 +20,16 @@
   </label>
   {% endif %}
   <button id="sig-apply-btn" class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          hx-post="/signatures/apply" hx-include="#sig-form{{ ', #sig-confirm-count' if typed_count }}" hx-target="#sig-preview" hx-swap="innerHTML"
-          hx-vals='{"confirmed": "1", "preview": "{{ token }}"}' hx-disabled-elt="this"
+          hx-post="/signatures/apply" hx-disabled-elt="this"
+          {% if retry %}{% if typed_count %}hx-include="#sig-confirm-count" {% endif %}hx-target="#retry-{{ retry }}" hx-swap="innerHTML"
+          hx-vals='{"confirmed": "1", "preview": "{{ token }}", "retry": "{{ retry }}"}'
+          {% else %}hx-include="#sig-form{{ ', #sig-confirm-count' if typed_count }}" hx-target="#sig-preview" hx-swap="innerHTML"
+          hx-vals='{"confirmed": "1", "preview": "{{ token }}"}'{% endif %}
           {% if typed_count %}disabled{% else %}hx-confirm="Apply this signature to {{ count }} user(s)? It overwrites their current Gmail signature."{% endif %}>Apply to {{ count }} user{{ "s" if count != 1 }}</button>
-  <p class="mt-1 text-xs text-brand-grayink">Apply writes exactly this preview. Change the scope or the template and you'll need to preview again.</p>
+  <p class="mt-1 text-xs text-brand-grayink">{% if retry %}Apply writes exactly this preview: the template that run used, to the people it failed for.{% else %}Apply writes exactly this preview. Change the scope or the template and you'll need to preview again.{% endif %}</p>
   {% endif %}
 {% else %}
   <p class="mt-2 text-sm text-brand-grayink">No active users match this scope.</p>
 {% endif %}
 {% endif %}
+{% if retry %}</div>{% endif %}

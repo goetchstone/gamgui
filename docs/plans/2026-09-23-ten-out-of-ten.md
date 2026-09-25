@@ -132,7 +132,7 @@ plan's Phase 0 F1–F3.
   GAM (`oauthuser` or a comma in a `<UserTypeEntity>`); `/groups?group=` opens one, and a user's group
   chips link there;
   `tests/test_groups_board.py` through the strict mock; screenshots in headless Chrome at 1100×760 — WKWebView,
-  a real screen reader and a live tenant unseen) · U5 partly `a8964de` (the jobs tray and Stop: a Jobs button in
+  a real screen reader and a live tenant unseen) · U5 `a8964de` (the jobs tray and Stop: a Jobs button in
   `base.html`'s header, "N running", opens a disclosure listing `web/jobs.py` `tray(st.jobs)` — at most 8,
   running first — each row a title (every job now has a `title` and a `kind`), its progress or final
   state, and a link to `/jobs/<id>`, whose panel loads from the job's own status route; it polls
@@ -149,7 +149,15 @@ plan's Phase 0 F1–F3.
   during a write on each loop through the strict mock; the `a11y` job opens the tray and a job's page
   (axe 0) and walks them by keys; a scratch Chrome run on a 0.9 s/call mock stopped an offboarding from
   the tray and a signature apply from its panel by keys alone — WKWebView's `confirm()`, VoiceOver and a
-  live tenant unseen. Left: "retry failures only") · U1 `dddd06d` (the Builder result's filter, External-only
+  live tenant unseen) and U5b (retry failures only: a finished signature apply or bulk department run
+  with failures offers "Retry the N that failed", `/signatures/retry` or `/users/bulk/retry` — a preview
+  route that renders the run's own confirm step in the button's place for exactly its failed people still
+  active, holding them and `Job.retry` (the template or department) under a single-use token keyed to the
+  job; its Apply is the usual `/apply` with `retry=<id>`, the same guard and typed count. Past the 200-row
+  failed sample there is no retry and the panel says why; the stopped department panel now lists its
+  failures. `tests/test_retry_failures.py` through the strict mock's `*missing*` trigger, the capped case
+  too; scratch Chrome at 1100×760: retry → preview → apply in place, no overflow, axe 0 — WKWebView and a
+  live tenant unseen) · U1 `dddd06d` (the Builder result's filter, External-only
   toggle and pager ask `GET /builder/results`, which filters every row of the retained
   `builder_last_result` server-side and answers a page of 10 matches; "N of M rows" and a CSV link of
   just the matches follow out of band, the count spoken through base.html's live region; a table whose
@@ -171,7 +179,7 @@ plan's Phase 0 F1–F3.
   same verify, so the connector changes only on a pass, the caches are busted and the header follows out
   of band; the startup pick is still the first sorted domain, now named, not persisted. Tests in
   `test_setup_web.py`; scratch Chrome at 1100×760: switched by the UI, no overflow, axe 0 — WKWebView and
-  a real second tenant unseen). **Open:** U5's retry.
+  a real second tenant unseen).
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's
@@ -497,7 +505,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U1, U4, U7, U8, U12, U13, U14 APPLIED; U5, U9, U11 partly (see Status by item); the rest open.*
+*Status: U1, U4, U5, U7, U8, U12, U13, U14 APPLIED; U9, U11 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows

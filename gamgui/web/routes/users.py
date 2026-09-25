@@ -25,7 +25,7 @@ from ...core.gam.commands import GAMCommands
 from ...core.lifecycle import autoreply_html, autoreply_text
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
-from ..jobs import start_job
+from ..jobs import retry_key, retry_of, start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, GAM_TROUBLE, as_of, connector, error_partial, friendly, write_failed
@@ -458,11 +458,13 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     conn = st.connector
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
-    if not store.strip():
-        return error_partial(request, "Enter a department first.")
     form = await request.form()
-    held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""),
-                                     _bulk_form_key(store, group, emails), again="click Preview again")
+    retried = str(form.get("retry") or "")   # a retry's preview held its people under the failed job
+    if not retried and not store.strip():
+        return error_partial(request, "Enter a department first.")
+    key = retry_key(retried) if retried else _bulk_form_key(store, group, emails)
+    held, refusal = st.previews.take(_BULK_FLOW, str(form.get(TOKEN_FIELD) or ""), key,
+                                     again="click Retry again" if retried else "click Preview again")
     if refusal:
         return error_partial(request, refusal)
     store, emails_held = held
@@ -479,10 +481,37 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     if refusal:
         return error_partial(request, refusal)
     n = len(targets)
+    users_n = f"{n} user{'s' if n != 1 else ''}"
     job = start_job(st.jobs, n, kind="department",
-                    title=f"Department “{store}” for {n} user{'s' if n != 1 else ''}")
+                    title=f"Department “{store}” retry — {users_n}" if retried else f"Department “{store}” for {users_n}")
+    job.retry = store
     job.task = asyncio.create_task(_run_bulk_store(job, st, conn, targets, store))
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": job})
+
+
+@router.post("/bulk/retry", response_class=HTMLResponse)
+async def bulk_retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Retry the N that failed (plan U5): the normal preview and confirm step for exactly a finished
+    run's failed people, with its department. It writes nothing; its Apply is ``/bulk/apply``'s."""
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, "_bulk_preview.html", {"error": NOT_CONNECTED, "retry": job})
+    done, refusal = retry_of(st.jobs, job, "department")
+    if done is None:
+        return TEMPLATES.TemplateResponse(request, "_bulk_preview.html", {"error": refusal, "retry": job})
+    try:
+        users = await st.users()
+    except Exception as exc:
+        return TEMPLATES.TemplateResponse(request, "_bulk_preview.html", {"error": friendly(exc, _TRY_AGAIN), "retry": job})
+    failed = {e.lower() for e in done.failed_items}
+    targets = [u for u in users if u.primary_email.lower() in failed and not u.suspended]
+    store = str(done.retry)
+    token = (st.previews.hold(_BULK_FLOW, retry_key(done.id), (store, [u.primary_email for u in targets]))
+             if targets else "")
+    return TEMPLATES.TemplateResponse(
+        request, "_bulk_preview.html",
+        {"targets": targets[:200], "count": len(targets), "store": store, "token": token,
+         "retry": done.id, "gone": len(failed) - len(targets)})
 
 
 @router.get("/bulk/status", response_class=HTMLResponse)
