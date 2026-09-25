@@ -79,3 +79,36 @@ def test_unconnected_home_points_at_setup(unconnected_client, gam_calls):  # noq
     assert 'href="/setup"' in html and "Load the directory" not in html
     assert "Not connected" in html
     assert "Connect a domain" in unconnected_client.get("/home/directory").text
+
+
+def test_home_names_the_domain_in_lowercase_and_gam_by_version(client, monkeypatch):  # noqa: F811
+    # The domain showed as typed at setup ("Example.COM") and the version line was GAM's whole
+    # banner ("GAM 7.48.11 - https://github.com/GAM-team/GAM - pyinstaller"). Domains are case-insensitive:
+    # show them lowercase; the version reads "GAM 7.48.11".
+    st = _state(client)
+    monkeypatch.setattr(st.connector, "domain", "Example.COM")
+    async def banner():
+        return "GAM 7.48.11 - https://github.com/GAM-team/GAM - pyinstaller\nGAM Team <x@example.com>"
+    monkeypatch.setattr(st.runner, "version", banner)
+    st.gam_version_held = None
+    html = client.get("/").text
+    assert ">example.com<" in html and "Example.COM" not in html
+    assert "GAM 7.48.11" in html and "github.com/GAM-team" not in html
+    assert "Example.COM" not in client.get("/users").text
+
+
+def test_recent_failures_are_the_last_thirty_days(client):  # noqa: F811
+    # "Recent failures" showed June's already-fixed offboarding failures three months later: the card
+    # read the newest failures however old. It shows the last 30 days; older ones stay in Audit.
+    import json
+    from datetime import datetime, timedelta, timezone
+    audit = _state(client).connector.audit
+    old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    with open(audit.path, "a") as fh:
+        fh.write(json.dumps({"ts": old, "action": "transfer_data", "target": "old@example.com", "ok": False,
+                             "extra": {"error": "409 conflict"}}) + "\n")
+    html = client.get("/").text
+    assert "old@example.com" not in html and "No failed writes in the last 30 days" in html
+    audit.record("add_delegate", target="new@example.com", ok=False, extra={"error": "boom"})
+    html = client.get("/").text
+    assert "new@example.com" in html and "old@example.com" not in html

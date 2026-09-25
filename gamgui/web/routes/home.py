@@ -8,7 +8,8 @@ held on AppState (``gam_version``) until the binary changes or setup activates a
 
 from __future__ import annotations
 
-from itertools import islice
+from datetime import datetime, timedelta, timezone
+from itertools import islice, takewhile
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
@@ -25,6 +26,7 @@ router = APIRouter()
 
 HOME_JOBS = 4        # the tray lists more; Home shows the newest few (running first)
 HOME_FAILURES = 3    # the last few failed writes; Audit has the rest
+HOME_FAILURE_DAYS = 30   # "recent": June's already-fixed failures once headlined Home in September
 
 
 def _directory(st, users) -> Dict[str, Any]:
@@ -39,9 +41,12 @@ def _directory(st, users) -> Dict[str, Any]:
     }
 
 
-def recent_failures(request: Request, n: int = HOME_FAILURES) -> List[Dict[str, Any]]:
-    """The newest ``n`` failed audit records, newest first — the log is streamed and stops once found."""
-    return list(islice((r for r in iter_records(_audit_path(request)) if r.get("ok") is False), n))
+def recent_failures(request: Request, n: int = HOME_FAILURES, days: int = HOME_FAILURE_DAYS) -> List[Dict[str, Any]]:
+    """The newest ``n`` failed audit records from the last ``days``, newest first. The log streams
+    newest-first, so reading stops at the first record older than the window (or once ``n`` are found)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    recent = takewhile(lambda r: str(r.get("ts") or "") >= cutoff, iter_records(_audit_path(request)))
+    return list(islice((r for r in recent if r.get("ok") is False), n))
 
 
 @router.get("/", response_class=HTMLResponse)

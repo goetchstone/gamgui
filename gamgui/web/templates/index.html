@@ -85,7 +85,7 @@
       </ul>
       <a href="/audit?failed=1" class="mt-2 inline-block text-sm font-medium text-brand-blueink {{ link }}">All failures in Audit</a>
       {% else %}
-      <p class="mt-2 text-sm text-brand-grayink">No failed writes in the <a href="/audit" class="text-brand-blueink {{ link }}">audit log</a>.</p>
+      <p class="mt-2 text-sm text-brand-grayink">No failed writes in the last 30 days — older ones are in the <a href="/audit?failed=1" class="text-brand-blueink {{ link }}">audit log</a>.</p>
       {% endif %}
     </section>
   </div>
