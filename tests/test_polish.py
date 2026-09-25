@@ -268,3 +268,26 @@ def test_no_tracked_file_names_a_github_account_to_switch_to():
     switch = re.compile(r"gh\s+auth\s+switch\b[^\n]*?(?:--user|-u)[ =]\S+")
     hits = [f"{name}: {m.group(0)}" for name, text in _tracked_text_files() for m in switch.finditer(text)]
     assert not hits, "a tracked file names a gh account to switch to:\n" + "\n".join(hits)
+
+
+def test_runbooks_name_only_tests_that_exist():
+    # connectors-chokepoint.md once cited `test_a_failed_user_write_says_why_...` for a test named
+    # `test_a_failed_write_says_why_...`; a reader grepping for it found nothing. A name ending in
+    # `_` is a prefix ("the test_switch_refuses_* tests") and has to match at least one test.
+    defs: set[str] = set()
+    for path in (_ROOT / "tests").rglob("*.py"):
+        defs |= set(re.findall(r"^\s*(?:async\s+)?def (test_\w+)", path.read_text(), flags=re.M))
+    files = {path.name for path in (_ROOT / "tests").rglob("test_*.py")}
+    missing = []
+    for doc in sorted((_ROOT / "docs" / "domains").glob("*.md")):
+        for name in re.findall(r"\btest_\w+(?:\.py)?", doc.read_text()):
+            if name.endswith(".py"):
+                ok = name in files
+            elif name.endswith("_"):
+                ok = any(d.startswith(name) for d in defs)
+            else:
+                ok = name in defs
+            if not ok:
+                missing.append(f"{doc.name}: {name}")
+    assert not missing, "a runbook names a test that doesn't exist:\n" + "\n".join(missing)
+

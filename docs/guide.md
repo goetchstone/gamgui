@@ -69,9 +69,10 @@ Users).
 
 **One person** — **Onboard → Generate**: name, email, role, manager, and whose Google Tasks gets the
 setup checklist. Tick **Create the Google account** to create it, and **Also send the welcome
-email** if you want one. **Preview** lists every step with its `gam` command; **Run** runs exactly
-that (change the form and you must preview again). The temporary password appears once, on a sheet
-you can copy or print — the new hire must change it at first sign-in.
+email to the new hire** if you want one. **Preview** lists every step with its `gam` command; the
+button under it (**Create account & run onboarding**, or **Create the task list** without an
+account) runs exactly that (change the form and you must preview again). The temporary password
+appears once, on a sheet you can copy or print — the new hire must change it at first sign-in.
 
 **A CSV of hires** — **Onboard → Bulk import**: download the template CSV, fill one row per hire
 (the `role` column picks the template), then **Preview** and confirm. It runs in the background with
@@ -92,7 +93,7 @@ transfer has finished.
 
 ![The offboarding preview](screenshots/lifecycle.png)
 
-**Before:** enter the leaver and the manager and click **Preview**. Read every warning. GamGUI
+**Before:** enter the leaver and the manager and click **Preview steps**. Read every warning. GamGUI
 refuses to offboard the admin it is connected as — revoking that account's access would cut off
 GamGUI mid-run — so connect as a different super admin first if you need to. Several steps, and
 the routine as a whole, have not yet run on a live domain, so **work through the
