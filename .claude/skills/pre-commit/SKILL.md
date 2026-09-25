@@ -34,8 +34,10 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    builder returning a list; every operator-supplied value is exactly one list
    element, never interpolated into a string.
 5. **Every mutation goes through the chokepoint (invariant 2).** New writes go
-   `GAMCommands` → `ChangePreview` → `guard.evaluate()` → `_run_write(...)` in
-   `gam_connector.py`. There is no second write path. A secret in the argv
+   `GAMCommands` → `ChangePreview` → `guard.enforce()` in the apply route, on the
+   changes the preview held → `_run_write(...)` in `gam_connector.py`. A new
+   POST route goes in `tests/test_write_routes_guarded.py` (GATED, or exempt
+   with its reason). There is no second write path. A secret in the argv
    (a password) is redacted before audit via `_run_write(audit_argv=...)`.
 6. **The mock lies.** If you touched `tests/fixtures/mock_gam.sh`, it must
    **fail the way real GAM fails** — a mock more permissive than GAM turns a

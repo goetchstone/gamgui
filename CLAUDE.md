@@ -16,8 +16,12 @@ Each of these exists because something went wrong. Several have tests guarding t
    `GAMCommands` static method and run with `create_subprocess_exec`. An operator-supplied value is
    always exactly one list element, never interpolated into a string.
 2. **Every mutation goes through the chokepoint**: `GAMCommands` builder → `ChangePreview` →
-   `guard.evaluate()` → connector `_run_write(...)`, which is serialized and appended to the audit
-   log. There is no second write path. Don't add one.
+   `guard.enforce()` → connector `_run_write(...)`, which is serialized and appended to the audit
+   log. There is no second write path. Don't add one. The guard is checked **in the apply route**,
+   before the first write — `guard.evaluate()` only draws the Confirm button, and five routes once
+   ran on a bare POST — against what the preview showed: a confirm step that posts the live form
+   runs the changes its preview held (single-use `web/previews.py` token), never a rebuild of that
+   form. `tests/test_write_routes_guarded.py` holds every POST route to this or a stated exemption.
 3. **Only read-only commands may become runnable automatically.** Of 1075 catalog entries, 538 run:
    26 hand-curated (the only ones that can *change* anything) plus 512 grammar-derived commands
    auto-promoted by `core/catalog/readbuilder.py` **because they are confidently `READ_ONLY` and not
