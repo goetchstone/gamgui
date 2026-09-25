@@ -149,7 +149,7 @@ plan's Phase 0 F1–F3.
   during a write on each loop through the strict mock; the `a11y` job opens the tray and a job's page
   (axe 0) and walks them by keys; a scratch Chrome run on a 0.9 s/call mock stopped an offboarding from
   the tray and a signature apply from its panel by keys alone — WKWebView's `confirm()`, VoiceOver and a
-  live tenant unseen) and U5b (retry failures only: a finished signature apply or bulk department run
+  live tenant unseen) and U5b `359315e` (retry failures only: a finished signature apply or bulk department run
   with failures offers "Retry the N that failed", `/signatures/retry` or `/users/bulk/retry` — a preview
   route that renders the run's own confirm step in the button's place for exactly its failed people still
   active, holding them and `Job.retry` (the template or department) under a single-use token keyed to the
