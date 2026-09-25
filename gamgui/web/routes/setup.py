@@ -141,7 +141,8 @@ async def _verify_and_activate(request: Request, domain: str, admin: str, switch
     st = request.app.state.gamgui
     result = await _service(request).verify(domain, admin)
     if result.ok:
-        st.activate(GAMConnector(runner=st.runner, domain=domain))   # busts what the old tenant left
+        audit = st.connector.audit if st.connector else None          # one audit log across a switch
+        st.activate(GAMConnector(runner=st.runner, domain=domain, audit=audit))   # busts what the old tenant left
     return TEMPLATES.TemplateResponse(
         request, "_verify.html", {"result": result, "domain": domain, "admin": admin, "switched": switched}
     )
