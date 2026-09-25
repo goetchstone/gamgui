@@ -4,7 +4,7 @@
 
 Runs scripts/preview_mock.py's app (strict mock gam, fake example.com data) on port 8799 in a
 background thread and drives headless Google Chrome over the DevTools protocol at 1280 px wide, 2x:
-Users, the signature designer with a preview, a calendar's access, and an offboarding preview.
+Users, the Home dashboard, the signature designer with a preview, a calendar's access, and an offboarding preview.
 Needs Google Chrome installed; `websockets` comes with uvicorn[standard]. Screenshots once showed
 the operator's company name and an internal calendar name because they were captured by hand.
 """
@@ -157,6 +157,11 @@ async def shoot():
             await t.goto("/users")
             await t.wait_for("document.querySelectorAll('tbody tr').length >= 3")
             await t.shot("users.png")
+
+            await t.goto("/")                                           # the Users visit warmed the directory cache
+            await t.wait_for("document.querySelector('#home-directory') && "
+                             "/\\d/.test(document.querySelector('#home-directory').innerText)")
+            await t.shot("home.png")
 
             await t.goto("/signatures")
             await t.js("(() => { const s = document.querySelector('select[name=scope_type]'); s.value = 'company';"

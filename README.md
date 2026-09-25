@@ -47,6 +47,8 @@ Details in [Build from source](#build-from-source).
 4. Read the **[user guide](docs/guide.md)**: setup and each everyday task, with what to check before
    and after.
 
+![Home — the connected domain, directory health at a glance, running jobs and recent failures](docs/screenshots/home.png)
+
 ![Users — fast directory search, with title and status](docs/screenshots/users.png)
 
 ![Signature designer — variables with a live preview](docs/screenshots/signatures.png)

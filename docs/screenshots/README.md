@@ -16,6 +16,7 @@ image before committing — the pre-commit hook's private-term check can't read 
 
 | File | Screen | Why it sells the tool |
 | --- | --- | --- |
+| `home.png` | Home dashboard (the directory cached first, so it shows counts) | the first screen: domain, directory health, jobs, failures |
 | `users.png` | Users list | the core: search, status, bulk department |
 | `signatures.png` | Signature designer with the live preview | the headline use case for many visitors |
 | `calendars.png` | Calendars — a name-search result + "who has access" | the "find/clean up shared calendars" win |
