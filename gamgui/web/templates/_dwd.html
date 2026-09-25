@@ -27,11 +27,37 @@
                 class="copy-btn shrink-0 rounded-md border border-brand-gray/60 px-2.5 py-1 text-xs font-medium text-brand-blueink hover:bg-brand-gray/10 transition-colors">Copy</button>
       </div>
     </div>
-    <a href="{{ dwd.admin_console_url }}" target="_blank" rel="noopener"
-       class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-blueink hover:text-brand-black">
-      Open Admin Console → Domain-Wide Delegation ↗
-    </a>
-    <p class="text-xs text-brand-grayink mt-2">Paste the client ID, add the scopes GAM needs, and authorize. Then verify below.</p>
+    <div class="mt-3">
+      <span class="text-xs text-brand-grayink">Scopes ({{ dwd.scopes | length }})</span>
+      <ul class="mt-1 space-y-0.5 text-[12.5px]">
+        {% for scope, use in dwd.scopes %}
+          <li class="flex gap-2"><code class="text-ink">{{ scope }}</code><span class="text-brand-grayink truncate">— {{ use }}</span></li>
+        {% endfor %}
+      </ul>
+      <div class="copy-wrap mt-1.5 flex items-center gap-2 rounded-lg bg-paper border border-brand-gray/40 p-2.5">
+        <code class="flex-1 break-all text-[12.5px] text-ink px-1">{{ dwd.scopes_csv }}</code>
+        <button type="button" data-action="copy" aria-label="Copy the scopes"
+                class="copy-btn shrink-0 rounded-md border border-brand-gray/60 px-2.5 py-1 text-xs font-medium text-brand-blueink hover:bg-brand-gray/10 transition-colors">Copy</button>
+      </div>
+    </div>
+    {% if dwd.auth_url %}
+      <a href="{{ dwd.auth_url }}" target="_blank" rel="noopener"
+         class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">
+        Authorize in the Admin Console ↗
+      </a>
+      <p class="text-xs text-brand-grayink mt-2">The link fills in the client ID and scopes: sign in as a super-admin, click AUTHORIZE, wait ~30s, then verify below.</p>
+    {% else %}
+      <a href="{{ dwd.admin_console_url }}" target="_blank" rel="noopener"
+         class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-blueink hover:text-brand-black">
+        Open Admin Console → Domain-Wide Delegation ↗
+      </a>
+      <p class="text-xs text-brand-grayink mt-2">Paste the client ID and the scopes above, and authorize. Then verify below.</p>
+    {% endif %}
+    <p class="text-xs mt-2 {{ 'text-amber-700' if dwd.user_security == false else 'text-brand-grayink' }}">
+      {% if dwd.user_security == false %}The admin token lacks <code>admin.directory.user.security</code>, so offboarding can't sign a leaver out: re-run <code>gam oauth create</code> and tick "Directory API - User Security", then import again.
+      {% elif dwd.user_security %}The admin token has <code>admin.directory.user.security</code> (offboarding's sign-out).
+      {% else %}Offboarding's sign-out uses the admin token's "Directory API - User Security" scope (chosen in <code>gam oauth create</code>), not delegation.{% endif %}
+    </p>
   </div>
 
   <div class="border-t border-brand-gray/30 pt-5">

@@ -157,7 +157,16 @@ plan's Phase 0 F1–F3.
   ragged result has; a sensitive result's CSV audit counts the rows downloaded. `tests/test_builder.py`
   runs a 250-row result whose matches sit past row 100; a scratch Chrome run at 1100×760 typed a filter
   (focus and text kept), toggled External only by Space, paged to the last page by Enter (focus to the
-  page line), axe 0, no JS error — WKWebView and a live tenant unseen). **Open:** U10; U5's retry.
+  page line), axe 0, no JS error — WKWebView and a live tenant unseen) · U10a (setup: `static/setup.js`
+  fills the domain from the admin email until the domain is edited; the DWD step shows `DWD_SCOPES` —
+  Calendar, Gmail ×4, Drive, Tasks, the default-on service-account scopes of the APIs the curated
+  commands call, from the vendored GAM's own table — and the Admin-console link pre-filled with the
+  client ID and scopes before any verify. `admin.directory.user.security` is NOT added: in GAM it is a
+  client-access scope (admin token, `gam oauth create`), so the step reads it off `oauth2.txt` and says
+  so; the offboarding runbook's "re-do the DWD step" advice for it was corrected. Tests in
+  `test_setup*.py`; scratch Chrome at 1100 wide: inference, the rendered step, axe 0 — a real Admin
+  console and `oauth2.txt` unseen). **Open:** U10b (active tenant in the header, explicit
+  `list_domains()` pick); U5's retry.
 - **Phase 6** — applied: Q11 `0c2fca0` (and D5's path scrub, `88496f3`) · batch-2 F#23 `a32acb1`
   · Q10 `1d44e26` (`web/routes/_common.py` holds `friendly`, `error_partial`,
   `connector`, `app_state`, `write_failed`, `signature_store` and `NOT_CONNECTED`, each screen's

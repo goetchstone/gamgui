@@ -20,7 +20,8 @@ import re
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urlencode
 
 from .gam.commands import EXPECTED_GAM_VERSION, GAMCommands
 from .gam.errors import GAMError
@@ -350,6 +351,39 @@ def _home_root() -> Optional[Path]:
 ADMIN_CONSOLE_DWD_URL = "https://admin.google.com/ac/owl/domainwidedelegation"
 _REQUIRED = ("oauth2service", "oauth2")
 
+# The service-account (Domain-Wide Delegation) scopes GamGUI's own commands use: every
+# default-on scope of the APIs its curated `gam user …` commands call, copied from the vendored
+# GAM's service-account scope table (gamlib glapi `_SVCACCT_SCOPES`, GAM 7.48.11) — not a guess.
+# Builder reads of other APIs (Chat, Classroom, Keep…) may need more; `check serviceaccount`
+# names them and hands out GAM's own link.
+DWD_SCOPES: Tuple[Tuple[str, str], ...] = (
+    ("https://www.googleapis.com/auth/calendar", "Calendar sharing, the offboarding sweep and reminder"),
+    ("https://mail.google.com/", "Gmail full access — GAM's default Gmail scope; message search"),
+    ("https://www.googleapis.com/auth/gmail.modify", "Gmail messages and labels — GAM's default"),
+    ("https://www.googleapis.com/auth/gmail.settings.basic", "Signatures and auto-reply"),
+    ("https://www.googleapis.com/auth/gmail.settings.sharing", "Mail delegation and forwarding"),
+    ("https://www.googleapis.com/auth/drive", "A user's Drive file list"),
+    ("https://www.googleapis.com/auth/tasks", "Onboarding task lists"),
+)
+
+# Offboarding's sign-out (`deprovision … signout`, `signout`) calls the Directory API with the
+# ADMIN token (oauth2.txt), not the service account: in GAM's tables this is a client-access scope
+# ("Directory API - User Security", `_CLIENT_SCOPES`), picked in `gam oauth create`. Delegation
+# cannot grant it, so it is checked against the admin token instead of listed above.
+USER_SECURITY_SCOPE = "https://www.googleapis.com/auth/admin.directory.user.security"
+
+
+def dwd_auth_url(client_id: str, scopes: Sequence[str], domain: str = "") -> str:
+    """The Admin-console link with the client ID and scopes filled in — the same shape
+    `gam check serviceaccount` prints on a failure (clientScopeToAdd / clientIdToAdd /
+    overwriteClientId / dn). Empty without a client ID: a link that adds no client is no help."""
+    if not client_id:
+        return ""
+    query = {"clientScopeToAdd": ",".join(scopes), "clientIdToAdd": client_id, "overwriteClientId": "true"}
+    if domain:
+        query["dn"] = domain
+    return f"{ADMIN_CONSOLE_DWD_URL}?{urlencode(query, safe=':/,')}"
+
 
 @dataclass
 class DirInspection:
@@ -646,16 +680,21 @@ class SetupService:
         return self.vault.has_credentials(domain)
 
     # --- Domain-Wide Delegation helper -------------------------------------------------
-    def dwd_details(self, domain: str) -> Dict[str, str]:
-        """Service-account client ID + the Admin Console link for the manual DWD step."""
-        client_id = ""
-        raw = self.vault.get(domain, "oauth2service")
-        if raw:
-            try:
-                client_id = str(json.loads(raw).get("client_id", ""))
-            except ValueError:
-                client_id = ""
-        return {"client_id": client_id, "admin_console_url": ADMIN_CONSOLE_DWD_URL}
+    def dwd_details(self, domain: str) -> Dict[str, object]:
+        """Everything the manual DWD step needs up front: the service account's client ID, the
+        scopes to authorize, the Admin-console link with both filled in, and whether the admin
+        token carries the sign-out scope (``None`` when its scopes can't be read)."""
+        client_id = str(_json_field(self.vault.get(domain, "oauth2service"), "client_id") or "")
+        scopes = [s for s, _ in DWD_SCOPES]
+        granted = _json_field(self.vault.get(domain, "oauth2"), "scopes")
+        return {
+            "client_id": client_id,
+            "admin_console_url": ADMIN_CONSOLE_DWD_URL,
+            "scopes": DWD_SCOPES,
+            "scopes_csv": ",".join(scopes),
+            "auth_url": dwd_auth_url(client_id, scopes, domain),
+            "user_security": (USER_SECURITY_SCOPE in granted) if isinstance(granted, list) else None,
+        }
 
     # --- fresh-setup guidance ----------------------------------------------------------
     def setup_commands(self, admin: str, cfgdir: Optional[Path] = None) -> Dict[str, object]:
@@ -697,6 +736,15 @@ class SetupService:
             raw=out,
             auth_url=("" if ok else _extract_auth_url(out)),
         )
+
+
+def _json_field(raw: Optional[str], key: str) -> object:
+    """``raw``'s top-level ``key`` when it is a JSON object, else ``None`` — never raises."""
+    try:
+        data = json.loads(raw) if raw else None
+    except ValueError:
+        return None
+    return data.get(key) if isinstance(data, dict) else None
 
 
 _STATUS_RE = re.compile(r"\b(PASS|FAIL)\b")

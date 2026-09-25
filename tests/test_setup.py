@@ -4,6 +4,7 @@ import json
 import os
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -11,7 +12,15 @@ from gamgui.core import setup as setup_mod
 from gamgui.core.gam.commands import EXPECTED_GAM_VERSION
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import FILENAMES, InMemoryBackend, SecretsVault
-from gamgui.core.setup import SetupService, _extract_auth_url, _parse_check
+from gamgui.core.setup import (
+    ADMIN_CONSOLE_DWD_URL,
+    DWD_SCOPES,
+    USER_SECURITY_SCOPE,
+    SetupService,
+    _extract_auth_url,
+    _parse_check,
+    dwd_auth_url,
+)
 
 
 @pytest.fixture
@@ -361,6 +370,61 @@ def test_dwd_details_extracts_client_id(tmp_path, bounded_home):
     svc = _svc(vault, tmp_path)
     svc.import_dir(tmp_path, "ex.com")
     assert svc.dwd_details("ex.com")["client_id"] == "123456789.apps.googleusercontent.com"
+
+
+def test_dwd_details_lists_the_scopes_and_a_prefilled_link(tmp_path, bounded_home):
+    # U10: the scopes and the pre-filled Admin-console link are shown before any verify, in the
+    # shape `gam check serviceaccount` prints on a failure.
+    _write_config(tmp_path)
+    vault = SecretsVault(InMemoryBackend())
+    svc = _svc(vault, tmp_path)
+    svc.import_dir(tmp_path, "ex.com")
+    dwd = svc.dwd_details("ex.com")
+    scopes = [s for s, _ in DWD_SCOPES]
+    assert dwd["scopes_csv"] == ",".join(scopes)
+    url = urlsplit(dwd["auth_url"])
+    assert f"{url.scheme}://{url.netloc}{url.path}" == ADMIN_CONSOLE_DWD_URL
+    q = parse_qs(url.query)
+    assert q["clientIdToAdd"] == ["123456789.apps.googleusercontent.com"]
+    assert q["clientScopeToAdd"] == [",".join(scopes)]
+    assert q["overwriteClientId"] == ["true"]
+    assert q["dn"] == ["ex.com"]
+
+
+def test_dwd_scopes_are_service_account_scopes_only():
+    # Copied from the vendored GAM's service-account table; a tripwire so a change is deliberate.
+    # `admin.directory.user.security` (offboarding's sign-out) is a CLIENT-access scope in GAM — the
+    # admin token's, from `gam oauth create` — so delegation can't grant it and it isn't listed.
+    assert [s for s, _ in DWD_SCOPES] == [
+        "https://www.googleapis.com/auth/calendar",
+        "https://mail.google.com/",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.settings.basic",
+        "https://www.googleapis.com/auth/gmail.settings.sharing",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/tasks",
+    ]
+    assert USER_SECURITY_SCOPE not in dict(DWD_SCOPES)
+    assert not any("admin.directory" in s for s, _ in DWD_SCOPES)
+
+
+def test_dwd_auth_url_needs_a_client_id():
+    assert dwd_auth_url("", ["https://www.googleapis.com/auth/calendar"]) == ""
+
+
+@pytest.mark.parametrize(
+    ("oauth2", "expected"),
+    [
+        (json.dumps({"scopes": [USER_SECURITY_SCOPE, "https://www.googleapis.com/auth/admin.directory.user"]}), True),
+        (json.dumps({"scopes": ["https://www.googleapis.com/auth/admin.directory.user"]}), False),
+        ("admin-refresh-token", None),        # not JSON: unknown, not "missing"
+        (json.dumps({"token": "t"}), None),   # no scopes recorded: unknown
+    ],
+)
+def test_dwd_details_reads_the_sign_out_scope_off_the_admin_token(tmp_path, oauth2, expected):
+    vault = SecretsVault(InMemoryBackend())
+    vault.set("ex.com", "oauth2", oauth2)
+    assert _svc(vault, tmp_path).dwd_details("ex.com")["user_security"] is expected
 
 
 def test_setup_commands_shape(tmp_path):

@@ -32,12 +32,13 @@
     <h2 class="eyebrow text-brand-grayink">Your domain</h2>
     <div class="mt-4 grid gap-4 sm:grid-cols-2">
       <label class="block">
-        <span class="text-sm text-brand-blueink">Primary domain</span>
-        <input class="{{ input_cls }} mt-1.5" type="text" name="domain" placeholder="yourdomain.com" />
+        <span class="text-sm text-brand-blueink">Super-admin email</span>
+        <input class="{{ input_cls }} mt-1.5" id="setup-admin" type="email" name="admin" placeholder="admin@yourdomain.com" autocomplete="off" />
       </label>
       <label class="block">
-        <span class="text-sm text-brand-blueink">Super-admin email</span>
-        <input class="{{ input_cls }} mt-1.5" type="email" name="admin" placeholder="admin@yourdomain.com" />
+        <span class="text-sm text-brand-blueink">Primary domain</span>
+        <input class="{{ input_cls }} mt-1.5" id="setup-domain" type="text" name="domain" placeholder="yourdomain.com" />
+        <span class="mt-1 block text-xs text-brand-grayink">Filled in from the email — edit it if yours differs.</span>
       </label>
     </div>
   </div>
@@ -91,3 +92,4 @@
   <div id="wizard-next"></div>
 </div>
 {% endblock %}
+{% block scripts %}<script src="/static/setup.js"></script>{% endblock %}

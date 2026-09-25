@@ -334,7 +334,9 @@ Audit shows eight `ok` records, one per step. Then check in Google, not just in 
 "When a step fails" table). Nothing is half-done except a sweep stopped by its timeout.
 1. Fix the cause. Auth/scope errors: re-run setup. Reset failed: check the leaver's account — nothing
    else ran. Revoke access failed: the leaver may still be signed in — usually the
-   `admin.directory.user.security` scope (re-do the domain-wide delegation step); the user's page has
+   `admin.directory.user.security` scope — a client-access scope on the admin token, not delegation:
+   re-run `gam oauth create`, tick "Directory API - User Security", and import again (Setup says
+   whether the imported token has it); the user's page has
    "Sign out everywhere" for the sessions alone. Delegate failed: "already exists" means it's done (tick it); "does not exist" or a
    suspended account: fix the manager or leaver. Transfer 409: a transfer is already running — wait
    for `completed` (Data Transfers → Print), then tick it.

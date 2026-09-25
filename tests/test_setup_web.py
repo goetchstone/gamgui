@@ -57,6 +57,30 @@ def test_import_shows_dwd_and_stores_creds(ctx):
     assert vault.has_credentials("ex.com")
 
 
+def test_setup_page_infers_the_domain_from_the_email(ctx):
+    # U10: the email comes first and setup.js fills the domain from it (a same-origin file: no
+    # inline script under the CSP).
+    r = ctx[0].get("/setup")
+    assert r.text.index('id="setup-admin"') < r.text.index('id="setup-domain"')
+    assert '<script src="/static/setup.js"></script>' in r.text
+    js = (Path(__file__).parents[1] / "gamgui/web/static/setup.js").read_text()
+    assert "setup-admin" in js and "setup-domain" in js
+
+
+def test_import_shows_the_scopes_and_the_prefilled_link_up_front(ctx):
+    client, base, _, _ = ctx
+    cfg = base / "cfg"
+    cfg.mkdir()
+    (cfg / "oauth2.txt").write_text(json.dumps({"scopes": ["https://www.googleapis.com/auth/admin.directory.user"]}))
+    (cfg / "oauth2service.json").write_text(json.dumps({"client_id": "CID.apps", "type": "service_account"}))
+    r = client.post("/setup/import", data={"domain": "ex.com", "admin": "a@ex.com", "config_dir": str(cfg)})
+    assert "https://www.googleapis.com/auth/gmail.settings.sharing" in r.text
+    assert "clientScopeToAdd=https://www.googleapis.com/auth/calendar," in r.text
+    assert "&amp;clientIdToAdd=CID.apps&amp;overwriteClientId=true&amp;dn=ex.com" in r.text
+    assert "Directory API - User Security" in r.text     # the admin token lacks the sign-out scope
+    assert "text-amber-700" in r.text
+
+
 def test_import_requires_fields(ctx):
     client = ctx[0]
     r = client.post("/setup/import", data={"domain": "", "admin": "", "config_dir": ""})

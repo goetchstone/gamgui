@@ -33,7 +33,8 @@ Actively developed and used against live Google Workspace tenants. Working today
 - **Setup wizard** — either **import an existing GAM install** (it auto-detects `$GAMCFGDIR`,
   `~/.gam`, and its own setup dir, shows which credential files each one holds, and moves them into
   the Keychain) or follow the guided fresh GAM project / OAuth flow; then the manual
-  domain-wide-delegation step and a verify.
+  domain-wide-delegation step — the scopes GamGUI uses and an Admin-console link with the client ID
+  and scopes filled in, shown up front — and a verify. The domain is filled in from the admin email.
 - **Users** — a fast, cached list (search name, email, title, department or org unit; sort any
   column; 15–50 a page; opening a person and coming back keeps your place) and detail, profile
   editing (title/department — location is shown but not editable) with a bulk "set department"
