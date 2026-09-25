@@ -11,6 +11,7 @@ HTTP layer offline.
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -55,7 +56,7 @@ def _active_tenant(request) -> tuple:
         admin = st.vault.oauth_admin_email(conn.domain)
     except Exception:  # a locked or unreadable Keychain must not break every page
         admin = ""
-    return conn.domain, admin
+    return conn.domain.lower(), admin          # domains are case-insensitive; setup kept whatever was typed
 
 
 def ago(seconds: Optional[float]) -> str:
@@ -144,7 +145,9 @@ class AppState:
         if held and held[0] == key:
             return held[1]
         try:
-            version = next(iter((await self.runner.version()).splitlines()), "")
+            first = next(iter((await self.runner.version()).splitlines()), "")
+            # "GAM 7.48.11 - https://github.com/GAM-team/GAM - pyinstaller" reads as "GAM 7.48.11".
+            version = (re.match(r"GAM \S+", first) or [first])[0]
         except Exception:  # noqa: BLE001 — Home shows no version rather than failing
             return ""
         if version:

@@ -145,12 +145,12 @@ async def users_page(request: Request, q: str = "", scope: str = "all", page: st
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _USERS_PAGE,
-            {"connected": True, "domain": st.connector.domain, "error": friendly(exc, _TRY_AGAIN),
+            {"connected": True, "domain": st.connector.domain.lower(), "error": friendly(exc, _TRY_AGAIN),
              **_table_context([], *view)},
         )
     return TEMPLATES.TemplateResponse(
         request, _USERS_PAGE,
-        {"connected": True, "domain": st.connector.domain, **_table_context(users, *view), **as_of(st.user_cache)},
+        {"connected": True, "domain": st.connector.domain.lower(), **_table_context(users, *view), **as_of(st.user_cache)},
     )
 
 
