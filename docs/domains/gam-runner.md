@@ -130,8 +130,9 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   on a print/report read and only in the shape `GAMCommands.todrive_args` emits — `todrive [tduser
   <EmailAddress>] [tdtitle <String>]`, each once, in that order, a non-empty `tduser` (GAM's
   `GetTodriveParameters` reads it with `getString`, which refuses an empty value; `tdtitle` takes
-  `minLen=0`; read from the vendored build). `info user`/`check serviceaccount` handlers ignore
-  trailing words, so a `todrive` after them (or a `show`) is refused before the handler runs.
+  `minLen=0`; read from the vendored build). The `info user` handler ignores trailing words
+  (`check serviceaccount` takes only `scope|scopes <APIScopeURLList>` of service-account scopes), so a
+  `todrive` after them (or a `show`) is refused before the handler runs.
 - **Seeing what GAM received:** an autouse fixture (`tests/conftest.py` `_gam_argv_log`) points
   `GAM_MOCK_ARGV_LOG` at a per-test file for every test; the mock appends each argv (NUL-separated)
   and `tests/helpers.py` `read_gam_calls` parses it — the `gam_calls` fixture reads the current test's.

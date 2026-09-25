@@ -59,10 +59,16 @@ class GAMCommands:
         return ["version"]
 
     @staticmethod
-    def check_svcacct(admin: str) -> List[str]:
-        # Verifies domain-wide delegation scopes. NOTE: the noun is `serviceaccount`
-        # here (GAM uses `create svcacct` but `check serviceaccount` — not symmetric).
-        return ["user", admin, "check", "serviceaccount"]
+    def check_svcacct(admin: str, scopes: Sequence[str]) -> List[str]:
+        # Verifies domain-wide delegation for exactly `scopes` — grammar:
+        # `gam <UserTypeEntity> check serviceaccount (scope|scopes <APIScopeURLList>)*`, the list one
+        # comma-joined element. Without it GAM checks its own, larger default scope set and refuses an
+        # operator who authorized only the scopes the app asked for. Each must be a service-account
+        # scope (GAM exits "Invalid choice" otherwise). NOTE: the noun is `serviceaccount` here (GAM
+        # uses `create svcacct` but `check serviceaccount` — not symmetric).
+        if not scopes:
+            raise ValueError("check_svcacct needs the scopes to check")
+        return ["user", admin, "check", "serviceaccount", "scopes", ",".join(scopes)]
 
     # --- users (read) -----------------------------------------------------------------
     @staticmethod

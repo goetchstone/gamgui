@@ -497,3 +497,17 @@ async def test_verify_without_credentials(runner):
     result = await SetupService(empty, runner).verify("nope.com", "a@nope.com")
     assert result.ok is False
     assert "No credentials" in result.summary
+
+
+DWD = [scope for scope, _ in DWD_SCOPES]
+
+
+async def test_verify_checks_exactly_the_prefilled_scopes(runner, vault, domain, gam_calls):
+    # A bare `check serviceaccount` checks GAM's own, larger default scope set, so an operator who
+    # authorized exactly the pre-filled DWD_SCOPES was refused. Verify asks GAM about those scopes only
+    # (the grammar's `scopes <APIScopeURLList>`), and the strict mock answers like GAM for what it's asked.
+    result = await SetupService(vault, runner).verify(domain, "admin@example.com")
+    assert result.ok is True, result.summary
+    assert gam_calls() == [["user", "admin@example.com", "check", "serviceaccount", "scopes", ",".join(DWD)]]
+    checked = [label for label, status in result.lines if label.startswith("https://") and status == "PASS"]
+    assert sorted(checked) == sorted(DWD)

@@ -141,3 +141,19 @@ def test_a_refusal_that_also_says_not_found_is_a_refusal():
 ])
 def test_gams_entity_counter_is_not_a_status_code(line, expected):
     assert classify_stderr(line) is expected
+
+
+def test_a_missing_scope_names_both_places_it_is_granted():
+    # A missing admin-token scope (admin.directory.user.security, offboarding's sign-out) is picked in
+    # `gam oauth create`; delegation can't grant it. The remediation said "re-do the DWD step" for all.
+    err = GAMError.from_run(1, "ERROR: 403: Request had insufficient authentication scopes.")
+    assert err.kind is GAMErrorKind.SCOPE_MISSING
+    assert "gam oauth create" in err.remediation and "Domain-Wide Delegation" in err.remediation
+
+
+def test_a_missing_scope_is_named_when_gam_names_it():
+    scope = "https://www.googleapis.com/auth/admin.directory.user.security"
+    err = GAMError.from_run(1, f"ERROR: Request had insufficient authentication scopes: {scope}")
+    assert err.kind is GAMErrorKind.SCOPE_MISSING
+    assert scope in err.remediation
+    assert "gam oauth create" in err.remediation

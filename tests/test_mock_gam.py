@@ -12,8 +12,10 @@ import pytest
 
 from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
+from gamgui.core.setup import DWD_SCOPES
 
 CAL = "c_team@group.calendar.google.com"
+DWD = [scope for scope, _ in DWD_SCOPES]
 
 # Every write builder the app calls, with the options it can emit.
 WRITES = {
@@ -76,7 +78,7 @@ WRITES = {
 # for their target (tests/test_gam_connector.py::test_a_per_user_read_asks_gam_about_that_user).
 READS = {
     "version": [C.version()],
-    "check_svcacct": [C.check_svcacct("admin@example.com")],
+    "check_svcacct": [C.check_svcacct("admin@example.com", DWD)],
     "print_users": [C.print_users(), C.print_users(query="isSuspended=false")],
     "print_cros": [C.print_cros("status:ACTIVE")],
     "print_filelist": [C.print_filelist("alice@example.com", "name contains 'x'")],
@@ -175,7 +177,13 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     # `todrive <ToDriveAttribute>*`: only on a print/report read, and only in the shape the Builder emits.
     (["user", "alice@example.com", "show", "vacation", "todrive"], "Invalid argument"),
     (C.info_user("alice@example.com") + ["todrive"], "Invalid argument: todrive"),
-    (C.check_svcacct("admin@example.com") + ["todrive", "tduser", "boss@example.com"], "Invalid argument: todrive"),
+    (C.check_svcacct("admin@example.com", DWD) + ["todrive", "tduser", "boss@example.com"],
+     "Invalid argument: todrive"),
+    # admin.directory.* are client-access (admin-token) scopes: GAM refuses them as service-account ones.
+    (C.check_svcacct("admin@example.com", ["https://www.googleapis.com/auth/admin.directory.user"]),
+     "Invalid choice (https://www.googleapis.com/auth/admin.directory.user)"),
+    (["user", "admin@example.com", "check", "serviceaccount", "scopes"], "Missing argument"),
+    (["user", "admin@example.com", "check", "serviceaccount", "scopes", ""], "Empty argument"),
     (C.print_delegates("alice@example.com") + ["todrive", "tdshare", "x@example.com", "writer"], "Invalid argument"),
     (C.print_delegates("alice@example.com") + ["todrive", "tduser"], "Missing argument"),
     (C.print_delegates("alice@example.com") + ["todrive", "tduser", ""], "Empty argument"),
@@ -277,3 +285,23 @@ async def test_mock_delegates_persist_like_gmail_with_state(connector, gam_state
     assert (await connector.remove_delegate(alice, "assistant@example.com")).ok
     assert await connector.list_delegates(alice) == ["backup@example.com", "carol@example.com"]
     assert (await connector.add_delegate(alice, "assistant@example.com")).ok
+
+
+async def test_mock_check_serviceaccount_reports_the_scopes_asked_as_gam_does(runner, domain):
+    # It listed admin.directory.user/group as delegation PASS lines — client-access scopes in GAM, which
+    # `check serviceaccount` never checks. GAM (checkServiceAccount, vendored 7.48.11) prints each scope
+    # asked, lowercased and sorted, as "  {scope:73} PASS (j/n)".
+    out = await runner.run_authenticated(domain, C.check_svcacct("admin@example.com", [s.upper() for s in DWD]))
+    rows = [line.split() for line in out.splitlines() if line.startswith("  https://")]
+    assert [r[0] for r in rows] == sorted(DWD)
+    assert [r[1:] for r in rows] == [["PASS", f"({j}/{len(DWD)})"] for j in range(1, len(DWD) + 1)]
+    assert "admin.directory" not in out and "All scopes PASSED!" in out
+
+
+@pytest.mark.hand_built_argv   # the bare form: the app never sends it now, but GAM accepts it
+async def test_mock_bare_check_serviceaccount_fails_on_gams_larger_default_set(runner, domain):
+    # A bare check asks about GAM's own default scopes; the simulated tenant authorized only DWD_SCOPES,
+    # so GAM prints FAIL for the rest, the Admin-console link, and exits SCOPES_NOT_AUTHORIZED_RC (1).
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, ["user", "admin@example.com", "check", "serviceaccount"])
+    assert ei.value.exit_code == 1

@@ -443,16 +443,53 @@ if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events"
   exit 0
 fi
 
-# `gam user <admin> check serviceaccount` -> simulate a fully-authorized service account.
+# `gam user <admin> check serviceaccount (scope|scopes <APIScopeURLList>)*`, as the vendored 7.48.11
+# build's checkServiceAccount prints it: `{label:73} PASS`, then each scope checked, sorted, as
+# `  {scope:73} PASS (j/n)`. A scope asked for must be a SERVICE-ACCOUNT scope (lowercased, commas or
+# spaces between) or GAM exits with an invalid choice — admin.directory.* are client-access scopes (the
+# admin token, `gam oauth create`) and are refused here as GAM refuses them. The simulated tenant
+# authorized exactly the scopes GamGUI pre-fills (core/setup.py DWD_SCOPES). A bare check asks about
+# GAM's own larger default set, so its extra scopes FAIL and GAM exits SCOPES_NOT_AUTHORIZED_RC (1).
+SA_AUTHORIZED="https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/gmail.settings.sharing https://www.googleapis.com/auth/tasks"
+# A sample of GAM's other default-on service-account scopes (gamlib glapi _SVCACCT_SCOPES).
+SA_OTHER="https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.activity https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/keep https://www.googleapis.com/auth/spreadsheets"
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
-  cat <<'EOF'
-System time status: PASS
-Service account private key authentication: PASS
-https://www.googleapis.com/auth/admin.directory.user: PASS
-https://www.googleapis.com/auth/admin.directory.group: PASS
-https://www.googleapis.com/auth/gmail.settings.basic: PASS
-All scopes PASS
-EOF
+  sa_user="$2"; shift 4
+  asked=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      scope|scopes)
+        need_value $# "APIScopeURLList"
+        [ -n "$2" ] || empty_arg "APIScopeURLList"
+        for s in $(printf '%s' "$2" | tr 'A-Z,' 'a-z '); do
+          case " $SA_AUTHORIZED $SA_OTHER " in
+            *" $s "*) asked="$asked $s" ;;
+            *) invalid_choice "$s" "$(printf '%s' "$SA_AUTHORIZED $SA_OTHER" | tr ' ' '|')" ;;
+          esac
+        done
+        shift 2 ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  [ -n "$asked" ] || asked="$SA_AUTHORIZED $SA_OTHER"
+  checked=$(printf '%s\n' $asked | sort -u)
+  n=$(printf '%s\n' "$checked" | wc -l | tr -d ' ')
+  printf '%-73s %s\n' "System time status" "PASS" \
+    "Service Account Private Key Authentication" "PASS" \
+    "Service Account Private Key age; Google recommends rotating keys on a routine basis" "PASS"
+  printf 'Domain-wide Delegation authentication:, User: %s, Scopes: %s\n' "$sa_user" "$n"
+  j=0; failed=0
+  for s in $checked; do
+    j=$((j + 1))
+    case " $SA_AUTHORIZED " in *" $s "*) st=PASS ;; *) st=FAIL; failed=1 ;; esac
+    printf '  %-73s %s (%d/%d)\n' "$s" "$st" "$j" "$n"
+  done
+  if [ "$failed" = 1 ]; then
+    printf '\nSome scopes FAILED or should be DISABLED!\nTo update authorization, please go to the following link in your browser:\n    https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=%s&clientIdToAdd=1234567890&overwriteClientId=true\n\n' \
+      "$(printf '%s' "$checked" | tr '\n' ',')"
+    exit 1
+  fi
+  printf '\nAll scopes PASSED!\n\nService Account Client name: 1234567890 is fully authorized.\n\n'
   exit 0
 fi
 

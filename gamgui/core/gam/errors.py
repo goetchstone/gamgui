@@ -52,9 +52,14 @@ ACCOUNT_WIDE_KINDS = frozenset({GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTH
 # Human remediation text shown alongside the raw error.
 _REMEDIATION = {
     GAMErrorKind.AUTH_EXPIRED: "Your sign-in expired. Re-run setup to refresh authorization.",
+    # Two places grant a scope, and GAM's usual words ("insufficient authentication scopes") don't say
+    # which: an admin-token (client-access) scope — Directory, Reports, admin.directory.user.security for
+    # sign-out — is picked in `gam oauth create`; delegation cannot grant it. A per-user API scope
+    # (Gmail, Calendar, Drive…) is the Domain-Wide Delegation step's.
     GAMErrorKind.SCOPE_MISSING: (
-        "A required API scope is not authorized. Re-do the Domain-Wide Delegation step "
-        "in the setup wizard."
+        "A required API scope is not authorized. An admin (Directory, Reports) scope is granted by "
+        "re-running `gam oauth create` and ticking it; a per-user (Gmail, Calendar, Drive) scope by the "
+        "Domain-Wide Delegation step in the setup wizard."
     ),
     GAMErrorKind.RATE_LIMITED: "Google is rate-limiting requests. Wait a moment and retry.",
     GAMErrorKind.NOT_FOUND: "The requested user, group, or resource was not found.",
@@ -122,6 +127,10 @@ _SEVERITY: List[GAMErrorKind] = [
 ]
 
 
+# A Google API scope URL, as GAM names one in an error.
+_SCOPE_URL: Pattern[str] = re.compile(r"https://(?:www\.googleapis\.com/auth/[\w.\-/]*\w|mail\.google\.com/)")
+
+
 # GAM's per-entity counter, " (403/1200)" on the 403rd of 1,200 users. Dropped before classifying: the
 # status-code patterns read it as an HTTP 403, 404 or 429.
 _ENTITY_COUNT: Pattern[str] = re.compile(r"\s*\(\d+/\d+\)")
@@ -183,7 +192,12 @@ class GAMError(Exception):
 
     @property
     def remediation(self) -> str:
-        return _REMEDIATION[self.kind]
+        text = _REMEDIATION[self.kind]
+        if self.kind is GAMErrorKind.SCOPE_MISSING:
+            named = sorted(set(_SCOPE_URL.findall(self.stderr or "")))
+            if named:
+                text += " GAM named: " + ", ".join(named) + "."
+        return text
 
     @property
     def message(self) -> str:

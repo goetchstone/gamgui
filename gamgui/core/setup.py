@@ -718,7 +718,7 @@ class SetupService:
         if not self.is_ready(domain):
             return VerifyResult(ok=False, summary="No credentials imported yet.")
         try:
-            out = await self.runner.run_authenticated(domain, GAMCommands.check_svcacct(admin))
+            out = await self.runner.run_authenticated(domain, GAMCommands.check_svcacct(admin, [scope for scope, _ in DWD_SCOPES]))
         except GAMError as exc:
             return VerifyResult(ok=False, summary=exc.message, raw=exc.stderr)
         lines = _parse_check(out)
