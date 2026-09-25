@@ -2,7 +2,8 @@
 
 The counts come from the directory cache as it is — any age, labelled — and a cold cache shows a Load
 control instead of holding the page on ``gam print users``. Jobs come from the tray's registry and
-failures from the local audit log. The only ``gam`` on load is ``gam version``, which is local.
+failures from the local audit log. The only ``gam`` on load is ``gam version``, which is local — and
+held on AppState (``gam_version``) until the binary changes or setup activates a tenant.
 """
 
 from __future__ import annotations
@@ -46,10 +47,7 @@ def recent_failures(request: Request, n: int = HOME_FAILURES) -> List[Dict[str, 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     st = request.app.state.gamgui
-    try:
-        version = (await st.runner.version()).splitlines()[0] if st.runner.binary_exists() else ""
-    except Exception:
-        version = ""
+    version = await st.gam_version()
     configured = st.vault.has_credentials(st.audit_domain) if st.audit_domain else False
     rows, running, _ = tray(st.jobs)
     return TEMPLATES.TemplateResponse(request, "index.html", {

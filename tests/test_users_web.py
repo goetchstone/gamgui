@@ -2117,3 +2117,32 @@ def test_a_failed_write_says_why_with_gams_error_expandable(client, monkeypatch,
 def test_add_delegate_empty_rejected(client):
     r = client.post("/users/delegate/add", data={"email": "alice@example.com", "delegate": "   "})
     assert "Enter a delegate email." in r.text
+
+
+def test_home_runs_gam_version_once_per_binary(client, tmp_path):
+    # Home ran `gam version` (a subprocess) on every load. It is held on AppState now, and read again
+    # only when the binary changes (a re-vendor) or a tenant is activated (setup).
+    import os
+    import shutil
+
+    st = client.app.state.gamgui
+    binary = tmp_path / "gam"
+    shutil.copy2(FIXTURES / "mock_gam.sh", binary)
+    st.runner.gam_binary = binary
+    calls = []
+    real = st.runner.version
+
+    async def version():
+        calls.append(1)
+        return await real()
+    st.runner.version = version
+    for _ in range(3):
+        assert client.get("/").status_code == 200
+    assert len(calls) == 1 and "GAM" in client.get("/").text
+    stat = binary.stat()
+    os.utime(binary, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    client.get("/")
+    assert len(calls) == 2
+    st.activate(st.connector)
+    client.get("/")
+    assert len(calls) == 3

@@ -10,6 +10,7 @@ HTTP layer offline.
 
 from __future__ import annotations
 
+import os
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -94,6 +95,7 @@ class AppState:
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
+    gam_version_held: Optional[tuple] = None  # (the binary's stat key, `gam version`'s first line) — see gam_version
 
     def __post_init__(self) -> None:
         self.previews.bind(self._tenant)
@@ -113,9 +115,32 @@ class AppState:
         self.audit_domain = connector.domain
         self.invalidate_users()
         self.invalidate_groups()
+        self.gam_version_held = None   # setup re-reads the version on the next Home
         if changed:
             self.previews.clear()
             self.builder_last_result = None
+
+    async def gam_version(self) -> str:
+        """``gam version``'s first line, for Home. Held until the binary changes (a re-vendor: its path,
+        inode, size or mtime) or a tenant is activated — Home ran the subprocess on every load. No binary,
+        or a failed read, is "" and isn't held, so the next load tries again."""
+        binary = self.runner.gam_binary
+        try:
+            info = os.stat(binary)
+        except OSError:
+            self.gam_version_held = None
+            return ""
+        key = (str(binary), info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+        held = self.gam_version_held
+        if held and held[0] == key:
+            return held[1]
+        try:
+            version = next(iter((await self.runner.version()).splitlines()), "")
+        except Exception:  # noqa: BLE001 — Home shows no version rather than failing
+            return ""
+        if version:
+            self.gam_version_held = (key, version)
+        return version
 
     async def users(self, force: bool = False, stale_ok: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports). ``stale_ok`` only
