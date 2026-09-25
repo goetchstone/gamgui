@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, build_user_query
@@ -41,6 +41,8 @@ from .person import ConnectorAccount, Person
 
 # The remediation for a write that failed before GAM could say why (no binary, a Keychain error).
 _WRITE_FAILED = "Something went wrong talking to GAM. See details below."
+# The keys of a `print domains` record that name a domain (a flattened CSV column ends in one of them).
+_DOMAIN_KEYS = {"domainName", "domainAliasName", "parentDomainName"}
 
 # The audit error for a write cut off by the app quitting (its job task cancelled) mid-call.
 # True whether it came during the call (the runner has stopped gam) or while waiting for the write lock.
@@ -137,6 +139,26 @@ class GAMConnector(Connector):
         argv = GAMCommands.print_groups()
         stdout = await self.runner.run_authenticated(self.domain, argv)
         return [GAMGroup.from_json(r) for r in parse_records(stdout)]
+
+    async def list_domains(self) -> List[str]:
+        """Every domain the tenant's addresses can end in — primary, secondaries and their domain aliases —
+        lowercased, from one ``gam print domains``. Raises as any read does."""
+        stdout = await self.runner.run_authenticated(self.domain, GAMCommands.print_domains())
+        found: List[str] = []
+
+        def walk(node: Any) -> None:
+            if isinstance(node, dict):
+                for key, val in node.items():
+                    if key.rsplit(".", 1)[-1] in _DOMAIN_KEYS and isinstance(val, str) and val.strip():
+                        found.append(val.strip().lower())
+                    else:
+                        walk(val)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+
+        walk(parse_records(stdout))
+        return list(dict.fromkeys(found))
 
     async def list_group_members(self, group: str) -> List[GroupMember]:
         argv = GAMCommands.print_group_members(group)

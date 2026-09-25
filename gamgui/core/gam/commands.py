@@ -489,6 +489,13 @@ class GAMCommands:
         return ["print", "group-members", "group", group, "formatjson"]
 
     @staticmethod
+    def print_domains() -> List[str]:
+        # The tenant's primary and secondary domains, each with its domain aliases in the JSON record
+        # (GamCommands.txt `gam print domains ... [formatjson]`) — what the Builder's External-only lens
+        # counts as internal.
+        return ["print", "domains", "formatjson"]
+
+    @staticmethod
     def print_groups_member(email: str) -> List[str]:
         # Groups that <email> belongs to. Returns CSV with an `email` column.
         return ["print", "groups", "member", email]

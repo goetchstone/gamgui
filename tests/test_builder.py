@@ -762,6 +762,58 @@ def test_external_only_searches_every_row(client, monkeypatch):
     assert "1 of 250 rows" in both and "user230@example.com" in both
 
 
+def _sharing_result(client, monkeypatch):
+    """A sharing result naming each kind of address; `print domains` still goes to the strict mock."""
+    runner = client.app.state.gamgui.connector.runner
+    real, domain_reads = runner.run_authenticated, []
+
+    async def canned(domain, argv, **kw):
+        if argv[:2] == ["print", "domains"]:
+            domain_reads.append(argv)
+            return await real(domain, argv, **kw)
+        return ("owner,sharedWith\n" + "\n".join(f"alice@example.com,{a}" for a in (
+            "bob@example.com", "alice@alias.example.net", "carol@example.net", "dan@mail.example.com",
+            "partner@elsewhere.org", "spoof@notexample.com")) + "\n")
+
+    monkeypatch.setattr(runner, "run_authenticated", canned)
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    return client.app.state.gamgui.builder_last_result["id"], domain_reads
+
+
+def test_external_only_counts_every_tenant_domain_as_internal(client, monkeypatch):
+    # It once took anything not "@<primary>" as external, so a secondary domain, a domain alias and a
+    # subdomain all showed up in a sharing audit. The tenant's domains are read once, through the mock.
+    rid, domain_reads = _sharing_result(client, monkeypatch)
+    assert domain_reads == []                       # the plain table never needs them
+    for _ in range(3):
+        ext = client.get("/builder/results", params={"rid": rid, "external": "1"}).text
+        assert "2 of 6 rows" in ext and "partner@elsewhere.org" in ext and "spoof@notexample.com" in ext
+    assert domain_reads == [["print", "domains", "formatjson"]]     # learned once, not per keystroke
+    assert client.app.state.gamgui.domains_held[1] == ("example.com", "alias.example.net", "example.net")
+
+
+def test_external_only_falls_back_to_the_primary_when_the_domain_read_fails(client, monkeypatch):
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+    from gamgui.web import server
+
+    rid, _ = _sharing_result(client, monkeypatch)
+    st, tries = client.app.state.gamgui, []
+
+    async def refused():
+        tries.append(1)
+        raise GAMError(GAMErrorKind.SCOPE_MISSING, 1, "ERROR: 403: Request had insufficient authentication scopes.")
+
+    monkeypatch.setattr(st.connector, "list_domains", refused)
+    for _ in range(2):
+        ext = client.get("/builder/results", params={"rid": rid, "external": "1"}).text
+        assert "4 of 6 rows" in ext and "carol@example.net" in ext and "bob@example.com" not in ext
+    assert len(tries) == 1                          # a failure isn't retried on every request...
+    conn, domains, ok, at = st.domains_held
+    st.domains_held = (conn, domains, ok, at - server.DOMAINS_RETRY)
+    client.get("/builder/results", params={"rid": rid, "external": "1"})
+    assert len(tries) == 2                          # ...but is, once DOMAINS_RETRY has passed
+
+
 def test_the_pager_pages_over_the_matches(client, monkeypatch):
     _, rid = _big_result(client, monkeypatch)
     # "Doc 1" is in Doc 1, Doc 10–19 and Doc 100–199 (111 rows), 12 pages of them.

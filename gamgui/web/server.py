@@ -11,6 +11,7 @@ HTTP layer offline.
 from __future__ import annotations
 
 import secrets
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -70,6 +71,7 @@ TEMPLATES.env.filters["ago"] = ago
 TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
 TEMPLATES.env.globals["active_tenant"] = _active_tenant
 TOKEN_COOKIE = "gamgui_token"
+DOMAINS_RETRY = 600   # seconds before a failed `gam print domains` is tried again (a success is kept)
 
 
 @dataclass
@@ -91,6 +93,7 @@ class AppState:
     builder_last_result: Optional[dict] = None  # last read-command result set, for the CSV download
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
+    domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
 
     async def users(self, force: bool = False, stale_ok: bool = False) -> list:
         """The cached user list (one ``gam print users`` shared by the list + reports). ``stale_ok`` only
@@ -125,6 +128,26 @@ class AppState:
 
     def invalidate_groups(self) -> None:
         self.group_cache.invalidate()
+
+    async def tenant_domains(self) -> tuple:
+        """The domains an internal address ends in: the primary, secondaries and domain aliases, from one
+        ``gam print domains`` per connector (a tenant switch makes a new one). If that read fails — the
+        admin's grant may lack the domain scope — just the primary, and the read is tried again after
+        ``DOMAINS_RETRY``, not on every filter keystroke."""
+        conn = self.connector
+        primary = ((conn.domain if conn else "") or self.audit_domain or "").lower()
+        if conn is None:
+            return (primary,) if primary else ()
+        held = self.domains_held
+        if held and held[0] is conn and (held[2] or time.monotonic() - held[3] < DOMAINS_RETRY):
+            return held[1]
+        try:
+            found, ok = await conn.list_domains(), True
+        except Exception:  # noqa: BLE001 — the lens falls back to the primary, as it did before
+            found, ok = [], False
+        domains = tuple(dict.fromkeys(d for d in (primary, *found) if d))
+        self.domains_held = (conn, domains, ok, time.monotonic())
+        return domains
 
     @classmethod
     def create(cls, vault: Optional[SecretsVault] = None, token: Optional[str] = None) -> "AppState":

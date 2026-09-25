@@ -301,6 +301,29 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ] && [ "${3:-}" = "member" ];
   exit 0
 fi
 
+# `gam print domains formatjson` -> CSV, a `domainName` and a `JSON` column per domain: the Directory API's
+# Domains resource, its domain aliases nested in it. The tenant: example.com (primary, aliased by
+# alias.example.net) and a secondary example.net. GAM also takes todrive and showitemcountonly, and without
+# formatjson flattens the record into columns this mock doesn't model; the app sends neither, so each is
+# refused rather than answered in a guessed shape.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "domains" ]; then
+  shift 2; fj=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      formatjson) fj=1; shift ;;
+      quotechar) [ -n "$fj" ] || invalid_arg "$1"; [ -n "${2:-}" ] || missing_arg "Character"; shift 2 ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  [ -n "$fj" ] || { echo "ERROR: mock: print domains without formatjson isn't modelled" 1>&2; exit 2; }
+  cat <<'EOF'
+domainName,JSON
+example.com,"{""creationTime"": ""2020-01-06T17:00:00.000Z"", ""domainAliases"": [{""creationTime"": ""2021-03-01T09:00:00.000Z"", ""domainAliasName"": ""alias.example.net"", ""parentDomainName"": ""example.com"", ""verified"": true}], ""domainName"": ""example.com"", ""isPrimary"": true, ""verified"": true}"
+example.net,"{""creationTime"": ""2022-05-10T12:00:00.000Z"", ""domainName"": ""example.net"", ""isPrimary"": false, ""verified"": true}"
+EOF
+  exit 0
+fi
+
 # `gam print groups [fields ...]` -> NDJSON list of groups.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
   printf '%s\n' \

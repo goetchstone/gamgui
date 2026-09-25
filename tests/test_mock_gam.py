@@ -96,6 +96,7 @@ READS = {
     "search_messages": [C.search_messages("alice@example.com", "from:x")],
     "show_vacation": [C.show_vacation("alice@example.com")],
     "print_groups": [C.print_groups()],
+    "print_domains": [C.print_domains()],
     "print_group_members": [C.print_group_members("sales@example.com")],
     "print_groups_member": [C.print_groups_member("alice@example.com")],
 }

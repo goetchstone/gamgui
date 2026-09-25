@@ -89,7 +89,7 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   fixture user has different data; an address that isn't a user fails as GAM does), and all but
   `info user` accept only the argv the app sends, so `print delegates`, `show vacation` and `show signature` reject
   `formatjson` as GAM does (and `print groups member` any option — stricter than the grammar, the
-  safe direction). A `todrive` tail is accepted only on a print/report read and only in the shape
+  safe direction). `print domains` (the Builder's External-only lens) accepts only `formatjson [quotechar <c>]` and refuses the flattened no-`formatjson` form rather than answer it in a guessed shape. A `todrive` tail is accepted only on a print/report read and only in the shape
   the Builder emits (`todrive [tduser <addr>] [tdtitle <title>]`, see gam-runner). (Its *write* handlers are strict:
   a new mutating builder needs a handler that accepts only its grammar shape, or the mock fails it —
   and `tests/test_mock_gam.py` fails until the builder is classified there.)

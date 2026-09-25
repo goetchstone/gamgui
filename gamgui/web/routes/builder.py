@@ -140,7 +140,7 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     })
 
 
-def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResponse:
+async def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResponse:
     """Render a read command's output as a table when it looks tabular (CSV/JSON), else verbatim.
 
     Generic read commands span `print` (CSV/JSON → table) and `info`/`show` (human text → table
@@ -160,7 +160,7 @@ def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResp
             "id": secrets.token_hex(6), "records": records, "gam": gam,
             "sensitive": {"command": cmd.id, "argv": list(argv), "target": target} if cmd.sensitive else None}
         return TEMPLATES.TemplateResponse(request, "_records_table.html",
-                                          _results_context(request, last, "", False, 1))
+                                          await _results_context(request, last, "", False, 1))
     return TEMPLATES.TemplateResponse(request, "_read_output.html", {"output": out, "gam": gam})
 
 
@@ -180,27 +180,32 @@ def _columns_and_texts(last: dict) -> tuple:
     return last["cols"], last["texts"]
 
 
-def _is_external(text: str, domain: str) -> bool:
+def _is_internal(address: str, domains: tuple) -> bool:
+    """An address at one of the tenant's domains (primary, secondary, domain alias) or a subdomain of one."""
+    host = address.rsplit("@", 1)[-1]
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def _is_external(text: str, domains: tuple) -> bool:
     """The sharing-audit lens: a row that names "anyone" (a public or anyone-with-the-link share), or an
-    address outside your domain."""
+    address outside the tenant's domains."""
     if "anyone" in text:
         return True
-    return bool(domain) and any(not e.endswith("@" + domain) for e in _EMAIL.findall(text))
+    return bool(domains) and any(not _is_internal(e, domains) for e in _EMAIL.findall(text))
 
 
-def _matching(request: Request, last: dict, q: str, external: bool) -> list:
+async def _matching(request: Request, last: dict, q: str, external: bool) -> list:
     """The result's rows that pass the filter and the External-only toggle — over every row, not a page."""
     q = q.strip().lower()
-    st = app_state(request)
-    domain = (getattr(st.connector, "domain", "") or st.audit_domain or "").lower()
+    domains = await app_state(request).tenant_domains() if external else ()
     _, texts = _columns_and_texts(last)
     return [r for r, t in zip(last["records"], texts, strict=True)
-            if (not q or q in t) and (not external or _is_external(t, domain))]
+            if (not q or q in t) and (not external or _is_external(t, domains))]
 
 
-def _results_context(request: Request, last: dict, q: str, external: bool, page: int) -> dict:
+async def _results_context(request: Request, last: dict, q: str, external: bool, page: int) -> dict:
     cols, _ = _columns_and_texts(last)
-    rows = _matching(request, last, q, external)
+    rows = await _matching(request, last, q, external)
     pages = max(1, -(-len(rows) // RESULT_ROWS))
     page = min(max(1, page), pages)
     start = (page - 1) * RESULT_ROWS
@@ -236,7 +241,7 @@ async def results(request: Request, rid: str = "", q: str = "", external: str = 
     last, why = _last_result(request, rid)
     if last is None:
         return error_partial(request, why)
-    ctx = _results_context(request, last, q, _on(external), page)
+    ctx = await _results_context(request, last, q, _on(external), page)
     # A pager button that just went disabled can't keep focus: the page line takes it, not <body>.
     trigger = request.headers.get("HX-Trigger")
     ctx["focus"] = (trigger == "rt-prev" and ctx["page"] == 1) or (trigger == "rt-next" and ctx["page"] == ctx["pages"])
@@ -256,7 +261,7 @@ async def export_csv(request: Request, rid: str = "", q: str = "", external: str
     last, why = _last_result(request, rid)
     if last is None:
         return Response(why, media_type="text/plain", status_code=404)
-    records = _matching(request, last, q, _on(external))
+    records = await _matching(request, last, q, _on(external))
     sensitive = last.get("sensitive")
     if sensitive:
         if st.connector is None:
@@ -422,7 +427,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
             out = await conn.catalog_read(cmd, argv, target)
         except Exception as exc:  # noqa: BLE001
             return error_partial(request, friendly(exc), _details(exc))
-        return _render_read(request, out, cmd, argv, target)
+        return await _render_read(request, out, cmd, argv, target)
     # A mutation runs only from its preview: the held command, when the live form still matches it.
     # Otherwise the answer is a fresh preview of what the form holds now, to check before running.
     form = await request.form()
