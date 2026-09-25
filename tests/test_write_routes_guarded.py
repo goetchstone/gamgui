@@ -52,7 +52,7 @@ PREVIEWS = {
     "/calendars/delete/preview", "/calendars/event/preview",
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
-    "/groups/members/remove/preview",
+    "/groups/members/remove/preview", "/users/groups/remove/preview",
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -69,7 +69,7 @@ LOCAL_ONLY = {
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe
 # to its members; a larger group renders the /calendars/share/group confirm step instead, GATED below.)
 LOW_WRITES = {
-    "/users/signature", "/users/signout", "/users/groups/add", "/users/groups/remove",
+    "/users/signature", "/users/signout", "/users/groups/add",
     "/users/delegate/add", "/users/delegate/remove", "/users/organization",
     "/users/calendar/add", "/users/calendar/remove", "/users/vacation/set", "/users/vacation/off",
     "/groups/members", "/calendars/share", "/calendars/unshare",
@@ -136,6 +136,9 @@ GATED = {
     # The groups board adds with one click (a LOW write, above) but removes only from a confirm step.
     "/groups/members/remove": Case({"group": "sales@example.com", "email": "alice@example.com"},
                                    "/groups/members/remove/preview"),
+    # A user's Groups tab too: its × opens the same confirm step.
+    "/users/groups/remove": Case({"email": "alice@example.com", "group": "sales@example.com"},
+                                 "/users/groups/remove/preview"),
     "/builder/sequence/run": Case({}, "/builder/sequence/preview",
                                   typed={"confirm": "confirm", "confirm_email": "carol@example.com"},
                                   setup=_ten_deletes, edit=_another_step),

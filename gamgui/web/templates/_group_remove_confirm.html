@@ -1,15 +1,18 @@
+{# The confirm step for a removal, on the Groups board (defaults) and on a user's Groups tab (post, target, zone). #}
 <div class="mb-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm">
   <p tabindex="-1" data-focus class="font-medium text-red-800">Remove {{ email }} from {{ group }}?</p>
   <p class="mt-1 text-red-700">{% if role == "owner" %}They are an <b>owner</b> — make sure the group keeps one. {% elif role == "manager" %}They are a <b>manager</b>. {% endif %}They stop getting the group's mail and lose what is shared with it. You can add them back.</p>
-  <form class="mt-3 flex gap-2" hx-post="/groups/members/remove" hx-target="#member-list" hx-swap="innerHTML"
+  <form class="mt-3 flex gap-2" hx-post="{{ post or '/groups/members/remove' }}" hx-target="{{ target or '#member-list' }}" hx-swap="innerHTML"
         hx-disabled-elt="find button[type=submit]">
     <input type="hidden" name="group" value="{{ group }}" />
     <input type="hidden" name="email" value="{{ email }}" />
+    {% if page %}
     <input type="hidden" name="q" value="{{ q }}" />
     <input type="hidden" name="page" value="{{ page }}" />
+    {% endif %}
     <input type="hidden" name="confirmed" value="1" />
     <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Remove</button>
-    <button type="button" data-action="clear" data-clear="member-confirm"
+    <button type="button" data-action="clear" data-clear="{{ zone or 'member-confirm' }}"
             class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors">Cancel</button>
   </form>
 </div>

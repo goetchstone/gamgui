@@ -250,9 +250,11 @@ async def user_groups(request: Request, email: str) -> HTMLResponse:
 
 
 async def _groups_partial(request: Request, conn, email: str) -> HTMLResponse:
+    """The person's groups (a live per-user read) and, for the add picker, the rest of the cached
+    ``st.groups()`` — not a live ``gam print groups`` on each open of the tab."""
     try:
         member_of = await conn.list_user_groups(email)
-        all_groups = await conn.list_groups()
+        all_groups = await request.app.state.gamgui.groups()
     except Exception as exc:
         return error_partial(request, friendly(exc, _TRY_AGAIN))
     member_set = set(member_of)
@@ -273,11 +275,27 @@ async def groups_add(request: Request, email: Annotated[str, Form()], group: Ann
     return await _groups_partial(request, conn, email)
 
 
+@router.post("/groups/remove/preview", response_class=HTMLResponse)
+async def groups_remove_preview(request: Request, email: Annotated[str, Form()] = "",
+                                group: Annotated[str, Form()] = "") -> HTMLResponse:
+    """The confirm step for leaving a group — the Groups board's, posting back here. Writes nothing."""
+    if not looks_like_email(group) or not looks_like_email(email):
+        return error_partial(request, "Pick a group to remove.")
+    return TEMPLATES.TemplateResponse(request, "_group_remove_confirm.html", {
+        "group": group.strip(), "email": email.strip(), "post": "/users/groups/remove",
+        "target": "#user-groups", "zone": "user-group-confirm"})
+
+
 @router.post("/groups/remove", response_class=HTMLResponse)
 async def groups_remove(request: Request, email: Annotated[str, Form()], group: Annotated[str, Form()]) -> HTMLResponse:
+    """Leave one group — only from its confirm step (guard.enforce, confirm_step), as on the Groups board."""
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
+    refusal = guard.enforce(guard.changes([email], RiskLevel.LOW, f"Remove from {group.strip()}"),
+                            await request.form(), confirm_step=True)
+    if refusal:
+        return error_partial(request, refusal)
     result = await conn.remove_group_member(group.strip(), email)
     if not result.ok:
         return write_failed(request, f"Couldn't remove {email} from {group.strip()}.", result)

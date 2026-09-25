@@ -571,7 +571,12 @@ def test_user_groups_view_add_remove(client, gam_calls):
     assert "it@example.com" in r.text               # available group in the add picker
     add = client.post("/users/groups/add", data={"email": "alice@example.com", "group": "it@example.com"})
     assert_ok_partial(add)
-    rem = client.post("/users/groups/remove", data={"email": "alice@example.com", "group": "sales@example.com"})
+    step = client.post("/users/groups/remove/preview", data={"email": "alice@example.com", "group": "sales@example.com"})
+    assert "Remove alice@example.com from sales@example.com?" in step.text and 'hx-post="/users/groups/remove"' in step.text
+    bare = client.post("/users/groups/remove", data={"email": "alice@example.com", "group": "sales@example.com"})
+    assert "needs confirmation" in bare.text        # the × only opens the confirm step; a bare POST writes nothing
+    rem = client.post("/users/groups/remove", data={"email": "alice@example.com", "group": "sales@example.com",
+                                                     "confirmed": "1"})
     assert_ok_partial(rem)
     assert gam_writes(gam_calls()) == [
         ["update", "group", "it@example.com", "add", "member", "alice@example.com"],
@@ -579,6 +584,14 @@ def test_user_groups_view_add_remove(client, gam_calls):
     ]
     assert _audited(client, 2) == [("add_group_member", "alice@example.com", True),
                                    ("remove_group_member", "alice@example.com", True)]
+
+
+def test_user_groups_tab_reads_the_cached_group_list(client, gam_calls):
+    # The add picker's groups come from st.groups(): opening the tab again (or another person's) runs
+    # only that person's `print groups member`, not a second `print groups`.
+    for who in ("alice@example.com", "carol@example.com", "alice@example.com"):
+        assert_ok_partial(client.get("/users/groups", params={"email": who}))
+    assert sum(a[:2] == ["print", "groups"] and a[2:3] != ["member"] for a in gam_calls()) == 1
 
 
 def test_suspended_user_detail_shows_unsuspend(client):
@@ -2025,7 +2038,7 @@ _ALICE = "alice@example.com"
 WRITE_FAILURES = [
     ("/users/groups/add", {"email": _ALICE, "group": "sales@example.com"}, "add_group_member",
      f"Couldn't add {_ALICE} to sales@example.com."),
-    ("/users/groups/remove", {"email": _ALICE, "group": "sales@example.com"}, "remove_group_member",
+    ("/users/groups/remove", {"email": _ALICE, "group": "sales@example.com", "confirmed": "1"}, "remove_group_member",
      f"Couldn't remove {_ALICE} from sales@example.com."),
     ("/users/organization", {"email": _ALICE, "title": "Lead", "department": "IT"}, "set_organization",
      "Couldn't update the title and department."),
