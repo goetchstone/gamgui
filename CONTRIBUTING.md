@@ -68,6 +68,10 @@ scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (S
   Content-Security-Policy allows only same-origin script files, so it wouldn't run. Give the element
   a `data-action` and its handler in `gamgui/web/static/` (see `app.js`).
 - Add or update tests for any change; keep `pytest` green.
+- Tests never touch the operator's own data. `tests/conftest.py` sets each test's HOME to its
+  `tmp_path` and fails any test that opens anything under the real `~/Library/Application
+  Support/GamGUI` or `~/.gam`. A web fixture still hands its stores (`RunbookStore`, `SignatureStore`,
+  `AuditLog`, `CalendarIndex`) explicit `tmp_path` paths, so a test reads only what it seeded.
 - A change an admin would notice — a screen's steps, a label, what a write does — updates the user
   guide, [`docs/guide.md`](docs/guide.md), in the same commit.
 

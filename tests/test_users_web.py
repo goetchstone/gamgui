@@ -14,7 +14,9 @@ from gamgui.core.calendar_index import CalendarIndex, IndexedCalendar
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.models import GAMUser
 from gamgui.core.gam.runner import GAMRunner
+from gamgui.core.onboarding import RunbookStore
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
+from gamgui.core.signatures import SignatureStore
 from gamgui.web.server import AppState, create_app
 
 from .helpers import TEST_HOSTS, assert_ok_partial, gam_writes, wait_for_job
@@ -43,7 +45,9 @@ def client(tmp_path, monkeypatch):
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t",
-                     calendar_index=CalendarIndex(tmp_path / "calendar_index.db"))
+                     calendar_index=CalendarIndex(tmp_path / "calendar_index.db"),
+                     runbooks=RunbookStore(tmp_path / "onboarding.json"),
+                     sig_templates=SignatureStore(tmp_path / "signatures.json"))
     with TestClient(create_app(state, allowed_hosts=TEST_HOSTS)) as c:
         c.get("/?token=t")
         yield c
@@ -53,10 +57,24 @@ def client(tmp_path, monkeypatch):
 def unconnected_client(tmp_path):
     vault = SecretsVault(InMemoryBackend())
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
-    state = AppState(vault=vault, runner=runner, audit_domain="", connector=None, token="t")
+    state = AppState(vault=vault, runner=runner, audit_domain="", connector=None, token="t",
+                     calendar_index=CalendarIndex(tmp_path / "calendar_index.db"),
+                     runbooks=RunbookStore(tmp_path / "onboarding.json"),
+                     sig_templates=SignatureStore(tmp_path / "signatures.json"))
     with TestClient(create_app(state, allowed_hosts=TEST_HOSTS)) as c:
         c.get("/?token=t")
         yield c
+
+
+def test_the_client_fixture_keeps_every_store_in_tmp_path(client, tmp_path):
+    # R7: this fixture (imported by the retry, jobs-tray and click-path tests) left the roles and
+    # signature templates to their app_data_dir() default — the operator's real ~/Library folder, whose
+    # own roles and templates then showed up on /onboard. Every store is this test's now.
+    assert client.get("/onboard").status_code == 200
+    assert client.get("/signatures").status_code == 200
+    st = client.app.state.gamgui
+    for path in (st.runbooks.path, st.sig_templates.path, st.connector.audit.path, st.calendar_index.path):
+        assert Path(path).parent == tmp_path, path
 
 
 def test_users_list(client):

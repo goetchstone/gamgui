@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import itertools
 import os
+import pwd
+import sys
 import threading
 from pathlib import Path
 
@@ -12,11 +14,112 @@ import pytest
 from gamgui.core.audit import AuditLog
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
+from gamgui.core.paths import app_data_dir
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MOCK_GAM = FIXTURES / "mock_gam.sh"
 DOMAIN = "example.com"
+
+
+# --- the operator's real data is off limits ---
+# A store that isn't handed a path (RunbookStore(), SignatureStore(), AuditLog(), a runner with no
+# base_dir, AppState.create) falls back to app_data_dir() — on this Mac the operator's real
+# ~/Library/Application Support/GamGUI, holding their roles, templates and audit log. A web fixture that
+# forgot one read their real onboarding roles and could append to their real audit.jsonl. So every test
+# runs with HOME pointed at its own temp dir (`_hermetic_home`), and an audit hook refuses — and fails
+# the test for — any open/mkdir/listdir/remove/sqlite connect under the real app-data dir or ~/.gam.
+
+
+class RealAppDataAccess(RuntimeError):
+    """A test reached the operator's real app-data dir or ~/.gam. Raised before the access happens."""
+
+
+def _guard_variants(path: Path) -> set:
+    """The spellings a path under *path* can arrive in: as given, resolved, and via the data-volume firmlink."""
+    out = {os.path.normpath(str(path)), os.path.realpath(path)}
+    if sys.platform == "darwin":
+        out |= {"/System/Volumes/Data" + p for p in list(out) if p.startswith("/Users/")}
+    return {p.casefold() if sys.platform == "darwin" else p for p in out}
+
+
+def _real_homes() -> set:
+    homes = {Path(os.path.expanduser("~"))}
+    try:
+        homes.add(Path(pwd.getpwuid(os.getuid()).pw_dir))
+    except KeyError:
+        pass
+    return homes
+
+
+# Computed at import, before any test can point HOME elsewhere: the real places, whichever spelling.
+REAL_DATA_ROOTS: set = set()
+for _home in _real_homes():
+    REAL_DATA_ROOTS |= _guard_variants(_home / ".gam")
+REAL_DATA_ROOTS |= _guard_variants(app_data_dir())
+if sys.platform == "darwin":
+    for _home in _real_homes():
+        REAL_DATA_ROOTS |= _guard_variants(_home / "Library" / "Application Support" / "GamGUI")
+
+REAL_DATA_VIOLATIONS: list = []         # (event, path) — every access the hook refused, in order
+_WATCHED_EVENTS = frozenset({
+    "open", "os.mkdir", "os.listdir", "os.scandir", "os.remove", "os.rmdir", "os.rename", "os.chmod",
+    "os.chown", "os.truncate", "os.utime", "os.symlink", "os.link", "shutil.rmtree", "shutil.copyfile",
+    "shutil.move", "sqlite3.connect",
+})
+
+
+def _under_real_data(arg) -> str:
+    if not isinstance(arg, (str, bytes, os.PathLike)):
+        return ""                        # an fd, a mode, a flag
+    try:
+        p = os.path.abspath(os.fsdecode(arg))
+    except (TypeError, ValueError):
+        return ""
+    key = p.casefold() if sys.platform == "darwin" else p
+    for root in REAL_DATA_ROOTS:
+        if key == root or key.startswith(root + os.sep):
+            return p
+    return ""
+
+
+def _real_data_guard(event: str, args: tuple) -> None:
+    if event not in _WATCHED_EVENTS:
+        return
+    for arg in args:
+        hit = _under_real_data(arg)
+        if hit:
+            REAL_DATA_VIOLATIONS.append((event, hit))
+            raise RealAppDataAccess(f"test touched the operator's real data: {event} {hit}")
+
+
+sys.addaudithook(_real_data_guard)      # can't be removed; it only ever refuses the real roots above
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_home(tmp_path, monkeypatch):
+    """HOME is this test's tmp_path, so every app_data_dir() fallback (the audit log a /setup/verify
+    connector writes, the /onboard roles, the signature templates, the runner's run/ dir, ~/.gam in the
+    setup wizard) lands in a throwaway folder no other test shares. $GAMCFGDIR is cleared for the same
+    reason: an operator's own would point the wizard at their real GAM config. A test that needs another
+    home sets HOME itself after this (test_setup_web's ``ctx`` does)."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / ".local" / "share"))     # app_data_dir off macOS
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+    monkeypatch.delenv("GAMCFGDIR", raising=False)
+    return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _no_real_app_data(_hermetic_home):
+    """Fail any test during which the hook refused an access to the real app-data dir or ~/.gam — even
+    one the code under test swallowed (a best-effort write, a background job)."""
+    start = len(REAL_DATA_VIOLATIONS)
+    yield
+    hits = REAL_DATA_VIOLATIONS[start:]
+    if hits:
+        pytest.fail("reached the operator's real app data (point the store at tmp_path):\n"
+                    + "\n".join(f"  {event} {path}" for event, path in hits), pytrace=False)
 
 
 @pytest.fixture
