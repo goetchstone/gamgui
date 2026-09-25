@@ -358,6 +358,7 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
     """Grant access, then put the calendar on the person's (or each group member's) list. A group of
     DEFAULT_BULK_THRESHOLD or more members is resolved first and answered with a confirm step naming
     the count (``/share/group`` runs it), not written: the fan-out is one write per member."""
+    tenant = request.app.state.gamgui.tenant_key()   # before the group read (web/previews.py)
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
@@ -372,7 +373,8 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
     decision = guard.evaluate(_fanout(emails)) if kind == "group" else None
     if decision is not None and decision.requires_confirmation:
         st = request.app.state.gamgui
-        token = st.previews.hold(_SHARE_FLOW, _share_key(cal, target, role), (cal, target, role, emails))
+        token = st.previews.hold(_SHARE_FLOW, _share_key(cal, target, role), (cal, target, role, emails),
+                                 tenant=tenant)
         try:
             ctx = await _detail_ctx(request, conn, cal, label)
         except Exception as exc:

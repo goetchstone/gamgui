@@ -160,6 +160,7 @@ async def offboard_preview(
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the address checks read the directory (web/previews.py)
     if st.connector is None:
         return error_partial(request, NOT_CONNECTED)
     done = _done(await request.form())
@@ -186,7 +187,7 @@ async def offboard_preview(
         notify=notify.strip(), employee_name=await _employee_name(st, user),
         manager_contact=await _manager_contact(st, manager))
     to_run = [s for s in steps if s.key not in done]
-    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done))
+    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done), tenant=tenant)
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",

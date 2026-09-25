@@ -155,6 +155,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
                   assignee: Annotated[str, Form()] = "", send_welcome: Annotated[str, Form()] = "",
                   create_account: Annotated[str, Form()] = "", first: Annotated[str, Form()] = "",
                   last: Annotated[str, Form()] = "") -> HTMLResponse:
+    tenant = app_state(request).tenant_key()   # the tenant this preview is bound to (web/previews.py)
     if email.strip() and not onboarding.looks_like_email(email):
         return error_partial(request, "That does not look like a valid email address for the new hire.")
     store = _store(request)
@@ -168,7 +169,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
             "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
     token = app_state(request).previews.hold(
         _FLOW, _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last),
-        (hire, cfg))
+        (hire, cfg), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_onboard_preview.html", {
         "token": token,
         "role": role, "steps": cfg.steps, "assignee": (assignee or email).strip(), "name": name, "email": email,
@@ -266,6 +267,7 @@ async def bulk_template() -> PlainTextResponse:
 
 @router.post("/bulk/preview", response_class=HTMLResponse)
 async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]) -> HTMLResponse:
+    tenant = app_state(request).tenant_key()   # the tenant this preview is bound to (web/previews.py)
     if app_state(request).connector is None:
         return error_partial(request, NOT_CONNECTED)
     try:
@@ -282,7 +284,7 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
     pairs, row_errors = onboarding.resolve_hires(rows, _store(request))
     # Run executes these rows with these role templates — not a re-parse of whatever comes back, nor a
     # role edited after the preview — under a single-use token, like every other confirm step.
-    token = app_state(request).previews.hold(_BULK_FLOW, text, pairs) if pairs else ""
+    token = app_state(request).previews.hold(_BULK_FLOW, text, pairs, tenant=tenant) if pairs else ""
     return TEMPLATES.TemplateResponse(request, "_onboard_bulk_preview.html", {
         "summary": onboarding.tally_hires(pairs), "errors": parse_errors + row_errors,
         "csv_text": text, "can_run": bool(pairs), "token": token,

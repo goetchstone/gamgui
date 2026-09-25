@@ -96,13 +96,21 @@ class AppState:
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
     gam_version_held: Optional[tuple] = None  # (the binary's stat key, `gam version`'s first line) — see gam_version
+    switches: int = 0   # tenant switches so far — see tenant_key
 
     def __post_init__(self) -> None:
-        self.previews.bind(self._tenant)
+        self.previews.bind(self.tenant_key)
 
     def _tenant(self) -> str:
         """The active domain, lowercased — what a held preview is bound to (``Previews.bind``)."""
         return (getattr(self.connector, "domain", "") or "").lower()
+
+    def tenant_key(self) -> tuple:
+        """Which tenant is active, as a request captures it before its first directory read: the switch
+        count and the domain. A preview binds to it (``Previews.hold(..., tenant=)``) and the Builder keeps
+        a read's rows only under it, so reads that straddled a switch — even one away and back, which may
+        have mixed both tenants — are neither run nor served on the tenant active when they finished."""
+        return (self.switches, self._tenant())
 
     def activate(self, connector: GAMConnector) -> None:
         """Make ``connector`` the active tenant (a verify that passed; a switch, plan U10b). The directory
@@ -117,6 +125,7 @@ class AppState:
         self.invalidate_groups()
         self.gam_version_held = None   # setup re-reads the version on the next Home
         if changed:
+            self.switches += 1
             self.previews.clear()
             self.builder_last_result = None
 

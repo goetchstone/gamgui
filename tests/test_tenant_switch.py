@@ -5,15 +5,18 @@ user's page serves the cached list with its age instead of blocking on a full re
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from gamgui.core import clock
 from gamgui.core import lifecycle as core_lifecycle
+from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.models import GAMUser
 from gamgui.web.previews import Previews
 from gamgui.web.server import AppState
@@ -92,6 +95,77 @@ def test_a_confirm_step_previewed_before_a_switch_runs_nothing_after_it(client, 
     r = client.post(route, data={**body, "confirmed": "1", "preview": token})
     assert "again" in r.text and "?job=" not in r.text, r.text[:300]
     assert len(gam_writes(gam_calls())) == before and not st.jobs
+
+
+# --- G1: a preview or read whose reads straddle a switch is bound to the tenant it started on --------
+
+def test_hold_binds_the_tenant_captured_when_the_request_started():
+    tenant = {"d": "example.com"}
+    store = Previews()
+    store.bind(lambda: tenant["d"])
+    at_start = "example.com"                  # the preview request began here ...
+    tenant["d"] = OTHER                        # ... and the switch landed while it read the directory
+    token = store.hold("f", ("form",), "value", tenant=at_start)
+    value, why = store.take("f", token, ("form",))
+    assert value is None and "domain changed" in why
+
+
+def test_a_switch_away_and_back_is_still_a_switch():
+    st = AppState(vault=None, runner=None, connector=SimpleNamespace(domain="example.com"))  # type: ignore[arg-type]
+    at_start = st.tenant_key()
+    st.activate(SimpleNamespace(domain=OTHER))          # type: ignore[arg-type]
+    st.activate(SimpleNamespace(domain="Example.com"))  # type: ignore[arg-type]
+    assert st.tenant_key() != at_start                  # reads may have mixed both tenants
+    back = st.tenant_key()
+    st.activate(SimpleNamespace(domain="example.com"))  # type: ignore[arg-type] — a re-verify isn't one
+    assert st.tenant_key() == back
+
+
+def _switch_mid_read(st):
+    st.activate(GAMConnector(runner=st.runner, domain=OTHER))
+
+
+def test_a_preview_whose_directory_read_straddles_a_switch_runs_nothing(client, monkeypatch, gam_calls):  # noqa: F811
+    st = client.app.state.gamgui
+    real = st.users
+
+    async def read_then_switch(**kw):
+        users = await real(**kw)                       # read on example.com ...
+        _switch_mid_read(st)                           # ... the switch lands before the preview holds
+        return users
+    monkeypatch.setattr(st, "users", read_then_switch)
+    body = {"template": "{name}", "scope_type": "user", "scope_value": "alice@example.com"}
+    token = _token(client.post("/signatures/preview", data=body).text)
+    monkeypatch.setattr(st, "users", real)
+    before = len(gam_writes(gam_calls()))
+    r = client.post("/signatures/apply", data={**body, "confirmed": "1", "preview": token})
+    assert "domain changed" in r.text and "?job=" not in r.text, r.text[:300]
+    assert len(gam_writes(gam_calls())) == before and not st.jobs
+
+
+def test_a_builder_read_that_straddles_a_switch_keeps_and_shows_nothing(client, monkeypatch):  # noqa: F811
+    st = client.app.state.gamgui
+
+    async def read_then_switch(cmd, argv, target):
+        _switch_mid_read(st)                           # the switch lands while the read is in flight
+        return "delegator,delegate\nalice@example.com,bob@example.com\n"
+    monkeypatch.setattr(st.connector, "catalog_read", read_then_switch)
+    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    assert st.builder_last_result is None               # example.com's rows aren't kept under example.org
+    assert "domain changed" in r.text and "bob@example.com" not in r.text, r.text[:300]
+
+
+def test_every_route_hold_passes_the_tenant_its_request_started_on():
+    """A preview route captures ``st.tenant_key()`` before its first directory read and hands it to
+    ``hold``; one that let ``hold`` read the tenant itself would bind a straddling preview to the new one."""
+    routes = Path(__file__).resolve().parent.parent / "gamgui" / "web" / "routes"
+    missing = []
+    for path in sorted(routes.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "hold"
+                    and not any(k.arg == "tenant" for k in node.keywords)):
+                missing.append(f"{path.name}:{node.lineno}")
+    assert not missing, missing
 
 
 # --- R11: nothing the old tenant returned is served under the new one --------------------------------

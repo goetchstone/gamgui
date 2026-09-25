@@ -449,6 +449,7 @@ async def bulk_page(request: Request) -> HTMLResponse:
 @router.post("/bulk/preview", response_class=HTMLResponse)
 async def bulk_preview(request: Request, store: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "", emails: Annotated[str, Form()] = "") -> HTMLResponse:
     st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the directory read: what the preview is bound to (web/previews.py)
     if st.connector is None:
         return error_partial(request, NOT_CONNECTED)
     try:
@@ -458,7 +459,7 @@ async def bulk_preview(request: Request, store: Annotated[str, Form()] = "", gro
     token = ""
     if targets and store.strip():
         token = st.previews.hold(_BULK_FLOW, _bulk_form_key(store, group, emails),
-                                 (store.strip(), [u.primary_email for u in targets]))
+                                 (store.strip(), [u.primary_email for u in targets]), tenant=tenant)
     return TEMPLATES.TemplateResponse(
         request, "_bulk_preview.html",
         {"targets": targets[:200], "count": len(targets), "store": store.strip(), "token": token}
@@ -507,6 +508,7 @@ async def bulk_retry(request: Request, job: Annotated[str, Form()] = "") -> HTML
     """Retry the N that failed (plan U5): the normal preview and confirm step for exactly a finished
     run's failed people, with its department. It writes nothing; its Apply is ``/bulk/apply``'s."""
     st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the directory read: what the preview is bound to (web/previews.py)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "_bulk_preview.html", {"error": NOT_CONNECTED, "retry": job})
     done, refusal = retry_of(st.jobs, job, "department")
@@ -519,8 +521,8 @@ async def bulk_retry(request: Request, job: Annotated[str, Form()] = "") -> HTML
     failed = {e.lower() for e in done.failed_items}
     targets = [u for u in users if u.primary_email.lower() in failed and not u.suspended]
     store = str(done.retry)
-    token = (st.previews.hold(_BULK_FLOW, retry_key(done.id), (store, [u.primary_email for u in targets]))
-             if targets else "")
+    token = (st.previews.hold(_BULK_FLOW, retry_key(done.id), (store, [u.primary_email for u in targets]),
+                              tenant=tenant) if targets else "")
     return TEMPLATES.TemplateResponse(
         request, "_bulk_preview.html",
         {"targets": targets[:200], "count": len(targets), "store": store, "token": token,

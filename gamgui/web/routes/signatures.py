@@ -125,6 +125,7 @@ async def preview(
     scope_value: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the directory read: what the preview is bound to (web/previews.py)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": NOT_CONNECTED})
     try:
@@ -133,17 +134,19 @@ async def preview(
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": friendly(exc)})
     matched = await _matched(st, users, scope_type, scope_value)
     return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL,
-                                      _preview_ctx(st, template, matched, _form_key(template, scope_type, scope_value)))
+                                      _preview_ctx(st, template, matched, _form_key(template, scope_type, scope_value),
+                                                   tenant))
 
 
-def _preview_ctx(st, template: str, matched, key) -> dict:
-    """The confirm step for ``template`` on ``matched``, both held under a single-use token for ``key``."""
+def _preview_ctx(st, template: str, matched, key, tenant: tuple) -> dict:
+    """The confirm step for ``template`` on ``matched``, both held under a single-use token for ``key``,
+    bound to ``tenant`` — the one the request read ``matched`` on (web/previews.py)."""
     sample = matched[0] if matched else None
     decision = guard.evaluate(_previews(matched), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
     return {"rendered": sig.render_signature(template, sample) if sample else "", "count": len(matched),
             "sample": sample, "warning": sig.smart_quote_warning(template),
             "typed_count": decision.requires_typed_count,
-            "token": st.previews.hold(_FLOW, key, (template, matched)) if matched else ""}
+            "token": st.previews.hold(_FLOW, key, (template, matched), tenant=tenant) if matched else ""}
 
 
 @router.post("/retry", response_class=HTMLResponse)
@@ -151,6 +154,7 @@ async def retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLRespo
     """Retry the N that failed (plan U5): the normal preview and confirm step for exactly a finished
     apply's failed people, with the template it ran. It writes nothing; its Apply is ``/apply``'s."""
     st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the directory read: what the preview is bound to (web/previews.py)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": NOT_CONNECTED, "retry": job})
     done, refusal = retry_of(st.jobs, job, "signatures")
@@ -162,7 +166,7 @@ async def retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLRespo
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": friendly(exc), "retry": job})
     failed = {e.lower() for e in done.failed_items}
     matched = [u for u in users if u.primary_email.lower() in failed and not u.suspended]
-    ctx = _preview_ctx(st, str(done.retry), matched, retry_key(done.id))
+    ctx = _preview_ctx(st, str(done.retry), matched, retry_key(done.id), tenant)
     return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL,
                                       {**ctx, "retry": done.id, "gone": len(failed) - len(matched)})
 

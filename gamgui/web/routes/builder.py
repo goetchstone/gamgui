@@ -129,10 +129,11 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     """The single-command preview: the exact `gam …`, the guard's decision, and its confirm step —
     for a mutation, holding what it shows under the token its Run button posts."""
     st = app_state(request)
+    tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
     decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
     blocked = await _alias_deletes(st, decision)
     token = "" if cmd.risk == RiskLevel.READ_ONLY or blocked else st.previews.hold(
-        _FLOW, _form_key(cmd, slots), (list(argv), target))
+        _FLOW, _form_key(cmd, slots), (list(argv), target), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
         "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
         "pending_transfers": await _pending_transfers(st.connector, decision),
@@ -140,12 +141,16 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     })
 
 
-async def _render_read(request: Request, out: str, cmd, argv, target: str) -> HTMLResponse:
+async def _render_read(request: Request, out: str, cmd, argv, target: str, tenant: tuple) -> HTMLResponse:
     """Render a read command's output as a table when it looks tabular (CSV/JSON), else verbatim.
 
     Generic read commands span `print` (CSV/JSON → table) and `info`/`show` (human text → table
     would be garbage), so pick the renderer from the shape rather than forcing every read into a
-    grid."""
+    grid. ``tenant`` is the one the read started on: a switch that landed while it ran has already
+    dropped the last result, so the old tenant's rows are neither kept for the CSV nor shown under
+    the new one."""
+    if app_state(request).tenant_key() != tenant:
+        return error_partial(request, _SWITCHED)
     gam = _gam_str(argv)
     text = (out or "").strip()
     first = text.splitlines()[0] if text else ""
@@ -168,6 +173,7 @@ RESULT_ROWS = 10    # result rows a page — the table sits under the command's 
 _EMAIL = re.compile(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}")
 _NO_RESULT = "No results — run a read command first."
 _REPLACED = "This result was replaced by a newer run — run the command again to see it."
+_SWITCHED = "The active domain changed while this ran — run it again to read the domain that is active now."
 
 
 def _columns_and_texts(last: dict) -> tuple:
@@ -404,7 +410,7 @@ async def preview(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse
 @router.post("/run", response_class=HTMLResponse)
 async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     st = app_state(request)
-    conn = st.connector
+    tenant, conn = st.tenant_key(), st.connector
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
     cmd = _catalog(request).by_id(cid)
@@ -427,7 +433,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
             out = await conn.catalog_read(cmd, argv, target)
         except Exception as exc:  # noqa: BLE001
             return error_partial(request, friendly(exc), _details(exc))
-        return await _render_read(request, out, cmd, argv, target)
+        return await _render_read(request, out, cmd, argv, target, tenant)
     # A mutation runs only from its preview: the held command, when the live form still matches it.
     # Otherwise the answer is a fresh preview of what the form holds now, to check before running.
     form = await request.form()
@@ -498,9 +504,10 @@ def _seq_previews(seq) -> list:
 async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLResponse:
     """The sequence's confirm step, holding the steps it shows under the token its Run form posts."""
     st = app_state(request)
+    tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
     decision = guard_mod.evaluate(_seq_previews(seq))
     blocked = await _alias_deletes(st, decision)
-    token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq])
+    token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
         "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
         "token": token, "pending_transfers": await _pending_transfers(st.connector, decision)})
