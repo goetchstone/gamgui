@@ -674,6 +674,91 @@ def test_the_open_tray_is_on_top_names_each_stop_and_closes_when_focus_leaves(pa
             job.finish()
 
 
+# Each control (or the box itself) of the open popup `sel`: the points of it that show inside both the popup's
+# box and the window (centre, two inset corners) where elementFromPoint lands outside the popup — something
+# drawn over it (or, given `only`, something inside `only` drawn over it).
+POPUP_COVERED = """((sel, only) => { const box = document.querySelector(sel), b = box.getBoundingClientRect();
+  const inside = ([x, y]) => x > b.left && x < b.right && y > b.top && y < b.bottom
+                             && x > 0 && y > 0 && x < innerWidth && y < innerHeight;
+  const els = [...box.querySelectorAll('a, button, [role=option]')];
+  return (els.length ? els : [box]).flatMap(el => {
+    const r = el.getBoundingClientRect();
+    return [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 2, r.top + 2], [r.right - 2, r.bottom - 2]]
+      .filter(inside).map(([x, y]) => document.elementFromPoint(x, y))
+      .filter(hit => !hit || !box.contains(hit)).filter(hit => !only || (hit && hit.closest(only)))
+      .map(hit => sel + ' "' + el.textContent.trim().slice(0, 30) + '" under '
+                  + (hit ? (hit.closest('[id]') || {id: '?'}).id + '>' + hit.tagName : 'nothing'));
+  }); })(%s, %s)"""
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(180)
+def test_the_header_draws_over_no_popup_opened_in_main(page):
+    """Re-check G3: the header is z-50 so the open jobs tray stays above the Users table's sticky header
+    row (review R2) — which puts the whole header bar above <main>'s own positioned popups too: the
+    Builder's fixed row-actions menu (z-40), its User/Group pickers' lists and the Groups board's people
+    suggestions (z-30). Opened, each is on top wherever it shows: at the app window's size, and at its
+    minimum (900x600) scrolled so the header is only partly in view. (At the minimum a Builder picker's
+    list runs past its scrolling form panel and is clipped by it — overflow, not the header — so there only
+    the header is held to drawing nothing over a popup.)"""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+
+    only = None                                               # anything over a popup, at the app's own size
+
+    def covered(sel: str) -> list[str]:
+        assert p.c.js(f"(e => !!e && e.getClientRects().length > 0)(document.querySelector({json.dumps(sel)}))"), sel
+        return p.c.js(POPUP_COVERED % (json.dumps(sel), json.dumps(only)))
+
+    def row_actions(scroll: int) -> list[str]:
+        p.c.js(f"window.scrollTo(0, {scroll})")
+        p.click("#builder-result .cell-act")                  # the first address: the top of the result
+        p.wait("!document.getElementById('row-actions').classList.contains('hidden')")
+        found = covered("#row-actions")
+        p.c.js("document.body.click()")
+        return found
+
+    try:
+        for width, height, scroll in ((W, H, 0), (900, 600, 0), (900, 600, 40)):
+            p.c.cmd("Emulation.setDeviceMetricsOverride", width=width, height=height, deviceScaleFactor=1,
+                     mobile=False)
+            where, only = f"{width}x{height} scrolled {scroll}", None if (width, height) == (W, H) else "header"
+            p.goto("/builder", "document.querySelector('#catalog button')")
+            p.fill("#cat-controls input[name=q]", "print groups")
+            p.settle("/List groups\\./.test(document.querySelector('#catalog').innerText)")
+            p.click("#catalog button", "Build")
+            p.settle("document.querySelector('#cmd-form form')")
+            p.click("#cmd-form button", "Preview")
+            p.settle("document.querySelector('#builder-result button')")
+            p.click("#builder-result button", "Run")
+            p.settle("document.querySelector('#builder-result .cell-act')")
+            assert row_actions(scroll) == [], where
+            if only is None:                                  # the probe can fail: a menu moved onto the bar is seen
+                p.click("#builder-result .cell-act")
+                p.c.js("document.getElementById('row-actions').style.top = '-30px'")   # its first items on the bar
+                assert covered("#row-actions"), "a menu under the header went unseen"
+                p.c.js("document.body.click()")
+            p.c.js("htmx.ajax('GET', '/builder/command/build.add_delegate', {target: '#cmd-form', swap: 'innerHTML'})")
+            p.settle("document.getElementById('slot-email')")
+            p.c.js(f"window.scrollTo(0, {scroll})")
+            p.click("#slot-email", action="focus")
+            p.settle("document.getElementById('slot-email').getAttribute('aria-expanded') === 'true'")
+            assert covered("#slot-email ~ .upick-menu, .upick-wrap:has(#slot-email) .upick-menu") == [], where
+
+            p.goto("/groups", "document.querySelector('#group-results [data-group]')")
+            p.click("#group-results [data-group]")
+            p.settle("document.querySelector('#member-list table')")
+            p.c.js(f"window.scrollTo(0, {scroll})")
+            p.click("#member-email", action="focus")
+            p.fill("#member-email", "a")
+            p.settle("document.querySelector('#people-results [role=option]')")
+            assert covered("#people-results") == [], where
+        assert p.c.js("window.__errs") == []
+    finally:
+        p.c.cmd("Emulation.setDeviceMetricsOverride", width=W, height=H, deviceScaleFactor=1, mobile=False)
+
+
 @pytest.mark.a11y
 @pytest.mark.timeout(120)
 def test_the_groups_board_works_from_the_keyboard(page):
@@ -1039,6 +1124,51 @@ def test_every_form_field_in_a_template_has_an_accessible_name():
         and not (in_label or a.get("aria-label") or a.get("aria-labelledby") or (name, a.get("id")) in label_for)
     ]
     assert not unnamed, "form fields with no accessible name:\n  " + "\n  ".join(unnamed)
+
+
+def _button_names(template: str, **ctx) -> list[str]:
+    """Each <button>'s accessible name in a rendered partial: its aria-label, else its text (sr-only too)."""
+    from gamgui.web.server import TEMPLATES
+
+    names: list[str] = []
+
+    class Walk(HTMLParser):
+        depth, text, label = 0, "", None
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "button":
+                self.depth, self.text, self.label = 1, "", dict(attrs).get("aria-label")
+            elif self.depth:
+                self.depth += 1
+
+        def handle_endtag(self, tag):
+            if self.depth:
+                self.depth -= 1
+                if not self.depth:
+                    names.append(self.label or re.sub(r"\s+", " ", self.text).strip())
+
+        def handle_data(self, data):
+            if self.depth:
+                self.text += data
+
+    Walk().feed(TEMPLATES.env.get_template(template).render(**ctx))
+    return names
+
+
+def test_a_saved_lists_repeated_buttons_name_their_item():
+    """Re-check G3: a saved signature template's Load and Delete, and a role's Edit and Delete, repeat on
+    every row — a screen reader's button list read "Delete, Delete, Delete". Each names its item, as a
+    catalog row's Build/Copy and a tray Stop do."""
+    templates = [{"name": "Sales", "body": "<b>{name}</b>"}, {"name": "Support", "body": "{email}"}]
+    roles = [{"name": n, "steps": ["Add to all-staff"], "org_unit": "", "signature": "", "groups": [],
+              "calendars": []} for n in ("Engineer", "Recruiter")]
+    for template, ctx, items in (("_sig_templates.html", {"templates": templates}, ("Sales", "Support")),
+                                 ("_onboard_roles.html", {"roles": roles}, ("Engineer", "Recruiter"))):
+        names = _button_names(template, **ctx)
+        repeated = sorted({n for n in names if names.count(n) > 1})
+        assert not repeated, f"{template}: buttons that share a name: {repeated}"
+        for verb in (("Load", "Delete") if template == "_sig_templates.html" else ("Edit", "Delete")):
+            assert [n for n in names if n.startswith(verb)] == [f"{verb} {i}" for i in items], (template, names)
 
 
 def test_a_focus_target_can_take_focus_and_a_dropped_outline_leaves_a_ring():

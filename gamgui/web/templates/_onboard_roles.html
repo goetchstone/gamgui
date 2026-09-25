@@ -8,9 +8,9 @@
         <button type="button" class="text-xs text-brand-blueink hover:underline" data-action="ob-edit"
                 data-name="{{ r.name }}" data-steps="{{ r.steps | join('\n') }}"
                 data-org="{{ r.org_unit }}" data-signature="{{ r.signature }}"
-                data-groups="{{ r.groups | join('\n') }}" data-calendars="{{ r.calendars | join('\n') }}">Edit</button>
+                data-groups="{{ r.groups | join('\n') }}" data-calendars="{{ r.calendars | join('\n') }}">Edit<span class="sr-only"> {{ r.name }}</span></button>
         <button class="text-xs text-red-600 hover:underline"
-                hx-post="/onboard/role/delete" hx-vals='{"name": {{ r.name | tojson }}}' hx-target="#onboard-roles" hx-swap="innerHTML">Delete</button>
+                hx-post="/onboard/role/delete" hx-vals='{"name": {{ r.name | tojson }}}' hx-target="#onboard-roles" hx-swap="innerHTML">Delete<span class="sr-only"> {{ r.name }}</span></button>
       </span>
     </div>
     <ul class="mt-1 list-disc pl-5 text-xs text-brand-grayink">{% for s in r.steps %}<li>{{ s }}</li>{% endfor %}</ul>
