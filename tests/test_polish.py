@@ -190,7 +190,9 @@ def test_makefile_setup_selects_the_interpreter_via_a_variable():
     requires-python >= 3.10. The interpreter must come from the overridable PYTHON variable."""
     makefile = (Path(__file__).parent.parent / "Makefile").read_text()
     assert "PYTHON ?=" in makefile, "make setup must honour an overridable PYTHON"
-    setup = makefile.split("\nsetup:", 1)[1].split("\n\n", 1)[0]
+    # Both installs (the locked `setup`, the flexible `setup-latest`) build the venv through `venv`.
+    assert "\nsetup: venv\n" in makefile and "\nsetup-latest: venv\n" in makefile
+    setup = makefile.split("\nvenv:", 1)[1].split("\n\n", 1)[0]
     assert "-m venv" in setup
     for line in setup.splitlines():
         assert "python3 -m venv" not in line, f"setup hardcodes the system interpreter: {line.strip()}"

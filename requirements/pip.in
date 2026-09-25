@@ -1,0 +1,4 @@
+# The pip that installs the other locks. Locked into pip.txt by `make lock`; `make setup` and
+# scripts/build_app.sh install it first with --require-hashes, because their --build-constraint
+# needs pip 25.3+ and Python 3.10-3.12 bundle an older pip.
+pip>=25.3

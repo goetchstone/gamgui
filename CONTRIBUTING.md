@@ -22,7 +22,7 @@ nothing suitable is installed, `make setup` says so and stops instead of buildin
 
 ```bash
 git clone <your-fork-url> && cd gamgui
-make setup        # creates .venv (Python 3.10+) and installs dev + native-window deps
+make setup        # creates .venv (Python 3.10+), installs the hash-locked dev + native-window deps
 make gam          # vendors the GAM7 binary into gamgui/resources/gam7 (needs network)
 make test         # runs the offline test suite
 make run          # launches the app
@@ -106,11 +106,17 @@ only to commands confidently classified `RiskLevel.READ_ONLY`.
 
 ## Dependencies
 
-`pyproject.toml` holds the flexible ranges, and `make setup` installs from them. What CI runs and
-what the `.app` ships are hash-locked instead: `requirements/dev.txt` (the runtime dependencies plus
-the test and lint tools) and `requirements/app.txt` (the runtime dependencies plus pywebview and
-PyInstaller), each compiled from the `.in` file beside it and installed with
-`pip install --require-hashes`. To add, remove or re-range a dependency:
+`pyproject.toml` holds the flexible ranges; only `make setup-latest` installs from them (newest
+allowed, no hash checks — for trying a dependency before locking it). What CI runs, what `make setup`
+installs and what the `.app` ships are hash-locked instead: `requirements/dev.txt` (the runtime
+dependencies plus the test and lint tools, and the hatchling that builds the project), and
+`requirements/app.txt` (the runtime dependencies plus pywebview and PyInstaller), each compiled from
+the `.in` file beside it and installed with `pip install --require-hashes`. `requirements/pip.txt`
+locks the pip that `make setup` and `make app` install first: they pass pip's `--build-constraint`
+(pip 25.3+, so pywebview's source-only `proxy-tools` is built by the locked setuptools), and Python
+3.10–3.12 bundle an older pip. `make setup` installs dev and app together in one resolve (the two
+locks must agree on every shared pin — `tests/test_locks.py` checks), then the project with
+`--no-deps --no-build-isolation`. To add, remove or re-range a dependency:
 
 1. edit `pyproject.toml` **and** the matching `requirements/*.in` — `tests/test_locks.py` fails on
    either one alone;
@@ -121,7 +127,7 @@ PyInstaller), each compiled from the `.in` file beside it and installed with
 The locks are made with `uv pip compile --universal` rather than pip-tools because one file then
 installs on Linux and macOS across Python 3.10–3.14 (`pip-compile` locks for the interpreter it runs
 on, and would need a file per CI job). `pip install --require-hashes -r requirements/dev.txt` in a
-fresh venv gives you exactly CI's environment. Dependabot keeps both locks current through its `uv`
+fresh venv gives you exactly CI's environment. Dependabot keeps the locks current through its `uv`
 ecosystem, which regenerates them with the same flags.
 
 ## Before opening a PR

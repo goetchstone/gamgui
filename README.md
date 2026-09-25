@@ -256,7 +256,7 @@ Linux too). No Google credentials are needed to build or test.
 
 ```bash
 git clone <repo-url> && cd gamgui
-make setup     # create .venv, install dev + native-window deps
+make setup     # create .venv, install the hash-locked dev + native-window deps
 make gam       # vendor the pinned GAM7 binary into gamgui/resources/gam7 (needs network)
 make test      # offline test suite — uses a mock gam, no binary/credentials required
 make lint      # ruff (the bug-catching rule set), mypy (core + web) and app.css freshness, as CI enforces
@@ -269,10 +269,17 @@ make run       # launch the app (native window; without pywebview, a browser URL
 nothing newer, `make setup` stops and says how to get one (`brew install python@3.13` or the
 python.org installer). Point it at a specific interpreter with `make setup PYTHON=python3.13`.
 
-`make help` lists all targets. Prefer raw commands? `pip install -e ".[dev,desktop]"`, then
-`scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`. That installs `pyproject.toml`'s flexible
-ranges; CI installs the exact, hash-locked set instead —
-`pip install --require-hashes -r requirements/dev.txt` reproduces it (see CONTRIBUTING.md).
+The venv `make setup` builds holds exactly what CI tests: it installs `requirements/dev.txt` and
+`requirements/app.txt` with `pip install --require-hashes` (first a locked pip, since Python
+3.10–3.12 bundle one too old for the install's `--build-constraint`), then the project itself with
+`--no-deps`. That is the venv `make run` starts the app from, credentials and all, so a package
+swapped on the index fails the install instead. `make setup-latest` builds the same venv from
+`pyproject.toml`'s flexible ranges at their newest, with no hash checks — for trying a dependency
+ahead of `make lock`, not for running against a real domain. To start from nothing, `make clean`
+first: pip leaves a package that is already installed at the pinned version alone.
+
+`make help` lists all targets. Prefer raw commands? See the `setup` target in the `Makefile` for the
+locked install, then `scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`.
 
 The GAM7 binary is **not committed** (platform-specific, large) — `make gam` / `scripts/fetch_gam.sh`
 fetches the pinned, tested version from the official releases and verifies it against the committed
@@ -281,7 +288,7 @@ checksum (the pin's source of truth is `EXPECTED_GAM_VERSION` — see "Staying c
 ### Build a standalone `.app` (macOS)
 
 ```bash
-make app       # PyInstaller -> dist/GamGUI.app (bundles Python + the GAM7 binary)
+make app       # PyInstaller -> dist/GamGUI.app (bundles Python + the GAM7 binary; needs network)
 build/venv/bin/python scripts/check_app.py dist/GamGUI.app   # optional: CI's smoke check of the bundle
 ```
 
@@ -380,8 +387,9 @@ repository settings: [`.github/workflows/codeql.yml`](.github/workflows/codeql.y
 `security-extended` suite, and skips `tests/`, the vendored GAM release, and vendored browser
 libraries — the config explains why for each.
 
-**Dependencies.** CI and the `.app` build install Python packages only from hash-locked files
-(`requirements/dev.txt`, `requirements/app.txt`, `pip install --require-hashes`), so a package
+**Dependencies.** CI, `make setup` and the `.app` build install Python packages only from
+hash-locked files (`requirements/dev.txt`, `requirements/app.txt` and the pip that installs them,
+`requirements/pip.txt`, with `pip install --require-hashes`), so a package
 swapped on the index fails the install instead of shipping.
 [`.github/dependabot.yml`](.github/dependabot.yml) watches those locks and the GitHub Actions weekly
 and — with the dependency graph enabled — opens PRs for known CVEs. The actions are pinned by commit

@@ -1,4 +1,4 @@
-.PHONY: setup gam css test cov a11y lint lock run app clean help
+.PHONY: venv setup setup-latest gam css test cov a11y lint lock run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -11,8 +11,9 @@ PYTHON ?=
 PYTHON_CANDIDATES := python3.14 python3.13 python3.12 python3.11 python3.10 python3
 
 help:
-	@echo "make setup   - create venv and install (dev + native window); needs Python 3.10+"
+	@echo "make setup   - create venv and install the hash-locked deps (dev + native window); needs Python 3.10+"
 	@echo "               override the interpreter with: make setup PYTHON=python3.13"
+	@echo "make setup-latest - the same venv from pyproject's flexible ranges (newest allowed, NOT hash-checked)"
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
 	@echo "make css     - rebuild gamgui/web/static/app.css (after a template adds a Tailwind class)"
 	@echo "make test    - run the offline test suite"
@@ -25,7 +26,7 @@ help:
 	@echo "make app     - build the standalone macOS .app (PyInstaller, macOS only)"
 	@echo "make clean   - remove venv and build artifacts"
 
-setup:
+venv:
 	@py="$(PYTHON)"; \
 	if [ -n "$$py" ]; then \
 	  "$$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null || { \
@@ -45,6 +46,20 @@ setup:
 	fi; \
 	echo "creating $(VENV) with $$py ($$("$$py" -V 2>&1))"; \
 	"$$py" -m venv $(VENV)
+
+# What CI tests, hash for hash: pip first from its own lock (--build-constraint needs pip >= 25.3, and
+# Python 3.10-3.12 bundle an older one), then both locks in one resolve — the app lock for pywebview,
+# whose source-only proxy-tools is built by the locked setuptools — then the project itself with no
+# dependencies, built by the hatchling the dev lock holds instead of one fetched unhashed.
+setup: venv
+	$(PY) -m pip install -q --require-hashes -r requirements/pip.txt
+	$(PY) -m pip install --require-hashes --build-constraint requirements/app.txt \
+	  -r requirements/dev.txt -r requirements/app.txt
+	$(PY) -m pip install -q --no-deps --no-build-isolation -e .
+
+# pyproject's flexible ranges at their newest: for trying a dependency ahead of `make lock`. Nothing
+# here is hash-checked, so don't run the app against a real tenant from this venv.
+setup-latest: venv
 	$(PY) -m pip install -U pip
 	$(PY) -m pip install -e ".[dev,desktop]"
 
@@ -72,7 +87,7 @@ lint:
 # installs the same file. Dependabot's uv ecosystem re-runs this command from the lock's own header.
 lock:
 	@test -x $(VENV)/bin/uv || { echo "make lock: no uv in $(VENV) (run make setup)" >&2; exit 1; }
-	for f in app dev; do \
+	for f in app dev pip; do \
 	  $(VENV)/bin/uv pip compile --quiet --universal --generate-hashes --python-version 3.10 $(ARGS) \
 	    --output-file=requirements/$$f.txt requirements/$$f.in || exit 1; \
 	done

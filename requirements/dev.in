@@ -1,5 +1,7 @@
 # What CI runs the suite, ruff and mypy with. Locked into dev.txt by `make lock`. Keep these in step
-# with pyproject.toml's dependencies and dev extra (tests/test_locks.py fails if they drift).
+# with pyproject.toml's dependencies, dev extra and build backend (tests/test_locks.py fails if they
+# drift). The backend is here because `make setup` installs the project with --no-build-isolation;
+# editables is what hatchling asks for to build it editable (get_requires_for_build_editable).
 fastapi>=0.141
 starlette>=1.3.1
 uvicorn>=0.29
@@ -14,3 +16,5 @@ httpx>=0.27
 ruff==0.16.8
 mypy==2.3.1
 uv==0.12.18
+hatchling
+editables~=0.3

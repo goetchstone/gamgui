@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the standalone GamGUI.app (macOS) with PyInstaller.
-# Prereqs: a Python 3.10+ to freeze — `make setup`'s .venv, or PYTHON=/path/to/python3.x. Vendors
+# Prereqs: a Python 3.10+ to freeze — `make setup`'s .venv, or PYTHON=/path/to/python3.x — and
+# network access to PyPI for the locked dependencies (requirements/pip.txt, then app.txt). Vendors
 # GAM7 automatically if missing.
 set -euo pipefail
 
@@ -32,10 +33,12 @@ echo "==> Installing the locked dependencies into a fresh build venv..."
 # stack — comes from requirements/app.txt, each file checked against its committed SHA-256. A venv
 # of its own, so nothing the dev venv happens to have ends up in the .app. The lock doubles as the
 # build constraint: pywebview's proxy-tools ships only as source, and this hash-checks the setuptools
-# that builds it. --build-constraint needs pip >= 25.3 (the one bundled with Python 3.14 has it).
+# that builds it. --build-constraint needs pip >= 25.3, and Python 3.10-3.12 bundle an older pip
+# ("no such option"), so the build venv first gets the pip locked in requirements/pip.txt.
 BUILD_VENV="build/venv"
 rm -rf "$BUILD_VENV"
 "$PY" -m venv "$BUILD_VENV"
+"$BUILD_VENV/bin/python" -m pip install -q --require-hashes -r requirements/pip.txt
 "$BUILD_VENV/bin/python" -m pip install -q --require-hashes \
   --build-constraint requirements/app.txt -r requirements/app.txt
 

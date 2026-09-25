@@ -96,7 +96,9 @@ guarding them:
 - **The `.app`'s Python dependencies are hash-locked.** `scripts/build_app.sh` installs them, in a
   fresh virtualenv, only from `requirements/app.txt` with `pip install --require-hashes`: every
   file, and the build backend of the one package that ships only as source, must match a committed
-  SHA-256. CI installs `requirements/dev.txt` the same way, from wheels only.
+  SHA-256. CI installs `requirements/dev.txt` the same way, from wheels only, and `make setup` — the
+  from-source venv `make run` starts the app from — installs both locks with `--require-hashes`.
+  The pip that runs these installs is itself locked (`requirements/pip.txt`).
 - **The UI's CSS is built ahead of time, by a pinned tool.** `scripts/build_css.sh` runs the
   Tailwind standalone CLI only if it matches the SHA-256 committed for that platform in
   `scripts/tailwind_checksums.txt` (no pin, no run), and the unminified output is committed, so a
