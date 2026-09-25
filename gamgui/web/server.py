@@ -56,6 +56,17 @@ def _active_tenant(request) -> tuple:
     return conn.domain, admin
 
 
+def ago(seconds: Optional[float]) -> str:
+    """A cached list's age in words, for its "as of" label (plan U12b)."""
+    s = int(seconds or 0)
+    if s < 60:
+        return "just now"
+    if s < 3600:
+        return f"{s // 60} min ago"
+    return f"{s // 3600} h ago" if s < 86400 else f"{s // 86400} d ago"
+
+
+TEMPLATES.env.filters["ago"] = ago
 TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
 TEMPLATES.env.globals["active_tenant"] = _active_tenant
 TOKEN_COOKIE = "gamgui_token"
@@ -81,14 +92,18 @@ class AppState:
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
 
-    async def users(self, force: bool = False) -> list:
-        """The cached user list (one ``gam print users`` shared by the list + reports)."""
+    async def users(self, force: bool = False, stale_ok: bool = False) -> list:
+        """The cached user list (one ``gam print users`` shared by the list + reports). ``stale_ok`` only
+        for a page that shows its age (``as_of`` in the template): past the TTL it gets the old list while
+        one refresh runs behind it (plan U12b). Anything that decides on the list — offboarding's
+        address check — leaves it off, so it reads fresh or fails."""
         conn = self.connector
         if conn is None:
             return []
         from ..core.gam.commands import CACHE_FIELDS
 
-        return await self.user_cache.get(lambda: conn.list_users(fields=CACHE_FIELDS), force=force)
+        return await self.user_cache.get(lambda: conn.list_users(fields=CACHE_FIELDS), force=force,
+                                         stale_ok=stale_ok)
 
     def invalidate_users(self) -> None:
         self.user_cache.invalidate()
@@ -101,12 +116,12 @@ class AppState:
         self.user_cache.patch(lambda u: u.primary_email.lower() == key,
                               (lambda u: replace(u, **changes)) if changes else None)
 
-    async def groups(self, force: bool = False) -> list:
-        """The cached group list (one ``gam print groups``), shared by the onboarding group picker."""
+    async def groups(self, force: bool = False, stale_ok: bool = False) -> list:
+        """The cached group list (one ``gam print groups``), shared by the pickers; ``stale_ok`` as for ``users``."""
         conn = self.connector
         if conn is None:
             return []
-        return await self.group_cache.get(conn.list_groups, force=force)
+        return await self.group_cache.get(conn.list_groups, force=force, stale_ok=stale_ok)
 
     def invalidate_groups(self) -> None:
         self.group_cache.invalidate()

@@ -54,7 +54,7 @@
   </div>
 </div>
 <div class="mt-2 flex items-center justify-between text-xs text-brand-grayink">
-  <span{% if focus %} tabindex="-1" data-focus{% endif %}>{{ total }} total{% if q or scope != 'all' %} (filtered){% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + users | length }} · page {{ page }} of {{ pages }}{% endif %}</span>
+  <span{% if focus %} tabindex="-1" data-focus{% endif %}>{{ total }} total{% if q or scope != 'all' %} (filtered){% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + users | length }} · page {{ page }} of {{ pages }}{% endif %}{% if as_of is defined %} · {% include "_as_of.html" %}{% endif %}</span>
   {% if pages > 1 %}
   <nav class="flex items-center gap-2" aria-label="User pages">
     {% for id, label, to in (("users-prev", "Prev", page - 1), ("users-next", "Next", page + 1)) %}

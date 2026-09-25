@@ -375,7 +375,7 @@ def test_signatures_apply_writes_the_previewed_people_and_asks_their_count(clien
     st = client.app.state.gamgui
     grown = client.portal.call(st.users) + [GAMUser(primary_email="dan@example.com", given_name="Dan")]
 
-    async def users(force=False):
+    async def users(force=False, stale_ok=False):
         return grown
 
     monkeypatch.setattr(st, "users", users)
@@ -699,7 +699,7 @@ def test_bulk_store_apply_refuses_someone_no_longer_active(client, gam_calls, mo
     # Alice was active at the preview; by Apply she is suspended or deleted, so nothing is written.
     _, token = _bulk_preview(client, **BULK_ALICE)
 
-    async def users(force=False):
+    async def users(force=False, stale_ok=False):
         return directory
 
     monkeypatch.setattr(client.app.state.gamgui, "users", users)
@@ -1671,7 +1671,7 @@ def test_offboard_run_rechecks_the_directory(client, gam_calls, monkeypatch):
     st = client.app.state.gamgui
     directory = [u for u in client.portal.call(st.users) if u.primary_email != MGR]
 
-    async def users(force=False):
+    async def users(force=False, stale_ok=False):
         return directory
 
     monkeypatch.setattr(st, "users", users)

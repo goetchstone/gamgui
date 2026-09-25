@@ -104,7 +104,7 @@ plan's Phase 0 F1–F3.
   calendar and event delete and the groups board's add/remove go through `write_failed`. Still
   leading with GAM's raw line: the Builder's single Run result (`builder.py` ~:358), onboarding's
   "Couldn't create the account: …" and offboarding's step log) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
-  unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; U12a `e86d580`: a title/department save, suspend/unsuspend, a delete and each accepted bulk-department write patch the one cached record — `st.patch_user` — instead of dropping the directory, the list keeping its last full fetch's age so the TTL and Refresh still re-read it; offboarding and a tenant switch still drop it; stale-while-refreshing with an "as of" label is open) · U8 and U13 `229e7bc`
+  unverified) · U12, whole now (domain-wide calls get a 1 h timeout, `2e8eace`; U12a `e86d580`: a title/department save, suspend/unsuspend, a delete and each accepted bulk-department write patch the one cached record — `st.patch_user` — instead of dropping the directory, the list keeping its last full fetch's age so the TTL and Refresh still re-read it; offboarding and a tenant switch still drop it; U12b: past the TTL the Users table, Reports and the pickers get the old list while one background refresh runs, each saying "as of N min ago" with a Refresh — offboarding's address check reads fresh or fails closed, and the alias-delete lookups never read the cache) · U8 and U13 `229e7bc`
   (the Users list's view is its URL: `/users/table` answers `HX-Replace-Url` — replaced, not pushed, or a search
   typed a pause at a time leaves a Back step per pause — and `/users` renders any view it is given; each row's
   detail link carries the view as `back`, so "← Users", the native window's only Back, reopens it, only the
@@ -497,7 +497,7 @@ tenant without per-action permission.
 - **A9** An automated axe-core check over the main screens in CI (M; needs a headless browser).
 
 ## Phase 5 — Usability
-*Status: U1, U4, U7, U8, U13, U14 APPLIED; U5, U9, U11, U12 partly (see Status by item); the rest open.*
+*Status: U1, U4, U7, U8, U12, U13, U14 APPLIED; U5, U9, U11 partly (see Status by item); the rest open.*
 - **U1 Builder filter sees only 100 rows (S–M).** `_records_table.html:16` renders `records[:100]`
   and the "Filter rows" / "External only" controls filter only those — an external-sharing audit on
   5,000 rows can falsely show nothing. Filter server-side over the retained result, or ship all rows

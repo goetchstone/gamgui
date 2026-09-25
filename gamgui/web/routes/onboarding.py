@@ -25,7 +25,7 @@ from ...core.onboarding import RoleTemplate, RunbookStore
 from ..jobs import Job, register_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, app_state, error_partial, signature_store
+from ._common import NOT_CONNECTED, app_state, as_of, error_partial, signature_store
 
 router = APIRouter(prefix="/onboard")
 
@@ -323,13 +323,13 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
 # --- pickers: search the tenant's groups + shared calendars while editing a role -----------
 
 @router.get("/search/groups", response_class=HTMLResponse)
-async def search_groups(request: Request, q: str = "") -> HTMLResponse:
+async def search_groups(request: Request, q: str = "", refresh: int = 0) -> HTMLResponse:
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
                                           {"field": "groups", "items": [], "error": NOT_CONNECTED})
     try:
-        groups = await st.groups()   # cached `gam print groups`
+        groups = await st.groups(force=bool(refresh), stale_ok=True)   # cached; the picker says how old
     except Exception as exc:  # noqa: BLE001
         return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
                                           {"field": "groups", "items": [], "error": "Couldn't list groups: " + str(exc)})
@@ -341,7 +341,8 @@ async def search_groups(request: Request, q: str = "") -> HTMLResponse:
         if len(items) >= 15:
             break
     return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
-                                      {"field": "groups", "items": items, "error": None})
+                                      {"field": "groups", "items": items, "error": None, "q": q,
+                                       **as_of(st.group_cache)})
 
 
 @router.get("/search/calendars", response_class=HTMLResponse)

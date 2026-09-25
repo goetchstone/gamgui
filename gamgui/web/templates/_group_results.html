@@ -17,3 +17,9 @@
 {% else %}
 <p class="text-sm text-brand-grayink">{% if find_q %}No group matches “{{ find_q }}”.{% else %}No groups yet.{% endif %}</p>
 {% endif %}
+{% if as_of is defined and not find_error %}
+<p class="mt-1 text-[11px] text-brand-grayink">Groups {% include "_as_of.html" %} ·
+  <button type="button" title="Reload from Google" class="underline hover:text-brand-black"
+          hx-get="/groups/search?refresh=1&amp;q={{ find_q | urlencode }}&amp;selected={{ selected | default('') | urlencode }}"
+          hx-target="#group-results" hx-swap="innerHTML">Refresh</button></p>
+{% endif %}

@@ -15,3 +15,9 @@
 {% else %}
 <p class="mt-1 text-xs text-brand-grayink">No matches.</p>
 {% endif %}
+{% if as_of is defined and not error %}
+<p class="mt-1 text-[11px] text-brand-grayink">Groups {% include "_as_of.html" %} ·
+  <button type="button" title="Reload from Google" class="underline hover:text-brand-black"
+          hx-get="/onboard/search/groups?refresh=1&amp;q={{ q | default('') | urlencode }}"
+          hx-target="#ob-group-picker" hx-swap="innerHTML">Refresh</button></p>
+{% endif %}

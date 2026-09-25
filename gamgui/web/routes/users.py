@@ -27,7 +27,7 @@ from ...core.signatures import smart_quote_warning
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, GAM_TROUBLE, connector, error_partial, friendly, write_failed
+from ._common import NOT_CONNECTED, GAM_TROUBLE, as_of, connector, error_partial, friendly, write_failed
 
 router = APIRouter(prefix="/users")
 
@@ -138,7 +138,7 @@ async def users_page(request: Request, q: str = "", scope: str = "all", page: in
         return TEMPLATES.TemplateResponse(request, _USERS_PAGE, {"connected": False})
     view = (q, scope, page, sort, desc, size)
     try:
-        users = await st.users()
+        users = await st.users(stale_ok=True)   # the table footer says how old it is
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _USERS_PAGE,
@@ -146,7 +146,8 @@ async def users_page(request: Request, q: str = "", scope: str = "all", page: in
              **_table_context([], *view)},
         )
     return TEMPLATES.TemplateResponse(
-        request, _USERS_PAGE, {"connected": True, "domain": st.connector.domain, **_table_context(users, *view)}
+        request, _USERS_PAGE,
+        {"connected": True, "domain": st.connector.domain, **_table_context(users, *view), **as_of(st.user_cache)},
     )
 
 
@@ -159,10 +160,10 @@ async def users_table(
     if st.connector is None:
         return error_partial(request, "Not connected — run setup first.")
     try:
-        users = await st.users(force=bool(refresh))
+        users = await st.users(force=bool(refresh), stale_ok=True)
     except Exception as exc:
         return error_partial(request, friendly(exc, _TRY_AGAIN))
-    ctx = _table_context(users, q, scope, page, sort, desc, size)
+    ctx = {**_table_context(users, q, scope, page, sort, desc, size), **as_of(st.user_cache)}
     ctx["focus"] = request.headers.get("HX-Trigger") in _PAGER_IDS
     # The address bar follows the view (plan U8), so Back from a user, or a reload, reopens it. Replaced,
     # not pushed: a search typed a pause at a time would otherwise leave a Back step per pause.

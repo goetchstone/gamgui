@@ -60,7 +60,7 @@ def test_the_group_finder_matches_address_or_name_and_is_capped(client, monkeypa
     assert "it@example.com" in client.get("/groups/search", params={"q": "IT"}).text      # by name
     assert "No group matches" in client.get("/groups/search", params={"q": "zzz"}).text
 
-    async def many(force=False):
+    async def many(force=False, stale_ok=False):
         return [GAMGroup(email=f"team{i:02}@example.com", name=f"Team {i}") for i in range(40)]
     monkeypatch.setattr(client.app.state.gamgui, "groups", many)
     r = client.get("/groups/search", params={"q": "team", "selected": "team03@example.com"})
@@ -73,7 +73,7 @@ def test_the_people_type_ahead_is_capped_and_offers_options(client, monkeypatch)
     assert 'role="option"' in r.text and 'data-val="carol@example.com"' in r.text
     assert "alice@example.com" not in r.text
 
-    async def many(force=False):
+    async def many(force=False, stale_ok=False):
         return [GAMUser(primary_email=f"person{i:02}@example.com") for i in range(40)]
     monkeypatch.setattr(client.app.state.gamgui, "users", many)
     r = client.get("/groups/people", params={"q": "person"})

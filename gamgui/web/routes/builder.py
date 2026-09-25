@@ -31,7 +31,7 @@ from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, app_state, error_partial, friendly
+from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly
 
 router = APIRouter(prefix="/builder")
 
@@ -307,17 +307,21 @@ async def pick(request: Request, kind: str = "users", q: str = "") -> HTMLRespon
     st = app_state(request)
     ql = q.strip().lower()
     pairs = []
+    age: dict = {}   # the list's "as of" label: served stale past the TTL while one refresh runs
     try:
         if kind == "groups" and st.connector is not None:
-            pairs = [(g.email, getattr(g, "name", "")) for g in await st.connector.list_groups()]
+            pairs = [(g.email, getattr(g, "name", "")) for g in await st.groups(stale_ok=True)]
+            age = as_of(st.group_cache)
         else:
-            pairs = [(u.primary_email, getattr(u, "full_name", "")) for u in await st.users()]
+            pairs = [(u.primary_email, getattr(u, "full_name", "")) for u in await st.users(stale_ok=True)]
+            age = as_of(st.user_cache)
     except Exception:  # noqa: BLE001 — a directory hiccup just yields no suggestions
         pairs = []
     if ql:
         pairs = [(e, n) for e, n in pairs if ql in (e or "").lower() or ql in (n or "").lower()]
     return TEMPLATES.TemplateResponse(request, "_picker_options.html",
-                                      {"items": pairs[:PICK_LIMIT], "more": len(pairs) > PICK_LIMIT})
+                                      {"items": pairs[:PICK_LIMIT], "more": len(pairs) > PICK_LIMIT,
+                                       **age})
 
 
 PAGE_SIZE = 6           # commands per page — sized so a page (2-line rows) fits a 13" window

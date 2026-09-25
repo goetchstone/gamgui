@@ -72,7 +72,9 @@ def _already_running(request: Request, job, user: str) -> HTMLResponse:
 
 async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     """Both addresses against the cached directory — before the preview and again before the run.
-    Fails closed: a directory that can't be read blocks the routine rather than skipping the check."""
+    Fails closed: a directory that can't be read blocks the routine rather than skipping the check.
+    Never ``stale_ok`` (plan U12b): a list past its TTL is re-read first, and a failed re-read blocks
+    too — the old list is not a fallback, since a leaver's or manager's account may have changed."""
     try:
         directory = await st.users()
     except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why

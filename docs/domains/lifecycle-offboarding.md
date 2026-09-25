@@ -36,7 +36,7 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 
 ## How it works
 **Both addresses are checked first**, by the preview and again by the run (`_check` →
-`lifecycle.check_addresses`, against the cached `gam print users`, ≤5 min old — a single-user write patches its record but never resets that age, plan U12). Blocked, before any
+`lifecycle.check_addresses`, against the cached `gam print users`, ≤5 min old — a single-user write patches its record but never resets that age, plan U12; never `stale_ok`, so a list past its TTL is re-read first and a failed re-read blocks rather than falling back to the old list, plan U12b, `tests/test_cache_freshness.py`). Blocked, before any
 write: an address not in the directory, an alias (the message names the primary), the same account
 twice, and a directory that can't be read (fails closed). Warned in the preview, not blocked: a
 super-admin or delegated-admin leaver (offboarding doesn't remove the role), an already-suspended

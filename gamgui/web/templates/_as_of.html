@@ -1,0 +1,6 @@
+{#- A cached directory list's age (plan U12b): past the TTL a page is served the old list while one
+    refresh runs behind it, and this is what makes that visible. ``as_of`` is the UserCache the page read
+    (routes/_common.as_of); each page puts its own words and Refresh around it. -#}
+{%- if as_of is defined and as_of.age_seconds is not none -%}
+as of {{ as_of.age_seconds | ago }}{% if as_of.refreshing %}, refreshing{% endif %}
+{%- endif -%}

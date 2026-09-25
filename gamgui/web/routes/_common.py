@@ -22,6 +22,13 @@ def connector(request: Request):
     return request.app.state.gamgui.connector
 
 
+def as_of(cache) -> dict:
+    """The template context for a cached list's "as of" label (``_as_of.html``, plan U12b): a page served
+    from ``cache`` with ``stale_ok`` must show how old it is. Empty when nothing is cached (a read that
+    raced a write is returned but not kept)."""
+    return {"as_of": cache} if cache.age_seconds is not None else {}
+
+
 def friendly(exc: Exception, fallback: str = GAM_TROUBLE) -> str:
     """What to do about a failed call, in words: GAM's remediation for its kind, else ``fallback``."""
     return exc.remediation if isinstance(exc, GAMError) else fallback

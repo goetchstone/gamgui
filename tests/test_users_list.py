@@ -27,7 +27,7 @@ def many(client, monkeypatch):  # noqa: F811
     people = [_user(i, orgUnitPath=f"/{'ABC'[i % 3]}", suspended=i % 5 == 0,
                     organizations=[{"primary": True, "title": ("Clerk", "Manager", "")[i % 3]}]) for i in range(40)]
 
-    async def users(force=False):
+    async def users(force=False, stale_ok=False):
         return people
     monkeypatch.setattr(client.app.state.gamgui, "users", users)
     return client

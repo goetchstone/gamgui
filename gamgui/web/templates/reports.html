@@ -11,10 +11,16 @@
 {% else %}
   <!-- Fixed-height workspace: cards + usage scroll inside, the page stays a constant size. -->
   <div class="flex flex-col gap-3 h-[calc(100vh-9rem)] min-h-[26rem]">
-    <div class="shrink-0">
-      <p class="eyebrow text-brand-blue">Insights</p>
-      <h1 class="font-serif text-2xl text-brand-black tracking-tight">Reports</h1>
-      <p class="text-brand-blueink text-sm">Across {{ total }} accounts — the gaps the Admin Console doesn't surface at a glance.</p>
+    <div class="shrink-0 flex items-end justify-between gap-4">
+      <div>
+        <p class="eyebrow text-brand-blue">Insights</p>
+        <h1 class="font-serif text-2xl text-brand-black tracking-tight">Reports</h1>
+        <p class="text-brand-blueink text-sm">Across {{ total }} accounts — the gaps the Admin Console doesn't surface at a glance.</p>
+      </div>
+      {% if as_of is defined %}
+      <p class="text-xs text-brand-grayink">Directory {% include "_as_of.html" %} ·
+        <a href="/reports?refresh=1" title="Reload from Google" class="underline hover:text-brand-black">Refresh</a></p>
+      {% endif %}
     </div>
 
     {% if error %}

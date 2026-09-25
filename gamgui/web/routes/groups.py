@@ -21,7 +21,7 @@ from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GROUP_ROLES
 from ...core.onboarding import looks_like_email
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, app_state, error_partial, friendly
+from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly
 
 PICK_LIMIT = 15      # group and people suggestions shown at once — keep typing to narrow
 MEMBERS_PAGE = 50    # member rows per page; the list scrolls inside the fixed window
@@ -41,13 +41,13 @@ def _pick(items, q: str, *fields) -> tuple[list, bool]:
     return hits[:PICK_LIMIT], len(hits) > PICK_LIMIT
 
 
-async def _group_choices(st, q: str = "") -> dict:
-    try:
-        groups = await st.groups()   # cached `gam print groups`, shared with onboarding's picker
+async def _group_choices(st, q: str = "", refresh: bool = False) -> dict:
+    try:   # cached `gam print groups`, shared with onboarding's picker; the list says how old it is
+        groups = await st.groups(force=refresh, stale_ok=True)
     except Exception as exc:  # noqa: BLE001 — any failure is shown in words, not a 500
         return {"groups": [], "more": False, "find_q": q, "find_error": "Couldn't list groups. " + friendly(exc)}
     shown, more = _pick(groups, q, "email", "name")
-    return {"groups": shown, "more": more, "find_q": q, "find_error": ""}
+    return {"groups": shown, "more": more, "find_q": q, "find_error": "", **as_of(st.group_cache)}
 
 
 async def _list_ctx(conn, group: str, q: str = "", page: int = 1, **extra) -> dict:
@@ -81,7 +81,7 @@ async def _panel_ctx(st, group: str) -> dict:
 
 async def _cached_groups(st) -> list:
     try:
-        return await st.groups()
+        return await st.groups(stale_ok=True)
     except Exception:  # noqa: BLE001 — only the heading's display name comes from here
         return []
 
@@ -102,13 +102,13 @@ async def board(request: Request, group: str = "") -> HTMLResponse:
 
 
 @router.get("/search", response_class=HTMLResponse)
-async def search(request: Request, q: str = "", selected: str = "") -> HTMLResponse:
+async def search(request: Request, q: str = "", selected: str = "", refresh: int = 0) -> HTMLResponse:
     """The group finder: the top matches by address or name from the cached group list."""
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "_group_results.html",
                                           {"groups": [], "more": False, "find_q": q, "find_error": NOT_CONNECTED})
-    ctx = await _group_choices(st, q)
+    ctx = await _group_choices(st, q, bool(refresh))
     return TEMPLATES.TemplateResponse(request, "_group_results.html", {**ctx, "selected": selected})
 
 
@@ -117,11 +117,12 @@ async def people(request: Request, q: str = "") -> HTMLResponse:
     """The add-member type-ahead: the top matches by address or name from the cached directory."""
     st = app_state(request)
     try:
-        users = await st.users()
+        users = await st.users(stale_ok=True)
     except Exception:  # noqa: BLE001 — a directory hiccup just yields no suggestions; typing still works
         users = []
     shown, more = _pick(users, q, "primary_email", "full_name")
-    return TEMPLATES.TemplateResponse(request, "_group_people.html", {"people": shown, "more": more})
+    return TEMPLATES.TemplateResponse(request, "_group_people.html",
+                                      {"people": shown, "more": more, **as_of(st.user_cache)})
 
 
 @router.get("/members", response_class=HTMLResponse)

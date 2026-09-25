@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import reports as reports_mod
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, friendly
+from ._common import NOT_CONNECTED, as_of, friendly
 
 router = APIRouter(prefix="/reports")
 
@@ -16,12 +16,13 @@ _USAGE_REPORT_PARTIAL = "_usage_report.html"
 
 
 @router.get("", response_class=HTMLResponse)
-async def reports_page(request: Request) -> HTMLResponse:
+async def reports_page(request: Request, refresh: int = 0) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _REPORTS_PAGE, {"connected": False, "reports": []})
     try:
-        users = await st.users()  # shared cache (CACHE_FIELDS superset covers REPORT_FIELDS)
+        # The shared cache (CACHE_FIELDS covers REPORT_FIELDS); the header says how old it is.
+        users = await st.users(force=bool(refresh), stale_ok=True)
     except Exception as exc:
         msg = friendly(exc, "Couldn't load users.")
         return TEMPLATES.TemplateResponse(
@@ -30,7 +31,7 @@ async def reports_page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(
         request,
         _REPORTS_PAGE,
-        {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users)},
+        {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users), **as_of(st.user_cache)},
     )
 
 

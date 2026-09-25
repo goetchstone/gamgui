@@ -8,3 +8,4 @@
 {% else %}
 <p class="px-3 py-1.5 text-brand-grayink">No matches.</p>
 {% endif %}
+{% if as_of is defined %}<p class="px-3 py-1 text-[11px] text-brand-grayink">Directory {% include "_as_of.html" %}</p>{% endif %}
