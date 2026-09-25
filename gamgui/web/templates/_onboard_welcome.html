@@ -6,10 +6,10 @@
   </div>
   <p class="text-xs text-brand-grayink">Variables: {% for v in vars %}<code>{{ "{" ~ v ~ "}" }}</code> {% endfor %}— filled in per new hire.</p>
   <label class="block text-xs text-brand-grayink">Subject
-  <input class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+  <input class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
          name="subject" value="{{ welcome.subject }}" /></label>
   <label class="block text-xs text-brand-grayink">Body
-  <textarea class="mt-1 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm font-mono text-[12.5px] text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+  <textarea class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm font-mono text-[12.5px] text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
             name="body" rows="8">{{ welcome.body }}</textarea></label>
   <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save template</button>
 </form>

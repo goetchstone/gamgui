@@ -1,4 +1,4 @@
-{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% set prefill = prefill | default({}) %}
 {% if cmd.buildable %}
 <form id="builder-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-3">
@@ -24,7 +24,7 @@
       <input id="{{ sid }}" name="{{ slot.key }}" value="{{ val }}" autocomplete="off" aria-describedby="{{ sid }}-help"
              placeholder="{{ slot.placeholder or ('group@domain' if slot.kind.value == 'group' else 'user@domain') }}"
              role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ sid }}-listbox"
-             class="upick {{ fld }} border-dashed border-brand-blue/50"
+             class="upick {{ fld }} border-dashed"
              data-kind="{{ 'groups' if slot.kind.value == 'group' else 'users' }}" />
       <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
     </span>
@@ -52,7 +52,7 @@
       <span class="upick-wrap relative block">
         <input id="td-user" name="td_user" aria-label="Sheet owner (whose Drive)" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
                role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="td-user-listbox"
-               class="upick {{ fld }} border-dashed border-brand-blue/50" data-kind="users" />
+               class="upick {{ fld }} border-dashed" data-kind="users" />
         <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
       </span>
       <input name="td_title" aria-label="Sheet name" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />

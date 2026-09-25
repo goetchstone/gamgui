@@ -24,6 +24,7 @@ module.exports = {
           black: "#000000",
           white: "#FFFFFF",
           gray: "#B2B4BB",     // warm gray: borders, rules, tints — never text
+          field: "#85878E",    // the gray, darkened for a form control's border: 3:1 (WCAG 1.4.11) on paper and white
           grayink: "#6D6E75",  // the gray, darkened for text (helper text, captions, empty states)
           blue: "#5A728E",     // slate blue, darkened from #69829E so its text and white-on-blue pass
           blueink: "#52647B",  // darker slate for text/hover

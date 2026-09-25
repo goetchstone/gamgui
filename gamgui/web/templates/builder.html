@@ -9,7 +9,7 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-{% set fld = "w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <!-- Fixed-height workspace: fills the window and never grows. Results scroll inside their own
      panel instead of pushing the page down, so the window stays a constant size. -->
 <div id="builder-root" class="flex flex-col gap-2.5 h-[calc(100vh-14.5rem)] min-h-[26rem]">
@@ -23,7 +23,7 @@
     <input class="{{ fld }} min-w-0 flex-1" type="search" name="q" aria-label="Search commands" placeholder="Search 1,000+ commands…"
            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
            hx-trigger="keyup changed delay:300ms, search" />
-    <select class="w-52 shrink-0 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" name="area" aria-label="Area"
+    <select class="w-52 shrink-0 rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" name="area" aria-label="Area"
             hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML">
       <option value="">All areas</option>
       {% for name, n in areas %}<option value="{{ name }}">{{ name }} ({{ n }})</option>{% endfor %}

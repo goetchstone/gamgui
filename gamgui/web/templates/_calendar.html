@@ -18,8 +18,8 @@
 <form class="mt-3 flex flex-wrap gap-2" hx-post="/users/calendar/add" hx-target="#calendar" hx-swap="innerHTML" hx-disabled-elt="find button">
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="email" name="target" required aria-label="Share with (email)" placeholder="share with person@domain.com"
-         class="flex-1 min-w-[12rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
-  <select name="role" aria-label="Access" class="rounded-lg border border-brand-gray/60 bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
+         class="flex-1 min-w-[12rem] rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+  <select name="role" aria-label="Access" class="rounded-lg border border-brand-field bg-brand-white px-2 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
     <option value="reader">See all details</option>
     <option value="freebusyreader">Free/busy only</option>
     <option value="writer">Make changes</option>

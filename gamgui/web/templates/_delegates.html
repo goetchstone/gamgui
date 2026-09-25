@@ -23,7 +23,7 @@
     <button class="text-xs text-red-700 hover:underline"
             hx-post="/users/delegate/remove" hx-target="#delegates" hx-swap="innerHTML" hx-disabled-elt="this"
             hx-confirm="Remove {{ d }}'s access to {{ email }}'s mailbox?"
-            hx-vals='{"email": {{ email | tojson }}, "delegate": {{ d | tojson }} }'>Remove</button>
+            hx-vals='{"email": {{ email | tojson }}, "delegate": {{ d | tojson }} }'>Remove<span class="sr-only"> {{ d }}</span></button>
   </li>
   {% endfor %}
 </ul>
@@ -33,6 +33,6 @@
 <form class="mt-3 flex gap-2" hx-post="/users/delegate/add" hx-target="#delegates" hx-swap="innerHTML" hx-disabled-elt="find button">
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="email" name="delegate" required aria-label="Delegate's email" placeholder="delegate@example.com" value="{{ typed or '' }}"
-         class="flex-1 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+         class="flex-1 rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
   <button class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors" type="submit">Add</button>
 </form>

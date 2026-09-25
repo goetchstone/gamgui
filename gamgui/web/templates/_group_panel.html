@@ -2,7 +2,7 @@
 {% if error %}<p class="text-sm text-amber-800">{{ error }}</p>
 {% else %}<p class="text-sm text-brand-grayink">Pick a group to see its members and add or remove people.</p>{% endif %}
 {% else %}
-{% set fld = "rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set fld = "rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <div class="flex flex-wrap items-baseline justify-between gap-x-3">
   <h2 tabindex="-1" data-focus class="font-serif text-xl text-brand-black">{{ group_name or group }}</h2>
   {% if group_name %}<span class="font-mono text-xs text-brand-grayink">{{ group }}</span>{% endif %}

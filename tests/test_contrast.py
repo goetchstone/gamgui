@@ -70,3 +70,45 @@ def test_every_fill_under_white_text_clears_aa():
                 if a == 1 and ratio(WHITE, rgb) < AA:
                     low[fill] = f"{ratio(WHITE, rgb):.2f}:1 in {path.name}"
     assert not low, f"white text on a fill under {AA}:1: {low}"
+
+
+BORDER = {name: v for name, v in _rules("border", "border-color").items() if ":" not in name}   # resting state
+NON_TEXT = 3.0                                                                                # WCAG 1.4.11
+_FIELD = re.compile(r"<(?:input|select|textarea)\b[^>]*>", re.S)
+_NOT_A_FIELD = re.compile(r'type="(?:hidden|checkbox|radio|submit|button|file)"')
+
+
+def field_borders() -> dict[str, list[str]]:
+    """Each template's text fields, selects and textareas → the border colours their classes paint
+    (a `{{ var }}` class resolved from the file's own `{% set var = "…" %}`)."""
+    out: dict[str, list[str]] = {}
+    for path in sorted((ROOT / "gamgui" / "web" / "templates").rglob("*.html")):
+        text = path.read_text()
+        sets = dict(re.findall(r'\{%\s*set (\w+) = "([^"]*)" %\}', text))
+        for m in _FIELD.finditer(text):
+            if _NOT_A_FIELD.search(m[0]):
+                continue
+            classes = " ".join(re.findall(r'class="([^"]*)"', m[0]))
+            tokens = re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda v, sets=sets: sets.get(v[1], ""), classes).split()
+            if any(re.fullmatch(r"border(-\d)?", t) for t in tokens):
+                line = text.count("\n", 0, m.start()) + 1
+                out[f"{path.name}:{line}"] = [t for t in tokens if t in BORDER]
+    return out
+
+
+def test_every_form_control_border_clears_3_to_1():
+    """Plan A-left2: a field's border is what shows there is a field (WCAG 1.4.11, 3:1 against what's
+    next to it). brand-gray at 40–60% was ~1.5:1; `border-brand-field` is the gray darkened to clear it.
+    Decorative card and rule borders aren't controls and stay light."""
+    fields = field_borders()
+    assert len(fields) > 40                             # the parser still finds the app's fields
+    low = {}
+    for where, colours in fields.items():
+        if not colours:
+            low[where] = "no border colour (Tailwind's default gray-200, 1.2:1)"
+        for c in colours:
+            rgb, a = BORDER[c]
+            worst = min(ratio(rgb, PAPER, a), ratio(rgb, WHITE, a))
+            if worst < NON_TEXT:
+                low[where] = f"{c} {worst:.2f}:1"
+    assert not low, f"form-control borders under {NON_TEXT}:1 on paper or white: {low}"

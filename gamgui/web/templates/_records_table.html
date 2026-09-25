@@ -6,7 +6,7 @@
     <form id="rt-form" role="search" class="flex items-center gap-2" hx-get="/builder/results" hx-target="#rt-body"
           hx-trigger="submit, input delay:250ms from:#rt-q, change from:#rt-external">
       <input type="hidden" name="rid" value="{{ rid }}" />
-      <input id="rt-q" name="q" class="w-44 rounded border border-brand-gray/50 px-2 py-1 text-xs focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" aria-label="Filter rows" placeholder="Filter rows…" />
+      <input id="rt-q" name="q" class="w-44 rounded border border-brand-field px-2 py-1 text-xs focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" type="search" aria-label="Filter rows" placeholder="Filter rows…" />
       <label class="flex items-center gap-1 text-brand-blueink"><input id="rt-external" type="checkbox" name="external" value="1" /> External only</label>
     </form>
     {% include "_records_meta.html" %}

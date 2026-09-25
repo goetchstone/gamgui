@@ -785,7 +785,36 @@ def test_back_from_a_user_reopens_the_list_as_left(page):
     assert p.c.js("window.__errs") == []
 
 
-# Record what #live-status is told, and each time the #busy pill (a live region too) comes on.
+@pytest.mark.a11y
+@pytest.mark.timeout(90)
+def test_a_swap_that_replaces_the_focused_control_puts_focus_back(page):
+    """Plan A-left2: a form that swaps itself out (title & department) or a list re-rendered under its own
+    button (a delegate's Remove) took the focused control with it, and focus fell to <body>. app.js puts it
+    on the control's re-rendered twin, or, when that is gone, on the zone, which opens with the result."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+    p.goto("/users/detail?email=carol%40example.com")
+    p.click("form[hx-post='/users/organization'] button[type=submit]", action="focus")
+    p.key("Enter")
+    p.settle("document.getElementById('org-saved')")
+    assert p.focused()["text"] == "Save title & department"
+    assert p.c.js("document.activeElement.getAttribute('aria-describedby')") == "org-saved"   # "Saved ✓"
+
+    p.click("#tab-mail")
+    p.settle("document.querySelector('#delegates button[hx-post]')")
+    assert p.c.js("document.querySelector('#delegates button[hx-post]').textContent") == "Remove helpdesk@example.com"
+    p.c.js("window.confirm = () => true")               # hx-confirm's dialog
+    # The mock's list doesn't change, so the same row comes back; mark this one so no twin does, as live.
+    p.c.js("document.querySelector('#delegates button[hx-post] .sr-only').textContent += ' (gone)'")
+    p.click("#delegates button[hx-post]", action="focus")
+    p.key("Enter")
+    p.settle("/Removed helpdesk/.test(document.getElementById('delegates').innerText)")
+    assert p.focused()["id"] == "delegates"
+    assert p.c.js("window.__errs") == []
+
+
+# Record what #live-status is told, and each time the #busy pill comes on.
 LISTEN = """window.__said = []; window.__busy = 0;
 const live = document.getElementById('live-status'), busy = document.getElementById('busy');
 new MutationObserver(() => __said.push(live.textContent)).observe(live, {childList: true, characterData: true, subtree: true});
@@ -806,7 +835,7 @@ def test_a_polled_job_speaks_through_one_stable_live_region(page):
                 if not n.get("ignored") and any(pr["name"] == "live" for pr in n.get("properties", []))]
 
     _offboard_preview(p)
-    [region] = live_regions()                          # #busy is display:none, so only #live-status
+    [region] = live_regions()                          # #busy is aria-hidden, so only #live-status
     p.c.js(LISTEN)
     p.click("button", "Run offboarding")
     p.wait("document.querySelector('#offboard-result [hx-get]')")      # the running panel, polling
@@ -1043,10 +1072,12 @@ def test_the_jobs_tray_speaks_only_a_finish_and_polls_as_a_poll():
 
 def test_the_live_region_is_outside_every_swap_and_polls_never_flash_working():
     """Plan A3: base.html holds the one polite, atomic status region app.js writes to; and every polled
-    panel's /status path is one app.js's isPoll recognises, so a poll doesn't show — and have the #busy live
-    region say — "Working…" every second."""
+    panel's /status path is one app.js's isPoll recognises, so a poll doesn't flash "Working…" every second.
+    The #busy pill is a visual cue, hidden from a reader: as a live region it said "Working…" on every
+    request, each typed search too (plan A-left2)."""
     base = (ROOT / "gamgui" / "web" / "templates" / "base.html").read_text()
     assert base.count('id="live-status"') == 1
+    assert '<div id="busy" aria-hidden="true">' in base and base.count("aria-live") == 1
     assert re.search(r'<div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true">'
                      r'</div>', base)
     app_js = (ROOT / "gamgui" / "web" / "static" / "app.js").read_text()

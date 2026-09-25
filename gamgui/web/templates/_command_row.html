@@ -6,10 +6,11 @@
     <p class="truncate text-xs text-brand-grayink"><span class="font-medium {{ {'read':'text-emerald-700','change':'text-brand-blueink','destructive':'text-red-700'}[c.risk_label] }}">{{ c.risk_label | capitalize }}</span>{% if c.description %} · {{ c.description }}{% endif %}</p>
   </div>
   <input type="hidden" value="{{ c.raw_syntax }}" />
+  {# Each button's name carries the command (visually hidden): a list of bare "Build"s says nothing. #}
   {% if c.buildable %}
   <button class="mt-0.5 shrink-0 rounded bg-brand-blue px-2 py-0.5 text-xs font-medium text-brand-white hover:bg-brand-blueink transition-colors"
-          hx-get="/builder/command/{{ c.id }}" hx-target="#cmd-form" hx-swap="innerHTML">Build</button>
+          hx-get="/builder/command/{{ c.id }}" hx-target="#cmd-form" hx-swap="innerHTML">Build<span class="sr-only"> {{ c.name }}</span></button>
   {% else %}
-  <button class="mt-0.5 shrink-0 rounded border border-brand-gray/40 px-2 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors" data-action="copy">Copy</button>
+  <button class="mt-0.5 shrink-0 rounded border border-brand-gray/40 px-2 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors" data-action="copy"><span data-label>Copy</span><span class="sr-only"> {{ c.name }}</span></button>
   {% endif %}
 </li>

@@ -20,7 +20,7 @@
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
       <label for="group-q" class="eyebrow text-brand-grayink">Find a group</label>
       <input id="group-q" type="search" name="q" autocomplete="off" placeholder="Name or address…"
-             class="mt-2 w-full rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+             class="mt-2 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
              hx-get="/groups/search" hx-trigger="input changed delay:250ms, search" hx-target="#group-results" hx-swap="innerHTML"
              hx-include="#group-selected" />
       <input type="hidden" id="group-selected" name="selected" value="{{ selected }}" />

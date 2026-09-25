@@ -50,7 +50,8 @@
 </head>
 <body class="h-full bg-paper text-ink font-sans">
   <div id="loadbar"></div>
-  <div id="busy" aria-live="polite"><span class="spinner"></span><span>Working…</span></div>
+  <!-- A visual cue only: as a live region it said "Working…" on every request, each typed search too. -->
+  <div id="busy" aria-hidden="true"><span class="spinner"></span><span>Working…</span></div>
   <!-- What a polled job panel says (plan A3, app.js): outside every swap, so a screen reader hears each change. -->
   <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <div class="min-h-full">

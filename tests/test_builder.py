@@ -262,6 +262,20 @@ def test_catalog_buildable_only_filter(client):
     assert "Build" in r.text and "Copy" not in r.text
 
 
+def test_each_catalog_rows_button_names_its_command(client):
+    # Plan A-left2: a list of bare "Build"s or "Copy"s says nothing to a screen reader. Each button's name
+    # carries its row's command, visually hidden; Copy's visible word is marked so "Copied" flips only it.
+    seen = set()
+    for params in ({"buildable": "1"}, {"q": "delete", "buildable": ""}):
+        r = client.get("/builder/catalog", params=params)
+        rows = re.findall(r'<p class="truncate text-brand-black">([^<]+)</p>.*?<button[^>]*>(.*?)</button>', r.text, re.S)
+        for name, inner in rows:
+            label = inner.removesuffix(f'<span class="sr-only"> {name}</span>')
+            assert label in ("Build", "<span data-label>Copy</span>"), (name, inner)
+            seen.add(label)
+    assert len(seen) == 2                               # both kinds of row were checked
+
+
 def test_user_picker_searches_directory(client):
     # The slot picker returns matches from the cached directory, capped — scales to large domains.
     r = client.get("/builder/pick", params={"kind": "users", "q": "al"})

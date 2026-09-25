@@ -13,7 +13,7 @@
   {# An account delete: the address is typed, not clicked through; the server checks it (guard.enforce). #}
   <label class="block text-sm text-red-700">Permanently delete <strong>{{ decision.typed_emails[0] }}</strong>? Type the email to confirm:
     <input id="builder-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ decision.typed_emails[0] }}"
-           class="mt-1 block w-full rounded-lg border border-red-300 bg-brand-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
+           class="mt-1 block w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
   </label>
   {% endif %}
   <button type="button"

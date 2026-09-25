@@ -18,7 +18,7 @@
   <input id="del-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ email }}" data-focus
          {% if pending_transfers or error %}aria-describedby="{% if error %}del-confirm-error {% endif %}{% if pending_transfers %}del-transfer-warning{% endif %}"{% endif %}
          {% if error %}aria-invalid="true"{% endif %}
-         class="w-full rounded-lg border border-red-300 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
+         class="w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
   {% if error %}<p id="del-confirm-error" class="text-xs text-red-700">{{ error }}</p>{% endif %}
   <div class="flex gap-2">
     <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Permanently delete</button>

@@ -25,10 +25,13 @@
     var src = wrap && wrap.querySelector("code, pre, input, textarea");
     if (!src) return;
     var text = (src.tagName === "INPUT" || src.tagName === "TEXTAREA") ? src.value : src.innerText;
+    // A button whose name carries more than it shows (a catalog row's hidden command) marks the
+    // visible word [data-label]; only that word flips, so the hidden part isn't made visible.
+    var label = btn.querySelector("[data-label]") || btn;
     function done() {
-      var prev = btn.textContent;
-      btn.textContent = "Copied";
-      setTimeout(function () { btn.textContent = prev; }, 1200);
+      var prev = label.textContent;
+      label.textContent = "Copied";
+      setTimeout(function () { label.textContent = prev; }, 1200);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text); done(); });
@@ -112,6 +115,24 @@
     if (twin) { twin.focus(); return true; }
     return false;
   }
+  // A click or submit whose swap replaced the very control it came from (the title/department Save, a
+  // delegate's Remove) drops focus to <body>. Once every root of that swap has settled (htmx settles the
+  // out-of-band ones first), focus goes to the control's re-rendered twin — the Save — or, when it is
+  // gone, to the zone, which opens with the result. One check per request; focus that survived stays.
+  var settled = new WeakMap();
+  function regainLater(d, root) {
+    var roots = settled.get(d);
+    if (roots) { roots.push(root); return; }
+    settled.set(d, roots = [root]);
+    setTimeout(function () {
+      var active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) return;
+      var src = d.requestConfig.triggeringEvent.submitter || d.requestConfig.elt;
+      var homes = d.target.isConnected ? [d.target] : roots.filter(function (r) { return r.isConnected; });
+      if (!homes.length || homes.some(function (h) { return returnFocus(h, src); })) return;
+      focusZone(homes[homes.length - 1]);
+    }, 0);
+  }
   document.body.addEventListener("htmx:afterSettle", function (e) {
     var d = e.detail, root = e.target;
     if (!byOperator(d) || !root.querySelector) return;
@@ -126,7 +147,7 @@
       return;
     }
     var opener = openers.get(zone);
-    if (!opener) return;
+    if (!opener) { regainLater(d, root); return; }
     openers.delete(zone);
     var active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;   // focus survived the swap
@@ -289,7 +310,7 @@
     }, 180);
   }
   // A job's progress panel polls its /status every second and shows its own spinner and count — don't
-  // let those background polls flicker the global pill, or its live region say "Working…" each time.
+  // let those background polls flicker the global pill (base.html hides it from a reader: a cue, not news).
   function isPoll(evt) {
     try {
       var d = evt.detail || {};
