@@ -134,7 +134,9 @@ def _truthy(value: str) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "x", "on"}
 
 
-_EMAIL_RE = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")
+# Domain labels exclude "." so each dot has exactly one place to match: `[^@\s,]+\.[^@\s,]+` let the domain
+# match its dots two ways and backtracked quadratically on "!@!." + "!." * n (CodeQL py/polynomial-redos).
+_EMAIL_RE = re.compile(r"^[^@\s,]+@[^@\s,.]+(?:\.[^@\s,.]+)+$")
 
 
 def looks_like_email(value: str) -> bool:

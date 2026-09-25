@@ -888,3 +888,22 @@ def test_the_csv_template_only_uses_reserved_example_domains():
 
     domains = set(re.findall(r"@([\w.-]+)", HIRE_CSV_TEMPLATE))
     assert domains and domains <= {"example.com", "example.net", "example.org"}, domains
+
+
+@pytest.mark.parametrize("value, ok", [
+    ("ada@example.com", True), ("a.b+tag@sub.example.co.uk", True), ("  ada@example.com  ", True),
+    ("oauthuser", False), ("@example.com", False), ("ada@", False), ("ada@example", False),
+    ("a,b@example.com", False), ("ada@exa mple.com", False), ("ada@@example.com", False),
+    ("ada@example..com", False), ("ada@.example.com", False), ("ada@example.com.", False),
+])
+def test_looks_like_email_cases(value, ok):
+    assert onboarding.looks_like_email(value) is ok
+
+
+def test_looks_like_email_is_linear_on_a_hostile_address():
+    # CodeQL py/polynomial-redos: `[^@\s,]+\.[^@\s,]+` let the domain match its dots two ways, so
+    # "!@!." + "!." * n took seconds at n=20,000 (quadratic). Domain labels no longer contain dots.
+    import time
+    start = time.monotonic()
+    assert onboarding.looks_like_email("!@!." + "!." * 200_000 + "@") is False
+    assert time.monotonic() - start < 0.5
