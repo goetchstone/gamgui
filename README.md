@@ -1,23 +1,51 @@
 # GamGUI
 
-A free, local, open-source **macOS GUI for [GAM7](https://github.com/GAM-team/GAM)** — administer
-Google Workspace (users, groups, signatures, delegates, vacation responders, reports, and more)
-without memorizing CLI commands, with your credentials kept in the macOS **Keychain**.
+A free, local, open-source **macOS app for [GAM7](https://github.com/GAM-team/GAM)**, the Google
+Workspace admin command line. The recurring admin chores get a screen, the big changes show a
+preview and wait for your confirm, and every change lands in an audit log — with GAM's full reach
+still underneath and your credentials in the macOS **Keychain**. Nothing runs in the cloud.
 
-> GAM exposes far more of Google Workspace than the Admin Console surfaces (Gmail
-> signatures/delegates/forwarding, advanced group settings, bulk operations, reporting). GamGUI
-> puts a safe, native front end on top of it.
+**Who it's for:** the Google Workspace admin on a Mac — often the one person who runs Workspace for
+the company — who knows GAM can do it but would rather not type it, or rebuild it from memory, every
+time.
 
-**Who it's for:** a Google Workspace admin on a Mac who wants the recurring chores — onboarding,
-offboarding, signatures, delegation, calendar sharing — behind a preview and an audit log instead of
-a terminal, with GAM's full reach still underneath.
+**What it does** — the everyday tasks, one screen each:
 
-**First five minutes:** there is no packaged download yet, so [build from source](#build-from-source)
-(`make setup && make gam && make run`). **Setup** imports an existing GAM install into the Keychain
-or walks you through a new one; then **Users** and **Reports** only read — nothing in your domain
-changes until you start a write yourself. Before relying on a write, check
-[Live verification status](#live-verification-status). The [user guide](docs/guide.md) walks an
-admin through setup and each everyday task, with what to check before and after.
+- **Onboard** a hire: the account, OU, signature, groups, shared calendars, a setup checklist and a
+  welcome email — one person, or a CSV of them.
+- **Offboard** a leaver: reset the password, revoke access and sign out, turn off forwarding, hand the
+  mailbox to a delegate, set an auto-reply, transfer Drive and calendars, remind the manager.
+- **Roll out a signature** to one person, a group, an OU, a department or everyone, with a live
+  preview.
+- **Find anyone** in the directory; edit title and department (one person or in bulk), delegates,
+  auto-replies and groups; sign out or suspend.
+- **Share a calendar** so it actually appears, and see who has access to any shared calendar.
+- **Audit**: 2SV gaps, inactive accounts, admins and storage in Reports; in the Builder, any of GAM's
+  read commands, filtered down to the rows that reach outside your domains.
+
+**How to get it:** there is **no notarized download yet** — you build it from source on your own Mac.
+It takes a few minutes and Python 3.10+ (macOS ships 3.9: `brew install python@3.13` first); no
+Google credentials are needed to build:
+
+```bash
+git clone https://github.com/goetchstone/gamgui.git && cd gamgui
+make setup && make gam && make run      # `make app` builds a standalone GamGUI.app
+```
+
+Details in [Build from source](#build-from-source).
+
+**Your first five minutes:**
+
+1. **Setup** imports an existing GAM install into the Keychain (or walks you through a new one), then
+   shows the one step Google makes you do by hand — domain-wide delegation, with a pre-filled
+   Admin-console link — and a **Verify**.
+2. Look around **Home**, **Users** and **Reports**. Reading never changes anything, and nothing in
+   your domain changes until you start a change yourself; the big ones — onboarding, offboarding,
+   bulk runs, deletes — show a preview first and wait for your confirm.
+3. Before you rely on a write, check [Live verification status](#live-verification-status) — some
+   writes have run against a real domain, others only offline.
+4. Read the **[user guide](docs/guide.md)**: setup and each everyday task, with what to check before
+   and after.
 
 ![Users — fast directory search, with title and status](docs/screenshots/users.png)
 
@@ -88,8 +116,6 @@ Actively developed and used against live Google Workspace tenants. Working today
   the steps after it "not run: stopped"). A signature apply or bulk department run that failed for
   some people offers **Retry the N that failed**: the same preview and confirm step, for just them
   (not past the 200 failures a job keeps). Jobs live in memory: quitting the app ends them.
-
-You build and run it yourself; it is not yet notarized for distribution to other Macs.
 
 > **Destructive actions are guarded — but check what has actually been proven live.** Suspend,
 > account delete, calendar/event delete, a Builder data transfer, the offboarding routine, and the
@@ -238,13 +264,10 @@ make css       # rebuild the UI's Tailwind CSS after a template adds a class (pi
 make run       # launch the app (native window; without pywebview, a browser URL — dev only)
 ```
 
-`make setup` builds the venv with whatever `python3` is first on your PATH — macOS's bundled
-`python3` is 3.9 and `pip install -e .` will refuse it ("requires a different Python"). If
-`python3 -V` is below 3.10, skip `make setup` and create the venv explicitly:
-
-```bash
-python3.14 -m venv .venv && .venv/bin/pip install -e ".[dev,desktop]"
-```
+`make setup` builds the venv with the newest Python 3.10+ on your PATH (`python3.14` down to
+`python3.10`, then `python3`). macOS's bundled `python3` is 3.9, which cannot install GamGUI; with
+nothing newer, `make setup` stops and says how to get one (`brew install python@3.13` or the
+python.org installer). Point it at a specific interpreter with `make setup PYTHON=python3.13`.
 
 `make help` lists all targets. Prefer raw commands? `pip install -e ".[dev,desktop]"`, then
 `scripts/fetch_gam.sh`, `pytest`, `python -m gamgui.app`. That installs `pyproject.toml`'s flexible

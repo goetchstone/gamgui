@@ -12,8 +12,8 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - **Make the report buckets actionable.** `/reports` already computes the worklists that matter
   (inactive 90+ days, no 2SV, suspended, missing recovery). Every one is currently a dead end you
-  can only click through one user at a time. The bulk executor and the guard already handle exactly
-  this shape of operation.
+  can only click through one user at a time (Home counts them, too). The bulk executor, the guard,
+  a job's Stop and "Retry the N that failed" already handle exactly this shape of operation.
 - **Offboarding: skip a step that doesn't apply.** Half there: each step has an "already done" box,
   so a re-run skips the steps that succeeded, and preview and run stay in sync off the step `key`s.
   Left: a "doesn't apply" choice (transferring 40 GB of Drive nobody wants) that the preview shows
