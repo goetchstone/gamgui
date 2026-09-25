@@ -720,22 +720,37 @@ class SetupService:
         try:
             out = await self.runner.run_authenticated(domain, GAMCommands.check_svcacct(admin, [scope for scope, _ in DWD_SCOPES]))
         except GAMError as exc:
+            # A failing scope is an answer, not a crash: GAM exits SCOPES_NOT_AUTHORIZED_RC with its
+            # PASS/FAIL table and the Admin-console link on stdout. Read it — still refusing to connect.
+            if exc.exit_code == SCOPES_NOT_AUTHORIZED_RC and _parse_check(exc.stdout):
+                return _check_result(exc.stdout, exited_ok=False)
             return VerifyResult(ok=False, summary=exc.message, raw=exc.stderr)
-        lines = _parse_check(out)
-        up = out.upper()
-        failed = ("FAILED" in up) or ("DISABLED!" in up) or any(s == "FAIL" for _, s in lines)
-        ok = bool(lines) and not failed
-        return VerifyResult(
-            ok=ok,
-            summary=(
-                "All scopes authorized."
-                if ok
-                else "Domain-Wide Delegation isn't authorized yet — use the link below, then verify again."
-            ),
-            lines=lines,
-            raw=out,
-            auth_url=("" if ok else _extract_auth_url(out)),
-        )
+        return _check_result(out)
+
+
+# `check serviceaccount`'s exit when a scope fails (the vendored build's SCOPES_NOT_AUTHORIZED_RC). GAM's
+# USAGE_ERROR_RC and ACTION_FAILED_RC are 1 as well, so verify reads a non-zero exit as the check's
+# answer only when stdout carries the check's PASS/FAIL table.
+SCOPES_NOT_AUTHORIZED_RC = 1
+
+
+def _check_result(out: str, exited_ok: bool = True) -> VerifyResult:
+    """A :class:`VerifyResult` from `check serviceaccount`'s stdout. It passes only on a clean exit
+    whose every row is PASS; otherwise it names how many scopes failed and carries GAM's link."""
+    lines = _parse_check(out)
+    up = out.upper()
+    failed = (not exited_ok) or ("FAILED" in up) or ("DISABLED!" in up) or any(s == "FAIL" for _, s in lines)
+    ok = bool(lines) and not failed
+    scopes = [status for label, status in lines if label.startswith("https://")]
+    if ok:
+        summary = "All scopes authorized."
+    elif "FAIL" in scopes:
+        summary = (f"Domain-Wide Delegation isn't authorized for {scopes.count('FAIL')} of {len(scopes)} "
+                   "scopes yet — use the link below, then verify again.")
+    else:
+        summary = "Domain-Wide Delegation isn't authorized yet — use the link below, then verify again."
+    return VerifyResult(ok=ok, summary=summary, lines=lines, raw=out,
+                        auth_url=("" if ok else _extract_auth_url(out)))
 
 
 def _json_field(raw: Optional[str], key: str) -> object:
@@ -771,6 +786,9 @@ def _parse_check(stdout: str) -> List[Tuple[str, str]]:
 
 
 def _extract_auth_url(stdout: str) -> str:
-    """The Admin Console / gam-shortn link GAM prints to authorize Domain-Wide Delegation."""
-    m = _AUTH_URL_RE.search(stdout or "")
-    return m.group(0).rstrip(".,") if m else ""
+    """The link GAM prints to authorize Domain-Wide Delegation. GAM prints a gam-shortn short link and
+    then the admin.google.com one it redirects to; the direct link wins — the operator can read where
+    it goes, and it skips a third-party redirector."""
+    found = [m.group(0).rstrip(".,") for m in _AUTH_URL_RE.finditer(stdout or "")]
+    direct = [url for url in found if url.startswith("https://admin.google.com/")]
+    return (direct or found or [""])[0]

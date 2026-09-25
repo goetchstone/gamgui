@@ -168,8 +168,9 @@ class GAMRunner:
     ) -> str:
         """Run a gam command as ``domain`` (credentials materialized from the vault).
 
-        Returns stdout on success; raises :class:`GAMError` on failure.
-        Set ``serialize=True`` for mutating commands.
+        Returns stdout on success; raises :class:`GAMError` on failure, carrying GAM's stdout too (a
+        failed `check serviceaccount` prints its answer there). Set ``serialize=True`` for mutating
+        commands.
         """
         argv = list(argv)
         timeout = timeout or self.timeout
@@ -177,9 +178,10 @@ class GAMRunner:
         async def _do() -> str:
             with EphemeralConfig(self.vault, domain, base_dir=self.base_dir) as cfgdir:
                 res = await self._exec(argv, cfgdir, timeout)
+            stdout = strip_cfgdir_noise(res.stdout, cfgdir)
             if res.returncode != 0:
-                raise GAMError.from_run(res.returncode, res.stderr, argv)
-            return strip_cfgdir_noise(res.stdout, cfgdir)
+                raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=stdout)
+            return stdout
 
         if serialize:
             async with self._write_lock:

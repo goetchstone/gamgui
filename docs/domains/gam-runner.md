@@ -41,8 +41,10 @@ a `wait_for` timeout kills the process and raises a `TIMEOUT` `GAMError` whose t
 ran and that it may have done part of its work. The timeout is `DEFAULT_TIMEOUT` (120s) unless the
 caller passes one: a domain-wide `all users …` call (the offboarding calendar sweep, the calendar-index
 scan) passes `DOMAIN_WIDE_TIMEOUT` (1 h), because GAM walks every user in turn. Non-zero exit →
-`GAMError.from_run` (stderr classified line by line; `kind` is the most severe line). Success stdout
-is de-noised, then the connector runs it through `parse_records`/`parse_one` and `Model.from_json`.
+`GAMError.from_run` (stderr classified line by line; `kind` is the most severe line). The error also
+carries the de-noised stdout (`GAMError.stdout`, scrubbed like stderr, kept out of `message` and the
+repr): a failed `check serviceaccount` exits 1 with its answer there, and setup's verify reads it.
+Success stdout is de-noised, then the connector runs it through `parse_records`/`parse_one` and `Model.from_json`.
 One side path: `version` (no credentials). `run_in_cfgdir` (any argv against an explicit, persistent
 cfgdir, meant for a setup wizard that never used it) is gone: it had no caller in the app, and it was
 a door to `_exec` that the chokepoint tripwires couldn't see and that `EphemeralConfig` never wiped.

@@ -658,6 +658,20 @@ def test_verify_activates_connector(ctx):
     assert state.connector is not None and state.audit_domain == "ex.com"
 
 
+def test_verify_with_a_failed_scope_shows_it_and_the_link_and_stays_disconnected(ctx):
+    # GAM exits 1 when a scope fails; the page showed a generic error. It lists each scope with its
+    # FAIL badge and offers GAM's pre-filled Authorize link — and still refuses to connect.
+    client, _, vault, state = ctx
+    vault.set_all("ex.com", {"oauth2": "tok", "oauth2service": json.dumps({"client_id": "x"})})
+    r = client.post("/setup/verify", data={"domain": "ex.com", "admin": "partialdwd@ex.com"})
+    assert r.status_code == 200
+    assert "https://www.googleapis.com/auth/tasks" in r.text and ">FAIL<" in r.text
+    assert "Authorize Domain-Wide Delegation" in r.text
+    assert 'href="https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=' in r.text
+    assert "GAM failed" not in r.text
+    assert state.connector is None
+
+
 def test_fresh_shows_commands(ctx):
     client = ctx[0]
     r = client.post("/setup/fresh", data={"domain": "ex.com", "admin": "a@ex.com"})

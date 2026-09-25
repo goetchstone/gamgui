@@ -451,6 +451,10 @@ fi
 # admin token, `gam oauth create`) and are refused here as GAM refuses them. The simulated tenant
 # authorized exactly the scopes GamGUI pre-fills (core/setup.py DWD_SCOPES). A bare check asks about
 # GAM's own larger default set, so its extra scopes FAIL and GAM exits SCOPES_NOT_AUTHORIZED_RC (1).
+# A `*partialdwd*` admin's tenant authorized all of those but gmail.settings.sharing and tasks. On a FAIL,
+# checkServiceAccount appends userinfo.email to the scopes checked and prints SCOPE_AUTHORIZATION_FAILED
+# with the short link and the admin.google.com one (clientScopeToAdd = those scopes, sorted; authuser =
+# the admin) — all on STDOUT (printLine), nothing on stderr — then exits 1.
 SA_AUTHORIZED="https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/gmail.settings.sharing https://www.googleapis.com/auth/tasks"
 # A sample of GAM's other default-on service-account scopes (gamlib glapi _SVCACCT_SCOPES).
 SA_OTHER="https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.activity https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/keep https://www.googleapis.com/auth/spreadsheets"
@@ -479,15 +483,25 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccou
     "Service Account Private Key Authentication" "PASS" \
     "Service Account Private Key age; Google recommends rotating keys on a routine basis" "PASS"
   printf 'Domain-wide Delegation authentication:, User: %s, Scopes: %s\n' "$sa_user" "$n"
+  granted="$SA_AUTHORIZED"
+  case "$sa_user" in
+    *partialdwd*) granted=$(printf '%s\n' $SA_AUTHORIZED | grep -v -e '/gmail\.settings\.sharing$' -e '/tasks$' | tr '\n' ' ') ;;
+  esac
   j=0; failed=0
   for s in $checked; do
     j=$((j + 1))
-    case " $SA_AUTHORIZED " in *" $s "*) st=PASS ;; *) st=FAIL; failed=1 ;; esac
+    case " $granted " in *" $s "*) st=PASS ;; *) st=FAIL; failed=1 ;; esac
     printf '  %-73s %s (%d/%d)\n' "$s" "$st" "$j" "$n"
   done
   if [ "$failed" = 1 ]; then
-    printf '\nSome scopes FAILED or should be DISABLED!\nTo update authorization, please go to the following link in your browser:\n    https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=%s&clientIdToAdd=1234567890&overwriteClientId=true\n\n' \
-      "$(printf '%s' "$checked" | tr '\n' ',')"
+    to_add=$(printf '%s\n' $checked https://www.googleapis.com/auth/userinfo.email | sort -u | paste -sd, -)
+    printf '\nSome scopes FAILED or should be DISABLED!\nTo update authorization, please go to the following link in your browser:\n%s\n    %s\n\n' \
+      "https://gam-shortn.appspot.com/mockdwd" \
+      "https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=$to_add&clientIdToAdd=1234567890&overwriteClientId=true&authuser=$sa_user"
+    printf '%s\n' "You will be directed to the Google Workspace admin console Security > API Controls > Domain-wide Delegation page" \
+      'The "Add a new Client ID" box will open' 'Make sure that "Overwrite existing client ID" is checked' 'Click AUTHORIZE' \
+      "When the box closes you're done" \
+      'After authorizing it may take some time for this test to pass so wait a few moments and then try this command again.' '' ''
     exit 1
   fi
   printf '\nAll scopes PASSED!\n\nService Account Client name: 1234567890 is fully authorized.\n\n'

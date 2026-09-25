@@ -464,6 +464,11 @@ def test_extract_auth_url():
     out = "Some scopes FAILED!\nplease go to:\n    https://gam-shortn.appspot.com/qhhmzr\nthen retry"
     assert _extract_auth_url(out) == "https://gam-shortn.appspot.com/qhhmzr"
     assert _extract_auth_url("all good, no link") == ""
+    # GAM prints the short link, then the admin.google.com one it redirects to: prefer the direct one,
+    # which the operator can read, over a third-party redirector.
+    both = ("please go to the following link in your browser:\nhttps://gam-shortn.appspot.com/qhhmzr\n"
+            "    https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=a&clientIdToAdd=1\n")
+    assert _extract_auth_url(both) == "https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=a&clientIdToAdd=1"
 
 
 async def test_engine_version(runner, vault):
@@ -511,3 +516,39 @@ async def test_verify_checks_exactly_the_prefilled_scopes(runner, vault, domain,
     assert gam_calls() == [["user", "admin@example.com", "check", "serviceaccount", "scopes", ",".join(DWD)]]
     checked = [label for label, status in result.lines if label.startswith("https://") and status == "PASS"]
     assert sorted(checked) == sorted(DWD)
+
+
+async def test_verify_shows_the_failed_scopes_and_gams_link_when_a_scope_fails(runner, vault, domain):
+    # A failing scope makes GAM exit 1 (SCOPES_NOT_AUTHORIZED_RC) with its PASS/FAIL table and the
+    # Admin-console link on stdout. The runner raised on the exit and verify showed only a generic
+    # "GAM failed" line: the operator never saw which scopes failed, nor the link to authorize them.
+    result = await SetupService(vault, runner).verify(domain, "partialdwd@example.com")
+    assert result.ok is False
+    failed = sorted(label for label, status in result.lines if status == "FAIL")
+    assert failed == ["https://www.googleapis.com/auth/gmail.settings.sharing", "https://www.googleapis.com/auth/tasks"]
+    assert any(status == "PASS" for _, status in result.lines)
+    assert "2 of 7" in result.summary and "GAM failed" not in result.summary
+    assert result.auth_url.startswith("https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd=")
+    assert "clientIdToAdd=" in result.auth_url and "Some scopes FAILED" in result.raw
+
+
+async def test_verify_a_non_check_failure_stays_a_plain_error(runner, vault, domain, monkeypatch):
+    # Exit 1 is also GAM's usage and action-failed code: only an answer that carries the check's table
+    # is read as one. Anything else is still refused with GAM's own error line.
+    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+
+    async def refused(*_a, **_k):
+        raise GAMError(GAMErrorKind.UNKNOWN, exit_code=1, stderr="ERROR: Invalid argument", stdout="")
+
+    monkeypatch.setattr(runner, "run_authenticated", refused)
+    result = await SetupService(vault, runner).verify(domain, "admin@example.com")
+    assert result.ok is False and result.lines == [] and result.auth_url == ""
+    assert "Invalid argument" in result.summary
+
+
+def test_gam_error_carries_stdout_scrubbed_and_out_of_its_repr():
+    from gamgui.core.gam.errors import GAMError
+
+    err = GAMError.from_run(1, "", ["user", "a@x"], stdout="User: a@x, password hunter2 set")
+    assert "hunter2" not in err.stdout and "User: a@x" in err.stdout
+    assert "User: a@x" not in repr(err) and "User: a@x" not in err.message

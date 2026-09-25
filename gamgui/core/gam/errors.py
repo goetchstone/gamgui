@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import enum
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import FrozenSet, Iterable, List, Optional, Pattern, Tuple
 
 from ..audit import redact_argv
@@ -174,6 +174,10 @@ class GAMError(Exception):
     argv: the gam argument list that was run (binary path excluded), for diagnostics.
     kinds: the kind of EVERY error line (``kind`` is the most severe of them) — what a best-effort
         caller checks, so one real failure among benign per-entity notices is never tolerated.
+    stdout: what GAM printed on stdout before the non-zero exit, scrubbed like stderr. Some failures
+        answer there: `check serviceaccount` exits SCOPES_NOT_AUTHORIZED_RC (1) with its PASS/FAIL
+        table and the Admin-console link on stdout (setup's verify reads it). Never in ``message`` or
+        the repr, so a logged error carries no directory data.
     """
 
     kind: GAMErrorKind
@@ -181,12 +185,14 @@ class GAMError(Exception):
     stderr: str = ""
     argv: Optional[List[str]] = None
     kinds: FrozenSet[GAMErrorKind] = frozenset()
+    stdout: str = field(default="", repr=False)
 
     def __post_init__(self) -> None:
         # Redact any secret the failed command carried BEFORE this exception is logged, shown, or its
         # .message is built — GAM echoes the command line (incl. the password) on a usage error.
         self.argv = redact_argv(self.argv)
         self.stderr = _scrub_stderr(self.stderr)
+        self.stdout = _scrub_stderr(self.stdout)
         self.kinds = frozenset(self.kinds) or frozenset({self.kind})
         super().__init__(self.message)
 
@@ -209,8 +215,10 @@ class GAMError(Exception):
         return f"{base}: {detail}" if detail else base
 
     @classmethod
-    def from_run(cls, exit_code: Optional[int], stderr: str, argv: Optional[List[str]] = None) -> "GAMError":
+    def from_run(cls, exit_code: Optional[int], stderr: str, argv: Optional[List[str]] = None,
+                 stdout: str = "") -> "GAMError":
         if exit_code is None:
-            return cls(kind=GAMErrorKind.TIMEOUT, exit_code=None, stderr=stderr, argv=argv)
+            return cls(kind=GAMErrorKind.TIMEOUT, exit_code=None, stderr=stderr, argv=argv, stdout=stdout)
         kinds = frozenset(kind for kind, _ in _error_lines(stderr))
-        return cls(kind=_worst(kinds), exit_code=exit_code, stderr=stderr, argv=argv, kinds=kinds)
+        return cls(kind=_worst(kinds), exit_code=exit_code, stderr=stderr, argv=argv, kinds=kinds,
+                   stdout=stdout)

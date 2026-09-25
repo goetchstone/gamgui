@@ -305,3 +305,32 @@ async def test_mock_bare_check_serviceaccount_fails_on_gams_larger_default_set(r
     with pytest.raises(GAMError) as ei:
         await runner.run_authenticated(domain, ["user", "admin@example.com", "check", "serviceaccount"])
     assert ei.value.exit_code == 1
+    # GAM prints the whole answer on stdout (printLine), not stderr — the error must carry it.
+    assert "https://www.googleapis.com/auth/keep" in ei.value.stdout and " FAIL (" in ei.value.stdout
+    assert "Some scopes FAILED or should be DISABLED!" in ei.value.stdout and ei.value.stderr == ""
+
+
+# The simulated tenant behind a `*partialdwd*` admin authorized all of DWD_SCOPES but these two.
+PARTIAL_MISSING = ["https://www.googleapis.com/auth/gmail.settings.sharing", "https://www.googleapis.com/auth/tasks"]
+
+
+async def test_mock_check_serviceaccount_fails_a_scope_the_tenant_did_not_authorize(runner, domain):
+    # What the vendored 7.48.11 checkServiceAccount does when a scope asked for fails: every row still
+    # prints ("  {scope:73} FAIL (j/n)"), then authorizeScopes(SCOPE_AUTHORIZATION_FAILED) prints the
+    # short link and the admin.google.com link — whose clientScopeToAdd is the scopes checked plus
+    # userinfo.email, sorted — all on stdout, and GAM exits SCOPES_NOT_AUTHORIZED_RC (1).
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.check_svcacct("partialdwd@example.com", DWD))
+    err = ei.value
+    assert err.exit_code == 1 and err.stderr == ""
+    rows = {line.split()[0]: line.split()[1] for line in err.stdout.splitlines() if line.startswith("  https://")}
+    assert sorted(rows) == sorted(DWD)
+    assert sorted(s for s, st in rows.items() if st == "FAIL") == PARTIAL_MISSING
+    lines = err.stdout.splitlines()
+    at = lines.index("Some scopes FAILED or should be DISABLED!")
+    assert lines[at + 1] == "To update authorization, please go to the following link in your browser:"
+    assert lines[at + 2].startswith("https://gam-shortn.appspot.com/")
+    long_url = lines[at + 3].strip()
+    wanted = ",".join(sorted(DWD + ["https://www.googleapis.com/auth/userinfo.email"]))
+    assert long_url.startswith(f"https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd={wanted}&")
+    assert long_url.endswith("&overwriteClientId=true&authuser=partialdwd@example.com")
