@@ -249,7 +249,7 @@ code or read directly in the source; **PLAUSIBLE** = reasoned, not demonstrated.
 session-scratch and are not kept — each item says how to reproduce.
 
 ## Scorecard
-*"Now" is as reviewed at `d5d775b`, before `harden-2026-09-23`. **Estimated after the branch** (the orchestrator's estimate, not a fresh review): Security 9 · Code quality 7.5 · Test quality 8.5 · Mock fidelity 7 · Tooling/CI 6.5 · Usability 7 · Accessibility 3 (untouched) · Docs 7 · Value 6.5 · Agent framework 9. The biggest remaining gaps are Phase 4 (accessibility), Phase 3 (lint/type/locks) and Phase 8 (live verification).*
+*"Now" is as reviewed at `d5d775b`, before `harden-2026-09-23`. **Estimated after the branch** (the orchestrator's estimate, not a fresh review): Security 9 · Code quality 7.5 · Test quality 8.5 · Mock fidelity 7 · Tooling/CI 6.5 · Usability 7 · Accessibility 3 (untouched) · Docs 7 · Value 6.5 · Agent framework 9. The biggest remaining gaps are Phase 4 (accessibility), Phase 3 (lint/type/locks) and Phase 8 (live verification).* **Estimated after `polish-2026-09-24`** (again the orchestrator's estimate; a six-lens review plus two re-checks ran on it): Security 9.5 · Code quality 8.5–9 · Test quality 9 · Mock fidelity 7.5 · Tooling/CI 9 (its new CI jobs unproven until pushed) · Usability 8.5 · Accessibility 8–8.5 (axe at zero on every screen; no VoiceOver pass yet) · Docs 8.5–9 · Value 7 · Agent framework 9. What still caps them is outside the code: Phase 8 live verification (D8), notarization (D1), a real screen-reader pass, and scope decisions (D6).
 
 | Dimension | Now | Realistic target | What caps it below 10 |
 |---|---|---|---|
