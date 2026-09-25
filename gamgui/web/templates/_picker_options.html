@@ -1,9 +1,14 @@
+{# A Builder User/Group slot's suggestions (builder.js): a listbox of options, its notes outside it.
+   builder.js gives the listbox the id its field's aria-controls names, and each option an id of its own. #}
 {% if items %}
+<ul role="listbox" aria-label="Suggestions">
 {% for email, name in items %}
-<button type="button" class="upick-opt block w-full cursor-pointer truncate px-3 py-1.5 text-left hover:bg-paper" data-val="{{ email }}">
+<li role="option" aria-selected="false" data-val="{{ email }}"
+    class="upick-opt block w-full cursor-pointer truncate border-l-2 border-transparent px-3 py-1.5 text-left hover:bg-paper aria-selected:border-brand-blue aria-selected:bg-paper">
   <span class="text-brand-black">{{ email }}</span>{% if name %} <span class="text-brand-grayink">· {{ name }}</span>{% endif %}
-</button>
+</li>
 {% endfor %}
+</ul>
 {% if more %}<p class="px-3 py-1 text-[11px] text-brand-grayink">Showing the first {{ items | length }} — keep typing to narrow.</p>{% endif %}
 {% else %}
 <p class="px-3 py-1.5 text-brand-grayink">No matches.</p>

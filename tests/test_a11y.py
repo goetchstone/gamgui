@@ -5,16 +5,17 @@
 
 Drives scripts/preview_mock.py's app (strict mock gam, fake example.com data, a temp $HOME) through
 each screen and the states that matter (user-detail and onboarding tabs, the Groups board's combobox
-and remove step, a signature preview, a calendar's access, a Builder result, an offboarding preview
-and its run), injects the vendored axe-core (tests/a11y/, checksum-checked) and counts the
-serious/critical violations per screen and rule. It fails on a rule or screen the baseline
-(tests/a11y/baseline.json) doesn't list, on a count above it — and on a count below it, so a fix locks
-its gain in. The baseline only ever shrinks, to empty (it is).
+and remove step, a signature preview, a calendar's access, a Builder result and a User slot's open
+suggestions, an offboarding preview and its run), injects the vendored axe-core (tests/a11y/,
+checksum-checked) and counts the serious/critical violations per screen and rule. It fails on a rule or
+screen the baseline (tests/a11y/baseline.json) doesn't list, on a count above it — and on a count below
+it, so a fix locks its gain in. The baseline only ever shrinks, to empty (it is).
 A second Chrome test uses the keyboard alone (real key events): the ARIA tab strips, focus landing in a
 confirm panel and coming back when it closes, and a brand focus ring on every Tab stop of every screen.
-Another works the Groups board by keys alone — find a group, add a person with a role through its
-combobox, remove a member through its confirm step (plan A6). One goes Back from a user to the Users
-list and finds it as left, and opens user-detail tabs to see each load on first open (plans U8, U13).
+Another walks a Builder User slot's combobox by keys and a click. Another works the Groups board by keys
+alone — find a group, add a person with a role through its combobox, remove a member through its
+confirm step (plan A6). One goes Back from a user to the Users list and finds it as left, and opens
+user-detail tabs to see each load on first open (plans U8, U13).
 A last one runs an offboarding and
 reads Chrome's accessibility tree: a polled panel speaks through base.html's one live region, which no
 poll replaces (plan A3).
@@ -306,6 +307,12 @@ def _screens(p: Page):
     p.click("#builder-result button", "Run")
     p.settle("document.querySelector('#builder-result table')")
     yield "builder"
+    p.c.js("htmx.ajax('GET', '/builder/command/build.add_delegate', {target: '#cmd-form', swap: 'innerHTML'})")
+    p.settle("document.getElementById('slot-email')")
+    p.click("#slot-email", action="focus")
+    p.settle("document.getElementById('slot-email').getAttribute('aria-expanded') === 'true'")
+    p.key("ArrowDown")
+    yield "builder/suggestions"                             # a User slot's combobox, open, one option active
 
     p.goto("/onboard")
     for tab in ("generate", "roles", "welcome", "bulk"):
@@ -644,6 +651,77 @@ def test_the_groups_board_works_from_the_keyboard(page):
     p.key("Enter")
     p.settle("/Removed bob@example.com/.test(document.getElementById('member-list').innerText)")
     assert p.focused()["panel"] and p.focused()["text"] == "Removed bob@example.com from staff@example.com."
+    assert p.c.js("window.__errs") == []
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_the_builders_address_picker_is_a_combobox(page):
+    """A Builder User/Group slot, by real key events: typing opens its suggestions, ArrowDown/Up move the
+    active option, Enter takes it without submitting, Escape closes, ArrowDown reopens — while Chrome's
+    accessibility tree names the combobox and its options — and a click still picks."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+
+    def ax(role: str) -> list[dict]:
+        return [n for n in p.c.cmd("Accessibility.getFullAXTree")["nodes"]
+                if not n.get("ignored") and n.get("role", {}).get("value") == role]
+
+    def name(n: dict) -> str:
+        return n.get("name", {}).get("value", "")
+
+    def field(attr: str):
+        return p.c.js(f"document.getElementById('slot-email').{attr}")
+
+    p.goto("/builder", "document.querySelector('#catalog button')")
+    p.c.js("htmx.ajax('GET', '/builder/command/build.add_delegate', {target: '#cmd-form', swap: 'innerHTML'})")
+    p.settle("document.getElementById('slot-email')")
+    p.click("#slot-email", action="focus")
+    p.type("example")                                         # focus opened the list; typing narrows it and says so
+    p.wait("/suggestion/.test(document.getElementById('live-status').textContent)")
+    box = [n for n in ax("combobox") if name(n).startswith("User")]
+    assert box, [name(n) for n in ax("combobox")]
+    props = {q["name"]: q.get("value", {}).get("value") for q in box[0].get("properties", [])}
+    assert props.get("expanded") is True and props.get("autocomplete") == "list"
+    assert field("getAttribute('aria-controls')") == "slot-email-listbox"
+    assert p.c.js("document.getElementById('slot-email-listbox').getAttribute('role')") == "listbox"
+    assert any("alice@example.com" in name(n) for n in ax("option"))
+
+    p.key("ArrowDown")
+    assert field("getAttribute('aria-activedescendant')") == "slot-email-listbox-0"
+    p.key("ArrowDown")
+    assert field("getAttribute('aria-activedescendant')") == "slot-email-listbox-1"
+    p.key("ArrowUp")
+    assert field("getAttribute('aria-activedescendant')") == "slot-email-listbox-0"
+    assert p.c.js("document.getElementById('slot-email-listbox-0').getAttribute('aria-selected')") == "true"
+    picked = p.c.js("document.getElementById('slot-email-listbox-0').dataset.val")
+    p.key("Enter")                                            # takes the suggestion, doesn't submit
+    assert field("value") == picked and field("getAttribute('aria-expanded')") == "false"
+    assert p.focused()["id"] == "slot-email" and not p.c.js("document.querySelector('#builder-result *')")
+
+    p.key("ArrowDown")                                        # reopens the list
+    p.wait("document.getElementById('slot-email').getAttribute('aria-expanded') === 'true'")
+    p.key("Escape")
+    assert field("getAttribute('aria-expanded')") == "false" and field("hasAttribute('aria-activedescendant')") is False
+    assert p.c.js("document.querySelector('#slot-email').closest('.upick-wrap')"
+                  ".querySelector('.upick-menu').classList.contains('hidden')")
+
+    p.key("ArrowDown")
+    p.wait("document.getElementById('slot-email').getAttribute('aria-expanded') === 'true'")
+    p.key("Tab")                                              # leaving the field closes its list
+    assert p.focused()["id"] == "slot-delegate" and field("getAttribute('aria-expanded')") == "false"
+
+    p.c.js("document.getElementById('slot-email').value = ''")
+    p.click("#slot-email", action="focus")                    # the whole list; the mouse still picks
+    p.wait("document.getElementById('slot-email-listbox-1')")
+    want = p.c.js("document.getElementById('slot-email-listbox-1').dataset.val")
+    r = p.c.js("(() => { const b = document.getElementById('slot-email-listbox-1').getBoundingClientRect();"
+               " return [b.left + 20, b.top + b.height / 2]; })()")
+    for kind in ("mousePressed", "mouseReleased"):
+        p.c.cmd("Input.dispatchMouseEvent", type=kind, x=r[0], y=r[1], button="left", clickCount=1)
+    assert field("value") == want and want != picked and field("getAttribute('aria-expanded')") == "false"
+    assert p.focused()["id"] == "slot-email"
     assert p.c.js("window.__errs") == []
 
 

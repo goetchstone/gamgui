@@ -22,41 +22,95 @@
 
   // Server-backed type-ahead for the User/Group slot pickers. A real, visible dropdown that renders
   // in WKWebView (plain DOM, no <datalist>) and scales — /builder/pick returns only the top matches
-  // from the cached directory. Document-level delegation so it works on HTMX-injected forms.
+  // from the cached directory. Each field is an ARIA combobox (_builder_form.html): ArrowDown/Up move
+  // through the suggestions (ArrowDown opens them), Enter takes one without submitting, Escape closes,
+  // a click still picks. Document-level delegation so it works on HTMX-injected forms.
   (function () {
-    var timer;
+    var timer, seq = 0;
+    function isPick(el) { return !!(el && el.classList && el.classList.contains("upick")); }
     function menuOf(inp) { var w = inp.closest(".upick-wrap"); return w ? w.querySelector(".upick-menu") : null; }
-    function closeAll() { document.querySelectorAll(".upick-menu").forEach(function (m) { m.classList.add("hidden"); }); }
-    function search(inp) {
+    function options(inp) {
       var menu = menuOf(inp);
+      return menu && !menu.classList.contains("hidden") ? [].slice.call(menu.querySelectorAll("[role=option]")) : [];
+    }
+    function close(inp) {
+      var menu = menuOf(inp);
+      seq++;                                   // a search still in flight must not reopen it
+      clearTimeout(timer);
+      if (menu) { menu.classList.add("hidden"); menu.replaceChildren(); }
+      inp.setAttribute("aria-expanded", "false");
+      inp.removeAttribute("aria-activedescendant");
+    }
+    function search(inp, speak) {
+      var menu = menuOf(inp), n = ++seq;
       if (!menu) return;
       var kind = inp.dataset.kind || "users";
       fetch("/builder/pick?kind=" + encodeURIComponent(kind) + "&q=" + encodeURIComponent(inp.value.trim()))
-        .then(function (r) { return r.text(); })
-        .then(function (html) { menu.innerHTML = html; menu.classList.remove("hidden"); })
-        .catch(function () {});
+        .then(function (r) { return r.ok ? r.text() : ""; })
+        .then(function (html) {
+          if (n !== seq || document.activeElement !== inp) return;   // a newer search, or the field was left
+          menu.innerHTML = html;
+          menu.classList.toggle("hidden", !html.trim());
+          var list = menu.querySelector("[role=listbox]"), opts = options(inp);
+          if (list) {
+            list.id = inp.getAttribute("aria-controls");
+            opts.forEach(function (o, i) { o.id = list.id + "-" + i; });
+          }
+          inp.setAttribute("aria-expanded", opts.length ? "true" : "false");
+          inp.removeAttribute("aria-activedescendant");
+          var live = document.getElementById("live-status");
+          if (speak && live) {
+            live.textContent = opts.length ? opts.length + (opts.length === 1 ? " suggestion" : " suggestions")
+              + ", arrow down to pick" : "No matches";
+          }
+        })
+        .catch(function () { /* no suggestions; the typed address still works */ });
+    }
+    function activate(inp, opt) {
+      options(inp).forEach(function (o) { o.setAttribute("aria-selected", o === opt ? "true" : "false"); });
+      inp.setAttribute("aria-activedescendant", opt.id);
+      opt.scrollIntoView({ block: "nearest" });
+    }
+    function take(inp, opt) {
+      inp.value = opt.dataset.val;
+      close(inp);
+      inp.focus();
     }
     document.addEventListener("input", function (e) {
-      if (!e.target.classList || !e.target.classList.contains("upick")) return;
+      if (!isPick(e.target)) return;
+      var inp = e.target;
       clearTimeout(timer);
-      timer = setTimeout(function () { search(e.target); }, 180);
+      timer = setTimeout(function () { search(inp, true); }, 180);
     });
-    document.addEventListener("focusin", function (e) {
-      if (e.target.classList && e.target.classList.contains("upick")) search(e.target);
-    });
-    // mousedown (not click) so the pick registers before the input's blur hides the menu.
-    document.addEventListener("mousedown", function (e) {
-      var opt = e.target.closest ? e.target.closest(".upick-opt") : null;
-      if (opt) {
+    document.addEventListener("focusin", function (e) { if (isPick(e.target)) search(e.target, false); });
+    document.addEventListener("focusout", function (e) { if (isPick(e.target)) close(e.target); });
+    document.addEventListener("keydown", function (e) {
+      var inp = e.target;
+      if (!isPick(inp) || e.ctrlKey || e.metaKey) return;
+      var opts = options(inp);
+      var cur = opts.findIndex(function (o) { return o.getAttribute("aria-selected") === "true"; });
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        var inp = opt.closest(".upick-wrap").querySelector(".upick");
-        inp.value = opt.dataset.val;
-        closeAll();
-        return;
+        if (!opts.length) { if (e.key === "ArrowDown") search(inp, true); return; }
+        if (e.altKey) return;                  // Alt+Down opens; with the list open, stay put
+        var down = e.key === "ArrowDown";
+        activate(inp, opts[cur < 0 ? (down ? 0 : opts.length - 1) : (cur + (down ? 1 : -1) + opts.length) % opts.length]);
+      } else if (e.key === "Enter" && cur >= 0) {
+        e.preventDefault();                    // take the suggestion; don't submit yet
+        take(inp, opts[cur]);
+      } else if (e.key === "Escape" && menuOf(inp) && !menuOf(inp).classList.contains("hidden")) {
+        e.preventDefault();
+        close(inp);
       }
-      var onInput = e.target.classList && e.target.classList.contains("upick");
-      var inMenu = e.target.closest && e.target.closest(".upick-menu");
-      if (!onInput && !inMenu) closeAll();
+    });
+    // mousedown (not click) so the pick lands before the field's blur closes the list; anywhere in the
+    // list keeps focus in the field.
+    document.addEventListener("mousedown", function (e) {
+      var menu = e.target.closest ? e.target.closest(".upick-menu") : null;
+      if (!menu) return;
+      e.preventDefault();
+      var opt = e.target.closest("[role=option]");
+      if (opt) take(menu.closest(".upick-wrap").querySelector(".upick"), opt);
     });
   })();
 

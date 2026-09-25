@@ -268,12 +268,21 @@ def test_user_picker_searches_directory(client):
     assert r.status_code == 200 and "alice@example.com" in r.text
     assert "No matches" in client.get("/builder/pick", params={"kind": "users", "q": "zzznope"}).text
     assert "sales@example.com" in client.get("/builder/pick", params={"kind": "groups"}).text
+    # A listbox of options (builder.js gives them ids); its notes sit outside it, as ARIA requires.
+    assert '<ul role="listbox"' in r.text and 'role="option" aria-selected="false" data-val="alice@example.com"' in r.text
+    assert 'role="listbox"' not in client.get("/builder/pick", params={"kind": "users", "q": "zzznope"}).text
 
 
 def test_builder_form_renders_picker_not_datalist(client):
-    # User slots use the server-backed picker widget, not a <datalist>.
+    # User slots use the server-backed picker widget, not a <datalist>; each is an ARIA combobox whose
+    # aria-controls names the listbox builder.js fills.
     r = client.get("/builder/command/build.add_delegate")
     assert 'class="upick' in r.text and 'data-kind="users"' in r.text and "datalist" not in r.text
+    fields = re.findall(r'<input id="([^"]+)"[^>]*class="upick', r.text)
+    assert fields
+    for sid in fields:
+        assert re.search(rf'<input id="{sid}"[^>]*role="combobox" aria-autocomplete="list" '
+                         rf'aria-expanded="false" aria-controls="{sid}-listbox"', r.text)
 
 
 def test_builder_page_groups_into_areas(client):

@@ -23,11 +23,12 @@
     <span class="upick-wrap relative mt-1 block">
       <input id="{{ sid }}" name="{{ slot.key }}" value="{{ val }}" autocomplete="off" aria-describedby="{{ sid }}-help"
              placeholder="{{ slot.placeholder or ('group@domain' if slot.kind.value == 'group' else 'user@domain') }}"
+             role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="{{ sid }}-listbox"
              class="upick {{ fld }} border-dashed border-brand-blue/50"
              data-kind="{{ 'groups' if slot.kind.value == 'group' else 'users' }}" />
       <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
     </span>
-    <span id="{{ sid }}-help" class="text-[11px] text-brand-grayink">click and type a {{ 'group' if slot.kind.value == 'group' else 'user' }} — pick from the list</span>
+    <span id="{{ sid }}-help" class="text-[11px] text-brand-grayink">type a {{ 'group' if slot.kind.value == 'group' else 'user' }} and pick from the list — arrows and Enter, or a click</span>
     {% else %}
     <input id="{{ sid }}" name="{{ slot.key }}" value="{{ val }}" placeholder="{{ slot.placeholder }}" autocomplete="off" class="{{ fld }} mt-1"
            {% if slot.hint_note %}aria-describedby="{{ sid }}-help"{% endif %} />
@@ -49,7 +50,8 @@
     <label class="mt-2 flex items-center gap-1.5"><input type="checkbox" name="td_export" value="1" /> Create a Sheet</label>
     <div class="mt-2 grid gap-2 sm:grid-cols-2">
       <span class="upick-wrap relative block">
-        <input name="td_user" aria-label="Sheet owner (whose Drive)" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
+        <input id="td-user" name="td_user" aria-label="Sheet owner (whose Drive)" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="td-user-listbox"
                class="upick {{ fld }} border-dashed border-brand-blue/50" data-kind="users" />
         <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
       </span>
