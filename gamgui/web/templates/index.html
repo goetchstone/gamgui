@@ -1,61 +1,98 @@
 {% extends "base.html" %}
+{#- Home (plan U4): the tenant, the common tasks, and three cards — the directory's counts from the cache,
+    the jobs, the last few failed writes. Nothing here calls Google on load (routes/home.py). -#}
 {% block content %}
-<div class="space-y-8">
-  <div>
-    <p class="eyebrow text-brand-blue">Administration</p>
-    <h1 class="mt-2 font-serif text-4xl text-brand-black tracking-tight">Welcome</h1>
-    <p class="text-brand-blueink mt-2 text-[15px] max-w-xl">
-      A local, secure console for Google Workspace — and, as connectors come online, the rest of your stack.
-    </p>
+{% import "_job_live.html" as live %}
+{% set t = active_tenant(request) %}
+{% set link = "underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black" %}
+<div class="space-y-5">
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <div class="min-w-0">
+      <p class="eyebrow text-brand-blue">Home</p>
+      <h1 class="mt-1 truncate font-serif text-3xl text-brand-black tracking-tight">{{ t[0] or "Welcome" }}</h1>
+      <p class="mt-1 text-sm text-brand-blueink">
+        {%- if t[0] %}{% if t[1] %}As {{ t[1] }} · {% endif %}{% elif configured %}Credentials saved, not connected · {% else %}Not connected · {% endif -%}
+        {%- if binary_present %}{{ gam_version or "GAM detected" }}{% else %}GAM not vendored yet — run <code class="text-xs">scripts/fetch_gam.sh</code>{% endif -%}
+      </p>
+    </div>
+    <form action="/users" method="get" role="search" aria-label="Find a user" class="flex items-center gap-2">
+      <label for="home-find" class="sr-only">Find a user by name, address, title or department</label>
+      <input id="home-find" type="search" name="q" placeholder="Find a user…"
+             class="w-64 rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+      <button type="submit" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Find</button>
+    </form>
   </div>
 
-  <div class="grid gap-5 sm:grid-cols-2">
-    <!-- GAM engine status -->
-    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-      <h2 class="eyebrow text-brand-grayink">GAM engine</h2>
-      {% if binary_present %}
-        <p class="mt-3 flex items-center gap-2.5">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-          <span class="font-serif text-lg text-brand-black">{{ gam_version or "Detected" }}</span>
-        </p>
-      {% else %}
-        <p class="mt-3 flex items-center gap-2.5">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-          <span class="font-serif text-lg text-brand-black">Not vendored yet</span>
-        </p>
-        <p class="text-sm text-brand-blueink mt-1.5">Run <code class="text-xs bg-paper px-1.5 py-0.5 rounded">scripts/fetch_gam.sh</code>.</p>
-      {% endif %}
-      <p class="text-xs text-brand-grayink mt-4 break-all">{{ gam_binary }}</p>
-    </div>
+  {% if not configured %}
+  <p class="rounded-2xl border border-brand-gray/40 bg-brand-white px-5 py-4 text-sm text-brand-blueink shadow-sm">
+    Every screen reads from a connected Google Workspace domain — <a href="/setup" class="font-medium text-brand-blueink {{ link }}">run setup</a> first.
+  </p>
+  {% endif %}
 
-    <!-- Workspace connection -->
-    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
-      <h2 class="eyebrow text-brand-grayink">Workspace</h2>
-      {% if configured %}
-        <p class="mt-3 flex items-center gap-2.5">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-          <span class="font-serif text-lg text-brand-black">{{ active_domain }}</span>
-        </p>
-        <p class="text-sm text-brand-blueink mt-1.5">Credentials in Keychain. Ready to manage users.</p>
-        <a href="/users" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Manage users</a>
-      {% else %}
-        <p class="mt-3 flex items-center gap-2.5">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-brand-gray"></span>
-          <span class="font-serif text-lg text-brand-black">Not configured</span>
-        </p>
-        <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">
-          Run setup
+  <nav aria-labelledby="home-tasks-h">
+    <h2 id="home-tasks-h" class="sr-only">Common tasks</h2>
+    <ul class="grid gap-3 sm:grid-cols-3">
+      {% for href, name, what in [
+        ("/onboard", "Onboard a new hire", "Account, OU, signature, groups and calendars from a role."),
+        ("/lifecycle", "Offboard a leaver", "Every step previewed before it runs."),
+        ("/signatures", "Apply a signature", "Design once, preview for a real person, apply in bulk."),
+      ] %}
+      <li>
+        <a href="{{ href }}" class="block h-full rounded-2xl border border-brand-gray/40 bg-brand-white px-4 py-3 shadow-sm hover:border-brand-blue transition-colors">
+          <span class="block text-sm font-medium text-brand-black">{{ name }} →</span>
+          <span class="mt-0.5 block text-xs text-brand-blueink">{{ what }}</span>
         </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  <div class="grid items-start gap-4 sm:grid-cols-3">
+    {% include "_home_directory.html" %}
+
+    <section aria-labelledby="home-jobs-h" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <div class="flex items-baseline justify-between gap-3">
+        <h2 id="home-jobs-h" class="eyebrow text-brand-grayink">Jobs</h2>
+        {% if running %}<span class="text-xs text-brand-blueink">{{ running }} running</span>{% endif %}
+      </div>
+      {% if jobs %}
+      <ul class="mt-1 divide-y divide-brand-gray/30">
+        {% for j in jobs %}
+        <li class="py-2">
+          <a href="/jobs/{{ j.id }}" class="block truncate text-sm text-brand-black hover:underline">{{ j.title or "Background job" }}</a>
+          <p class="mt-0.5 line-clamp-2 text-xs {{ 'text-brand-blueink' if not j.finished else ('text-emerald-800' if not (j.error or j.interrupted or j.failed_total) else 'text-amber-800') }}">{{ live.job_status(j) }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="mt-1 text-xs text-brand-grayink">{% if jobs_more %}+{{ jobs_more }} more in the Jobs tray, {% else %}The Jobs tray is {% endif %}live; this list is as of when Home opened.</p>
+      {% else %}
+      <p class="mt-2 text-sm text-brand-grayink">Nothing has run in the background since GamGUI started.</p>
       {% endif %}
-    </div>
+    </section>
+
+    <section aria-labelledby="home-failures-h" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <h2 id="home-failures-h" class="eyebrow text-brand-grayink">Recent failures</h2>
+      {% if failures %}
+      <ul class="mt-1 divide-y divide-brand-gray/30">
+        {% for r in failures %}
+        {% set err = (r.extra.error if r.extra is mapping else None) %}
+        <li class="py-2">
+          <p class="truncate text-sm text-brand-black">{{ r.action or "—" }}{% if r.target %} · {{ r.target }}{% endif %}</p>
+          <p class="font-mono text-xs text-brand-grayink">{{ (r.ts or "")[:16] | replace("T", " ") }} UTC</p>
+          {% if err %}<p class="line-clamp-2 break-words text-xs text-amber-800">{{ err[:160] }}</p>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <a href="/audit?failed=1" class="mt-2 inline-block text-sm font-medium text-brand-blueink {{ link }}">All failures in Audit</a>
+      {% else %}
+      <p class="mt-2 text-sm text-brand-grayink">No failed writes in the <a href="/audit" class="text-brand-blueink {{ link }}">audit log</a>.</p>
+      {% endif %}
+    </section>
   </div>
 
-  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm text-sm text-brand-blueink">
-    <h2 class="eyebrow text-brand-grayink">Screens</h2>
-    {% if not configured %}
-      <p class="mt-2">Every screen reads from a connected domain — run <a href="/setup" class="text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">setup</a> first.</p>
-    {% endif %}
-    <dl class="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+  <details class="text-sm text-brand-blueink">
+    <summary class="cursor-pointer text-brand-blueink hover:text-brand-black">What each screen does</summary>
+    <dl class="mt-3 grid gap-x-8 gap-y-2 sm:grid-cols-2">
       {% for href, name, what in [
         ("/users", "Users", "Search the directory; title and department, delegates, vacation, groups, calendar sharing; sign out, suspend, delete."),
         ("/groups", "Groups", "Find a group; see its members and roles; add someone with a role; remove a member."),
@@ -67,12 +104,12 @@
         ("/reports", "Reports", "2SV gaps, inactive accounts, admins, directory completeness, storage and mail usage."),
         ("/audit", "Audit", "Every write this app made, searchable, with a failures-only filter."),
       ] %}
-        <div>
-          <dt><a href="{{ href }}" class="font-medium text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">{{ name }}</a></dt>
-          <dd class="mt-0.5 leading-relaxed">{{ what }}</dd>
-        </div>
+      <div>
+        <dt><a href="{{ href }}" class="font-medium text-brand-blueink {{ link }}">{{ name }}</a></dt>
+        <dd class="mt-0.5 leading-relaxed">{{ what }}</dd>
+      </div>
       {% endfor %}
     </dl>
-  </div>
+  </details>
 </div>
 {% endblock %}

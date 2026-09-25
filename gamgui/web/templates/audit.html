@@ -17,7 +17,7 @@
     <input type="search" name="q" aria-label="Filter the audit log" placeholder="Filter by action, target, or error…"
            class="flex-1 min-w-[16rem] rounded-lg border border-brand-gray/60 bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
     <label class="flex items-center gap-2 text-sm text-brand-blueink">
-      <input type="checkbox" name="failed" value="1" /> Failures only
+      <input type="checkbox" name="failed" value="1"{% if failed %} checked{% endif %} /> Failures only
     </label>
   </form>
 

@@ -1002,6 +1002,10 @@ video {
   width: 14rem;
 }
 
+.w-64 {
+  width: 16rem;
+}
+
 .w-72 {
   width: 18rem;
 }
@@ -1050,10 +1054,6 @@ video {
   max-width: none;
 }
 
-.max-w-xl {
-  max-width: 36rem;
-}
-
 .flex-1 {
   flex: 1 1 0%;
 }
@@ -1076,6 +1076,10 @@ video {
 
 .resize {
   resize: both;
+}
+
+.scroll-mt-2 {
+  scroll-margin-top: 0.5rem;
 }
 
 .list-inside {
@@ -1815,11 +1819,6 @@ video {
   line-height: 2.25rem;
 }
 
-.text-4xl {
-  font-size: 2.25rem;
-  line-height: 2.5rem;
-}
-
 .text-\[10px\] {
   font-size: 10px;
 }
@@ -2187,6 +2186,11 @@ video {
   color: rgb(109 110 117 / var(--tw-text-opacity, 1));
 }
 
+.hover\:border-brand-blue:hover {
+  --tw-border-opacity: 1;
+  border-color: rgb(90 114 142 / var(--tw-border-opacity, 1));
+}
+
 .hover\:border-brand-blue\/50:hover {
   border-color: rgb(90 114 142 / 0.5);
 }
@@ -2364,6 +2368,10 @@ video {
 
   .sm\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sm\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .sm\:grid-cols-\[minmax\(0\2c 1fr\)_minmax\(0\2c 2fr\)\] {

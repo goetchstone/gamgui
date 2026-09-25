@@ -30,7 +30,7 @@
     <div class="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
     <div class="grid gap-4 sm:grid-cols-2">
       {% for r in reports %}
-      <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <div id="report-{{ r.key }}" class="scroll-mt-2 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
         <div class="flex items-baseline justify-between gap-3">
           <h2 class="eyebrow text-brand-grayink">{{ r.title }}</h2>
           <span class="font-serif text-2xl {{ 'text-brand-black' if r.count else 'text-brand-grayink' }}">{{ r.count }}</span>

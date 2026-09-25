@@ -91,12 +91,13 @@ def _rows_context(records: List[Dict[str, Any]], q: str = "", failed: bool = Fal
 
 
 @router.get("", response_class=HTMLResponse)
-async def audit_page(request: Request) -> HTMLResponse:
+async def audit_page(request: Request, failed: str = "") -> HTMLResponse:
+    # ``failed=1`` opens it filtered to failures (Home's "All failures" link, plan U4).
     records = read_records(_audit_path(request))
     total = len(records)
     failures = sum(1 for r in records if r.get("ok") is False)
     ctx = {"total": total, "failures": failures}
-    ctx.update(_rows_context(records))
+    ctx.update(_rows_context(records, failed=_flag(failed)))
     return TEMPLATES.TemplateResponse(request, _AUDIT_PAGE, ctx)
 
 

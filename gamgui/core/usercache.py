@@ -96,5 +96,11 @@ class UserCache:
             self._items = [change(i) if pick(i) else i for i in self._items]
 
     @property
+    def cached(self) -> Optional[list]:
+        """The list as it is, whatever its age, or None when nothing is cached — never a fetch and never
+        a refresh (Home, plan U4: its counts cost no ``gam`` call; ``age_seconds`` says how old they are)."""
+        return self._items
+
+    @property
     def age_seconds(self) -> Optional[float]:
         return None if self._items is None else clock.now() - self._at

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -286,33 +286,12 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     async def healthz() -> JSONResponse:
         return JSONResponse({"ok": True})
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request) -> HTMLResponse:
-        st: AppState = request.app.state.gamgui
-        try:
-            version = (await st.runner.version()).splitlines()[0] if st.runner.binary_exists() else ""
-        except Exception:
-            version = ""
-        domains = st.vault.list_domains()
-        configured = st.vault.has_credentials(st.audit_domain) if st.audit_domain else False
-        return TEMPLATES.TemplateResponse(
-            request,
-            "index.html",
-            {
-                "gam_version": version,
-                "gam_binary": str(st.runner.gam_binary),
-                "binary_present": st.runner.binary_exists(),
-                "domains": domains,
-                "active_domain": st.audit_domain,
-                "configured": configured,
-            },
-        )
-
     # Imported here (not at module top) to avoid a cycle: routes import TEMPLATES from this module.
     from .routes.audit import router as audit_router
     from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
     from .routes.groups import router as groups_router
+    from .routes.home import router as home_router
     from .routes.jobs import router as jobs_router
     from .routes.lifecycle import router as lifecycle_router
     from .routes.onboarding import router as onboarding_router
@@ -321,6 +300,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.signatures import router as signatures_router
     from .routes.users import router as users_router
 
+    app.include_router(home_router)
     app.include_router(setup_router)
     app.include_router(users_router)
     app.include_router(reports_router)

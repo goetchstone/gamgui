@@ -5,19 +5,6 @@
    own panel is on the page to say it. #}
 {% import "_job_live.html" as live %}
 {% set rows, running, more = tray %}
-{% macro status(j) -%}
-  {%- if not j.finished -%}
-    {{ "Stopping" if j.cancel_requested else "Running" }}{% if j.total %} · {{ j.done }} of {{ j.total }}{% endif %}{% if j.failed_total %} · {{ j.failed_total }} failed{% endif %}
-  {%- elif j.interrupted -%}
-    Interrupted — {{ j.applied }} of {{ j.total }} succeeded
-  {%- elif j.error -%}
-    {{ j.error }}
-  {%- elif not j.total -%}
-    Done
-  {%- else -%}
-    Done · {{ j.applied }} of {{ j.total }} succeeded{% if j.failed_total %} · {{ j.failed_total }} failed{% endif %}
-  {%- endif -%}
-{%- endmacro %}
 <div id="jobs-list" hx-get="/jobs/status" hx-trigger="every 2s" hx-swap="outerHTML">
   {% if rows %}
   <ul class="mt-2 divide-y divide-brand-gray/30" aria-label="Recent jobs">
@@ -28,9 +15,9 @@
         {{ live.stop(j, "tray") }}
       </div>
       <p class="mt-0.5 line-clamp-2 text-xs {{ 'text-brand-blueink' if not j.finished else ('text-emerald-800' if not (j.error or j.interrupted or j.failed_total) else 'text-amber-800') }}"
-         {% if j.finished %}{{ live.ended(j, "tray") }}{% endif %}>{{ status(j) }}</p>
+         {% if j.finished %}{{ live.ended(j, "tray") }}{% endif %}>{{ live.job_status(j) }}</p>
       {% if j.finished %}
-      <span hidden data-announce="tray-{{ j.id }}">Finished in the background: {{ j.title or "a job" }} — {{ status(j) | trim(". ") }}.</span>
+      <span hidden data-announce="tray-{{ j.id }}">Finished in the background: {{ j.title or "a job" }} — {{ live.job_status(j) | trim(". ") }}.</span>
       {% elif j.total %}
       <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-brand-gray/20">
         <div class="h-full bg-brand-blue" style="width: {{ j.done * 100 // j.total }}%"></div>

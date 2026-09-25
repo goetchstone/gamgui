@@ -1,0 +1,28 @@
+{#- Home's Directory card (plan U4): counts from the cached directory as it is, never a fetch of its own.
+    A cold cache offers Load — one `gam print users`, on a click — instead of holding the page. -#}
+<section id="home-directory" aria-labelledby="home-directory-h" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 id="home-directory-h" class="eyebrow text-brand-grayink">Directory</h2>
+    {% if loaded %}<span class="text-xs text-brand-grayink">{% include "_as_of.html" %}</span>{% endif %}
+  </div>
+  {% if error %}<p class="mt-2 text-sm text-amber-800">{{ error }}</p>{% endif %}
+  {% if loaded %}
+  <p class="mt-2 font-serif text-2xl text-brand-black">{{ total }} <span class="font-sans text-sm text-brand-blueink">account{{ "s" if total != 1 else "" }}{% if groups is not none %} · {{ groups }} group{{ "s" if groups != 1 else "" }}{% endif %}</span></p>
+  <ul class="mt-2 space-y-1 text-sm" aria-label="Report counts">
+    {% for r in reports %}
+    <li class="flex items-baseline justify-between gap-3">
+      <a href="/reports#report-{{ r.key }}" class="truncate text-brand-blueink hover:text-brand-black">{{ r.title }}</a>
+      <span class="{{ 'font-medium text-brand-black' if r.count else 'text-brand-grayink' }}">{{ r.count }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <button type="button" hx-get="/home/directory?refresh=1" hx-target="#home-directory" hx-swap="outerHTML" hx-disabled-elt="this"
+          class="mt-3 text-xs font-medium text-brand-blueink underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">Refresh</button>
+  {% elif connected %}
+  <p class="mt-2 text-sm text-brand-blueink">Not loaded yet. Home doesn't call Google on its own.</p>
+  <button type="button" hx-get="/home/directory" hx-target="#home-directory" hx-swap="outerHTML" hx-disabled-elt="this"
+          class="mt-3 rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Load the directory</button>
+  {% else %}
+  <p class="mt-2 text-sm text-brand-blueink">Connect a domain on <a href="/setup" class="underline decoration-brand-gray/60 underline-offset-2 hover:text-brand-black">Setup</a> to see its counts.</p>
+  {% endif %}
+</section>

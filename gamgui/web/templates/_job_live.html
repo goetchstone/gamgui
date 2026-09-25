@@ -41,3 +41,18 @@ id="stop-{{ where }}-{{ job.id }}" tabindex="-1"
 {% macro jobs_count(running, oob=False) -%}
 <span id="jobs-count"{% if oob %} hx-swap-oob="true"{% endif %} class="{{ 'rounded-full bg-brand-blue px-2 py-px text-xs text-white' if running else 'hidden' }}">{{ running ~ " running" if running else "" }}</span>
 {%- endmacro %}
+
+{# A job in one line (the tray and Home): running, stopping, interrupted, its error, or done. #}
+{% macro job_status(j) -%}
+  {%- if not j.finished -%}
+    {{ "Stopping" if j.cancel_requested else "Running" }}{% if j.total %} · {{ j.done }} of {{ j.total }}{% endif %}{% if j.failed_total %} · {{ j.failed_total }} failed{% endif %}
+  {%- elif j.interrupted -%}
+    Interrupted — {{ j.applied }} of {{ j.total }} succeeded
+  {%- elif j.error -%}
+    {{ j.error }}
+  {%- elif not j.total -%}
+    Done
+  {%- else -%}
+    Done · {{ j.applied }} of {{ j.total }} succeeded{% if j.failed_total %} · {{ j.failed_total }} failed{% endif %}
+  {%- endif -%}
+{%- endmacro %}
