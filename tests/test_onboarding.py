@@ -403,7 +403,7 @@ def _hire(**over):
 def test_parse_hire_csv():
     rows, errors = onboarding.parse_hire_csv(onboarding.HIRE_CSV_TEMPLATE)
     assert len(rows) == 2 and not errors
-    assert rows[0]["create_account"] is True and rows[0]["notify"] == "jordan.personal@gmail.com"
+    assert rows[0]["create_account"] is True and rows[0]["notify"] == "jordan.personal@example.net"
     assert rows[1]["notify"] == "" and rows[1]["send_welcome"] is False
     # header case-insensitive, blank lines skipped, per-row validation
     rows2, errors2 = onboarding.parse_hire_csv("ROLE,Email\nSales,a@x.com\n\n,b@x.com\nSales,\n")
@@ -425,7 +425,7 @@ async def test_provision_hire_notify_vs_sheet(connector, tmp_path):
     # notify address -> GAM emails it, nothing on the printable sheet
     r1 = await onboarding.provision_hire(connector, sig_store, store, cfg,
                                          _hire(name="Ada Byte", email="ada@example.com", create_account=True,
-                                               notify="ada.personal@gmail.com"))
+                                               notify="ada.personal@example.net"))
     assert r1["ok"] and r1["account_created"] and r1["notified"] and r1["credential"] is None
     assert r1["signature"] == "Classic" and r1["groups"]["added"] == 1
     # blank notify -> a credential for the printable sheet, not notified
@@ -486,7 +486,7 @@ def test_bulk_template_download(client):
 def test_bulk_preview_summarizes_and_flags_bad_rows(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     csv = ("role,name,email,create_account,notify\n"
-           "Sales,Ada,ada@example.com,yes,ada.p@gmail.com\n"
+           "Sales,Ada,ada@example.com,yes,ada.p@example.net\n"
            "Bogus,X,x@example.com,no,\n")
     r = client.post("/onboard/bulk/preview", files={"csv_file": ("hires.csv", csv, "text/csv")})
     assert r.status_code == 200
@@ -766,7 +766,7 @@ async def test_provision_hire_notify_never_audits_password(connector, tmp_path, 
     store = RunbookStore(tmp_path / "ob.json"); store.set_role("Sales", ["Set up POS"])
     r = await onboarding.provision_hire(connector, SignatureStore(tmp_path / "sig.json"), store, store.role("Sales"),
                                         _hire(name="Ada Byte", email="ada@example.com", create_account=True,
-                                              first="Ada", last="Byte", notify="ada.personal@gmail.com"))
+                                              first="Ada", last="Byte", notify="ada.personal@example.net"))
     assert r["notified"] is True and r["credential"] is None
     audit = (tmp_path / "audit.jsonl").read_text()
     assert "NOTIFYpw-1234-5678" not in audit and "create_user" in audit   # notifypassword redacted too
@@ -878,3 +878,13 @@ async def test_a_cancelled_runbook_build_is_audited_as_interrupted(connector, mo
     [rec] = [e for e in connector.audit.tail() if e["action"] == "onboard_runbook"]
     assert rec["ok"] is False and rec["extra"]["error"] == INTERRUPTED
     assert rec["extra"]["tasks"] == 0 and rec["extra"]["tasklist_id"]
+
+
+def test_the_csv_template_only_uses_reserved_example_domains():
+    # The template is what an operator downloads and edits. Its sample `notify` was once a real,
+    # registrable gmail.com address — keep that row by mistake and Google would email a new
+    # hire's sign-in details there. RFC 2606's example.* domains deliver nowhere.
+    from gamgui.core.onboarding import HIRE_CSV_TEMPLATE
+
+    domains = set(re.findall(r"@([\w.-]+)", HIRE_CSV_TEMPLATE))
+    assert domains and domains <= {"example.com", "example.net", "example.org"}, domains

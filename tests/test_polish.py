@@ -291,3 +291,12 @@ def test_runbooks_name_only_tests_that_exist():
                 missing.append(f"{doc.name}: {name}")
     assert not missing, "a runbook names a test that doesn't exist:\n" + "\n".join(missing)
 
+
+def test_example_data_never_uses_a_real_mail_provider():
+    # The onboarding CSV template's sample `notify` was once a gmail.com address — where Google
+    # would email a new hire's sign-in details if an operator kept the row — and a mock mailbox
+    # row carried a real Amazon SES Message-ID. Example data uses the reserved example.* domains.
+    real = re.compile(r"[\w.+-]+@(?:[\w-]+\.)*(?:gmail|googlemail|amazonses|outlook|hotmail|live|yahoo|"
+                      r"icloud|me|aol|proton|protonmail)\.(?:com|me|net)\b", flags=re.I)
+    hits = [f"{name}: {m.group(0)}" for name, text in _tracked_text_files() for m in real.finditer(text)]
+    assert not hits, "a tracked file uses a real mail provider's address:\n" + "\n".join(hits)

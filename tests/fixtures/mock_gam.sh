@@ -339,11 +339,12 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ];
   case "$*" in
     *FAILME*) echo "ERROR: 400: Bad Request - precondptionFailed: a representative GAM failure detail" 1>&2; exit 1 ;;
   esac
-  # `print messages` has no formatjson mode — real GAM returns CSV. One row carries an Amazon SES
-  # Return-Path header so the mailbox-search flow has an envelope-sender to surface.
+  # `print messages` has no formatjson mode — real GAM returns CSV. One row carries a bulk-mailer
+  # style Return-Path (a bounce address unlike the From) so the mailbox-search flow has an
+  # envelope-sender to surface. Made up: never paste a real message's headers in here.
   cat <<'EOF'
 User,id,Subject,From,Date,Return-Path
-someone@example.com,msg_1001,Your receipt,billing@vendor.example,"Mon, 23 Jun 2026 14:29:10 +0000",<0101019ef4e29302-4b960d36-aba1-4a59-9f22-123f07e3fce8-000000@us-west-2.amazonses.com>
+someone@example.com,msg_1001,Your receipt,billing@vendor.example,"Mon, 23 Jun 2026 14:29:10 +0000",<fixture-bounce-0001@bounces.vendor.example>
 someone@example.com,msg_1002,Weekly digest,news@vendor.example,"Tue, 24 Jun 2026 09:00:00 +0000",<bounce@vendor.example>
 EOF
   exit 0

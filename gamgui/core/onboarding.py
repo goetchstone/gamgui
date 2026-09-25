@@ -125,7 +125,7 @@ HIRE_COLUMNS = ["role", "name", "email", "manager", "assignee",
 
 HIRE_CSV_TEMPLATE = (
     "role,name,email,manager,assignee,create_account,first,last,send_welcome,notify\n"
-    "Salesperson,Jordan Lee,jordan@example.com,mgr@example.com,it@example.com,yes,Jordan,Lee,yes,jordan.personal@gmail.com\n"
+    "Salesperson,Jordan Lee,jordan@example.com,mgr@example.com,it@example.com,yes,Jordan,Lee,yes,jordan.personal@example.net\n"
     "Salesperson,Sam Rivers,sam@example.com,mgr@example.com,it@example.com,yes,Sam,Rivers,no,\n"
 )
 
