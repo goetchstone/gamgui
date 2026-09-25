@@ -58,7 +58,9 @@
     {# relative z-50: backdrop-blur makes the header a stacking context, and without a z-index it paints
        under <main>'s positioned content (the Users table's sticky header row) — the open tray with it. #}
     <header class="relative z-50 border-b border-brand-gray/40 bg-brand-white/80 backdrop-blur">
-      <div class="mx-auto {{ self.container_class() }} px-6 py-4 flex items-center gap-4">
+      {# One row on every screen: it once took each page's content width, so the nav sat inset on Home and
+         /setup and edge to edge everywhere else — it moved when you changed screens. #}
+      <div class="px-6 py-4 flex items-center gap-4">
         <a href="/" class="wordmark font-serif text-lg text-brand-black">GamGUI</a>
         <span class="h-4 w-px bg-brand-gray/60"></span>
         {% include "_tenant.html" %}

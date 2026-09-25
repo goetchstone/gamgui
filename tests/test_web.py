@@ -68,3 +68,18 @@ def test_home_describes_every_screen_in_the_nav(client):
     assert all(f'href="{s}"' in body for s in screens), screens - {s for s in screens if f'href="{s}"' in body}
     assert "come next" not in html
     assert 'href="/setup"' in body      # unconfigured: points at setup first
+
+
+def test_the_header_is_laid_out_the_same_on_every_screen(client):
+    # The header took each page's content width (container_class), so on Home and /setup (max-w-5xl) the
+    # wordmark and nav sat inset while on the ten full-width screens they ran edge to edge — the nav moved
+    # when you changed screens. The header's row is page-independent now.
+    client.get("/?token=testtoken")                       # the launch token sets the session cookie
+    rows = {}
+    for path in ("/", "/setup", "/users", "/signatures"):
+        html = client.get(path).text
+        m = re.search(r"<header[^>]*>\s*<div class=\"([^\"]+)\"", html)
+        assert m, f"{path}: no header row\n{html[html.find('<header'):html.find('<header') + 400]}"
+        rows[path] = m.group(1)
+    assert len(set(rows.values())) == 1, rows
+    assert "container" not in rows["/"] and "max-w" not in rows["/"], rows
