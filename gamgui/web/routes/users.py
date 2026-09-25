@@ -110,16 +110,16 @@ def _list_url_from(back: str) -> str:
     return _list_url("/users", _list_state(**got))
 
 
-def _table_context(users, q: str = "", scope: str = "all", page: int = 1, sort: str = "name",
-                   desc: int = 0, size: int = PAGE_SIZE) -> dict:
+def _table_context(users, q: str = "", scope: str = "all", page: object = 1, sort: str = "name",
+                   desc: object = 0, size: object = PAGE_SIZE) -> dict:
     state = _list_state(q, scope, sort, desc, size, page)
     rows = _sort_users(_filter_users(users, state["q"], state["scope"]), state["sort"], bool(state["desc"]))
-    size, total = state["size"], len(rows)
-    pages = max(1, math.ceil(total / size))
+    per, total = state["size"], len(rows)
+    pages = max(1, math.ceil(total / per))
     state["page"] = min(state["page"], pages)
-    start = (state["page"] - 1) * size
+    start = (state["page"] - 1) * per
     return {
-        **state, "users": rows[start:start + size], "pages": pages, "total": total, "start": start,
+        **state, "users": rows[start:start + per], "pages": pages, "total": total, "start": start,
         "sizes": PAGE_SIZES, "list_url": _list_url("/users", state), "back": _list_url("", state).lstrip("?"),
         "table_url": lambda **changes: _list_url("/users/table", state, **changes),
     }
@@ -131,9 +131,11 @@ def _error_page(request: Request, message: str) -> HTMLResponse:
 
 
 @router.get("", response_class=HTMLResponse)
-async def users_page(request: Request, q: str = "", scope: str = "all", page: int = 1, sort: str = "name",
-                     desc: int = 0, size: int = PAGE_SIZE) -> HTMLResponse:
-    """The list, opened at the view its URL names (the table's requests keep the URL current)."""
+async def users_page(request: Request, q: str = "", scope: str = "all", page: str = "1", sort: str = "name",
+                     desc: str = "0", size: str = str(PAGE_SIZE)) -> HTMLResponse:
+    """The list, opened at the view its URL names (the table's requests keep the URL current). Every
+    view value arrives as text and ``_list_state`` checks it, so a hand-edited or cut-off URL opens the
+    default view rather than FastAPI's 422 (review 2: R6)."""
     st = request.app.state.gamgui
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _USERS_PAGE, {"connected": False})
@@ -154,14 +156,14 @@ async def users_page(request: Request, q: str = "", scope: str = "all", page: in
 
 @router.get("/table", response_class=HTMLResponse)
 async def users_table(
-    request: Request, q: str = "", scope: str = "all", page: int = 1, sort: str = "name", desc: int = 0,
-    size: int = PAGE_SIZE, refresh: int = 0,
+    request: Request, q: str = "", scope: str = "all", page: str = "1", sort: str = "name", desc: str = "0",
+    size: str = str(PAGE_SIZE), refresh: str = "0",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
         return error_partial(request, "Not connected — run setup first.")
     try:
-        users = await st.users(force=bool(refresh), stale_ok=True)
+        users = await st.users(force=bool(_as_int(refresh, 0)), stale_ok=True)
     except Exception as exc:
         return error_partial(request, friendly(exc, _TRY_AGAIN))
     ctx = {**_table_context(users, q, scope, page, sort, desc, size), **as_of(st.user_cache)}

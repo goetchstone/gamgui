@@ -125,3 +125,12 @@ def test_a_pager_click_lands_focus_on_the_count_line(many):
     sorted_ = many.get("/users/table", params={"sort": "title"}, headers={"HX-Trigger": "sort-title"}).text
     assert "data-focus" not in sorted_          # a sort keeps focus on its header (htmx restores it by id)
     assert 'id="sort-title"' in sorted_
+
+
+@pytest.mark.parametrize("path", ["/users", "/users/table"])
+def test_a_garbled_view_in_the_url_opens_the_default_view(many, path):
+    # A hand-edited or truncated URL got FastAPI's raw 422 JSON: page/size/desc were typed int, so a
+    # non-number was refused before _list_state could fall back (review 2: R6).
+    r = many.get(f"{path}?page=abc&size=x&desc=y&sort=bogus&scope=nope")
+    assert r.status_code == 200
+    assert _emails(r.text) == _emails(many.get(path).text) and len(_emails(r.text)) == PAGE_SIZE
