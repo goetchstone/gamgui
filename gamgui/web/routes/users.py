@@ -657,7 +657,8 @@ async def _vacation_partial(request: Request, conn, email: str) -> HTMLResponse:
         vac = await conn.get_vacation(email)
     except Exception as exc:
         return error_partial(request, friendly(exc, _TRY_AGAIN))
-    # The stored body is HTML (the form sends it so); the textarea edits its text.
+    # The textarea edits the reply's text: an HTML body (what this form sends) is decoded, a plain-text
+    # one set elsewhere is kept as it is (autoreply_text decides which).
     message = autoreply_text(vac.message) if vac.enabled else ""
     return TEMPLATES.TemplateResponse(request, "_vacation.html", {"vac": vac, "email": email, "message": message})
 

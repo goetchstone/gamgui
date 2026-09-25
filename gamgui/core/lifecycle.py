@@ -133,11 +133,33 @@ class _BodyText(HTMLParser):
         self.out.append(data)
 
 
+# What marks a body as HTML: a tag in an email's vocabulary written as a tag (a name, then only
+# ``name=value`` attributes — so "a <b and c> d" is text), or an entity that stands for something.
+_BODY_TAG = re.compile(
+    r"</?(?:a|b|blockquote|body|br|center|code|del|div|em|font|h[1-6]|head|hr|html|i|img|ins|li|meta|ol|"
+    r"p|pre|s|small|span|strike|strong|style|sub|sup|table|tbody|td|th|thead|tr|tt|u|ul)"
+    r"""(?:\s+[a-z][\w:-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'<>=`]+))*\s*/?>""",
+    re.IGNORECASE)
+_BODY_ENTITY = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);")
+
+
+def _looks_like_html(body: str) -> bool:
+    return bool(_BODY_TAG.search(body)) or any(
+        html.unescape(m.group()) != m.group() for m in _BODY_ENTITY.finditer(body))
+
+
 def autoreply_text(body: str) -> str:
-    """The inverse of ``autoreply_html``, for a form pre-filled from ``show vacation`` (which prints the
-    stored HTML body): each ``<br>`` back to a line break, other tags dropped, entities unescaped — so
-    the operator edits the text, and saving it unchanged sends the same body, not an escaped copy of
-    its markup. A body written in Gmail (``<div>`` per line) reads the same way."""
+    """The inverse of ``autoreply_html``, for a form pre-filled from ``show vacation`` — which prints the
+    stored body as it is, HTML or plain text, and doesn't say which (review 2: R10).
+
+    An HTML body (a tag, or an entity, in it): each ``<br>`` back to a line break, other tags dropped,
+    entities unescaped — so the operator edits the text, and saving it unchanged sends the same body,
+    not an escaped copy of its markup. A body written in Gmail (``<div>`` per line) reads the same way.
+    Anything else is plain text (Gmail's plain-text mode, or set without ``html``) and is the text
+    verbatim: read as HTML, a ``<`` in it started a "tag" and the rest was lost. The form sends either
+    back through ``autoreply_html``, so the reply reads the same."""
+    if not _looks_like_html(body or ""):
+        return (body or "").strip()
     parser = _BodyText()
     parser.feed(body or "")
     parser.close()

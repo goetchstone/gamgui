@@ -14,9 +14,14 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 
 ## Files
 - `gamgui/core/lifecycle.py` — pure step builder. `build_offboard_steps(...)`, `fill_autoreply`,
-  `autoreply_html` (the text → the HTML body sent; the user page's Vacation form sends it too) and
-  its inverse `autoreply_text` (the stored HTML body `show vacation` prints → the text that form is
-  pre-filled with, so an unchanged save sends the same body),
+  `autoreply_html` (the text → the HTML body sent; the user page's Vacation form and the Builder's
+  `build.set_vacation` send it too) and its inverse `autoreply_text` (the stored body `show vacation`
+  prints → the text that form is pre-filled with, so an unchanged save sends a reply that reads the
+  same). `show vacation` prints the body as stored and doesn't say HTML or plain text, so
+  `autoreply_text` decides from the body: an email tag written as a tag, or an entity, is HTML and is
+  decoded; anything else is plain text and is kept verbatim (read as HTML, a `<` in a plain-text
+  reply started a "tag" and the rest was lost — review 2: R10). A plain-text body that happens to hold
+  a real tag or entity is read as HTML — the heuristic's known edge,
   `OffboardStep` dataclass (its `commands` = the exact argv(s) it runs), `command_line` (argv → the
   quoted, redacted `gam …` line the preview shows), `check_addresses` (both addresses against the
   directory → `AddressCheck` errors/warnings), `DEFAULT_SUBJECT` / `DEFAULT_MESSAGE`, and the step
@@ -246,7 +251,9 @@ parser was read statically (its bytecode, never run). No mismatch found.
   what the preview block ("Auto-reply senders will receive") shows. Before 2026-09-23 the raw text
   went out: HTML collapsed its line breaks into one paragraph (GAM turns only the two characters `\n`
   into `<br/>`, `setVacation`) and a typed `<`/`&` was markup (failure-log). The step's `gam` line
-  shows the HTML that is sent; the step summary and the auto-reply block show the text.
+  shows the HTML that is sent; the step summary and the auto-reply block show the text. The Builder's
+  "Set vacation auto-reply" sent its message raw with `html` until 2026-09-25 (the same collapse);
+  its build now runs the message through `autoreply_html` too.
 - `incomplete_transfers_for` reads `overallTransferStatusCode` (falling back to `status`) and treats
   anything not `"completed"` as pending; a real tenant's status vocabulary is the source of truth.
 

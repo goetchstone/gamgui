@@ -458,3 +458,32 @@ def test_command_line_shows_argument_bounds_and_masks_secrets():
         "gam update user a@example.com password random changepassword off")
     typed = command_line(GAMCommands.create_user("n@example.com", "N", "U", "S3cret pw!", notify="b@example.com"))
     assert "S3cret" not in typed and typed.count("***redacted***") == 2
+
+
+@pytest.mark.parametrize("body", ["if a<b then call", "Reach Tom <tom@example.com> & Jerry\nThanks",
+                                  "5 > 3 & 2 < 4", "x <b and c> y", "AT&T; call", "Out today.\nBack Monday."])
+def test_a_plain_text_auto_reply_is_pre_filled_as_it_is(body):
+    # A body stored as plain text (Gmail's plain-text mode, or set outside the app without `html`) is
+    # printed as-is by `show vacation`. Read as HTML, a '<' started a "tag" and the text after it was
+    # lost, so an unchanged save wrote the shortened text back (review 2: R10).
+    assert autoreply_text(body) == body
+    assert autoreply_text(autoreply_html(body)) == body   # an unchanged save sends HTML that reads the same
+
+
+@pytest.mark.parametrize("body, text", [("Away<br/>Ask Bob &amp; co.", "Away\nAsk Bob & co."),
+                                        ("<p>Out</p><p>Back soon</p>", "Out\nBack soon"),
+                                        ('<div dir="ltr">Hi <a href="mailto:b@example.com">Bob</a></div>', "Hi Bob"),
+                                        ("Fish &amp; chips", "Fish & chips"), ("One<BR>Two", "One\nTwo")])
+def test_an_html_auto_reply_is_read_as_html(body, text):
+    assert autoreply_text(body) == text
+
+
+def test_the_builders_vacation_sends_the_text_as_the_html_it_names():
+    # build.set_vacation names `html` but sent the message raw: its line breaks collapsed to spaces and
+    # a typed '<' or '&' became markup. It sends what the user page's form sends now.
+    from gamgui.core.catalog.catalog import load_catalog
+
+    argv = load_catalog().by_id("build.set_vacation").build(
+        {"email": "a@example.com", "subject": "Out", "message": "Ask <IT> & co.\nThanks"})
+    assert argv[argv.index("message") + 1] == autoreply_html("Ask <IT> & co.\nThanks")
+    assert "html" in argv

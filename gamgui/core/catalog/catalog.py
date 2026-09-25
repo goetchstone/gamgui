@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from ..gam.commands import GAMCommands
+from ..lifecycle import autoreply_html
 from ..connectors.base import RiskLevel
 from .describe import gloss
 from .models import Catalog, CatalogCommand, CommandSlot, SlotKind
@@ -114,7 +115,10 @@ def _curated() -> List[CatalogCommand]:
         _cmd("build.set_vacation", "Users", "Gmail - Vacation", "Set vacation auto-reply", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("subject", "Subject", SlotKind.TEXT),
               _slot("message", "Message", SlotKind.TEXT)],
-             lambda s: GAMCommands.set_vacation(s["email"], s.get("subject", ""), s.get("message", ""), html=True),
+             # Sent as the user page's form sends it: HTML built from the text, so its line breaks hold
+             # and a typed '<' or '&' is text, not markup.
+             lambda s: GAMCommands.set_vacation(s["email"], s.get("subject", ""),
+                                                autoreply_html(s.get("message", "")), html=True),
              "gam user <email> vacation on subject <s> message <m> html contactsonly false domainonly false "
              "start Started end NotSpecified",
              "Turn on the user's vacation auto-responder with a subject and message, for every sender and "
