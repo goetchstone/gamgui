@@ -104,7 +104,7 @@ plan's Phase 0 F1–F3.
   calendar and event delete and the groups board's add/remove go through `write_failed`. Still
   leading with GAM's raw line: the Builder's single Run result (`builder.py` ~:358), onboarding's
   "Couldn't create the account: …" and offboarding's step log) · U11 (Copy button and one print helper, `a32acb1`; printing in the built `.app` is
-  unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; the cache items are open) · U8 and U13 `229e7bc`
+  unverified) · U12 (domain-wide calls get a 1 h timeout, `2e8eace`; U12a: a title/department save, suspend/unsuspend, a delete and each accepted bulk-department write patch the one cached record — `st.patch_user` — instead of dropping the directory, the list keeping its last full fetch's age so the TTL and Refresh still re-read it; offboarding and a tenant switch still drop it; stale-while-refreshing with an "as of" label is open) · U8 and U13 `229e7bc`
   (the Users list's view is its URL: `/users/table` answers `HX-Replace-Url` — replaced, not pushed, or a search
   typed a pause at a time leaves a Back step per pause — and `/users` renders any view it is given; each row's
   detail link carries the view as `back`, so "← Users", the native window's only Back, reopens it, only the

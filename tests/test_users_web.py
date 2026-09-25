@@ -597,6 +597,46 @@ def test_set_organization_refreshes_the_displayed_role(client):
     assert r.text.count("Account Manager") >= 2
 
 
+def _print_users(calls):
+    return [c for c in calls if c[:2] == ["print", "users"]]
+
+
+_ALICE_ADDR, _BOB_ADDR = "alice@example.com", "bob@example.com"
+
+
+@pytest.mark.parametrize("path, form, view, shows", [
+    ("/users/organization", {"email": _ALICE_ADDR, "title": "Design Lead", "department": "Marketing"},
+     {"q": "Marketing"}, ["alice@example.com", "Design Lead"]),
+    ("/users/suspend/apply", {"email": _ALICE_ADDR, "suspend": "on", "confirmed": "1"},
+     {"scope": "suspended"}, ["alice@example.com"]),
+    ("/users/suspend/apply", {"email": _BOB_ADDR, "suspend": "off", "confirmed": "1"},
+     {"scope": "active"}, ["bob@example.com"]),
+    ("/users/delete/apply", {"email": _ALICE_ADDR, "confirmed": "1", "confirm_email": _ALICE_ADDR},
+     {}, ["carol@example.com"]),
+], ids=["title-department", "suspend", "unsuspend", "delete"])
+def test_a_single_user_write_patches_the_cached_record(client, gam_calls, path, form, view, shows):
+    # Plan U12: each of these once dropped the whole cached directory, so on a large domain the next
+    # page re-ran `gam print users`. Their new values are known, so the one record changes instead.
+    assert "alice@example.com" in client.get("/users/table").text
+    assert len(gam_writes(gam_calls())) == 0
+    r = client.post(path, data=form)
+    assert r.status_code == 200 and len(gam_writes(gam_calls())) == 1, r.text[:300]
+    listed = client.get("/users/table", params=view).text
+    assert all(s in listed for s in shows)
+    if path == "/users/delete/apply":
+        assert "alice@example.com" not in listed
+    assert len(_print_users(gam_calls())) == 1                   # the first page's read, and no other
+
+
+def test_a_write_to_an_address_the_cache_doesnt_hold_drops_the_list(client, gam_calls):
+    # An account created minutes ago (or any address that isn't a cached primary): what the write did
+    # to the list isn't known, so the next page reads the directory again.
+    client.get("/users/table")
+    client.post("/users/organization", data={"email": "new.hire@example.com", "title": "T", "department": "D"})
+    client.get("/users/table")
+    assert len(_print_users(gam_calls())) == 2
+
+
 def test_bulk_store_page_renders(client):
     r = client.get("/users/bulk")
     assert r.status_code == 200
@@ -677,9 +717,12 @@ def test_bulk_store_apply_runs_as_job(client, gam_calls):
     assert_ok_partial(r)
     job = _job(client, r.text, "/users/bulk/status")
     wait_for_job(client, job)
-    assert cache._items is None                                  # dropped, so the new departments show
     # Department set to the store, alice's existing title kept — and GAM accepted it.
     assert (job.applied, job.failed, job.error) == (1, [], None)
+    alice = next(u for u in cache._items if u.primary_email == "alice@example.com")
+    assert (alice.title, alice.department) == ("IT Director", "Downtown")   # patched, not dropped (U12)
+    assert "alice@example.com" in client.get("/users/table", params={"q": "Downtown"}).text
+    assert len(_print_users(gam_calls())) == 1                   # the preview's read, and no other
     assert gam_writes(gam_calls()) == [
         ["update", "user", "alice@example.com", "organization", "title", "IT Director",
          "department", "Downtown", "primary"],
@@ -1146,6 +1189,27 @@ async def _department_feed():
     await set_departments(job, SimpleNamespace(set_organization=set_organization),
                           [GAMUser("alice@example.com"), GAMUser("gone@example.com")], "Sales")
     return job
+
+
+async def test_bulk_department_patches_each_person_and_drops_the_list_after_a_failure():
+    # Plan U12: each accepted write patches that person's record; a failed one's outcome isn't known
+    # (a timeout may still have applied it), so the run ends by dropping the whole cached list.
+    from gamgui.web.jobs import start_job
+    from gamgui.web.routes.users import _run_bulk_store
+
+    async def set_organization(email, title="", department=""):
+        return _gone_result(email)
+
+    patched, dropped = [], []
+    st = SimpleNamespace(patch_user=lambda email, **kw: patched.append((email, kw)),
+                         invalidate_users=lambda: dropped.append(1))
+    conn = SimpleNamespace(set_organization=set_organization)
+    await _run_bulk_store(start_job({}, 1), st, conn, [GAMUser("alice@example.com")], "Sales")
+    assert (patched, dropped) == ([("alice@example.com", {"department": "Sales"})], [])
+    patched.clear()
+    await _run_bulk_store(start_job({}, 2), st, conn, [GAMUser("alice@example.com"), GAMUser("gone@example.com")],
+                          "Sales")
+    assert (patched, dropped) == ([("alice@example.com", {"department": "Sales"})], [1])
 
 
 async def _fanout_feed():

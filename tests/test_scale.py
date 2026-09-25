@@ -51,3 +51,63 @@ async def test_user_cache_ttl_force_invalidate():
     cache.invalidate()
     await cache.get(fetch)  # re-fetch after invalidation
     assert calls["n"] == 3
+
+
+async def test_user_cache_patch_updates_one_record_and_keeps_the_lists_age(monkeypatch):
+    # Plan U12: a write whose new values are known patches its record, so the next page doesn't re-run
+    # `gam print users` — but the rest of the list is no fresher, so the TTL and force still re-fetch.
+    from gamgui.core import clock
+
+    t = {"now": 1000.0}
+    monkeypatch.setattr(clock, "now", lambda: t["now"])
+    cache, calls = UserCache(ttl=300), {"n": 0}
+
+    async def fetch():
+        calls["n"] += 1
+        return ["a", "b", "c"]
+
+    held = await cache.get(fetch)
+    t["now"] += 200
+    cache.patch(lambda i: i == "b", str.upper)
+    assert await cache.get(fetch) == ["a", "B", "c"] and calls["n"] == 1
+    assert held == ["a", "b", "c"]                  # a new list: what a caller already holds isn't edited
+    assert cache.age_seconds == 200                 # the patch didn't reset the age
+    cache.patch(lambda i: i == "a")                 # no change: the record goes (a delete)
+    assert await cache.get(fetch) == ["B", "c"] and calls["n"] == 1
+    t["now"] += 101                                 # past the TTL of the original fetch
+    assert await cache.get(fetch) == ["a", "b", "c"] and calls["n"] == 2
+    cache.patch(lambda i: i == "b", str.upper)
+    assert await cache.get(fetch, force=True) == ["a", "b", "c"] and calls["n"] == 3
+
+
+async def test_user_cache_patch_nothing_matching_drops_the_list():
+    # A write to an account the cache doesn't show (an alias, a minutes-old user): its effect on the
+    # list isn't known, so the whole list goes, as before U12.
+    cache = UserCache()
+
+    async def fetch():
+        return ["a"]
+
+    await cache.get(fetch)
+    cache.patch(lambda i: i == "zz", str.upper)
+    assert cache.age_seconds is None
+
+
+async def test_user_cache_does_not_keep_a_fetch_that_raced_a_write():
+    # A `print users` that started before a write landed may not show it: returned, but not kept.
+    import asyncio
+
+    cache, started, release, calls = UserCache(), asyncio.Event(), asyncio.Event(), {"n": 0}
+
+    async def slow():
+        calls["n"] += 1
+        started.set()
+        await release.wait()
+        return ["stale"]
+
+    task = asyncio.create_task(cache.get(slow))
+    await started.wait()
+    cache.patch(lambda i: True, str.upper)          # nothing cached yet: nothing to patch, but it counts
+    release.set()
+    assert await task == ["stale"]
+    assert cache.age_seconds is None                # not kept: the next read fetches again

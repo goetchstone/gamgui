@@ -6,7 +6,7 @@ A loop writes into the polled progress record the web layer starts it with (``we
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from .gam.errors import ACCOUNT_WIDE_KINDS, GAMError
 
@@ -38,9 +38,11 @@ def _why(exc: Exception) -> str:
     return exc.remediation if isinstance(exc, GAMError) else _TRY_AGAIN
 
 
-async def set_departments(job, conn, users, department: str) -> None:
-    """Set ``department`` on each of ``users``, KEEPING each existing title. Stops at a failure every
-    later user would share (``stop_reason``), or at Stop."""
+async def set_departments(job, conn, users, department: str,
+                          on_set: Optional[Callable[[Any], None]] = None) -> None:
+    """Set ``department`` on each of ``users``, KEEPING each existing title; ``on_set(user)`` after
+    each write GAM accepted (the web layer patches its cached record). Stops at a failure every later
+    user would share (``stop_reason``), or at Stop."""
     try:
         for u in users:
             if stop_requested(job):
@@ -55,6 +57,8 @@ async def set_departments(job, conn, users, department: str) -> None:
             except Exception as exc:  # noqa: BLE001 — one user must not stop the rest
                 ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc)
             job.record(u.primary_email, ok, why, detail)
+            if ok and on_set is not None:
+                on_set(u)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
                 job.error = stop

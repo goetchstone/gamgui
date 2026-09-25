@@ -346,7 +346,7 @@ async def remove_delegate(request: Request, email: Annotated[str, Form()], deleg
 async def set_organization(
     request: Request, email: Annotated[str, Form()], title: Annotated[str, Form()] = "", department: Annotated[str, Form()] = ""
 ) -> HTMLResponse:
-    """Set a user's title (role) + department. Guarded write; invalidates the cache."""
+    """Set a user's title (role) + department. Guarded write; patches the cached record."""
     st = request.app.state.gamgui
     conn = st.connector
     if conn is None:
@@ -355,7 +355,7 @@ async def set_organization(
     result = await conn.set_organization(email, title=title, department=department)
     if not result.ok:
         return write_failed(request, "Couldn't update the title and department.", result)
-    st.invalidate_users()  # title/department changed -> cached directory is stale
+    st.patch_user(email, title=title, department=department)  # `organization ... primary` sets both
     return TEMPLATES.TemplateResponse(
         request, "_org_form.html", {"email": email, "title": title, "department": department, "saved": True}
     )
@@ -388,11 +388,17 @@ async def _bulk_targets(st, group: str, emails_raw: str):
 
 
 async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
-    """The job's task: ``bulk.set_departments``, then the cached directory is stale."""
+    """The job's task: ``bulk.set_departments``, each person's new department patched into the cached
+    directory as it lands. A failed write's outcome isn't known (a timeout may still have applied it),
+    so any failure — or the loop dying — drops the whole list instead."""
+    clean = False
     try:
-        await bulk.set_departments(job, conn, targets, store)
+        await bulk.set_departments(job, conn, targets, store,
+                                   on_set=lambda u: st.patch_user(u.primary_email, department=store))
+        clean = not job.failed_total
     finally:
-        st.invalidate_users()  # departments changed -> cached directory is stale
+        if not clean:
+            st.invalidate_users()
 
 
 @router.get("/bulk", response_class=HTMLResponse)
@@ -571,7 +577,7 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
     result = await conn.delete_user(email)
     if not result.ok:
         return write_failed(request, f"Couldn't delete {email}.", result)
-    request.app.state.gamgui.invalidate_users()
+    request.app.state.gamgui.patch_user(email)  # no changes: the record goes
     return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "deleted": True})
 
 
@@ -664,7 +670,7 @@ async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend
     if not results or failed is not None:
         what = f"Couldn't {'suspend' if want_suspend else 'unsuspend'} {email}."
         return write_failed(request, what, failed) if failed is not None else error_partial(request, what)
-    request.app.state.gamgui.invalidate_users()  # status changed -> cached list is stale
+    request.app.state.gamgui.patch_user(email, suspended=want_suspend)
     return TEMPLATES.TemplateResponse(
         request, "_suspend_zone.html", {"email": email, "suspended": want_suspend}
     )

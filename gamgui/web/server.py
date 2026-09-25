@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import secrets
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -92,6 +92,14 @@ class AppState:
 
     def invalidate_users(self) -> None:
         self.user_cache.invalidate()
+
+    def patch_user(self, email: str, **changes) -> None:
+        """A write to one account whose new values are known (plan U12): that cached record takes
+        ``changes`` (GAMUser fields), or is removed when there are none (a delete), so the next page
+        doesn't re-run ``gam print users``. An address that isn't a cached primary drops the list."""
+        key = email.strip().lower()
+        self.user_cache.patch(lambda u: u.primary_email.lower() == key,
+                              (lambda u: replace(u, **changes)) if changes else None)
 
     async def groups(self, force: bool = False) -> list:
         """The cached group list (one ``gam print groups``), shared by the onboarding group picker."""
