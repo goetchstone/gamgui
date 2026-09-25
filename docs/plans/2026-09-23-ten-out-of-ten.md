@@ -157,7 +157,7 @@ plan's Phase 0 F1–F3.
   ragged result has; a sensitive result's CSV audit counts the rows downloaded. `tests/test_builder.py`
   runs a 250-row result whose matches sit past row 100; a scratch Chrome run at 1100×760 typed a filter
   (focus and text kept), toggled External only by Space, paged to the last page by Enter (focus to the
-  page line), axe 0, no JS error — WKWebView and a live tenant unseen) · U10a (setup: `static/setup.js`
+  page line), axe 0, no JS error — WKWebView and a live tenant unseen) · U10a `3989f02` (setup: `static/setup.js`
   fills the domain from the admin email until the domain is edited; the DWD step shows `DWD_SCOPES` —
   Calendar, Gmail ×4, Drive, Tasks, the default-on service-account scopes of the APIs the curated
   commands call, from the vendored GAM's own table — and the Admin-console link pre-filled with the
