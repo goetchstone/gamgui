@@ -16,7 +16,8 @@ a terminal, with GAM's full reach still underneath.
 (`make setup && make gam && make run`). **Setup** imports an existing GAM install into the Keychain
 or walks you through a new one; then **Users** and **Reports** only read — nothing in your domain
 changes until you start a write yourself. Before relying on a write, check
-[Live verification status](#live-verification-status).
+[Live verification status](#live-verification-status). The [user guide](docs/guide.md) walks an
+admin through setup and each everyday task, with what to check before and after.
 
 ![Users — fast directory search, with title and status](docs/screenshots/users.png)
 

@@ -212,7 +212,10 @@ plan's Phase 0 F1–F3.
   Chrome over 12 screens and the key flows logged zero violations — WKWebView and the pywebview
   print path unseen). **Open:** none.
 - **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
-  `scripts/bump_gam.py`). **Open:** V1, V6; V3–V5 are new scope, and D6 says none for now.
+  `scripts/bump_gam.py`) · V6a `docs/guide.md` (a task guide for the admin: setup, find, onboard,
+  offboard, signature, calendar share, external-sharing audit, jobs, audit log; `tests/test_guide.py`
+  pins its scope table to Setup's and checks its links). **Open:** V1, the rest of V6; V3–V5 are new
+  scope, and D6 says none for now.
 - **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
   "Live verification status" marks every step still unproven, and
   `docs/domains/lifecycle-offboarding.md` has the first live run checklist.

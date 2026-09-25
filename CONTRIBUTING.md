@@ -68,6 +68,8 @@ scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (S
   Content-Security-Policy allows only same-origin script files, so it wouldn't run. Give the element
   a `data-action` and its handler in `gamgui/web/static/` (see `app.js`).
 - Add or update tests for any change; keep `pytest` green.
+- A change an admin would notice — a screen's steps, a label, what a write does — updates the user
+  guide, [`docs/guide.md`](docs/guide.md), in the same commit.
 
 ## Coding standards
 
