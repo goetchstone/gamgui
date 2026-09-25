@@ -44,7 +44,9 @@ authority for each.
   jobs) and [web-server-security](web-server-security.md) (the request gate + the `data-*`/`dataset`
   rule for rendering Google-supplied data). Feature screens have their own runbooks:
   [onboarding](onboarding.md), [lifecycle-offboarding](lifecycle-offboarding.md),
-  [signatures](signatures.md), [reports](reports.md).
+  [signatures](signatures.md), [reports](reports.md). The admin-facing [guide](../guide.md) names
+  controls by their on-screen words, and `tests/test_guide.py` fails when a renamed button leaves it
+  stale; a changed screen in the README's images means `scripts/readme_screenshots.py` again.
 - **Bump the GAM version** → [build-packaging](build-packaging.md) (the whole runbook; `bump_gam.py`,
   step 1 fails by design), then [gam-commands](gam-commands.md) (`EXPECTED_GAM_VERSION`) and
   [catalog-builder](catalog-builder.md) (regenerate `command_catalog.json`; keep the counts in CLAUDE.md,

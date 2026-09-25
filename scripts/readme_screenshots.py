@@ -86,6 +86,13 @@ class Tab:
         await self.wait_for("document.readyState === 'complete' && document.fonts.status === 'loaded'")
 
     async def shot(self, name, min_h=880):
+        # --hide-scrollbars leaves a clipped scroll box looking cut off (the offboarding preview's
+        # max-h panel once stopped mid-step 5 of 8, above its Run button), so open every scroll box
+        # whose content overflows it before measuring: the image shows all of it.
+        await self.js("(() => { for (const el of document.querySelectorAll('body *')) {"
+                      " const s = getComputedStyle(el);"
+                      " if (/auto|scroll/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 1) {"
+                      " el.style.maxHeight = 'none'; el.style.overflowY = 'visible'; } } return true; })()")
         h = await self.js("Math.ceil(document.documentElement.scrollHeight)")
         h = max(min_h, min(h, 2400))
         await self.cmd("Emulation.setDeviceMetricsOverride", width=W, height=h, deviceScaleFactor=2, mobile=False)
@@ -171,8 +178,8 @@ async def shoot():
             await t.goto("/lifecycle")
             await t.fill("input[name=user]", "carol@example.com")
             await t.fill("input[name=manager]", "alice@example.com")
-            await t.click_text("Preview")
-            await t.wait_for("/Run offboarding|Confirm|steps/i.test(document.body.innerText) && document.querySelectorAll('code, pre').length > 0", 15)
+            await t.click_text("Preview steps")
+            await t.wait_for("/Run offboarding/.test(document.body.innerText) && document.querySelectorAll('code, pre').length > 0", 15)
             await t.shot("lifecycle.png")
     finally:
         proc.terminate()

@@ -213,8 +213,9 @@ plan's Phase 0 F1–F3.
   print path unseen). **Open:** none.
 - **Phase 7** — applied: V2 `c4f9515` (README/ROADMAP counts now drift-tested and rewritten by
   `scripts/bump_gam.py`) · V6a `docs/guide.md` (a task guide for the admin: setup, find, onboard,
-  offboard, signature, calendar share, external-sharing audit, jobs, audit log; `tests/test_guide.py`
-  pins its scope table to Setup's and checks its links) · V6b `5374694` the README's first screen (who it's
+  offboard, signature, calendar share, external-sharing audit, jobs, audit log, `12169b1`;
+  `tests/test_guide.py` pins its scope table to Setup's, checks its links, and holds each bold label
+  to its section's screen) · V6b `5374694` the README's first screen (who it's
   for, the everyday tasks, build from source — no notarized download yet — and a first five minutes
   that ends at the guide; `make setup`'s interpreter choice stated as it is; screenshots regenerated
   with the tenant header). **Open:** V1; V3–V5 are new
@@ -580,7 +581,8 @@ tenant without per-action permission.
   release, move to a "departed" OU; basic OU and licence management.
 - **V5 Multi-tenant switching (M, D6)** — the caches are already tenant-bust-aware.
 - **V6 A short task-based user guide** (`docs/guide.md`): first setup, onboard a hire, offboard,
-  roll out a signature, audit external sharing.
+  roll out a signature, audit external sharing. *Applied:* V6a `12169b1` (the guide), V6b `5374694`
+  (the README's first screen) — see Phase 7 above.
 
 ## Phase 8 — Live verification (gates every "10" involving GAM writes; needs D8)
 *Status: open — the first real offboarding is its first live test (D8).*
