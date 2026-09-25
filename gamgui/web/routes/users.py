@@ -355,7 +355,9 @@ async def add_delegate(request: Request, email: Annotated[str, Form()], delegate
     if not result.ok:
         return await _delegates_partial(request, conn, email, typed=delegate, notice={
             "ok": False, "message": "Couldn't add the delegate. " + result.remediation, "details": result.detail})
-    return await _delegates_partial(request, conn, email, notice={"ok": True, "message": f"Added {delegate}."})
+    # Enter re-renders the form with the list, and focus lands on its new Add button: say the result.
+    return await _delegates_partial(request, conn, email, notice={"ok": True, "message": f"Added {delegate}.",
+                                                                  "announce": "delegates"})
 
 
 @router.post("/delegate/remove", response_class=HTMLResponse)

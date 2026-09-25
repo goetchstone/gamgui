@@ -55,7 +55,9 @@
   <!-- What a polled job panel says (plan A3, app.js): outside every swap, so a screen reader hears each change. -->
   <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <div class="min-h-full">
-    <header class="border-b border-brand-gray/40 bg-brand-white/80 backdrop-blur">
+    {# relative z-50: backdrop-blur makes the header a stacking context, and without a z-index it paints
+       under <main>'s positioned content (the Users table's sticky header row) — the open tray with it. #}
+    <header class="relative z-50 border-b border-brand-gray/40 bg-brand-white/80 backdrop-blur">
       <div class="mx-auto {{ self.container_class() }} px-6 py-4 flex items-center gap-4">
         <a href="/" class="wordmark font-serif text-lg text-brand-black">GamGUI</a>
         <span class="h-4 w-px bg-brand-gray/60"></span>
@@ -74,7 +76,8 @@
           {% endif %}
           {% endfor %}
         </nav>
-        {# The jobs tray (plan U5): a disclosure — app.js opens it, and closes it on Escape or a click outside. #}
+        {# The jobs tray (plan U5): a disclosure — app.js opens it, and closes it on Escape, a click outside, or focus
+           moving on out of it. #}
         {% import "_job_live.html" as live %}
         {% set tray = jobs_tray(request) %}
         <div id="jobs-tray" class="relative">

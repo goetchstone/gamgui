@@ -21,7 +21,8 @@
 
 {# Stop (plan U5), in a running job's panel and its tray row: the loop ends before its next target, and
    the one in flight finishes. One id in every state, so a poll that re-renders it keeps focus on it;
-   `ended(job, where)` puts that id on the finished panel's line, where focus then lands. #}
+   `ended(job, where)` puts that id on the finished panel's line, where focus then lands. It names its job
+   for a screen reader: the tray lists several, each with a Stop. #}
 {% macro stop(job, where="panel") -%}
 {%- if job.can_stop and job.cancel_requested -%}
 <span id="stop-{{ where }}-{{ job.id }}" tabindex="-1" data-focus class="ml-auto shrink-0 text-xs text-brand-grayink">Stopping after the current one…</span>
@@ -29,7 +30,7 @@
 <button id="stop-{{ where }}-{{ job.id }}" type="button" hx-post="/jobs/stop" hx-target="this" hx-swap="outerHTML" hx-disabled-elt="this"
         hx-vals='{"job": "{{ job.id }}", "where": "{{ where }}"{% if job.confirm_stop %}, "confirmed": "1"{% endif %}}'
         {% if job.confirm_stop %}hx-confirm="Stop “{{ job.title }}” after the current step? The steps after it won't run."{% endif %}
-        class="ml-auto shrink-0 rounded-md border border-brand-gray/60 bg-brand-white px-2.5 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors">Stop</button>
+        class="ml-auto shrink-0 rounded-md border border-brand-gray/60 bg-brand-white px-2.5 py-0.5 text-xs text-brand-blueink hover:bg-paper transition-colors">Stop{% if job.title %}<span class="sr-only"> {{ job.title }}</span>{% endif %}</button>
 {%- endif -%}
 {%- endmacro %}
 

@@ -1,5 +1,6 @@
+{# `announce` (a key): a success that leaves focus elsewhere is spoken through #live-status (app.js). #}
 {% if ok %}
-<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{{ message }}</div>
+<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"{% if announce %} data-announce="{{ announce }}"{% endif %}>{{ message }}</div>
 {% else %}
 {# The message says what to do in words; GAM's raw error is one click away, not the headline. #}
 <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">

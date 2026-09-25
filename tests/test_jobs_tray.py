@@ -181,7 +181,7 @@ def test_stop_refuses_a_job_that_is_not_a_loop_or_not_there(client):  # noqa: F8
     index = start_job(client.app.state.gamgui.jobs, 0, kind="index", title="Calendar index rebuild")
     r = client.post("/jobs/stop", data={"job": index.id})
     assert not index.cancel_requested and "can't be stopped" in unescape(r.text)
-    assert "Stop</button>" not in client.get("/jobs/status").text
+    assert f'<button id="stop-tray-{index.id}"' not in client.get("/jobs/status").text
     assert "no longer available" in client.post("/jobs/stop", data={"job": "gone"}).text
 
 
@@ -199,13 +199,14 @@ def test_each_running_panel_offers_stop_and_the_stopped_one_says_stopping(client
     for kind, status in panels.items():
         job = _running(client, kind)
         html = client.get(status, params={"job": job.id}).text
-        assert f'id="stop-panel-{job.id}"' in html and "Stop</button>" in html, kind
+        assert f'<button id="stop-panel-{job.id}"' in html, kind
+        assert 'Stop<span class="sr-only"> A job</span></button>' in html, kind   # names its job (review R4)
         job.cancel_requested = True
         html = client.get(status, params={"job": job.id}).text
         assert f'id="stop-panel-{job.id}"' in html and "Stopping after the current one" in html, kind
         job.finish()
         html = client.get(status, params={"job": job.id}).text
-        assert f'id="stop-panel-{job.id}"' in html and "Stop</button>" not in html, kind   # focus lands on the result
+        assert f'id="stop-panel-{job.id}"' in html and f'<button id="stop-panel-{job.id}"' not in html, kind   # focus lands on the result
 
 
 # --- the tray ----------------------------------------------------------------------------------------

@@ -255,7 +255,7 @@ def _offboard_preview(p: Page) -> None:
     p.c.js("window.confirm = () => true")          # Run offboarding's hx-confirm
 
 
-def _screens(p: Page):
+def _screens(p: Page, st):
     """Put the app in each state worth checking; yield its name there."""
     p.goto("/")
     yield "home"
@@ -341,6 +341,23 @@ def _screens(p: Page):
     p.goto("/setup")
     yield "setup"
 
+    # Two domains in the Keychain, the active one's oauth2.txt naming its admin: the /setup switcher and
+    # the header's tenant chip with its admin line, which one fake domain never renders.
+    domain = _shots().preview_mock.DOMAIN
+    oauth2 = st.vault.get(domain, "oauth2")
+    st.vault.set(domain, "oauth2", json.dumps({"decoded_id_token": {"email": f"admin@{domain}"}}))
+    st.vault.set_all("example.org", {k: v for k, v in st.vault.get_all(domain).items() if v})
+    try:
+        p.goto("/setup", "document.querySelector('#tenant-switch select') && /admin@/.test("
+                         "document.getElementById('tenant').innerText)")
+        yield "setup/two-domains"
+    finally:
+        st.vault.clear_domain("example.org")
+        st.vault.set(domain, "oauth2", oauth2)
+
+
+SERVED: dict = {}      # app_url's AppState, for the st fixture
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -361,8 +378,9 @@ def app_url(tmp_path_factory):
             mp.delenv(var, raising=False)
         mp.setenv("GAM_MOCK_FIXTURES", str(preview_mock.FIXTURES))
         mp.setattr(preview_mock, "PORT", port)
-        server = uvicorn.Server(uvicorn.Config(preview_mock.build_app(state), host="127.0.0.1", port=port,
-                                               log_level="warning"))
+        app = preview_mock.build_app(state)
+        SERVED["state"] = app.state.gamgui
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
         thread = threading.Thread(target=server.run, daemon=True)
         thread.start()
         for _ in range(100):
@@ -374,6 +392,12 @@ def app_url(tmp_path_factory):
         yield f"http://127.0.0.1:{port}"
         server.should_exit = True
         thread.join(10)
+
+
+@pytest.fixture(scope="module")
+def st(app_url):
+    """The served app's AppState: a test registers a running job, or a second tenant, the way a run would."""
+    return SERVED["state"]
 
 
 @pytest.fixture(scope="module")
@@ -410,8 +434,8 @@ def _ratchet(counts: dict[str, dict[str, int]], baseline: dict[str, dict[str, in
 
 @pytest.mark.a11y
 @pytest.mark.timeout(300)
-def test_no_new_serious_or_critical_axe_violations(page):
-    found = {screen: page.violations() for screen in _screens(page)}
+def test_no_new_serious_or_critical_axe_violations(page, st):
+    found = {screen: page.violations() for screen in _screens(page, st)}
     counts = {screen: {v["id"]: v["nodes"] for v in vs} for screen, vs in found.items() if vs}
     print(f"axe serious/critical violations, {sum(map(len, found.values()))} rule hits:\n{_summary(found)}")
 
@@ -584,6 +608,70 @@ def test_the_jobs_tray_works_from_the_keyboard(page):
     assert re.match(r"/jobs/[\w-]+$", p.c.js("location.pathname"))
     assert "Offboarding complete" in p.c.js("document.getElementById('job-panel').innerText")
     assert p.c.js("window.__errs") == []
+
+
+# Each link and button in the open tray: the points (centre, two inset corners) where elementFromPoint
+# lands outside #jobs-panel — something of the page drawn over the tray.
+TRAY_COVERED = """[...document.querySelectorAll('#jobs-panel a, #jobs-panel button')].flatMap(el => {
+  const r = el.getBoundingClientRect(), panel = document.getElementById('jobs-panel');
+  return [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 2, r.top + 2], [r.right - 2, r.bottom - 2]]
+    .map(([x, y]) => document.elementFromPoint(x, y))
+    .filter(hit => !hit || !panel.contains(hit))
+    .map(hit => el.id + ' under ' + (hit ? (hit.closest('[id]') || {id: '?'}).id + '>' + hit.tagName : 'nothing'));
+})"""
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_the_open_tray_is_on_top_names_each_stop_and_closes_when_focus_leaves(page, st):
+    """Review R2-R4 (plan U5): the header's backdrop-blur made it a stacking context under <main>, so the
+    Users table's sticky header row painted over the open tray and took a click meant for a job's Stop.
+    Focus Tabbed out of the tray and on under it (WCAG 2.4.11), where Escape no longer closed it. And
+    two running jobs gave two buttons named just "Stop"."""
+    from gamgui.web.jobs import start_job
+
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+    titles = ("Signature for the whole company — 5 users", "Department Sales for 8 users")
+    jobs = [start_job(st.jobs, total=n, title=t, kind=k) for n, t, k in
+            ((5, titles[0], "signatures"), (8, titles[1], "department"))]
+    try:
+        def expanded() -> tuple:
+            return (p.c.js("document.getElementById('jobs-toggle').getAttribute('aria-expanded')"),
+                    p.c.js("!document.getElementById('jobs-panel').hidden"))
+
+        p.goto("/users", "document.querySelectorAll('#users-table tbody tr').length >= 3")
+        p.click("#jobs-toggle", action="focus")
+        p.key("Enter")
+        p.settle("document.querySelectorAll('#jobs-panel button[id^=stop-tray-]').length === 2")
+        assert expanded() == ("true", True)
+        assert p.c.js(TRAY_COVERED) == []
+        stops = p.c.js("[...document.querySelectorAll('#jobs-panel button[id^=stop-tray-]')]"
+                       ".map(b => b.textContent.replace(/\\s+/g, ' ').trim())")
+        assert sorted(stops) == sorted(f"Stop {t}" for t in titles)
+
+        in_tray = "document.getElementById('jobs-tray').contains(document.activeElement)"
+        tab_stops = p.c.js("document.querySelectorAll('#jobs-panel a, #jobs-panel button').length")
+        for _ in range(tab_stops):                          # each job's link, and a running one's Stop
+            p.key("Tab")
+            assert p.c.js(in_tray) and expanded() == ("true", True)
+        p.key("Tab")                                        # on into the page: the tray gets out of the way
+        assert not p.c.js(in_tray) and expanded() == ("false", False)
+
+        p.click("#jobs-toggle", action="focus")
+        p.key("Enter")
+        p.key("Tab")
+        p.key("Escape")                                     # from inside: closed, focus back on the toggle
+        assert expanded() == ("false", False) and p.focused()["id"] == "jobs-toggle"
+        p.key("Enter")
+        p.c.js("document.activeElement.blur()")             # focus lost (a poll swapped out its row)
+        p.key("Escape")
+        assert expanded() == ("false", False) and p.focused()["id"] == "jobs-toggle"
+        assert p.c.js("window.__errs") == []
+    finally:
+        for job in jobs:
+            job.finish()
 
 
 @pytest.mark.a11y
@@ -877,6 +965,36 @@ def test_a_polled_job_speaks_through_one_stable_live_region(page):
           await new Promise(r => setTimeout(r, 50)); }
         el.remove(); })()""")
     assert p.c.js("__said")[len(said):] == ["Probe: 10% done", "Probe: 20% done"]
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_adding_a_delegate_by_enter_is_said(page):
+    """Review follow-up: Enter in the delegate field re-renders the list with its form, and focus lands on
+    the new Add button, not on the result — so "Added …" is spoken through #live-status (data-announce),
+    as the Groups board's add is."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+    p.goto("/users/detail?email=alice%40example.com")
+    p.click("#tab-mail")
+    p.settle("document.querySelector('#delegates input[name=delegate]')")
+    p.c.js(LISTEN)
+    p.click("#delegates input[name=delegate]", action="focus")
+    p.type("carol@example.com")
+    p.key("Enter")
+    p.settle("/Added carol/.test(document.getElementById('delegates').innerText)")
+    assert p.c.js("window.__said") == ["Added carol@example.com."]
+    # A Remove in between (its result takes focus, so says nothing here) and the same add again: news.
+    p.c.js("window.confirm = () => true")
+    p.click("#delegates button[hx-post='/users/delegate/remove']")
+    p.settle("/Removed/.test(document.getElementById('delegates').innerText)")
+    p.click("#delegates input[name=delegate]", action="focus")
+    p.type("carol@example.com")
+    p.key("Enter")
+    p.settle("/Added carol/.test(document.getElementById('delegates').innerText)")
+    assert p.c.js("window.__said") == ["Added carol@example.com."] * 2
+    assert p.c.js("window.__errs") == []
 
 
 def _template_tags() -> list[tuple[str, int, str, dict[str, str | None], bool]]:

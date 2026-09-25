@@ -169,6 +169,11 @@
   document.body.addEventListener("htmx:afterSettle", function (e) {
     var root = e.target, live = document.getElementById("live-status");
     if (!live || !root.querySelectorAll) return;
+    // A line the page no longer shows is forgotten: said again when it comes back ("Added …" after a
+    // Remove in between) is news again.
+    Object.keys(said).forEach(function (key) {
+      if (!document.querySelector('[data-announce="' + CSS.escape(key) + '"]')) delete said[key];
+    });
     var marked = [].slice.call(root.querySelectorAll("[data-announce]"));
     if (root.matches("[data-announce]")) marked.unshift(root);
     marked.forEach(function (el) {
@@ -181,8 +186,10 @@
     });
   });
 
-  // The header's jobs tray (plan U5, base.html): a disclosure button and the list it shows. Escape or a
-  // click outside closes it; Escape from inside hands focus back to the button.
+  // The header's jobs tray (plan U5, base.html): a disclosure button and the list it shows. Escape, a click
+  // outside, or focus moving on out of it closes it: an open tray left behind covers the controls focus
+  // goes to next (WCAG 2.4.11). Escape hands focus back to the button when it was in the tray, or lost —
+  // never out of a field the operator is in.
   function setTray(open, refocus) {
     var btn = document.getElementById("jobs-toggle"), panel = document.getElementById("jobs-panel");
     if (!btn || !panel) return;
@@ -195,8 +202,17 @@
     return !!panel && !panel.hidden;
   }
   document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || !trayOpen()) return;
+    var tray = document.getElementById("jobs-tray"), at = document.activeElement;
+    setTray(false, !at || at === document.body || tray.contains(at));
+  });
+  document.addEventListener("focusout", function (e) {
     var tray = document.getElementById("jobs-tray");
-    if (e.key === "Escape" && trayOpen() && tray.contains(document.activeElement)) setTray(false, true);
+    // No relatedTarget is focus lost, not moved: a poll swapping out the focused row, or the window
+    // losing focus. Only a move to somewhere outside the tray closes it.
+    if (trayOpen() && tray && tray.contains(e.target) && e.relatedTarget && !tray.contains(e.relatedTarget)) {
+      setTray(false, false);
+    }
   });
   document.addEventListener("click", function (e) {
     var tray = document.getElementById("jobs-tray");
