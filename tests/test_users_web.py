@@ -2146,3 +2146,15 @@ def test_home_runs_gam_version_once_per_binary(client, tmp_path):
     st.activate(st.connector)
     client.get("/")
     assert len(calls) == 3
+
+
+@pytest.mark.parametrize("path, params", [
+    ("/users/calendar", {"email": "alice@example.com"}),
+    ("/calendars/detail", {"cal": "alice@example.com"}),
+])
+def test_each_calendar_access_remove_button_names_its_row(client, path, params):
+    # A screen reader heard a bare "Remove" on every access row; each names whose access it removes.
+    r = client.get(path, params=params)
+    assert_ok_partial(r)
+    rows = re.findall(r">Remove(<span class=\"sr-only\">[^<]*</span>)?</button>", r.text)
+    assert rows and all(rows), f"an unnamed Remove on {path}"

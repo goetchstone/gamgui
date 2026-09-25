@@ -19,7 +19,7 @@
         <button class="text-xs text-red-700 hover:underline shrink-0"
                 hx-post="/calendars/unshare" hx-target="#cal-detail" hx-swap="innerHTML" hx-disabled-elt="this"
                 hx-vals='{"cal": {{ cal | tojson }}, "scope": {{ a.scope_token | tojson }}, "label": {{ label | tojson }} }'
-                hx-confirm="Remove access for {{ a.who }}?">Remove</button>
+                hx-confirm="Remove access for {{ a.who }}?">Remove<span class="sr-only"> {{ a.who }}</span></button>
         {% endif %}
       </li>
       {% endfor %}

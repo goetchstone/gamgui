@@ -7,7 +7,7 @@
     <button class="text-xs text-red-700 hover:underline shrink-0"
             hx-post="/users/calendar/remove" hx-target="#calendar" hx-swap="innerHTML" hx-disabled-elt="this"
             hx-vals='{"email": {{ email | tojson }}, "scope": {{ a.scope_token | tojson }} }'
-            hx-confirm="Remove access for {{ a.who }}?">Remove</button>
+            hx-confirm="Remove access for {{ a.who }}?">Remove<span class="sr-only"> {{ a.who }}</span></button>
     {% endif %}
   </li>
   {% endfor %}
