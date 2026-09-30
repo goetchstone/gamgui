@@ -18,8 +18,6 @@ inside a value.
 
 from __future__ import annotations
 
-import csv
-import io
 import json
 import re
 import sys
@@ -73,10 +71,19 @@ _EMAIL = st.builds(lambda loc, labels, up: (loc + "@" + ".".join(labels)).upper(
                    _LOCAL, st.lists(_LABEL, min_size=2, max_size=3), st.booleans())
 
 
+def _cell(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"' if any(c in value for c in ',"\r\n') else value
+
+
 def _csv(rows, lineterminator="\n") -> str:
-    buf = io.StringIO()
-    csv.writer(buf, lineterminator=lineterminator).writerows(rows)
-    return buf.getvalue()
+    """Rows as a conforming writer prints them — GAM's own Python (3.14) included: a cell holding a
+    comma, quote, CR or LF is quoted. Not csv.writer: on 3.10 it leaves a lone CR unquoted when lines
+    end in LF (3.11 changed that), which the reader then takes for a line break — the py3.10 legs failed
+    on the test's own CSV, not on the parser."""
+    lines = [",".join(_cell(v) for v in row) for row in rows]
+    # csv.writer's rule for a row of one empty field: quote it, or it reads back as a blank line.
+    return "".join(('""' if line == "" and len(row) == 1 else line) + lineterminator
+                   for line, row in zip(lines, rows, strict=True))
 
 
 def _noise() -> st.SearchStrategy[str]:

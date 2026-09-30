@@ -40,7 +40,12 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
 - **Prevention:** the property files run in every suite (deterministic `suite` profile), and CI's
   `fuzz` job drives them with Atheris; `tests/test_fuzz_targets.py` keeps every property fuzzable.
   On Python 3.10 the `csv` module still refuses a NUL byte (3.11 dropped that) — GAM doesn't print
-  one, so the properties leave NUL out on 3.10 rather than pin it.
+  one, so the properties leave NUL out on 3.10 rather than pin it. And the PR's py3.10 legs went red
+  on the tests' own CSV: 3.10's `csv.writer` leaves a lone CR unquoted when lines end in LF (3.11+
+  quote it), so the generated input — not the parser — was malformed there. The properties now write
+  their CSV with a small writer that quotes the same on every Python. Lesson: a generator built on the
+  stdlib inherits its version quirks — run new properties on the floor Python (3.10) before pushing
+  (`docker run --platform linux/amd64 python:3.10-slim`, bootstrapping `requirements/pip.txt` first).
 
 ## 2026-09-30 — The automated GAM bump was merged before its CI finished
 
