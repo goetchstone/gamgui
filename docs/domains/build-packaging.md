@@ -53,8 +53,8 @@
   moment); **"main: PR gate"** — a pull request, with the required checks `ci-ok`, `Analyze (python)`,
   `Analyze (actions)` and `Dependency review`, each pinned to the GitHub Actions app (integration
   15368, so no other app can post a passing status under the name), not strict, and the admin role as
-  an `always` bypass so the owner still pushes straight to `main` (a PR merge past a red check is an
-  explicit, logged bypass). **`ci-ok`** is `ci.yml`'s last job: `needs` every blocking job, runs
+  a `pull_request` bypass: every change, the owner's too, reaches `main` through a PR (a direct push
+  is refused), and merging one past a red or stuck check is an explicit, logged bypass. **`ci-ok`** is `ci.yml`'s last job: `needs` every blocking job, runs
   `if: always()`, and fails on any failed, cancelled *or skipped* one — a required check passes on
   "skipped", and one that never reports never passes, so requiring the matrix legs by name would wedge
   every PR the day one is renamed. `test_ci_ok_needs_every_blocking_job` (a new job must join
