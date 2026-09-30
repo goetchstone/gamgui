@@ -206,3 +206,18 @@ def test_pywebview_is_pinned():
     assert re.search(r"^pyinstaller==[\d.]+$", app_in, re.MULTILINE), app_in
     build = (REPO_ROOT / "scripts" / "build_app.sh").read_text()
     assert not re.search(r"(pywebview|pyinstaller)[=<>~]", build, re.IGNORECASE), build
+
+
+def test_a_reinstall_keeps_the_committed_command_catalog(tmp_path):
+    # command_catalog.json is committed beside the vendored binary; the install's `rm -rf "$DEST"` deleted
+    # it, so every `make gam` left a tracked file missing (the Builder tests failed) until someone
+    # re-ran build_command_catalog.py.
+    root, sha = _make_root(tmp_path, pinned=None)
+    (root / "scripts" / "gam_checksums.txt").write_text(f"{sha}  {ASSET}\n")
+    _dest(root).mkdir(parents=True)
+    (_dest(root) / "command_catalog.json").write_text('{"version": "9.99.99"}\n')
+    r = _run(root, tmp_path)
+    if not _INSTALLS:
+        pytest.skip("the install step runs on macOS only (see _INSTALLS)")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (_dest(root) / "command_catalog.json").read_text() == '{"version": "9.99.99"}\n'

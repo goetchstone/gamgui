@@ -120,9 +120,18 @@ fi
 GAM_DIR="$(dirname "$GAM_BIN")"
 
 echo "==> Installing into $DEST"
+# command_catalog.json is committed beside the vendored files (generated from the grammar; after a bump
+# build_command_catalog.py refreshes it and test_catalog_matches_grammar holds it to the grammar), so keep
+# it across the wipe — deleting it left a tracked file missing after every `make gam`.
+KEEP_CATALOG=""
+if [ -f "$DEST/command_catalog.json" ]; then
+  KEEP_CATALOG="$TMP/command_catalog.json"
+  cp "$DEST/command_catalog.json" "$KEEP_CATALOG"
+fi
 rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -R "$GAM_DIR"/. "$DEST"/
+if [ -n "$KEEP_CATALOG" ]; then cp "$KEEP_CATALOG" "$DEST/command_catalog.json"; fi
 chmod +x "$DEST/gam"
 
 printf '%s\n' "$VERSION" > "$DEST/VERSION"
