@@ -29,6 +29,7 @@ from .paths import app_data_dir
 from .signatures import render_signature
 
 WELCOME_VARS = ["name", "role", "email", "manager"]   # the {tokens} the welcome email understands
+_TOKEN = re.compile(r"\{(\w+)\}")
 
 # Unambiguous alphabet for a temp password someone reads off a printed sheet and types once:
 # no 0/O, 1/l/I. Grouped for legibility. It is single-use — the account is created with
@@ -110,11 +111,9 @@ class RoleTemplate:
 
 
 def render(template: str, ctx: Dict[str, str]) -> str:
-    """Substitute {name}/{role}/{email}/{manager}; literal-brace-safe (only known vars replaced)."""
-    out = template or ""
-    for key in WELCOME_VARS:
-        out = out.replace("{" + key + "}", str(ctx.get(key, "")))
-    return out
+    """Substitute {name}/{role}/{email}/{manager}; literal-brace-safe (only known vars replaced). One
+    pass: a value that itself holds a {token} is inserted as written, never expanded again."""
+    return _TOKEN.sub(lambda m: str(ctx.get(m[1], "")) if m[1] in WELCOME_VARS else m[0], template or "")
 
 
 # --- bulk import: a CSV of new hires, one row each, onboarded via the role template ---
@@ -172,7 +171,9 @@ def parse_hire_csv(text: str) -> Tuple[List[Dict], List[str]]:
         return [], ["The CSV needs a 'role' column — that's what picks the template."]
 
     def cell(raw: Dict, key: str) -> str:
-        return str(raw.get(fieldmap.get(key, ""), "") or "").strip()
+        # A column the CSV lacks reads as blank. (It once read as the column whose header is empty —
+        # fieldmap.get(key, "") hit that column — filling name, notify and the rest with its value.)
+        return str(raw.get(fieldmap[key], "") or "").strip() if key in fieldmap else ""
 
     rows: List[Dict] = []
     errors: List[str] = []

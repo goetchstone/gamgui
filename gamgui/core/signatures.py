@@ -114,9 +114,9 @@ def render_signature(template: str, user: GAMUser) -> str:
     }
 
     out = _expand_optional(template or "", values)
-    for var, val in values.items():
-        out = out.replace(var, val)
-    return out
+    # One pass, so a value that itself holds a {variable} (a name typed as "{phone}") is inserted as
+    # written — replacing variable by variable expanded it with the next one's value.
+    return re.sub("|".join(map(re.escape, values)), lambda m: values[m[0]], out)
 
 
 def match_scope(users: List[GAMUser], scope_type: str, scope_value: str = "") -> List[GAMUser]:

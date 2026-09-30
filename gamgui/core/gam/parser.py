@@ -33,8 +33,10 @@ def parse_records(stdout: str) -> List[Dict[str, Any]]:
         return _coerce_to_records(obj)
 
     # 2) Newline-delimited JSON (each line a JSON object). Require the first non-empty
-    #    line to parse as JSON before committing to this interpretation.
-    lines = [ln for ln in text.splitlines() if ln.strip()]
+    #    line to parse as JSON before committing to this interpretation. Split on "\n" only:
+    #    str.splitlines() also breaks on U+2028/U+2029/U+0085, which json.dumps(ensure_ascii=False)
+    #    leaves raw inside a string — a name holding one became a bogus record (found by fuzzing).
+    lines = [ln for ln in text.split("\n") if ln.strip()]
     if lines and _try_json(lines[0]) is not None:
         records: List[Dict[str, Any]] = []
         ndjson_ok = True
@@ -63,7 +65,7 @@ def parse_one(stdout: str) -> Dict[str, Any]:
 def _try_json(s: str) -> Any:
     try:
         return json.loads(s)
-    except ValueError:
+    except (ValueError, RecursionError):   # RecursionError: nesting deeper than the stack ("[" * 200000)
         return None
 
 
@@ -76,8 +78,15 @@ def _coerce_to_records(val: Any) -> List[Dict[str, Any]]:
 
 
 def _parse_csv(text: str) -> List[Dict[str, Any]]:
-    reader = csv.DictReader(io.StringIO(text))
-    rows = list(reader)
+    # newline="": the csv module does its own line handling, so a bare CR inside a cell is data, not an
+    # error. And a cell may be as long as the output itself (a formatjson record, a long signature):
+    # the module's 131,072-character limit is raised for this read only — it is process-wide state.
+    reader = csv.DictReader(io.StringIO(text, newline=""))
+    old_limit = csv.field_size_limit(max(csv.field_size_limit(), len(text)))
+    try:
+        rows = list(reader)
+    finally:
+        csv.field_size_limit(old_limit)
     if not rows:
         return []
     # GAM's `formatjson` output is a CSV that carries a "JSON" column holding the full record
