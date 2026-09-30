@@ -351,8 +351,10 @@ GamGUI pins a tested GAM7 version — `EXPECTED_GAM_VERSION` in `gamgui/core/gam
 - **Release-watch** (`.github/workflows/gam-watch.yml`, weekly) does the mechanical bump when GAM
   ships a newer version and **opens a PR** — the asset's GitHub build attestation verified (signed
   by GAM-team's release workflow on `main`, nothing else in their repo), pinned, vendored, catalog
-  regenerated, suite run. It never merges: you review the changelog, run the live
-  acceptance pass, and merge. Automatic pinning is safe *because* the attestation check gates it — no
+  regenerated, suite run — in a job with a read-only token; a second job only pushes the branch and
+  opens the PR. It never merges: you approve its CI runs (a PR opened by the workflow's own token
+  doesn't start them), review the changelog, run the live acceptance pass, and merge once branch
+  protection's required checks are green. Automatic pinning is safe *because* the attestation check gates it — no
   verified provenance, no PR — so it isn't trust-on-first-use.
 - **Compat check** (`gam-compat` CI job + `tests/test_command_contract.py`) asserts every GAM
   sub-command our builders use still exists in the vendored command reference, so a renamed/removed

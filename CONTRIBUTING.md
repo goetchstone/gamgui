@@ -17,8 +17,9 @@ Taking part here is under the [code of conduct](CODE_OF_CONDUCT.md). Questions g
 [Discussions](https://github.com/goetchstone/gamgui/discussions) — [SUPPORT.md](SUPPORT.md) says what
 goes where — and issues use the forms on **New issue**: a bug, a feature request, or a *live
 verification report* when you've run a write against a real domain. A pull request fills in the
-template's checklist, and CI (tests on macOS and Linux, lint, accessibility, the app build, CodeQL)
-must pass.
+template's checklist, and branch protection requires CI to pass before it merges: `ci-ok` (tests on
+macOS and Linux, lint, accessibility, the GAM compatibility check, the app build), CodeQL, and
+dependency review.
 
 ## Quick start
 

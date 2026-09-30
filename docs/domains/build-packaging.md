@@ -40,12 +40,39 @@
   `builder.id` (`gh api repos/GAM-team/GAM/attestations/sha256:<digest>`) and update
   `SIGNER_WORKFLOW`/`SOURCE_REF` deliberately. `test_attestation_trusts_only_gam_teams_release_workflow`.
 - **Every action pinned by commit SHA** (C4, 2026-09-24). A tag is mutable — whoever controls
-  `actions/checkout` or `github/codeql-action` can move `v7` to new code — and `gam-watch.yml`'s job
-  holds `contents: write` + `pull-requests: write`. So every `uses:` is `owner/repo@<40-hex> # vX.Y.Z`
+  `actions/checkout` or `github/codeql-action` can move `v7` to new code — and `gam-watch.yml`'s
+  `open-pr` job holds `contents: write` + `pull-requests: write`. So every `uses:` is `owner/repo@<40-hex> # vX.Y.Z`
   (`test_every_action_is_pinned_by_commit_sha`). Dependabot's `github-actions` ecosystem reads the
   trailing version comment and moves the SHA and the comment together. To pin a new action by hand:
   `gh api repos/<owner>/<repo>/git/ref/tags/<vX.Y.Z>`, and if its `object.type` is `tag` (annotated),
   `gh api repos/<owner>/<repo>/git/tags/<that sha>` for the commit it points at.
+- **Branch protection, and the one `ci-ok` check** (2026-09-30). Until then nothing gated `main`: the
+  automated bump PR #22 was merged 5 s after its approved CI runs began, before any job finished
+  (failure-log 2026-09-30). Two repository rulesets on the default branch: **"main: history"** —
+  no deletion, no force-push, no bypass for anyone (to rewrite `main` deliberately, disable it for the
+  moment); **"main: PR gate"** — a pull request, with the required checks `ci-ok`, `Analyze (python)`,
+  `Analyze (actions)` and `Dependency review`, each pinned to the GitHub Actions app (integration
+  15368, so no other app can post a passing status under the name), not strict, and the admin role as
+  an `always` bypass so the owner still pushes straight to `main` (a PR merge past a red check is an
+  explicit, logged bypass). **`ci-ok`** is `ci.yml`'s last job: `needs` every blocking job, runs
+  `if: always()`, and fails on any failed, cancelled *or skipped* one — a required check passes on
+  "skipped", and one that never reports never passes, so requiring the matrix legs by name would wedge
+  every PR the day one is renamed. `test_ci_ok_needs_every_blocking_job` (a new job must join
+  `needs`, or carry `continue-on-error` like the latest-GAM preview) and
+  `test_the_required_checks_always_report_on_a_pull_request` (no job-level `if:`, `continue-on-error`
+  or paths filter on a required job). Rename a required job, or add a required workflow, and update
+  the ruleset in the same change. Scorecard runs only on push and schedule — never require it. A
+  **bot PR** (gam-watch's, opened with `github.token`) gets no CI until the maintainer clicks
+  **Approve and run workflows**; that human gate is intended — don't hand the workflow a PAT.
+- **gam-watch runs the new GAM without the write token** (2026-09-30). The bump used to run in one
+  job holding `contents: write` + `pull-requests: write`: the new GAM binary, the pip install and the
+  whole suite ran next to a token that could push. Now `prepare` (read-only, `persist-credentials:
+  false`) attests, vendors, regenerates and tests, then uploads the change as a `git diff --binary`
+  patch plus the changelog excerpt (GamUpdate.txt is gitignored); `open-pr` (ubuntu, 10 minutes) only
+  checks out, `git apply --index`es it, commits, pushes `gam-bump/<version>` and opens the PR. Every
+  job in every workflow has a timeout (`test_every_job_has_a_timeout`). The coverage gate's one leg is
+  held to the matrix too (`test_ci_enforces_the_coverage_floor`): renaming `macos-latest` would
+  otherwise skip the `--cov` step silently.
 - **Hardened runtime on the app and on `gam`** (2026-09-23). Without it dyld honors `DYLD_*` launch variables, so a same-user `launchctl setenv DYLD_INSERT_LIBRARIES=…` loads code into the app the Keychain trusts, or into the `gam` holding the plaintext credentials; until then the bundle and `gam` were signed with no runtime flag at all. Signing order matters: `codesign --force --deep` re-signs every nested Mach-O with the app's options — the old script signed `gam` *before* the deep sign, which silently replaced it (checked on a copy). So `sign_app.sh` signs `gam` after the deep sign and then reseals the bundle without `--deep`.
 - **Entitlements, and why each is there.** A self-signed or ad-hoc signature has no Team ID, and library validation refuses any dylib whose Team ID differs from the process's — every bundled one, the frozen Python included — so both need `disable-library-validation` (measured: a hardened ad-hoc binary could not load its own ad-hoc dylib without it; with it, `DYLD_*` stayed ignored). The app needs nothing else: ctypes and pyobjc callbacks use the system libffi, whose arm64 closures need no writable-executable memory, and WKWebView runs its JavaScript JIT in WebKit's own process — both checked with a hardened copy of the build Python. `gam` carries upstream's set unchanged because we replace upstream's signature; `test_gam_entitlements_match_the_vendored_upstream_binary` fails if a bump changes it. Never add `allow-dyld-environment-variables`, `get-task-allow`, `cs.debugger` or `disable-executable-page-protection` (`test_no_entitlements_reopen_injection_or_debugging`). With a Developer ID (D1) every file would share a Team ID and `disable-library-validation` could go.
 - **pywebview/pyinstaller pinned.** Both go inside the shipped bundle; an unpinned floor would ship an unreviewed WKWebView host or bootloader. `test_pywebview_is_pinned` (in `test_fetch_gam.py`) checks pywebview's exact pin in `pyproject.toml` equals `requirements/app.in`'s, that `app.in` pins PyInstaller exactly, and that `build_app.sh` names no package of its own.

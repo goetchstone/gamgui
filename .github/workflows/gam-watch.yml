@@ -3,13 +3,20 @@ name: GAM release watch
 # Weekly: if GAM-team/GAM shipped a version newer than our pin, do the mechanical part of the
 # "Updating GAM" runbook and open a PR — verified, tested, ready to review. Not auto-merge: a human
 # still reads the changelog, runs scripts/acceptance.py against a real tenant, and merges. The PR's
-# own required checks (CI across 3.10/3.12/3.14 + CodeQL) are the gate; the contract test turns a
-# renamed/removed command into a red PR rather than a silent live break.
+# required checks (branch protection on main: ci-ok, CodeQL, dependency review) are the gate; the
+# contract test turns a renamed/removed command into a red PR rather than a silent live break. A PR
+# opened with github.token doesn't start CI by itself: its runs wait as "action required" until the
+# maintainer clicks "Approve and run workflows" on it — merge only once they're green (PR #22 was
+# merged 5 s after its approved runs began, before any finished).
 #
 # The pin is written automatically ONLY because scripts/bump_gam.py verifies GitHub's Sigstore build
 # attestation for the asset first (gh attestation verify, signed by GAM-team/GAM's build.yml on main,
 # on a GitHub-hosted runner). No verified provenance -> the script fails -> no PR. That is what keeps
 # automatic pinning from being trust-on-first-use (see the fail-closed pin invariant in CLAUDE.md).
+#
+# Two jobs, so the token that can push never meets the new code: `prepare` downloads the new GAM,
+# installs the locked deps and runs the suite with a read-only token, and hands the result on as a
+# patch; `open-pr` only applies that patch, pushes the branch and opens the PR.
 on:
   schedule:
     - cron: "0 14 * * 1" # Mondays 14:00 UTC
@@ -19,15 +26,23 @@ permissions:
   contents: read
 
 jobs:
-  bump:
+  prepare:
     # macOS arm64, so the vendored asset (and its pinned checksum) is exactly what a maintainer's
     # `make gam` produces — not a Linux runner's different asset.
     runs-on: macos-latest
+    timeout-minutes: 30
     permissions:
-      contents: write        # push the bump branch
-      pull-requests: write   # open the PR
+      contents: read
+      pull-requests: read    # gh pr list: is a PR for this version already open?
+    outputs:
+      todo: ${{ steps.check.outputs.todo }}
+      latest: ${{ steps.check.outputs.latest }}
+      pin: ${{ steps.check.outputs.pin }}
+      tests_rc: ${{ steps.tests.outputs.rc }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Is a newer GAM out?  # cheap check first — no download unless we're actually behind
         id: check
@@ -79,20 +94,54 @@ jobs:
           echo "rc=$?" >> "$GITHUB_OUTPUT"
           tail -20 /tmp/pytest.log
 
-      - name: Open the PR
+      - name: Package the bump for the job that opens the PR
         if: steps.check.outputs.todo == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
-          LATEST: ${{ steps.check.outputs.latest }}
           PIN: ${{ steps.check.outputs.pin }}
-          TESTS_RC: ${{ steps.tests.outputs.rc }}
+        # GamUpdate.txt is vendored (gitignored), so the changelog excerpt for the PR body is cut here.
+        run: |
+          mkdir -p "$RUNNER_TEMP/bump"
+          git add -A
+          git diff --cached --binary > "$RUNNER_TEMP/bump/bump.patch"
+          awk -v pin="$PIN" 'index($0,pin){exit} {print}' gamgui/resources/gam7/GamUpdate.txt | head -40 > "$RUNNER_TEMP/bump/delta.txt"
+          test -s "$RUNNER_TEMP/bump/bump.patch"
+
+      - if: steps.check.outputs.todo == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gam-bump
+          path: ${{ runner.temp }}/bump
+          retention-days: 5
+
+  open-pr:
+    needs: prepare
+    if: needs.prepare.outputs.todo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write        # push the bump branch
+      pull-requests: write   # open the PR
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: gam-bump
+          path: ${{ runner.temp }}/bump
+
+      - name: Open the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ needs.prepare.outputs.latest }}
+          PIN: ${{ needs.prepare.outputs.pin }}
+          TESTS_RC: ${{ needs.prepare.outputs.tests_rc }}
         run: |
           BR="gam-bump/$LATEST"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BR"
-          git add -A
-          DELTA=$(awk -v pin="$PIN" 'index($0,pin){exit} {print}' gamgui/resources/gam7/GamUpdate.txt | head -40)
+          git apply --index "$RUNNER_TEMP/bump/bump.patch"
+          DELTA=$(cat "$RUNNER_TEMP/bump/delta.txt")
           STATUS=$([ "$TESTS_RC" = "0" ] && echo "✅ offline suite green" || echo "❌ offline suite RED — needs code changes before merge")
           git commit -q -m "GAM: bump $PIN -> $LATEST (automated)
 
@@ -106,9 +155,11 @@ jobs:
           - Pin, version strings, test mock, browse catalog and the counts in CLAUDE.md, README and ROADMAP updated mechanically.
           - $STATUS
 
-          **Before merge (human):** skim the changelog below, and run \`scripts/acceptance.py\` against a
-          real tenant — CI cannot (it is the only true output-shape check). If the suite is red, the
-          contract test likely caught a renamed/removed command we use; that needs a code change.
+          **Before merge (human):** click **Approve and run workflows** so CI and CodeQL run on this PR
+          (a PR opened by github.token doesn't start them), and merge only once the required checks are
+          green. Skim the changelog below, and run \`scripts/acceptance.py\` against a real tenant — CI
+          cannot (it is the only true output-shape check). If the suite is red, the contract test likely
+          caught a renamed/removed command we use; that needs a code change.
 
           <details><summary>GamUpdate.txt since $PIN</summary>
 

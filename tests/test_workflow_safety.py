@@ -111,6 +111,19 @@ def test_ci_enforces_the_coverage_floor():
     assert report and int(report[1]) >= 90, "the coverage floor in pyproject was removed or lowered"
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert re.search(r"^\s+run: pytest -q --cov\b", ci, re.M), "no CI step runs the suite under --cov"
+    # The --cov step runs on one matrix leg, named by literals in its if:. Rename the leg (a pinned
+    # macOS label, a Python bump) and the step silently never runs — every leg green, no floor at all.
+    test_job = _jobs(ci)["test"]
+    matrix = {key: re.findall(r'"?([\w.-]+)"?', values)
+              for key, values in re.findall(r"^        (os|python): \[(.*)\]$", test_job, re.M)}
+    leg = r"matrix\.os == '([\w.-]+)' && matrix\.python == '([\w.-]+)'"
+    cov_if = re.search(r"^        if: " + leg + r"\n        run: pytest -q --cov\b", test_job, re.M)
+    assert cov_if, "the --cov step must name its one leg as matrix.os == '…' && matrix.python == '…'"
+    os_name, python = cov_if.groups()
+    assert os_name in matrix["os"] and python in matrix["python"], f"the --cov leg ({os_name}, {python}) isn't in the matrix"
+    # ...and every other leg runs the plain suite: exactly the complement, so each leg runs pytest once.
+    assert re.search(r"^        if: \$\{\{ !\(" + leg.replace("([\\w.-]+)", "{}").format(
+        re.escape(os_name), re.escape(python)) + r"\) \}\}\n        run: pytest -q\n", test_job, re.M)
 
 
 def _jobs(text: str) -> dict:
@@ -126,3 +139,42 @@ def test_ci_builds_and_smoke_checks_the_app():
     assert "runs-on: macos-latest\n" in job and re.search(r"^    timeout-minutes: \d+", job, re.M)
     assert "run: ./scripts/fetch_gam.sh\n" in job and "--allow-unpinned" not in job  # the pinned binary
     assert "run: build/venv/bin/python scripts/check_app.py dist/GamGUI.app\n" in job
+
+
+def test_every_job_has_a_timeout():
+    # The default is six hours: a hung test, or a download that never finishes, burns it all and
+    # holds a runner (and, in gam-watch, a token) that long.
+    missing = [f"{wf.name}:{name}" for wf in WORKFLOWS for name, body in _jobs(wf.read_text()).items()
+               if not re.search(r"^    timeout-minutes: \d+", body, re.M)]
+    assert not missing, missing
+
+
+# The checks branch protection requires on a pull request into main (the "main: PR gate" ruleset).
+# A required check passes on "skipped" and never passes if it never reports, so each must come from a
+# job that always runs on a pull request: no job-level if:, no continue-on-error, no paths filter.
+REQUIRED = {"ci.yml": {"ci-ok"}, "codeql.yml": {"analyze"}, "dependency-review.yml": {"review"}}
+
+
+def test_ci_ok_needs_every_blocking_job():
+    jobs = _jobs((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    ci_ok = jobs["ci-ok"]
+    blocking = {name for name, body in jobs.items()
+                if name != "ci-ok" and "\n    continue-on-error: true\n" not in body}
+    needs = set(re.search(r"^    needs: \[(.*)\]$", ci_ok, re.M)[1].replace(" ", "").split(","))
+    assert needs == blocking, f"ci-ok must need exactly the blocking jobs: missing {blocking - needs}, extra {needs - blocking}"
+    assert "\n    if: always()\n" in ci_ok   # without it, a failed need skips ci-ok, and a skip passes
+    fail_if = re.search(r"^        if: (.*)\n        run: \|\n\s+echo .*\n\s+exit 1$", ci_ok, re.M)
+    assert fail_if and all(f"contains(needs.*.result, '{r}')" in fail_if[1] for r in ("failure", "cancelled", "skipped"))
+
+
+def test_the_required_checks_always_report_on_a_pull_request():
+    for wf_name, job_ids in REQUIRED.items():
+        text = (ROOT / ".github" / "workflows" / wf_name).read_text()
+        trigger = text.split("\njobs:\n", 1)[0]
+        assert re.search(r"^  pull_request:", trigger, re.M), wf_name
+        assert not re.search(r"^\s+paths(?:-ignore)?:", trigger, re.M), f"{wf_name}: a paths filter skips the check"
+        jobs = _jobs(text)
+        for job_id in job_ids:
+            body = jobs[job_id]
+            assert "\n    continue-on-error:" not in body, f"{wf_name}:{job_id}"
+            assert job_id == "ci-ok" or not re.search(r"^    if:", body, re.M), f"{wf_name}:{job_id} can be skipped"

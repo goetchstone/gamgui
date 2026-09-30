@@ -160,3 +160,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # authenticate api.github.com -> avoid the 60/hr 403
       - name: Command-token contract against latest (early warning)
         run: pytest -q tests/test_command_contract.py -k "tokens or grammar_line"
+
+  ci-ok:
+    # The one check from this workflow that branch protection requires (with CodeQL's Analyze legs and
+    # Dependency review). Required checks are matched by name, so requiring the matrix legs one by one
+    # would wedge every PR the day a leg is renamed or a Python version changes — a required name that
+    # never reports never passes. `needs` is every job above except the non-blocking preview
+    # (tests/test_workflow_safety.py holds that), and a skipped or cancelled job fails this as surely
+    # as a failed one: a required check passes on "skipped".
+    name: ci-ok
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint, test, a11y, gam-compat, app]
+    if: always()
+    steps:
+      - name: Every blocking job passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "A blocking CI job did not pass; its own check says which."
+          exit 1
