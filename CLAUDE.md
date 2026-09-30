@@ -69,8 +69,9 @@ unproven until it has run against one — see the live-verification status in th
 - **macOS-only** is deliberate: don't build or pitch Windows/Linux support. But don't *foreclose* it
   either — keep platform specifics in the shell (window, Keychain, codesigning, `.app`), not in
   `core/`. Same framing for a free-text `gam` runner: not planned, not forbidden. See ROADMAP.md.
-- **Commits** happen when the operator asks. It is a solo repo: commits go straight to `main` unless
-  a PR is requested; an `improve-rules` proposal is always a PR.
+- **Commits** happen when the operator asks, and every change reaches `main` through a pull request
+  (since 2026-09-30): branch, push the branch, open the PR, merge once its required checks are green.
+  Branch protection enforces it — `main` takes no direct push, the owner's included.
 
 ## Working here economically
 

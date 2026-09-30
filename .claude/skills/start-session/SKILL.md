@@ -14,9 +14,10 @@ it.
 
 - `git log --oneline -8` and `git status` — what shipped recently, what's dirty.
   (The hook's digest already has the branch, last commit and dirty count.)
-- Branching: this is a solo repo and the operator commits straight to `main`
-  when they ask for a commit. Use a branch/PR when they ask for one, and always
-  for an [improve-rules](../improve-rules/SKILL.md) proposal.
+- Branching: every change goes through a pull request (since 2026-09-30) — a
+  branch off `main`, pushed as the owner, a PR, merged once `ci-ok`, CodeQL and
+  dependency review are green. `main` refuses a direct push. An
+  [improve-rules](../improve-rules/SKILL.md) proposal is a PR like any other.
 
 ## 2. Is the toolchain sane?
 
