@@ -1,0 +1,61 @@
+name: Live verification report
+description: You ran a GamGUI write against a real domain — tell us whether it worked.
+labels: ["live-verification"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The README's [live verification status](https://github.com/goetchstone/gamgui#live-verification-status)
+        table lists which writes have run against a production domain. Anything marked *not yet*
+        is proven offline only. A report here — worked or failed — is how a row changes.
+        Run *not yet* writes on a **throwaway** user, group or calendar first.
+  - type: input
+    id: write
+    attributes:
+      label: Which write
+      description: As named in the table's first column.
+      placeholder: Suspend / unsuspend
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Worked as the preview described
+        - Worked, but something differed from the preview
+        - Failed
+    validations:
+      required: true
+  - type: textarea
+    id: checked
+    attributes:
+      label: What you checked in Google afterwards
+      description: e.g. "Admin console shows the account suspended; the user was signed out of Gmail."
+  - type: textarea
+    id: audit
+    attributes:
+      label: The audit-log line
+      description: From the Audit screen. Redact addresses and your domain.
+      render: text
+  - type: input
+    id: commit
+    attributes:
+      label: GamGUI commit
+      description: "`git rev-parse --short HEAD`"
+    validations:
+      required: true
+  - type: input
+    id: gam
+    attributes:
+      label: GAM version
+      description: Shown in the app's header.
+    validations:
+      required: true
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Nothing private
+      options:
+        - label: I removed credentials, tokens, my domain and real people's addresses from this report.
+          required: true

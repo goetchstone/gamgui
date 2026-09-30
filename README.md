@@ -1,5 +1,10 @@
 # GamGUI
 
+[![CI](https://github.com/goetchstone/gamgui/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/goetchstone/gamgui/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/goetchstone/gamgui/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/goetchstone/gamgui/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/goetchstone/gamgui/badge)](https://scorecard.dev/viewer/?uri=github.com/goetchstone/gamgui)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A free, local, open-source **macOS app for [GAM7](https://github.com/GAM-team/GAM)**, the Google
 Workspace admin command line. The recurring admin chores get a screen, the big changes show a
 preview and wait for your confirm, and every change lands in an audit log — with GAM's full reach

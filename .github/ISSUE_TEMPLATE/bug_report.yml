@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in GamGUI broke or did the wrong thing.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you paste anything:** never include `oauth2service.json`, `oauth2.txt`,
+        `client_secrets.json` or a token, and replace your domain and real people's addresses
+        (`someone@example.com` is fine). A security problem goes to a
+        [private advisory](https://github.com/goetchstone/gamgui/security/advisories/new), not here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what GamGUI did instead of what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Onboard
+        2. …
+  - type: dropdown
+    id: screen
+    attributes:
+      label: Screen
+      options:
+        - Setup
+        - Home
+        - Users
+        - Groups
+        - Signatures
+        - Calendars
+        - Builder
+        - Onboard
+        - Lifecycle (offboarding)
+        - Reports
+        - Audit
+        - Building or launching the app
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error text or audit-log line
+      description: |
+        The message on screen, or the line from the Audit screen for a failed write (it holds
+        the exact `gam` command and GAM's error). Redact addresses and your domain.
+      render: text
+  - type: input
+    id: commit
+    attributes:
+      label: GamGUI commit
+      description: "`git rev-parse --short HEAD` in the checkout you built from."
+    validations:
+      required: true
+  - type: input
+    id: gam
+    attributes:
+      label: GAM version
+      description: Shown in the app's header, e.g. `GAM 7.48.14`.
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "26.1"
+  - type: dropdown
+    id: runs-as
+    attributes:
+      label: How you run it
+      options:
+        - The built app (make app)
+        - make run
+        - In a browser (dev fallback)
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Nothing private
+      options:
+        - label: I removed credentials, tokens, my domain and real people's addresses from this report.
+          required: true

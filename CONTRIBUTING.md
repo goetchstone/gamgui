@@ -13,6 +13,13 @@ conversation to have in the PR.
 Looking for something to pick up? [ROADMAP.md](ROADMAP.md) is the ranked backlog, and its
 "Deliberate trade-offs" section explains the two things GamGUI does not do today, and why.
 
+Taking part here is under the [code of conduct](CODE_OF_CONDUCT.md). Questions go to
+[Discussions](https://github.com/goetchstone/gamgui/discussions) — [SUPPORT.md](SUPPORT.md) says what
+goes where — and issues use the forms on **New issue**: a bug, a feature request, or a *live
+verification report* when you've run a write against a real domain. A pull request fills in the
+template's checklist, and CI (tests on macOS and Linux, lint, accessibility, the app build, CodeQL)
+must pass.
+
 ## Quick start
 
 You need **Python 3.10+** (`pyproject.toml` sets `requires-python = ">=3.10"`). macOS's own

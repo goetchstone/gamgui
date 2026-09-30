@@ -1,0 +1,44 @@
+name: Feature request
+description: An admin chore GamGUI should handle, or a screen that could work better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things shape what gets built: GamGUI is **macOS-only by design**, and every new
+        *write* is added deliberately — a preview, the confirm guard, an audit line, and a live
+        run on a throwaway account before it is trusted. Reads are cheap; the Builder already runs
+        most of GAM's read commands. [ROADMAP.md](https://github.com/goetchstone/gamgui/blob/main/ROADMAP.md)
+        is the ranked backlog.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The chore or problem
+      description: What you do today, how often, and what makes it painful.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What GamGUI would do
+      description: The screen or change you have in mind — as rough as you like.
+  - type: textarea
+    id: gam
+    attributes:
+      label: The gam command(s), if you know them
+      description: Exactly as you'd type them, with example values.
+      render: text
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Onboarding
+        - Offboarding
+        - Signatures
+        - Users / groups
+        - Calendars
+        - Builder
+        - Reports
+        - Setup
+        - Something new

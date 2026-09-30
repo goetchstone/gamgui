@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/goetchstone/gamgui/security/advisories/new
+    about: Privately — never in a public issue. GamGUI holds domain-wide credentials.
+  - name: Ask a question
+    url: https://github.com/goetchstone/gamgui/discussions/categories/q-a
+    about: Setup, "how do I…", or whether GamGUI fits your domain.
+  - name: Read the user guide
+    url: https://github.com/goetchstone/gamgui/blob/main/docs/guide.md
+    about: Setup and each everyday task, with what to check before and after.
+  - name: A GAM question, not a GamGUI one
+    url: https://github.com/GAM-team/GAM/wiki
+    about: How a gam command behaves, or an error GAM itself prints for the same command.
