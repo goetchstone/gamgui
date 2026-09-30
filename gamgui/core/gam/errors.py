@@ -37,6 +37,9 @@ class GAMErrorKind(enum.Enum):
     # A user for whom a Google service (Calendar, Gmail…) is off: GAM's "<Service> Service/App not
     # enabled" per-user warning — not the account-wide "<API> not enabled. Please run …" failure.
     SERVICE_NOT_ENABLED = "service_not_enabled"
+    # The subscription has no free license for another account ("Create Failed: Domain user limit
+    # reached. Contact Support." — seen live 2026-09-30). Every later create fails the same way.
+    LICENSE_LIMIT = "license_limit"
     NOT_AUTHENTICATED = "not_authenticated"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
@@ -45,6 +48,7 @@ class GAMErrorKind(enum.Enum):
 # Failures about the connection, not the one target: an expired admin sign-in, GAM not set up, an API
 # scope not granted. Every later call in a bulk loop would fail the same way, so the loop stops at the
 # first one (core/bulk.py `stop_reason`) instead of reporting one cause once per remaining target.
+# Not LICENSE_LIMIT: it fails only later *creates*, so bulk onboarding skips those and runs the rest.
 ACCOUNT_WIDE_KINDS = frozenset({GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTHENTICATED,
                                 GAMErrorKind.SCOPE_MISSING})
 
@@ -73,6 +77,11 @@ _REMEDIATION = {
     GAMErrorKind.SERVICE_NOT_ENABLED: (
         "That Google service is turned off for this user — check their licence, or the service's "
         "on/off setting for their organizational unit in the Admin console."
+    ),
+    GAMErrorKind.LICENSE_LIMIT: (
+        "Your Google Workspace subscription has no free license for another account. Free one (delete "
+        "or unlicense a departed user's account) or add licenses under Billing in the Admin console, "
+        "then run it again."
     ),
     GAMErrorKind.NOT_AUTHENTICATED: "GAM is not configured yet. Complete the setup wizard first.",
     GAMErrorKind.TIMEOUT: "The command timed out. Check connectivity and retry.",
@@ -108,6 +117,7 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     # not enabled"). Narrow on purpose: GAM's account-wide "Calendar not enabled. Please run "gam update
     # project"…" is a real failure and must stay UNKNOWN. Tolerated by the offboarding calendar sweep.
     (re.compile(r"Service/App not enabled", re.I), GAMErrorKind.SERVICE_NOT_ENABLED),
+    (re.compile(r"Domain user limit reached", re.I), GAMErrorKind.LICENSE_LIMIT),
     (re.compile(r"please run.*oauth|no.*credentials|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
 ]
 
@@ -121,7 +131,7 @@ _PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting all |Got \d+ )")
 # so a real failure is never reported as the benign kind next to it.
 _SEVERITY: List[GAMErrorKind] = [
     GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTHENTICATED, GAMErrorKind.SCOPE_MISSING,
-    GAMErrorKind.RATE_LIMITED, GAMErrorKind.TIMEOUT, GAMErrorKind.UNKNOWN,
+    GAMErrorKind.LICENSE_LIMIT, GAMErrorKind.RATE_LIMITED, GAMErrorKind.TIMEOUT, GAMErrorKind.UNKNOWN,
     GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.OWN_ACL, GAMErrorKind.SERVICE_NOT_ENABLED,
     GAMErrorKind.NOT_FOUND,
 ]

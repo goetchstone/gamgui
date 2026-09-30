@@ -111,7 +111,7 @@ async def test_stop_ends_bulk_onboarding_between_hires_never_mid_hire(connector,
               "notify": ""} for i in range(3)]
     job = OnboardJob(total=3, kind="onboard")
     await _run_bulk_onboard(job, _StopDuring(connector, job, "create_user"), SignatureStore(tmp_path / "sig.json"),
-                            store, [(h, store.role("Sales")) for h in hires])
+                            store, [(h, store.role("Sales")) for h in hires], {})
     _stopped_after_one(job)
     writes = [" ".join(w) for w in gam_writes(gam_calls())]
     assert writes[0].startswith("create user new0@example.com")

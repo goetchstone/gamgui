@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -459,7 +460,7 @@ async def test_run_bulk_onboard_executor(connector, tmp_path):
             _hire(role="Nope", name="X", email="x@example.com")]                          # unknown role
     cfgs = {"Sales": store.role("Sales"), "Nope": None}
     job = OnboardJob(id="t", total=3)
-    await _run_bulk_onboard(job, connector, sig_store, store, [(r, cfgs[r["role"]]) for r in rows])
+    await _run_bulk_onboard(job, connector, sig_store, store, [(r, cfgs[r["role"]]) for r in rows], {})
     assert job.finished and job.done == 3
     assert job.applied == 1 and job.failed_total == 2 and len(job.failed) == 2
 
@@ -473,7 +474,7 @@ async def test_bulk_job_feed_is_bounded_at_scale(connector, tmp_path):
     rows = [_hire(name=f"H{i}", email=f"h{i}@example.com") for i in range(50)]
     job = OnboardJob(id="t", total=50)
     await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
-                            [(r, store.role("Sales")) for r in rows])
+                            [(r, store.role("Sales")) for r in rows], {})
     assert job.done == 50 and len(job.recent) == _RECENT_WINDOW
 
 
@@ -678,7 +679,7 @@ async def test_provision_hire_partial_failure_counts_as_failed(connector, tmp_pa
     r = await onboarding.provision_hire(connector, sig_store, store, store.role("Sales"), _hire(email="ada@example.com"))
     assert r["ok"] is False and any("groups" in e for e in r["errors"])
     job = OnboardJob(id="t", total=1)
-    await _run_bulk_onboard(job, connector, sig_store, store, [(_hire(email="ada@example.com"), store.role("Sales"))])
+    await _run_bulk_onboard(job, connector, sig_store, store, [(_hire(email="ada@example.com"), store.role("Sales"))], {})
     assert job.failed_total == 1 and job.applied == 0
 
 
@@ -809,7 +810,7 @@ async def test_bulk_recent_feed_holds_no_plaintext_password(connector, tmp_path,
     job = OnboardJob(id="t", total=1)
     await _run_bulk_onboard(job, connector, SignatureStore(tmp_path / "sig.json"), store,
                             [(_hire(name="Ada Byte", email="ada@example.com", first="Ada", last="Byte",
-                                    create_account=True), store.role("Sales"))])
+                                    create_account=True), store.role("Sales"))], {})
     assert "RECENTpw-9999" not in json.dumps([vars(r) for r in job.recent])  # feed never retains plaintext
     assert any(c["password"] == "RECENTpw-9999" for c in job.credentials)   # only the sheet holds it
 
@@ -907,3 +908,187 @@ def test_looks_like_email_is_linear_on_a_hostile_address():
     start = time.monotonic()
     assert onboarding.looks_like_email("!@!." + "!." * 200_000 + "@") is False
     assert time.monotonic() - start < 0.5
+
+
+# --- a just-created account Google hasn't finished setting up (seen live 2026-09-30) ----------------------
+
+CAL = "team@group.calendar.google.com"
+
+
+@pytest.fixture
+def new_account_lag(gam_state):
+    """Arm the mock: an account `create user` makes fails its next N per-user calls as it did live."""
+    def arm(n: int) -> None:
+        (gam_state / "new_account_lag").write_text(str(n))
+    return arm
+
+
+def _new_hire_role(tmp_path, **role):
+    store = RunbookStore(tmp_path / "ob.json")
+    store.set_role("Sales", ["Set up POS"], **role)
+    return store, SignatureStore(tmp_path / "sig.json")
+
+
+def _reports():
+    got: list = []
+    return got, lambda step, ok, reason, _detail: got.append((step["what"], ok, reason))
+
+
+@pytest.mark.asyncio
+async def test_a_new_accounts_signature_and_calendar_wait_for_google_then_apply(connector, tmp_path,
+                                                                                new_account_lag):
+    new_account_lag(2)   # the signature and the calendar each refused once, as they were live
+    store, sigs = _new_hire_role(tmp_path, signature="Classic", calendars=[CAL])
+    r = await onboarding.provision_hire(connector, sigs, store, store.role("Sales"),
+                                        _hire(first="Ada", last="Byte", create_account=True))
+    assert r["account_created"] and r["ok"] and not r["errors"]          # parked, not failed
+    assert [w["what"] for w in r["waiting"]] == ["signature", "calendar"]
+    assert r["signature"] is None and r["calendars"]["waiting"] == [CAL]
+    got, report = _reports()
+    await onboarding.finish_new_accounts(connector, r["waiting"], report, waits=(0,))
+    assert got == [("signature", True, ""), ("calendar", True, "")]
+    audit = [json.loads(line) for line in (tmp_path / "audit.jsonl").read_text().splitlines()]
+    assert [(a["action"], a["ok"]) for a in audit if a["action"] in ("set_signature", "subscribe_calendar")] == [
+        ("set_signature", False), ("subscribe_calendar", False), ("set_signature", True), ("subscribe_calendar", True)]
+
+
+@pytest.mark.asyncio
+async def test_finishing_gives_up_after_its_last_round_and_says_what_to_do(connector, tmp_path, new_account_lag):
+    new_account_lag(10)
+    store, sigs = _new_hire_role(tmp_path, signature="Classic")
+    r = await onboarding.provision_hire(connector, sigs, store, store.role("Sales"),
+                                        _hire(first="Ada", last="Byte", create_account=True))
+    got: list = []
+    await onboarding.finish_new_accounts(connector, r["waiting"],
+                                         lambda step, ok, why, detail: got.append((ok, why, detail)), waits=(0, 0))
+    # GAM's last words stay with it: they can also mean a missing scope, which a wait never fixes.
+    assert got == [(False, onboarding.NOT_READY_REASON, "GAM failed (unknown, exit=50): User: ada@example.com, "
+                    "User Set Failed: access_denied: Requested client not authorized")]
+    got, report = _reports()
+    await onboarding.finish_new_accounts(connector, r["waiting"], report, stopped=lambda: True, waits=(0,))
+    assert got == [("signature", False, onboarding.STOPPED_REASON)]
+
+
+@pytest.mark.asyncio
+async def test_an_existing_account_is_never_parked(connector, tmp_path, gam_state):
+    # The same refusal on an account this run didn't create is a real failure (a service turned off, a
+    # delegation scope missing), reported at once — not retried for minutes.
+    (gam_state / "provisioning").mkdir()
+    (gam_state / "provisioning" / "ada@example.com").write_text("5")
+    store, sigs = _new_hire_role(tmp_path, calendars=[CAL])
+    r = await onboarding.provision_hire(connector, sigs, store, store.role("Sales"), _hire())
+    assert not r["waiting"] and r["calendars"]["failed"] == [CAL] and not r["ok"]
+
+
+@pytest.mark.asyncio
+async def test_the_new_hires_own_task_list_waits_too(connector, tmp_path, new_account_lag):
+    new_account_lag(1)   # assignee left blank: the checklist goes to the account just created
+    store, sigs = _new_hire_role(tmp_path)
+    r = await onboarding.provision_hire(connector, sigs, store, store.role("Sales"),
+                                        _hire(first="Ada", last="Byte", create_account=True, assignee=""))
+    assert [w["what"] for w in r["waiting"]] == ["tasks"] and r["tasklist"] is None and not r["errors"]
+    got, report = _reports()
+    await onboarding.finish_new_accounts(connector, r["waiting"], report, waits=(0,))
+    assert got == [("tasks", True, "")]
+
+
+@pytest.mark.asyncio
+async def test_no_license_left_skips_the_later_accounts_but_not_the_other_rows(connector, tmp_path, gam_calls):
+    # Every later create would be refused the same way, so it isn't tried; a row for an existing
+    # account needs no license and still runs (review of the first cut, which stopped the whole CSV).
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
+    store, sigs = _new_hire_role(tmp_path)
+    rows = [_hire(name="A One", email="a-USERLIMIT@example.com", first="A", last="One", create_account=True),
+            _hire(name="B Two", email="b@example.com", first="B", last="Two", create_account=True),
+            _hire(name="Cy Three", email="cy@example.com")]
+    job = OnboardJob(id="t", total=3)
+    await _run_bulk_onboard(job, connector, sigs, store, [(r, store.role("Sales")) for r in rows], {})
+    assert job.done == 3 and not job.error and job.applied == 1
+    assert [(f.item, "no free license" in f.reason) for f in job.failed] == [
+        ("a-USERLIMIT@example.com", True), ("b@example.com", True)]
+    assert [c[2] for c in gam_calls() if c[:2] == ["create", "user"]] == ["a-USERLIMIT@example.com"]
+
+
+def test_a_single_hire_refused_for_want_of_a_license_says_so(client):
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    r = _preview_and_run(client, role="Sales", name="Ada Byte", email="ada-USERLIMIT@example.com",
+                         assignee="it@example.com", create_account="1")
+    assert "Couldn&#39;t create the account: Your Google Workspace subscription has no free license" in r.text
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_bulk_run_lists_what_waits_for_google_instead_of_retrying(connector, tmp_path,
+                                                                                   new_account_lag):
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
+    new_account_lag(1)
+    store, sigs = _new_hire_role(tmp_path, signature="Classic")
+    rows = [_hire(name="Ada Byte", email="ada@example.com", create_account=True),
+            _hire(name="Bo Ng", email="bo@example.com", create_account=True)]
+    job = OnboardJob(id="t", total=2)
+
+    class StopAfterFirst:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        async def create_onboarding_runbook(self, *a, **kw):
+            job.cancel_requested = True
+            return await self.inner.create_onboarding_runbook(*a, **kw)
+
+    jobs: dict = {}
+    await _run_bulk_onboard(job, StopAfterFirst(connector), sigs, store, [(r, store.role("Sales")) for r in rows], jobs)
+    assert not job.finishing and not jobs
+    assert job.error.startswith("Stopped by you — 1 not attempted.")
+    assert "1 step left waiting for Google to set up the new accounts was not retried" in job.error
+
+
+@pytest.mark.asyncio
+async def test_bulk_hands_the_waiting_steps_to_one_finishing_job(connector, tmp_path, new_account_lag, monkeypatch):
+    from gamgui.web.routes.onboarding import OnboardJob, _run_bulk_onboard
+    new_account_lag(1)
+    monkeypatch.setattr(onboarding, "NEW_ACCOUNT_WAITS", (0,))
+    store, sigs = _new_hire_role(tmp_path, signature="Classic")
+    rows = [_hire(name="Ada Byte", email="ada@example.com", create_account=True),
+            _hire(name="Bo Ng", email="bo@example.com", create_account=True)]
+    jobs: dict = {}
+    job = OnboardJob(id="t", total=2)
+    await _run_bulk_onboard(job, connector, sigs, store, [(r, store.role("Sales")) for r in rows], jobs)
+    assert job.applied == 2 and job.recent[0].reason == "waiting for Google: signature"
+    finishing = jobs[job.finishing]
+    await finishing.task
+    assert finishing.title == "Finishing setup for 2 new accounts"
+    assert finishing.finished and finishing.applied == 2 and not finishing.error
+
+
+def test_run_shows_what_waits_for_google_and_finishes_it(client, new_account_lag, monkeypatch):
+    new_account_lag(2)
+    monkeypatch.setattr(onboarding, "NEW_ACCOUNT_WAITS", (0,))
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "signature": "Classic",
+                                        "calendars": CAL})
+    r = _preview_and_run(client, role="Sales", name="Ada Byte", email="ada@example.com",
+                         assignee="it@example.com", create_account="1")
+    assert "Account created" in r.text and "waiting for Google — applied as soon" in r.text
+    assert "0 of 1 shared calendar" in r.text and "1 waiting for Google" in r.text
+    job_id = re.search(r'/onboard/finish/status\?job=([\w-]+)', r.text).group(1)
+    job = client.app.state.gamgui.jobs[job_id]
+    wait_for_job(client, job)
+    shown = client.get(f"/onboard/finish/status?job={job_id}").text
+    assert "Finishing setup — done" in shown and job.applied == 2
+
+
+@pytest.mark.asyncio
+async def test_stop_ends_the_wait_for_google_at_once(connector):
+    # The rounds wait minutes apart: Stop must not leave the job sleeping out the rest of the wait.
+    import asyncio
+    from gamgui.web.routes.onboarding import FinishJob, _run_finish
+    step = {"what": "calendar", "email": "ada@example.com", "calendar": CAL}
+    job = FinishJob(total=1, kind="finish")
+    task = asyncio.create_task(_run_finish(job, connector, [step], waits=(30,)))
+    await asyncio.sleep(0.05)
+    assert job.next_try_in > 25
+    job.cancel_requested = True
+    await asyncio.wait_for(task, 3)
+    assert job.error == "Stopped by you." and [(f.item, f.reason) for f in job.failed] == [
+        (onboarding.step_label(step), onboarding.STOPPED_REASON)]

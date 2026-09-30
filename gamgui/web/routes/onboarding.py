@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Annotated, List, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from ...core import clock, guard, onboarding
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
+from ...core.gam.errors import GAMErrorKind
 from ...core.onboarding import RoleTemplate, RunbookStore
 from ..jobs import Job, register_job
 from ..previews import TOKEN_FIELD
@@ -48,10 +49,13 @@ class OnboardJob(Job):
     account_created: int = 0
     notified: int = 0
     credentials: List[dict] = field(default_factory=list)  # printable-sheet rows (blank-notify accounts)
+    finishing: str = ""   # the FinishJob retrying steps Google wasn't ready for on the new accounts
 
     def record_hire(self, res: dict) -> None:
-        self.record(res.get("email") or res.get("name") or "?", bool(res.get("ok")),
-                    "; ".join(res.get("errors") or []))
+        notes = list(res.get("errors") or [])
+        if res.get("waiting"):
+            notes.append(onboarding.waiting_note(res["waiting"]))
+        self.record(res.get("email") or res.get("name") or "?", bool(res.get("ok")), "; ".join(notes))
         if res.get("account_created"):
             self.account_created += 1
         if res.get("notified"):
@@ -60,12 +64,69 @@ class OnboardJob(Job):
             self.credentials.append(res["credential"])
 
 
+@dataclass
+class FinishJob(Job):
+    """The steps Google wasn't ready for on just-created accounts (``core.onboarding.finish_new_accounts``),
+    retried in the background: one feed row per step. ``next_try_at`` is when the next round starts;
+    ``minutes`` is how long it keeps trying, as its panel says."""
+    next_try_at: float = 0.0
+    minutes: int = 0
+
+    @property
+    def next_try_in(self) -> int:
+        return max(0, int(self.next_try_at - clock.now() + 0.999)) if self.next_try_at else 0
+
+
+def start_finishing(jobs: dict, conn, waiting: List[Dict[str, Any]]) -> FinishJob:
+    """Register a FinishJob for ``waiting`` and start it. These are writes the run's preview already
+    held and ``guard.enforce`` passed — the same argv, retried, never a new change."""
+    accounts = sorted({w["email"] for w in waiting})
+    title = ("Finishing setup for " + accounts[0]) if len(accounts) == 1 else \
+        "Finishing setup for {} new accounts".format(len(accounts))
+    minutes = max(1, round(sum(onboarding.NEW_ACCOUNT_WAITS) / 60))
+    job = register_job(jobs, FinishJob(total=len(waiting), title=title, kind="finish", minutes=minutes))
+    job.task = asyncio.create_task(_run_finish(job, conn, waiting))
+    return job
+
+
+async def _run_finish(job: FinishJob, conn, waiting: List[Dict[str, Any]],
+                      waits: Optional[Tuple[float, ...]] = None) -> None:
+    """Background executor for a FinishJob. Never raises out; Stop ends it at once, even mid-wait."""
+    async def nap(seconds: float) -> None:
+        job.next_try_at = clock.now() + seconds
+        for _ in range(int(seconds) + 1):   # a second at a time, so Stop ends the wait at once
+            if job.cancel_requested or clock.now() >= job.next_try_at:
+                break
+            await asyncio.sleep(min(1.0, job.next_try_at - clock.now()))
+        job.next_try_at = 0.0
+
+    def report(step: Dict[str, Any], ok: bool, reason: str, detail: str) -> None:
+        job.record(onboarding.step_label(step), ok, reason, detail)
+
+    try:
+        await onboarding.finish_new_accounts(conn, waiting, report, stopped=lambda: job.cancel_requested,
+                                             nap=nap, waits=onboarding.NEW_ACCOUNT_WAITS if waits is None else waits)
+        if job.cancel_requested:
+            job.error = "Stopped by you."
+    except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
+        job.error = str(exc)
+    finally:
+        job.finish()
+
+
 async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store,
-                            pairs: List[Tuple[dict, RoleTemplate]]) -> None:
+                            pairs: List[Tuple[dict, RoleTemplate]], jobs: dict) -> None:
     """Background executor: onboard each (row, role template) pair. Never raises out. Stops when an
     account create fails for a reason every later hire would share (``stop_reason``: sign-in expired,
     a scope missing); a best-effort sub-step's failure (a group, a calendar, the task list) never stops
-    it, since the accounts themselves may still be created. Stop ends it between hires, never mid-hire."""
+    it, since the accounts themselves may still be created. No license left fails only the rows that
+    create an account: the later ones are skipped untried, the rest still run. Stop ends it between
+    hires, never mid-hire. The steps Google wasn't ready for on the new accounts go on to one FinishJob
+    in ``jobs`` once every hire has run — by then the first accounts have had a head start — but not
+    after a stop of any kind: those are listed instead."""
+    waiting: List[Dict[str, Any]] = []
+    no_license = ""
+    quitting = False
     try:
         for hire, cfg in pairs:
             if stop_requested(job):
@@ -75,17 +136,35 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store,
                                  "role": hire["role"], "ok": False,
                                  "errors": ["unknown role or role has no steps"]})
                 continue
+            if no_license and hire.get("create_account"):
+                job.record_hire({"email": hire.get("email"), "name": hire.get("name") or hire.get("email"),
+                                 "role": hire["role"], "ok": False, "errors": ["not attempted: " + no_license]})
+                continue
             res = await onboarding.provision_hire(conn, sig_store, store, cfg, hire)
             job.record_hire(res)
+            waiting += res.get("waiting") or []
             kind, why = res.get("stop") or (None, "")
+            if kind is GAMErrorKind.LICENSE_LIMIT:
+                no_license = why
+                continue
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
                 job.error = stop
                 break
+    except asyncio.CancelledError:
+        quitting = True   # the app is quitting (server._lifespan): start nothing new
+        raise
     except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
         job.error = str(exc)
     finally:
         job.finish()
+        if waiting and job.error:
+            n = len(waiting)
+            job.error += (" {} step{} left waiting for Google to set up the new accounts {} not retried — "
+                          "set {} from the person's page or Calendars.").format(
+                              n, "" if n == 1 else "s", "was" if n == 1 else "were", "it" if n == 1 else "them")
+        elif waiting and not quitting:
+            job.finishing = start_finishing(jobs, conn, waiting).id
 
 
 @router.get("", response_class=HTMLResponse)
@@ -236,13 +315,15 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
         return error_partial(request, "Couldn't create the account: " + detail)
 
     # Map the structured result onto the single-hire result panel's contract.
-    credentials = {**res["credential"], "signature": res["signature"]} if res["credential"] else None
+    credentials = {**res["credential"], "signature": res["signature"],
+                   "signature_failed": "signature: not applied" in res["errors"]} if res["credential"] else None
     memberships = None
     if res["groups"] or res["calendars"]:
         g = res["groups"] or {"added": 0, "total": 0, "failed": []}
         c = res["calendars"] or {"added": 0, "total": 0, "failed": []}
         memberships = {"groups_added": g["added"], "groups_total": g["total"], "groups_failed": g["failed"],
-                       "cals_added": c["added"], "cals_total": c["total"], "cals_failed": c["failed"]}
+                       "cals_added": c["added"], "cals_total": c["total"], "cals_failed": c["failed"],
+                       "cals_waiting": c.get("waiting", [])}
     result = res["tasklist"] or {"tasklist_id": "", "created": 0, "total": len(cfg.steps), "failed": []}
     tl_err = next((e[len("tasks: "):] for e in res["errors"] if e.startswith("tasks:")), "")
     if tl_err and not result.get("tasklist_id"):
@@ -250,9 +331,11 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     if not credentials and not memberships and tl_err and not result.get("tasklist_id"):
         return error_partial(request, "Couldn't create the task list: " + tl_err)   # nothing else ran -> error page
     title = "Onboard {} — {}".format(name or email or "new hire", role)
+    finishing = start_finishing(st.jobs, conn, res["waiting"]) if res["waiting"] else None
     return TEMPLATES.TemplateResponse(request, "_onboard_run.html", {
         "result": result, "assignee": assignee, "title": title, "email_sent": res["email_sent"],
-        "email": email, "credentials": credentials, "memberships": memberships,
+        "email": email, "credentials": credentials, "memberships": memberships, "finishing": finishing,
+        "waiting": {w["what"] for w in res["waiting"]},
     })
 
 
@@ -316,7 +399,7 @@ async def bulk_run(request: Request, csv_text: Annotated[str, Form()]) -> HTMLRe
     job = register_job(st.jobs, OnboardJob(total=n, kind="onboard",
                                            title=f"Bulk onboarding — {n} hire{'s' if n != 1 else ''}"))
     job.task = asyncio.create_task(
-        _run_bulk_onboard(job, conn, signature_store(request), _store(request), pairs))
+        _run_bulk_onboard(job, conn, signature_store(request), _store(request), pairs, jobs=st.jobs))
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": job, "credentials": None})
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -381,6 +464,14 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     resp = TEMPLATES.TemplateResponse(request, "_onboard_bulk_status.html", {"job": j, "credentials": creds})
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@router.get("/finish/status", response_class=HTMLResponse)
+async def finish_status(request: Request, job: str = "") -> HTMLResponse:
+    j = app_state(request).jobs.get(job) if job else None
+    if not isinstance(j, FinishJob):   # st.jobs is shared; another feature's job isn't ours
+        j = None
+    return TEMPLATES.TemplateResponse(request, "_onboard_finish.html", {"job": j})
 
 
 @router.post("/bulk/done", response_class=HTMLResponse)

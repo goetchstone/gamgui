@@ -1,0 +1,29 @@
+{% import "_job_live.html" as live %}
+{% from "_job_failures.html" import failures %}
+{% if job is none %}
+<div class="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">That job is no longer available — the Audit screen shows what it did.</div>
+{% else %}
+<div id="onboard-finish-{{ job.id }}"
+     {% if not job.finished %}hx-get="/onboard/finish/status?job={{ job.id }}" hx-trigger="load delay:1s" hx-swap="outerHTML"{% endif %}
+     class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-2">
+  <div class="flex items-center justify-between gap-3">
+    <h3 class="font-serif text-lg text-brand-black"{% if job.finished %} {{ live.ended(job) }}{% endif %}>{% if not job.finished %}Waiting for Google… {{ job.done }} / {{ job.total }}{% elif job.error %}Finishing setup — stopped{% elif job.failed_total %}Finishing setup — {{ job.failed_total }} not done{% else %}Finishing setup — done{% endif %}</h3>
+    {% if not job.finished %}<span class="flex items-center gap-3">{{ live.stop(job) }}</span>{{ live.progress(job, "Finishing setup") }}
+    {% else %}<span hidden data-announce="{{ job.id }}">Finishing setup {{ "stopped" if job.error else "done" }}: {{ job.applied }} applied, {{ job.failed_total }} not done.{% if job.error %} {{ job.error }}{% endif %}</span>{% endif %}
+  </div>
+  {% if not job.finished %}
+  <p class="text-sm text-brand-grayink">A new account takes Google a few minutes to set up before its signature, calendars and tasks can be changed, so GamGUI keeps trying{% if job.minutes %} for about {{ job.minutes }} minute{{ "" if job.minutes == 1 else "s" }}{% endif %}. You can leave this screen — the jobs tray keeps track.{% if job.next_try_in %} Next try in {{ job.next_try_in }} s.{% endif %}</p>
+  {% endif %}
+  {% if job.recent %}
+  <ul class="space-y-0.5 text-xs break-words">
+    {% for r in job.recent %}
+    <li class="{{ 'text-emerald-800' if r.ok else 'text-amber-800' }}">{{ live.mark(r.ok) }}{{ r.item }}{% if r.reason %} — {{ r.reason }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if job.finished %}
+    {% if job.error %}<p class="text-sm text-red-700">{{ job.error }}</p>{% endif %}
+    {% if job.failed %}<div class="text-amber-900"><p class="text-sm">Not done:</p>{{ failures(job) }}</div>{% endif %}
+  {% endif %}
+</div>
+{% endif %}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.errors import GAMError, GAMErrorKind, classify_stderr
+from gamgui.core.gam.errors import ACCOUNT_WIDE_KINDS, GAMError, GAMErrorKind, classify_stderr
 
 
 @pytest.mark.parametrize(
@@ -157,3 +157,19 @@ def test_a_missing_scope_is_named_when_gam_names_it():
     assert err.kind is GAMErrorKind.SCOPE_MISSING
     assert scope in err.remediation
     assert "gam oauth create" in err.remediation
+
+
+def test_no_license_left_for_a_new_account_is_its_own_kind():
+    # Live 2026-09-30, under a generic "GAM reported an error". It fails only creates, so it is not an
+    # account-wide stop: bulk onboarding skips the later creates and still runs the other rows.
+    e = GAMError.from_run(50, "ERROR: User: new@example.com, Create Failed: Domain user limit reached. Contact Support.")
+    assert e.kind is GAMErrorKind.LICENSE_LIMIT and e.kind not in ACCOUNT_WIDE_KINDS
+    assert "no free license" in e.remediation and "Billing" in e.remediation
+
+
+def test_a_token_refusal_for_one_user_never_stops_a_bulk_run():
+    # A brand-new account gives it for its first minutes (core/onboarding.py parks the step); for anyone
+    # else it is a delegation problem. Either way it is about that one user: a signature rollout that
+    # meets a just-created account must carry on past it.
+    e = GAMError.from_run(50, "User: a@example.com, User Set Failed: access_denied: Requested client not authorized")
+    assert e.kind not in ACCOUNT_WIDE_KINDS

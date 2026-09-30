@@ -5,7 +5,11 @@
 #   GAM_MOCK_REFRESH   - if set, simulate an OAuth token refresh by rewriting oauth2.txt in GAMCFGDIR
 #   GAM_MOCK_ARGV_LOG  - if set, append every invocation's argv to this file (tests/helpers.py reads it)
 #   GAM_MOCK_STATE     - if set, a directory where the mock keeps settings between calls the way GAM
-#                        merges into them (`vacation`; the `gam_state` fixture)
+#                        merges into them (`vacation`; the `gam_state` fixture). A number in its
+#                        `new_account_lag` file makes each account `create user` makes "still being set
+#                        up by Google" for that many per-user calls (signature, calendar subscribe, task
+#                        list), each failing as it did live — see still_provisioning. (A file, not an env
+#                        var: the runner passes gam only an allowlisted environment.)
 #
 # The mock must fail the way real GAM fails: one more permissive than GAM turns a live break into a
 # green test (CLAUDE.md, "the mock lies"). So:
@@ -16,7 +20,7 @@
 #   - anything unhandled FAILS. Add a handler for a new command; never make the catch-all succeed.
 # Failure triggers, by argument substring: *missing*/*nonexistent* -> "Does not exist" for the user,
 # group, calendar, event or delegate; *exists* -> 409 on create, and "already exists" on a delegate add;
-# plus SENDFAIL, SUBFAIL, CONFLICT409,
+# plus USERLIMIT (no license left for a new account), SENDFAIL, SUBFAIL, CONFLICT409,
 # FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED, SWEEPSLOW, SIGNOUTFAIL, FWDFAIL (see each handler). The stderr wording
 # and exit codes are GAM7's shape (2 usage error, 50 action failed, 51 action not performed, 56 does
 # not exist) written from its source conventions, not captured from a tenant — only a live capture
@@ -66,6 +70,21 @@ need_user() {  # <address> <Show|Print>: a fixture-directory user, or one the mo
     return 0
   fi
   not_a_user "$1" "$2"
+}
+# A just-created account Google hasn't finished setting up. Live, 2026-09-30, a signature set 1 s after
+# `create user` failed "User: x, User Set Failed: access_denied: Requested client not authorized"
+# (exit 50) and a calendar subscribe 7 s after it "User: x, Calendar Service/App not enabled" (exit
+# 73); both succeed once Google catches up. `create user` arms $GAM_MOCK_STATE/new_account_lag of them.
+still_provisioning() {  # <user>: true, one fewer left, while the account is still being set up
+  f="${GAM_MOCK_STATE:-}/provisioning/$1"
+  { [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$f" ]; } || return 1
+  n=$(cat "$f")
+  if [ "$n" -le 1 ]; then rm -f "$f"; else echo $((n - 1)) > "$f"; fi
+  return 0
+}
+not_ready_token() {  # <user> <Entity Action>: Google won't issue a token to act as the new account yet
+  printf 'User: %s, %s Failed: access_denied: Requested client not authorized\n' "$1" "$2" 1>&2
+  exit 50
 }
 canned_delegates() {  # <user>: each fixture user's own mail delegates, one per line
   case "$1" in
@@ -572,7 +591,13 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && [ "${2:-}" = "user" ]
   check_user_attrs "$@"
   case "$user" in
     *exists*) echo "ERROR: 409: Entity already exists - duplicate: $user" 1>&2; exit 1 ;;
+    # Seen live 2026-09-30, when the subscription had no free license.
+    *USERLIMIT*) echo "ERROR: User: $user, Create Failed: Domain user limit reached. Contact Support." 1>&2; exit 50 ;;
   esac
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/new_account_lag" ]; then
+    mkdir -p "$GAM_MOCK_STATE/provisioning"
+    cp "$GAM_MOCK_STATE/new_account_lag" "$GAM_MOCK_STATE/provisioning/$user"
+  fi
   echo "User: $user, Added"
   exit 0
 fi
@@ -663,6 +688,7 @@ if [ "${1:-}" = "user" ] && { [ "${3:-}" = "signature" ] || [ "${3:-}" = "sig" ]
     esac
   done
   check_exists "User" "$user"
+  if still_provisioning "$user"; then not_ready_token "$user" "User Set"; fi
   echo "User: $user, SendAs Address: <$user>, Updated"
   exit 0
 fi
@@ -947,6 +973,10 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "add" ] && [ "${4:-}" = "calendars" ]; 
       *) invalid_arg "$1" ;;
     esac
   done
+  if still_provisioning "$user"; then
+    printf 'User: %s, Calendar Service/App not enabled\n' "$user" 1>&2
+    exit 73
+  fi
   echo "User $user subscribed to calendar $cal"
   exit 0
 fi
@@ -1026,6 +1056,8 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "create" ] && [ "${4:-}" = "tasklist" ]
     esac
   done
   check_exists "User" "$user"
+  # The token failure is per account, not per API, so the signature's live wording is assumed here.
+  if still_provisioning "$user"; then not_ready_token "$user" "Tasklist Create"; fi
   if [ -n "$idonly" ]; then echo "MockTasklist_abc123"; else echo "User: $user, Tasklist: MockTasklist_abc123, Added"; fi
   exit 0
 fi

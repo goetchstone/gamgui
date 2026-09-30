@@ -28,6 +28,7 @@
 
   {% if job.finished %}
     {% if job.error %}<p class="text-sm text-red-700">{{ job.error }}</p>{% endif %}
+    {% if job.finishing %}<div hx-get="/onboard/finish/status?job={{ job.finishing }}" hx-trigger="load" hx-swap="outerHTML"></div>{% endif %}
     {% if job.failed %}
     <details class="text-xs text-amber-900"><summary class="cursor-pointer">{{ job.failed_total }} failed{% if job.more %} (showing first {{ job.failed | length }}){% endif %}</summary>
       <ul class="mt-1 list-disc pl-5">{% for f in job.failed %}<li>{{ f.item }} — {{ f.reason or "failed" }}</li>{% endfor %}</ul>

@@ -17,7 +17,9 @@ Sign in at accounts.google.com — Google will require a new password at first l
       <dt class="text-brand-grayink">Email</dt><dd class="font-mono text-brand-black">{{ credentials.email }}</dd>
       <dt class="text-brand-grayink">Temp password</dt><dd class="font-mono text-lg font-semibold text-brand-black">{{ credentials.password }}</dd>
       <dt class="text-brand-grayink">Org unit</dt><dd class="text-brand-black">{{ credentials.org_unit }}</dd>
-      {% if credentials.signature %}<dt class="text-brand-grayink">Signature</dt><dd class="text-brand-black">{{ credentials.signature }} applied</dd>{% endif %}
+      {% if credentials.signature %}<dt class="text-brand-grayink">Signature</dt><dd class="text-brand-black">{{ credentials.signature }} applied</dd>
+      {% elif "signature" in waiting %}<dt class="text-brand-grayink">Signature</dt><dd class="text-brand-black">waiting for Google — applied as soon as the account is ready (below)</dd>
+      {% elif credentials.signature_failed %}<dt class="text-brand-grayink">Signature</dt><dd class="text-amber-800">not applied — set it from their page on Users</dd>{% endif %}
     </dl>
     <p class="mt-3 text-xs text-brand-grayink">Sign in at <span class="font-mono">accounts.google.com</span> — Google will require a new password at first login.</p>
   </div>
@@ -27,11 +29,13 @@ Sign in at accounts.google.com — Google will require a new password at first l
 <div class="rounded-2xl border p-4 text-sm shadow-sm mb-3 {{ 'border-emerald-300 bg-emerald-50 text-emerald-900' if not (memberships.groups_failed or memberships.cals_failed) else 'border-amber-300 bg-amber-50 text-amber-900' }}">
   {% if memberships.groups_total %}Added <strong>{{ email }}</strong> to {{ memberships.groups_added }} of {{ memberships.groups_total }} group{{ '' if memberships.groups_total == 1 else 's' }}.{% if memberships.groups_failed %} <span class="text-amber-800">Couldn't add: {{ memberships.groups_failed | join(", ") }}</span>{% endif %}{% endif %}
   {% if memberships.groups_total and memberships.cals_total %}<br>{% endif %}
-  {% if memberships.cals_total %}Subscribed to {{ memberships.cals_added }} of {{ memberships.cals_total }} shared calendar{{ '' if memberships.cals_total == 1 else 's' }}.{% if memberships.cals_failed %} <span class="text-amber-800">Couldn't subscribe: {{ memberships.cals_failed | join(", ") }}</span>{% endif %}{% endif %}
+  {% if memberships.cals_total %}Subscribed to {{ memberships.cals_added }} of {{ memberships.cals_total }} shared calendar{{ '' if memberships.cals_total == 1 else 's' }}.{% if memberships.cals_waiting %} {{ memberships.cals_waiting | length }} waiting for Google (below).{% endif %}{% if memberships.cals_failed %} <span class="text-amber-800">Couldn't subscribe: {{ memberships.cals_failed | join(", ") }}</span>{% endif %}{% endif %}
 </div>
 {% endif %}
-<div class="rounded-2xl border p-4 text-sm shadow-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-900' if result.tasklist_id else 'border-amber-300 bg-amber-50 text-amber-900' }}">
-  {% if result.tasklist_id %}
+<div class="rounded-2xl border p-4 text-sm shadow-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-900' if result.tasklist_id or "tasks" in waiting else 'border-amber-300 bg-amber-50 text-amber-900' }}">
+  {% if "tasks" in waiting %}
+    The task list for <strong>{{ assignee }}</strong> is waiting for Google to finish setting up the account (below).
+  {% elif result.tasklist_id %}
     Created <strong>{{ result.created }}</strong> of {{ result.total }} task{{ '' if result.total == 1 else 's' }} in <strong>{{ assignee }}</strong>'s Google Tasks — “{{ title }}”.
     {% if result.failed %}<br><span class="text-amber-800">Couldn't add: {{ result.failed | join(", ") }}</span>{% endif %}
   {% else %}
@@ -39,3 +43,6 @@ Sign in at accounts.google.com — Google will require a new password at first l
   {% endif %}
   {% if email_sent is not none %}<br>Welcome email to {{ email }}: {{ "sent ✓" if email_sent else "failed to send" }}.{% endif %}
 </div>
+{% if finishing %}
+<div class="mt-3">{% with job = finishing %}{% include "_onboard_finish.html" %}{% endwith %}</div>
+{% endif %}

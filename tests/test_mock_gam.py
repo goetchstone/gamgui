@@ -334,3 +334,29 @@ async def test_mock_check_serviceaccount_fails_a_scope_the_tenant_did_not_author
     wanted = ",".join(sorted(DWD + ["https://www.googleapis.com/auth/userinfo.email"]))
     assert long_url.startswith(f"https://admin.google.com/ac/owl/domainwidedelegation?clientScopeToAdd={wanted}&")
     assert long_url.endswith("&overwriteClientId=true&authuser=partialdwd@example.com")
+
+
+async def test_mock_fails_a_just_created_account_as_google_did_until_it_is_set_up(runner, domain, gam_state):
+    # Captured live 2026-09-30: 1 s after `create user` a signature set failed with Google's token
+    # refusal (exit 50), 7 s after it a calendar subscribe with "Service/App not enabled" (exit 73).
+    (gam_state / "new_account_lag").write_text("2")
+    await runner.run_authenticated(domain, C.create_user("new@example.com", "New", "Hire", "Temp-Pa55w0rd"),
+                                   serialize=True)
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.set_signature("new@example.com", "<b>New</b>"), serialize=True)
+    assert ei.value.exit_code == 50
+    assert "User: new@example.com, User Set Failed: access_denied: Requested client not authorized" in ei.value.stderr
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.subscribe_calendar("new@example.com", CAL), serialize=True)
+    assert ei.value.exit_code == 73 and ei.value.kind is GAMErrorKind.SERVICE_NOT_ENABLED
+    # Set up now: the same calls go through, and an account the mock didn't just create never lagged.
+    await runner.run_authenticated(domain, C.set_signature("new@example.com", "<b>New</b>"), serialize=True)
+    await runner.run_authenticated(domain, C.subscribe_calendar("alice@example.com", CAL), serialize=True)
+
+
+async def test_mock_refuses_a_new_account_when_no_license_is_left(runner, domain):
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, C.create_user("USERLIMIT@example.com", "New", "Hire", "Temp-Pa55w0rd"),
+                                       serialize=True)
+    assert ei.value.exit_code == 50 and ei.value.kind is GAMErrorKind.LICENSE_LIMIT
+    assert "Create Failed: Domain user limit reached. Contact Support." in ei.value.stderr

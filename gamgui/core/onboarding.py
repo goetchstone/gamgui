@@ -12,6 +12,7 @@ into a Google Tasks list on whoever is doing the setup, so the checklist lives i
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import re
@@ -20,8 +21,9 @@ import os
 import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
+from .gam.errors import GAMError, GAMErrorKind
 from .gam.models import GAMUser
 from .paths import app_data_dir
 from .signatures import render_signature
@@ -298,19 +300,12 @@ def split_name(name: str, first: str, last: str) -> Tuple[str, str]:
     return first, last
 
 
-async def _apply_signature(conn, sig_store, cfg, email: str, first: str, last: str) -> Optional[str]:
-    """Apply the role's signature template to ``email``; return the template name if applied, else None."""
-    if not cfg.signature:
-        return None
-    body = sig_store.get(cfg.signature)
+def _signature_html(sig_store, cfg, email: str, first: str, last: str) -> Optional[str]:
+    """The role's signature rendered for the hire, or None when the role has none (or it was deleted)."""
+    body = sig_store.get(cfg.signature) if cfg.signature else None
     if not body:
         return None
-    user = GAMUser(primary_email=email, given_name=first, family_name=last)
-    try:
-        r = await conn.set_signature(email, render_signature(body, user), html=True)
-        return cfg.signature if r.ok else None
-    except Exception:  # noqa: BLE001 — signature is best-effort
-        return None
+    return render_signature(body, GAMUser(primary_email=email, given_name=first, family_name=last))
 
 
 async def _apply_groups(conn, email: str, groups: List[str]) -> "tuple[int, list]":
@@ -327,18 +322,107 @@ async def _apply_groups(conn, email: str, groups: List[str]) -> "tuple[int, list
     return ok, failed
 
 
-async def _apply_calendars(conn, email: str, calendars: List[str]) -> "tuple[int, list]":
-    ok, failed = 0, []
-    for c in calendars:
-        try:
-            r = await conn.subscribe_calendar_for(email, c)
-            if r.ok:
-                ok += 1
+# --- a just-created account: Google takes a few minutes before it can be acted as --------------------
+# Seen live 2026-09-30: a signature set 1 s after the create failed "User Set Failed: access_denied:
+# Requested client not authorized", and a calendar subscribe 7 s after it "Calendar Service/App not
+# enabled". Both work once Google has finished setting the account up. So on an account THIS run
+# created, those failures park the step for `finish_new_accounts` instead of failing it. On an existing
+# user the same words mean a missing delegation scope or a service turned off: a real failure there.
+_TOKEN_NOT_READY = re.compile(r"Requested client not authorized", re.I)
+# Seconds before each retry: about 7 minutes in all, in few enough tries that an account Google is slow
+# with leaves a handful of failed attempts in the audit log, not dozens.
+NEW_ACCOUNT_WAITS: Tuple[float, ...] = (20, 40, 60, 120, 180)
+NOT_READY_REASON = ("Google still hadn't finished setting up the new account. Try again later — the "
+                    "signature from the person's page, a calendar from Calendars. If it keeps failing, a "
+                    "delegation scope is missing or the service is off for the account's org unit.")
+STOPPED_REASON = "Stopped before Google was ready: do it from the person's page or Calendars."
+
+
+def not_ready_yet(failure: Any) -> bool:
+    """Is ``failure`` (a failed ``ChangeResult`` or a raised ``GAMError``) the way GAM reports an account
+    Google hasn't finished setting up? Ask it only about an account this run just created."""
+    kind = getattr(failure, "kind", None)
+    text = getattr(failure, "detail", "") or str(failure)
+    return kind is GAMErrorKind.SERVICE_NOT_ENABLED or bool(_TOKEN_NOT_READY.search(text))
+
+
+def step_label(step: Dict[str, Any]) -> str:
+    """One parked step, as a feed row names it."""
+    if step["what"] == "signature":
+        return "Signature “{}” for {}".format(step["name"], step["email"])
+    if step["what"] == "calendar":
+        return "Calendar {} for {}".format(step["calendar"], step["email"])
+    return "Task list for {}".format(step["email"])
+
+
+def waiting_note(waiting: List[Dict[str, Any]]) -> str:
+    """A hire's parked steps, for its bulk feed row: "waiting for Google: signature, 2 calendars"."""
+    cals = sum(1 for w in waiting if w["what"] == "calendar")
+    parts = (["signature"] if any(w["what"] == "signature" for w in waiting) else []) + \
+        (["{} calendar{}".format(cals, "" if cals == 1 else "s")] if cals else []) + \
+        (["task list"] if any(w["what"] == "tasks" for w in waiting) else [])
+    return "waiting for Google: " + ", ".join(parts)
+
+
+async def _run_step(conn, step: Dict[str, Any]) -> Tuple[bool, Any]:
+    """Run one signature / calendar / task-list step: ``(True, None)``, or ``(False, why)`` with the
+    failed ``ChangeResult`` or the exception (None when a task list came back without an id)."""
+    try:
+        if step["what"] == "signature":
+            r = await conn.set_signature(step["email"], step["html"], html=True)
+        elif step["what"] == "calendar":
+            r = await conn.subscribe_calendar_for(step["email"], step["calendar"])
+        else:
+            tl = await conn.create_onboarding_runbook(step["email"], step["title"], step["steps"])
+            return bool(tl.get("tasklist_id")), None
+    except Exception as exc:  # noqa: BLE001 — every step is best-effort, reported on its own
+        return False, exc
+    return (True, None) if r.ok else (False, r)
+
+
+def _why(failure: Any) -> Tuple[str, str]:
+    """(reason in words, GAM's raw error) for a step's failure."""
+    if failure is None:
+        return "No task list id came back.", ""
+    if isinstance(failure, GAMError):
+        return failure.remediation, str(failure)
+    if isinstance(failure, Exception):
+        return str(failure), ""
+    return failure.remediation or failure.detail or "Failed.", failure.detail
+
+
+async def finish_new_accounts(conn, waiting: List[Dict[str, Any]],
+                              report: Callable[[Dict[str, Any], bool, str, str], None],
+                              stopped: Callable[[], bool] = lambda: False,
+                              nap: Callable[[float], Awaitable[None]] = asyncio.sleep,
+                              waits: Sequence[float] = NEW_ACCOUNT_WAITS) -> None:
+    """Retry the steps ``provision_hire`` parked until Google has set the new accounts up. Before each
+    round, ``nap`` for the next of ``waits``; then try every step still waiting. A step that works, or
+    fails for any other reason, is done with and passed to ``report(step, ok, reason, detail)``; one still
+    not ready after the last round is reported with NOT_READY_REASON and GAM's last error (the same words
+    can mean a missing scope or a service turned off). ``stopped()`` is asked before each round and each
+    step; once it says so, the rest are reported with STOPPED_REASON."""
+    left: List[Tuple[Dict[str, Any], Any]] = [(step, None) for step in waiting]
+    for delay in waits:
+        if not left or stopped():
+            break
+        await nap(delay)
+        still: List[Tuple[Dict[str, Any], Any]] = []
+        for step, last in left:
+            if stopped():
+                still.append((step, last))
+                continue
+            ok, failure = await _run_step(conn, step)
+            if ok:
+                report(step, True, "", "")
+            elif failure is not None and not_ready_yet(failure):
+                still.append((step, failure))
             else:
-                failed.append(c)
-        except Exception:  # noqa: BLE001
-            failed.append(c)
-    return ok, failed
+                report(step, False, *_why(failure))
+        left = still
+    reason = STOPPED_REASON if left and stopped() else NOT_READY_REASON
+    for step, last in left:
+        report(step, False, reason, _why(last)[1] if last is not None else "")
 
 
 async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
@@ -346,14 +430,16 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
 
     ``hire`` is a parsed CSV row; ``cfg`` its resolved role template. Best-effort per sub-step. When an
     account is created, a blank ``notify`` puts the temp password on ``credential`` (printable sheet);
-    a ``notify`` email hands sign-in delivery to GAM/Google and only sets ``notified``."""
+    a ``notify`` email hands sign-in delivery to GAM/Google and only sets ``notified``. On an account this
+    run created, a signature, calendar or task-list step Google wasn't ready for yet is parked on
+    ``waiting`` for ``finish_new_accounts`` rather than counted as an error."""
     email = (hire.get("email") or "").strip()
     name = (hire.get("name") or "").strip()
     first, last = split_name(name, hire.get("first", ""), hire.get("last", ""))
     res = {"email": email, "name": name or (first + " " + last).strip() or email, "role": hire["role"],
            "ok": True, "account_created": False, "notified": False, "credential": None,
            "signature": None, "groups": None, "calendars": None, "tasklist": None,
-           "email_sent": None, "errors": []}
+           "email_sent": None, "errors": [], "waiting": []}
 
     if hire.get("create_account"):
         if not email:
@@ -370,7 +456,10 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             res["stop"] = (getattr(exc, "kind", None), str(getattr(exc, "remediation", exc)))
             return res
         if not cr.ok:
-            res["ok"] = False; res["errors"].append("create: " + (cr.detail or "failed"))
+            # A recognised refusal (no license left, sign-in expired…) in words; otherwise GAM's own —
+            # the generic "GAM reported an error" would say less than it.
+            known = cr.kind is not None and cr.kind is not GAMErrorKind.UNKNOWN
+            res["ok"] = False; res["errors"].append("create: " + (cr.remediation if known else (cr.detail or "failed")))
             res["stop"] = (cr.kind, cr.remediation)   # the bulk executor stops on an account-wide kind
             return res
         res["account_created"] = True
@@ -380,13 +469,27 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             res["credential"] = {"name": res["name"], "email": email, "password": pw,
                                  "org_unit": cfg.org_unit or "/"}
 
+    fresh = res["account_created"]
+
+    async def attempt(step: Dict[str, Any]) -> Tuple[bool, Any]:
+        """Run ``step``; on the just-created account a not-ready failure parks it and counts as not failed."""
+        ok, failure = await _run_step(conn, step)
+        if not ok and fresh and failure is not None and not_ready_yet(failure):
+            res["waiting"].append(step)
+            return False, None
+        return ok, failure
+
     if email:
         # Signature only for an account THIS run created — matches the single /run flow and never
         # clobbers an existing user's customized signature (or renders a blank {name} for an
         # existing-account row that has no name in the CSV).
-        if res["account_created"]:
-            res["signature"] = await _apply_signature(conn, sig_store, cfg, email, first, last)
-            if cfg.signature and not res["signature"]:
+        if fresh and cfg.signature:
+            html = _signature_html(sig_store, cfg, email, first, last)
+            ok, failure = (False, "missing") if html is None else await attempt(
+                {"what": "signature", "email": email, "name": cfg.signature, "html": html})
+            if ok:
+                res["signature"] = cfg.signature
+            elif failure is not None:
                 res["errors"].append("signature: not applied")
         if cfg.groups:
             g_ok, g_fail = await _apply_groups(conn, email, cfg.groups)
@@ -394,8 +497,15 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             if g_fail:
                 res["errors"].append("groups: couldn't add " + ", ".join(g_fail))
         if cfg.calendars:
-            c_ok, c_fail = await _apply_calendars(conn, email, cfg.calendars)
-            res["calendars"] = {"added": c_ok, "total": len(cfg.calendars), "failed": c_fail}
+            c_ok, c_fail = 0, []
+            for cal in cfg.calendars:
+                ok, failure = await attempt({"what": "calendar", "email": email, "calendar": cal})
+                if ok:
+                    c_ok += 1
+                elif failure is not None:
+                    c_fail.append(cal)
+            c_wait = [w["calendar"] for w in res["waiting"] if w["what"] == "calendar"]
+            res["calendars"] = {"added": c_ok, "total": len(cfg.calendars), "failed": c_fail, "waiting": c_wait}
             if c_fail:
                 res["errors"].append("calendars: couldn't subscribe " + ", ".join(c_fail))
 
@@ -410,7 +520,11 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             if not tl.get("tasklist_id"):
                 res["errors"].append("tasks: no tasklist id came back")
         except Exception as exc:  # noqa: BLE001
-            res["errors"].append("tasks: " + str(getattr(exc, "remediation", exc)))
+            # Left blank, the assignee is the new hire: the same not-ready wait as their signature.
+            if fresh and assignee.lower() == email.lower() and not_ready_yet(exc):
+                res["waiting"].append({"what": "tasks", "email": assignee, "title": title, "steps": list(cfg.steps)})
+            else:
+                res["errors"].append("tasks: " + str(getattr(exc, "remediation", exc)))
 
     if hire.get("send_welcome") and email:
         # The single flow holds the welcome template its preview rendered; a bulk row uses the store's.

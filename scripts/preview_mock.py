@@ -8,6 +8,11 @@ with fake credentials, and all state — audit log, runbooks, signature template
 $HOME, so the setup screen can't see a real ~/.gam — lives in a temp dir deleted on exit. Set
 GAM_MOCK_ARGV_LOG=<file> to record every argv the mock receives.
 
+    --new-account-lag N   an account Onboard creates refuses its next N per-user calls the way a
+                          brand-new Google account does, and the retries wait seconds, not minutes —
+                          to look at "waiting for Google" (e.g. 3, with a role that has a signature
+                          and a calendar)
+
 A write that "works" here only proves the mock accepted it (CLAUDE.md, "the mock lies").
 """
 
@@ -81,6 +86,14 @@ def main() -> None:
         for var in ("GAMCFGDIR", "XDG_DATA_HOME", "GAMGUI_GAM_BINARY"):
             os.environ.pop(var, None)
         os.environ["GAM_MOCK_FIXTURES"] = str(FIXTURES)
+        if "--new-account-lag" in sys.argv:
+            lag = sys.argv[sys.argv.index("--new-account-lag") + 1]
+            mock_state = state_dir / "gam_state"
+            mock_state.mkdir()
+            (mock_state / "new_account_lag").write_text(lag)
+            os.environ["GAM_MOCK_STATE"] = str(mock_state)
+            from gamgui.core import onboarding
+            onboarding.NEW_ACCOUNT_WAITS = (5, 5, 5)
         app = build_app(state_dir)
         print(f"GamGUI preview (mock gam, fake data): http://127.0.0.1:{PORT}/?token={TOKEN}", flush=True)
         # uvicorn re-raises the stop signal after shutting down; SIGTERM's default action would kill

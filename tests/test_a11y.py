@@ -1215,6 +1215,7 @@ POLLED = {
     "_offboard_run.html": ("job", "Offboarding", "offboard"),
     "_sequence_run.html": ("job", "Running the sequence", "sequence"),
     "_onboard_bulk_status.html": ("job", "Onboarding", "onboard"),
+    "_onboard_finish.html": ("job", "Finishing setup", "finish"),
     "_calendar_index_job.html": ("job", None, "index"),          # a scan with no count: it says so once
 }
 

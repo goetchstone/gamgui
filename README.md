@@ -155,9 +155,9 @@ for the Builder's External-only filter, and reading the connected admin and its 
 
 | Write | Where | Live |
 |---|---|---|
-| Create an account | Onboard (one hire or a CSV) | not yet |
-| Tasks checklist (a task list, one task per step) | Onboard | not yet |
-| Welcome email | Onboard | not yet |
+| Create an account | Onboard (one hire or a CSV) | **confirmed** |
+| Tasks checklist (a task list, one task per step) | Onboard | **confirmed** |
+| Welcome email | Onboard | **confirmed** |
 | Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
@@ -185,6 +185,12 @@ for the Builder's External-only filter, and reading the connected admin and its 
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
 | Export a result to a Google Sheet | Builder | not yet |
+
+**A new account isn't ready at once.** On the first live onboarding (2026-09-30) the account,
+groups, checklist and welcome email went through, but the signature (1 s after the create) and a
+shared calendar (7 s after) were refused because Google hadn't finished setting the account up.
+Onboarding now keeps those steps and retries them for about seven minutes; that retry has not yet
+run live. A create refused for want of a license now says so.
 
 **Offboarding repairs awaiting a live run.** Two offboarding bugs were found in real audit logs and
 fixed, but the fixes have not themselves run live yet: Drive and calendar are now transferred in a

@@ -65,7 +65,9 @@ profile, groups, delegates, vacation responder, signature and calendar sharing.
 
 **Before:** on **Onboard → Role templates**, check the role you'll use — its org unit, signature,
 groups, shared calendars and checklist steps. Check the new address isn't already taken (search
-Users).
+Users). Creating an account needs a free license: with none left, Google refuses it and GamGUI says
+so. A CSV run then skips the rest of its new accounts without trying them, and still runs the rows
+for people who already have one.
 
 **One person** — **Onboard → Generate**: name, email, role, manager, and whose Google Tasks gets the
 setup checklist. Tick **Create the Google account** to create it, and **Also send the welcome
@@ -74,14 +76,22 @@ button under it (**Create account & run onboarding**, or **Create the task list*
 account) runs exactly that (change the form and you must preview again). The temporary password
 appears once, on a sheet you can copy or print — the new hire must change it at first sign-in.
 
+**Waiting for Google.** A brand-new account takes Google a few minutes to set up, and until then
+its signature, its shared calendars and (if the new hire is the assignee) its checklist can't be
+set. GamGUI keeps those steps and tries again for about seven minutes, in a **Waiting for Google**
+panel under the result; you can leave the screen, the jobs tray keeps track. Anything still not
+done after that is listed with GAM's error — set the signature from the person's page and the
+calendar from Calendars. (Stopping a CSV run lists those steps instead of retrying them.)
+
 **A CSV of hires** — **Onboard → Bulk import**: download the template CSV, fill one row per hire
 (the `role` column picks the template), then **Preview** and confirm. It runs in the background with
 live progress. Leave `notify` blank to put each password on the printable sheet, or give a personal
 address and Google emails the sign-in details there.
 
 **After:** in the Admin console, check the account exists in the right org unit. Check the groups,
-calendars, signature and the checklist in the assignee's Google Tasks. Account creation, task lists,
-the welcome email and adding to a group are all *not yet* verified live.
+calendars, signature and the checklist in the assignee's Google Tasks. Account creation, the task
+list, the welcome email and adding to a group have run on a real domain; the retry for a new
+account's signature and calendars has not yet.
 
 ## Offboard a leaver
 
