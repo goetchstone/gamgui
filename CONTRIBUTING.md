@@ -75,7 +75,9 @@ scripts/            # fetch_gam.sh (vendor GAM7 + grammar), gam_checksums.txt (S
 - No inline JavaScript in a template — no `<script>` body, no `onclick=`-style attribute: the
   Content-Security-Policy allows only same-origin script files, so it wouldn't run. Give the element
   a `data-action` and its handler in `gamgui/web/static/` (see `app.js`).
-- Add or update tests for any change; keep `pytest` green.
+- Add or update tests for any change; keep `pytest` green. Code that takes outside input — a GAM
+  output, an uploaded CSV, an operator's free text — also gets a property in `tests/test_props_*.py`:
+  a module-level `@given` function with no fixtures, so CI's fuzz job (Atheris, `fuzz/`) drives it too.
 - Tests never touch the operator's own data. `tests/conftest.py` sets each test's HOME to its
   `tmp_path` and fails any test that opens anything under the real `~/Library/Application
   Support/GamGUI` or `~/.gam`. A web fixture still hands its stores (`RunbookStore`, `SignatureStore`,

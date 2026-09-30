@@ -10,12 +10,20 @@ import threading
 from pathlib import Path
 
 import pytest
+from hypothesis import settings
 
 from gamgui.core.audit import AuditLog
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.paths import app_data_dir
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
+
+# The property tests (tests/test_props_*.py) run deterministically here — the same examples every run,
+# so a green PR stays green and a red one reproduces — with no example database written into the tree.
+# Fresh inputs are the fuzz job's work (fuzz/, in CI). HYPOTHESIS_PROFILE=explore tries new ones locally.
+settings.register_profile("suite", derandomize=True, deadline=None, max_examples=200, database=None)
+settings.register_profile("explore", deadline=None, max_examples=5000, database=None)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "suite"))
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MOCK_GAM = FIXTURES / "mock_gam.sh"

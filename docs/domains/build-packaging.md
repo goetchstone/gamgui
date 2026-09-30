@@ -73,6 +73,22 @@
   job in every workflow has a timeout (`test_every_job_has_a_timeout`). The coverage gate's one leg is
   held to the matrix too (`test_ci_enforces_the_coverage_floor`): renaming `macos-latest` would
   otherwise skip the `--cov` step silently.
+- **Property tests and fuzzing** (2026-09-30). `tests/test_props_argv.py`, `test_props_parsing.py` and
+  `test_props_errors.py` hold Hypothesis properties of the code that takes outside input: every
+  free-text value a `GAMCommands` builder takes lands as exactly one argv element (invariant 1),
+  redaction leaves no secret, GAM's output and the hire CSV parse without surprises, and the error
+  classifier is total, monotonic and scrubs passwords. Written 2026-09-30, they found six real bugs
+  on day one (failure-log). In the
+  suite they run under the `suite` profile (`tests/conftest.py`: derandomized, no example database),
+  so every leg sees the same examples and a red PR reproduces; `HYPOTHESIS_PROFILE=explore` tries new
+  ones locally. CI's `fuzz` job (in `ci-ok`) drives the same properties with Atheris
+  (`fuzz/fuzz_props.py`; targets found by `fuzz/targets.py`), coverage-guided over `gamgui`, with a
+  fixed `-seed`, `-runs` and `PYTHONHASHSEED` so a crash is real and re-runs the same; its input is
+  uploaded as the `fuzz-crash` artifact. Atheris installs only on Linux x86_64 CPython 3.12+ (the
+  marker in `requirements/dev.in`), so `tests/test_fuzz_targets.py` proves the plumbing everywhere:
+  every property is fuzzable (module-level `@given`, no fixtures, no `parametrize`) and takes raw bytes.
+  OpenSSF Scorecard's Fuzzing check looks for exactly this (`import atheris`); Hypothesis alone
+  doesn't count.
 - **Hardened runtime on the app and on `gam`** (2026-09-23). Without it dyld honors `DYLD_*` launch variables, so a same-user `launchctl setenv DYLD_INSERT_LIBRARIES=…` loads code into the app the Keychain trusts, or into the `gam` holding the plaintext credentials; until then the bundle and `gam` were signed with no runtime flag at all. Signing order matters: `codesign --force --deep` re-signs every nested Mach-O with the app's options — the old script signed `gam` *before* the deep sign, which silently replaced it (checked on a copy). So `sign_app.sh` signs `gam` after the deep sign and then reseals the bundle without `--deep`.
 - **Entitlements, and why each is there.** A self-signed or ad-hoc signature has no Team ID, and library validation refuses any dylib whose Team ID differs from the process's — every bundled one, the frozen Python included — so both need `disable-library-validation` (measured: a hardened ad-hoc binary could not load its own ad-hoc dylib without it; with it, `DYLD_*` stayed ignored). The app needs nothing else: ctypes and pyobjc callbacks use the system libffi, whose arm64 closures need no writable-executable memory, and WKWebView runs its JavaScript JIT in WebKit's own process — both checked with a hardened copy of the build Python. `gam` carries upstream's set unchanged because we replace upstream's signature; `test_gam_entitlements_match_the_vendored_upstream_binary` fails if a bump changes it. Never add `allow-dyld-environment-variables`, `get-task-allow`, `cs.debugger` or `disable-executable-page-protection` (`test_no_entitlements_reopen_injection_or_debugging`). With a Developer ID (D1) every file would share a Team ID and `disable-library-validation` could go.
 - **pywebview/pyinstaller pinned.** Both go inside the shipped bundle; an unpinned floor would ship an unreviewed WKWebView host or bootloader. `test_pywebview_is_pinned` (in `test_fetch_gam.py`) checks pywebview's exact pin in `pyproject.toml` equals `requirements/app.in`'s, that `app.in` pins PyInstaller exactly, and that `build_app.sh` names no package of its own.
