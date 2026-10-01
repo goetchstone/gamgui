@@ -30,6 +30,26 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-10-01 — improve-rules pass: the mock-lies rule held in prose, not for exit codes
+- **What happened:** the observer pass over 8 fix commits since 92e8f36, the 2026-09-30 failure-log
+  entries, a failed CI run and two pre-merge review findings. One gap was still open live:
+  `SCOPES_NOT_AUTHORIZED_RC` was 1 where the vendored build says 10, and the mock agreed, so every
+  test asserted the guess (failure-log 2026-10-01; 5804cc4, e84a74a).
+- **Invariant in force:** the unnumbered "mock lies" section — the vendored build is the source of truth.
+- **Why it didn't hold:** wrong layer. Message text was read from the build; exit codes and streams
+  were guessed, and nothing mechanical compared them.
+- **Would a rule have caught it?** Only if enforced differently — now a tripwire,
+  `tests/test_gam_exit_codes.py`. No CLAUDE.md text change.
+- **Enforcement home if changed:** tripwire test (drift-guard family).
+- **Not a rules problem (recorded, no change):** 4e5d46e, 2c8a5d8, c3c4318, 4640722, b709353, bbceb9d,
+  255e49d, the early-merged GAM bump, the py3.10 fuzz failure — each landed its own tripwire or was
+  caught by CI. Shapes to watch for a third case: snapshot-after-await (2, both tenant switches);
+  a convention tested per template, not per class (a11y names: 2 — `_commands.html`'s Copy is still
+  open); "swallowed failure reads as success" (3; vault/ephemeral fix tracked separately); "the grammar
+  proves syntax only" (2: exit codes here, Google's state lag in bbceb9d).
+- **Resolved (2026-10-01):** fix/gam-exit-codes. The window stamp is date-only, so the next pass
+  re-counts today's fixes; stamping a time needs the local hook changed, left to the operator.
+
 ## 2026-09-23 — "Run executes the live form" was fixed in offboarding, then found in four more flows
 - **What happened:** offboarding's Run rebuilt its steps from the live form, so a manager retyped
   after Preview would have been handed the mailbox unpreviewed (failure-log 2026-09-23,
