@@ -89,9 +89,10 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
   and holds the mock's rejected-key and missing-credentials exits to the build (the failing-scope exit
   is held by `test_mock_gam.py` through the constant). It covers those paths only — the mock's other
   `exit N` literals (2, 50, 56, 73) were checked by hand against the table on 2026-10-01 and are not
-  guarded. The build half skips without PyInstaller, which CI's test jobs do not install, so it bites
-  locally and not on CI's automated GAM bump PRs (tracked separately). Still unproven live: no failing
-  scope or rejected key has been captured from a real tenant.
+  guarded. The build half first skipped without PyInstaller, which CI's test jobs do not install; it now
+  reads the archive with the stdlib, and `gam-compat` (so every GAM bump PR) and gam-watch's suite set
+  `EXIT_CODES_REQUIRE_GAM`, which fails rather than skips (`test_workflow_safety.py` holds both). Still
+  unproven live: no failing scope or rejected key has been captured from a real tenant.
 
 ## 2026-09-30 — Property tests found six input-handling bugs on their first run
 

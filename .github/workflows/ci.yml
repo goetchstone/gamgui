@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.14"   # the vendored gam's own Python: test_gam_exit_codes unmarshals its bytecode
       - name: Install (hash-locked, wheels only)
         run: |
           python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
@@ -112,6 +112,9 @@ jobs:
         run: git checkout -- gamgui/resources/gam7/command_catalog.json
       - name: The whole suite against the REAL reference (the command contract, and every argv sent to the mock)
         run: pytest -q
+        env:
+          # tests/test_gam_exit_codes.py reads the build's *_RC table here; a skip would hide that it didn't.
+          EXIT_CODES_REQUIRE_GAM: "1"
 
   app:
     # Freezes the .app exactly as `make app` does, so a spec, lock or signing change that breaks the
