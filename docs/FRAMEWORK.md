@@ -160,7 +160,8 @@ docs/
 │   ├── pre-commit/ · post-failure/
 │   ├── start-session/ · end-of-session/
 │   ├── improve-rules/
-│   └── add-builder-command/       #   pre-existing
+│   ├── add-builder-command/       #   pre-existing
+│   └── live-verify/               #   proving a write on the real tenant, safely
 └── agents/                        # gam-command-author, gam-command-reviewer (SHARED)
 ```
 
