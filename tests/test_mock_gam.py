@@ -12,7 +12,7 @@ import pytest
 
 from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
-from gamgui.core.setup import DWD_SCOPES
+from gamgui.core.setup import DWD_SCOPES, SCOPES_NOT_AUTHORIZED_RC
 
 CAL = "c_team@group.calendar.google.com"
 DWD = [scope for scope, _ in DWD_SCOPES]
@@ -301,10 +301,10 @@ async def test_mock_check_serviceaccount_reports_the_scopes_asked_as_gam_does(ru
 @pytest.mark.hand_built_argv   # the bare form: the app never sends it now, but GAM accepts it
 async def test_mock_bare_check_serviceaccount_fails_on_gams_larger_default_set(runner, domain):
     # A bare check asks about GAM's own default scopes; the simulated tenant authorized only DWD_SCOPES,
-    # so GAM prints FAIL for the rest, the Admin-console link, and exits SCOPES_NOT_AUTHORIZED_RC (1).
+    # so GAM prints FAIL for the rest, the Admin-console link, and exits SCOPES_NOT_AUTHORIZED_RC.
     with pytest.raises(GAMError) as ei:
         await runner.run_authenticated(domain, ["user", "admin@example.com", "check", "serviceaccount"])
-    assert ei.value.exit_code == 1
+    assert ei.value.exit_code == SCOPES_NOT_AUTHORIZED_RC
     # GAM prints the whole answer on stdout (printLine), not stderr — the error must carry it.
     assert "https://www.googleapis.com/auth/keep" in ei.value.stdout and " FAIL (" in ei.value.stdout
     assert "Some scopes FAILED or should be DISABLED!" in ei.value.stdout and ei.value.stderr == ""
@@ -318,11 +318,11 @@ async def test_mock_check_serviceaccount_fails_a_scope_the_tenant_did_not_author
     # What the vendored 7.48.11 checkServiceAccount does when a scope asked for fails: every row still
     # prints ("  {scope:73} FAIL (j/n)"), then authorizeScopes(SCOPE_AUTHORIZATION_FAILED) prints the
     # short link and the admin.google.com link — whose clientScopeToAdd is the scopes checked plus
-    # userinfo.email, sorted — all on stdout, and GAM exits SCOPES_NOT_AUTHORIZED_RC (1).
+    # userinfo.email, sorted — all on stdout, and GAM exits SCOPES_NOT_AUTHORIZED_RC.
     with pytest.raises(GAMError) as ei:
         await runner.run_authenticated(domain, C.check_svcacct("partialdwd@example.com", DWD))
     err = ei.value
-    assert err.exit_code == 1 and err.stderr == ""
+    assert err.exit_code == SCOPES_NOT_AUTHORIZED_RC and err.stderr == ""
     rows = {line.split()[0]: line.split()[1] for line in err.stdout.splitlines() if line.startswith("  https://")}
     assert sorted(rows) == sorted(DWD)
     assert sorted(s for s, st in rows.items() if st == "FAIL") == PARTIAL_MISSING

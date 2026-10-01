@@ -720,18 +720,22 @@ class SetupService:
         try:
             out = await self.runner.run_authenticated(domain, GAMCommands.check_svcacct(admin, [scope for scope, _ in DWD_SCOPES]))
         except GAMError as exc:
-            # A failing scope is an answer, not a crash: GAM exits SCOPES_NOT_AUTHORIZED_RC with its
-            # PASS/FAIL table and the Admin-console link on stdout. Read it — still refusing to connect.
-            if exc.exit_code == SCOPES_NOT_AUTHORIZED_RC and _parse_check(exc.stdout):
+            # A failing scope or a rejected key is an answer, not a crash: GAM exits with its PASS/FAIL
+            # rows on stdout (and, for a scope, the Admin-console link). Read it — still refusing to connect.
+            if exc.exit_code in CHECK_ANSWER_RCS and _parse_check(exc.stdout):
                 return _check_result(exc.stdout, exited_ok=False)
             return VerifyResult(ok=False, summary=exc.message, raw=exc.stderr)
         return _check_result(out)
 
 
-# `check serviceaccount`'s exit when a scope fails (the vendored build's SCOPES_NOT_AUTHORIZED_RC). GAM's
-# USAGE_ERROR_RC and ACTION_FAILED_RC are 1 as well, so verify reads a non-zero exit as the check's
-# answer only when stdout carries the check's PASS/FAIL table.
-SCOPES_NOT_AUTHORIZED_RC = 1
+# `check serviceaccount`'s exits that still carry its PASS/FAIL rows on stdout, as the vendored build
+# defines them (tests/test_gam_exit_codes.py reads the build's *_RC table and holds these to it): a scope
+# not authorized, and a service-account key Google rejected (invalidOauth2serviceJsonExit, after the key
+# row FAILs). OAUTH2SERVICE_JSON_REQUIRED_RC is also a missing or unreadable oauth2service.json, so
+# verify reads either exit as the check's answer only when stdout carries the rows.
+SCOPES_NOT_AUTHORIZED_RC = 10
+OAUTH2SERVICE_JSON_REQUIRED_RC = 16
+CHECK_ANSWER_RCS = (SCOPES_NOT_AUTHORIZED_RC, OAUTH2SERVICE_JSON_REQUIRED_RC)
 
 
 def _check_result(out: str, exited_ok: bool = True) -> VerifyResult:

@@ -125,6 +125,11 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
 # GAM's own progress chatter on stderr (gam.cfg show_gettings, on by default): "Getting all Users, may
 # take some time on a large Google Workspace Account..." / "Got 150 Users: a@x - z@x". Not an error line.
 _PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting all |Got \d+ )")
+# The instructions GAM prints after invalidOauth2serviceJsonExit's error (Msg.INSTRUCTIONS_OAUTH2SERVICE_JSON,
+# read from the vendored build) say what to run, not what failed. Read as error lines, the last one —
+# "to create and authorize a Service account." matches the service-account pattern — became the message.
+_INSTRUCTION_LINE: Pattern[str] = re.compile(
+    r"Please run|gam create\|use project|gam user <user> update serviceaccount|to create and authorize a Service account\.")
 
 # Most severe first, for a stderr whose lines disagree. An account-wide failure outranks a per-entity
 # one, and an unrecognized error outranks the per-entity refusals a best-effort sweep prints beside it,
@@ -159,7 +164,8 @@ def _error_lines(stderr: str) -> List[Tuple[GAMErrorKind, str]]:
     ...``) prints one line per entity, so a stderr can hold benign and real failures side by side —
     classifying the whole text by its first match let one "not found" mask the rest."""
     lines = (raw.strip() for raw in (stderr or "").splitlines())
-    return [(_classify_line(line), line) for line in lines if line and not _PROGRESS_LINE.match(line)]
+    return [(_classify_line(line), line) for line in lines
+            if line and not _PROGRESS_LINE.match(line) and not _INSTRUCTION_LINE.fullmatch(line)]
 
 
 def _worst(kinds: Iterable[GAMErrorKind]) -> GAMErrorKind:
@@ -185,7 +191,7 @@ class GAMError(Exception):
     kinds: the kind of EVERY error line (``kind`` is the most severe of them) — what a best-effort
         caller checks, so one real failure among benign per-entity notices is never tolerated.
     stdout: what GAM printed on stdout before the non-zero exit, scrubbed like stderr. Some failures
-        answer there: `check serviceaccount` exits SCOPES_NOT_AUTHORIZED_RC (1) with its PASS/FAIL
+        answer there: `check serviceaccount` exits SCOPES_NOT_AUTHORIZED_RC (10) with its PASS/FAIL
         table and the Admin-console link on stdout (setup's verify reads it). Never in ``message`` or
         the repr, so a logged error carries no directory data.
     """

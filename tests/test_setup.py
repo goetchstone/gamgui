@@ -519,7 +519,7 @@ async def test_verify_checks_exactly_the_prefilled_scopes(runner, vault, domain,
 
 
 async def test_verify_shows_the_failed_scopes_and_gams_link_when_a_scope_fails(runner, vault, domain):
-    # A failing scope makes GAM exit 1 (SCOPES_NOT_AUTHORIZED_RC) with its PASS/FAIL table and the
+    # A failing scope makes GAM exit SCOPES_NOT_AUTHORIZED_RC (10) with its PASS/FAIL table and the
     # Admin-console link on stdout. The runner raised on the exit and verify showed only a generic
     # "GAM failed" line: the operator never saw which scopes failed, nor the link to authorize them.
     result = await SetupService(vault, runner).verify(domain, "partialdwd@example.com")
@@ -532,18 +532,32 @@ async def test_verify_shows_the_failed_scopes_and_gams_link_when_a_scope_fails(r
     assert "clientIdToAdd=" in result.auth_url and "Some scopes FAILED" in result.raw
 
 
-async def test_verify_a_non_check_failure_stays_a_plain_error(runner, vault, domain, monkeypatch):
-    # Exit 1 is also GAM's usage and action-failed code: only an answer that carries the check's table
-    # is read as one. Anything else is still refused with GAM's own error line.
-    from gamgui.core.gam.errors import GAMError, GAMErrorKind
+# What the vendored build writes for an unreadable key file (invalidOauth2serviceJsonExit: the error, then
+# its instructions, exit 16) and for a usage error (exit 2).
+UNREADABLE_KEY = ("\nERROR: Service Account OAuth2 File: /x/oauth2service.json, Does not exist or has invalid "
+                  "format, Authentication\nPlease run\n\ngam create|use project\ngam user <user> update "
+                  "serviceaccount\n\nto create and authorize a Service account.\n")
+
+
+@pytest.mark.parametrize("exit_code,stderr,shown", [
+    (16, UNREADABLE_KEY, "Does not exist or has invalid format"),
+    (2, "ERROR: Invalid argument", "Invalid argument"),
+])
+async def test_verify_a_non_check_failure_stays_a_plain_error(runner, vault, domain, monkeypatch,
+                                                              exit_code, stderr, shown):
+    # Only an answer that carries the check's rows is read as one: OAUTH2SERVICE_JSON_REQUIRED_RC (16) is
+    # also a missing or unreadable key file, with nothing on stdout. Anything else is still refused with
+    # GAM's own ERROR line — not the instructions GAM prints after it. The error is built as the runner
+    # builds it (from_run), so its kind and detail line are the ones production shows.
+    from gamgui.core.gam.errors import GAMError
 
     async def refused(*_a, **_k):
-        raise GAMError(GAMErrorKind.UNKNOWN, exit_code=1, stderr="ERROR: Invalid argument", stdout="")
+        raise GAMError.from_run(exit_code, stderr, ["user", "admin@example.com", "check", "serviceaccount"])
 
     monkeypatch.setattr(runner, "run_authenticated", refused)
     result = await SetupService(vault, runner).verify(domain, "admin@example.com")
     assert result.ok is False and result.lines == [] and result.auth_url == ""
-    assert "Invalid argument" in result.summary
+    assert shown in result.summary and "to create and authorize" not in result.summary
 
 
 def test_gam_error_carries_stdout_scrubbed_and_out_of_its_repr():
@@ -556,9 +570,10 @@ def test_gam_error_carries_stdout_scrubbed_and_out_of_its_repr():
 
 @pytest.mark.asyncio
 async def test_verify_names_a_rejected_key_instead_of_asking_for_delegation(runner, vault, domain):
-    # A rejected service-account key makes `check serviceaccount` exit 1 with a FAIL row too — but it
-    # isn't a delegation problem, and GAM prints no link. It once read "Domain-Wide Delegation isn't
-    # authorized yet — use the link below" with no link, sending the operator to the wrong fix.
+    # A rejected service-account key makes `check serviceaccount` exit OAUTH2SERVICE_JSON_REQUIRED_RC (16)
+    # with a FAIL row and its error on stderr — but it isn't a delegation problem, and GAM prints no link.
+    # It once read "Domain-Wide Delegation isn't authorized yet — use the link below" with no link,
+    # sending the operator to the wrong fix.
     result = await SetupService(vault, runner).verify(domain, "badkey-admin@example.com")
     assert not result.ok and not result.auth_url
     assert "Service Account Private Key Authentication" in result.summary

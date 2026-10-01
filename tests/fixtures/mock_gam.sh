@@ -150,19 +150,20 @@ case "${1:-}" in
 esac
 
 # Every other call is authenticated: GamGUI must have materialized the Keychain credentials into a
-# private per-call GAMCFGDIR (never ~/.gam), and GAM can't act without its credential files. (The
-# wording and exit code of GAM's missing-file error are approximate.)
+# private per-call GAMCFGDIR (never ~/.gam), and GAM can't act without its credential files. The exit
+# codes are the build's (OAUTH2SERVICE_JSON_REQUIRED_RC and OAUTH2_TXT_REQUIRED_RC, both 16; they were
+# once a guessed 12); the wording is approximate.
 if [ -z "${GAMCFGDIR:-}" ]; then
   echo "ERROR: mock: GAMCFGDIR is not set - an authenticated call escaped the ephemeral config" 1>&2
   exit 2
 fi
 if [ ! -s "$GAMCFGDIR/oauth2service.json" ]; then
   printf 'ERROR: Service Account OAuth2 File: %s, Does not exist\n' "$GAMCFGDIR/oauth2service.json" 1>&2
-  exit 12
+  exit 16
 fi
 if [ ! -s "$GAMCFGDIR/oauth2.txt" ]; then
   printf 'ERROR: Client OAuth2 File: %s, Does not exist\nPlease run: gam oauth create\n' "$GAMCFGDIR/oauth2.txt" 1>&2
-  exit 12
+  exit 16
 fi
 # GAM rewrites oauth2.txt whenever it refreshes the access token, on any authenticated call.
 if [ -n "${GAM_MOCK_REFRESH:-}" ]; then
@@ -469,11 +470,12 @@ fi
 # spaces between) or GAM exits with an invalid choice — admin.directory.* are client-access scopes (the
 # admin token, `gam oauth create`) and are refused here as GAM refuses them. The simulated tenant
 # authorized exactly the scopes GamGUI pre-fills (core/setup.py DWD_SCOPES). A bare check asks about
-# GAM's own larger default set, so its extra scopes FAIL and GAM exits SCOPES_NOT_AUTHORIZED_RC (1).
+# GAM's own larger default set, so its extra scopes FAIL and GAM exits SCOPES_NOT_AUTHORIZED_RC (10).
 # A `*partialdwd*` admin's tenant authorized all of those but gmail.settings.sharing and tasks. On a FAIL,
 # checkServiceAccount appends userinfo.email to the scopes checked and prints SCOPE_AUTHORIZATION_FAILED
 # with the short link and the admin.google.com one (clientScopeToAdd = those scopes, sorted; authuser =
-# the admin) — all on STDOUT (printLine), nothing on stderr — then exits 1.
+# the admin) — all on STDOUT (printLine), nothing on stderr — then exits SCOPES_NOT_AUTHORIZED_RC (10).
+# The exit codes are the build's *_RC values; tests/test_gam_exit_codes.py holds them to it.
 SA_AUTHORIZED="https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/gmail.settings.sharing https://www.googleapis.com/auth/tasks"
 # A sample of GAM's other default-on service-account scopes (gamlib glapi _SVCACCT_SCOPES).
 SA_OTHER="https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.activity https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/keep https://www.googleapis.com/auth/spreadsheets"
@@ -499,12 +501,16 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccou
   checked=$(printf '%s\n' $asked | sort -u)
   n=$(printf '%s\n' "$checked" | wc -l | tr -d ' ')
   # A rejected service-account key (deleted or rotated in the Cloud console): the key row FAILs and GAM
-  # stops before any scope is checked — exit 1, nothing on stderr, no delegation table and no link.
+  # stops before any scope is checked — no delegation table, no link. invalidOauth2serviceJsonExit then
+  # writes its error and instructions to stderr and exits OAUTH2SERVICE_JSON_REQUIRED_RC (16).
   case "$sa_user" in
     *badkey*)
       printf '%-73s %s\n' "System time status" "PASS" \
         "Service Account Private Key Authentication" "FAIL"
-      exit 1 ;;
+      printf '\nERROR: Service Account OAuth2 File: %s, Does not exist or has invalid format, Authentication\n' \
+        "$GAMCFGDIR/oauth2service.json" 1>&2
+      printf 'Please run\n\ngam create|use project\ngam user <user> update serviceaccount\n\nto create and authorize a Service account.\n' 1>&2
+      exit 16 ;;
   esac
   printf '%-73s %s\n' "System time status" "PASS" \
     "Service Account Private Key Authentication" "PASS" \
@@ -529,7 +535,7 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccou
       'The "Add a new Client ID" box will open' 'Make sure that "Overwrite existing client ID" is checked' 'Click AUTHORIZE' \
       "When the box closes you're done" \
       'After authorizing it may take some time for this test to pass so wait a few moments and then try this command again.' '' ''
-    exit 1
+    exit 10
   fi
   printf '\nAll scopes PASSED!\n\nService Account Client name: 1234567890 is fully authorized.\n\n'
   exit 0
