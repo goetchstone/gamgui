@@ -185,7 +185,7 @@ class GAMError(Exception):
     kinds: the kind of EVERY error line (``kind`` is the most severe of them) — what a best-effort
         caller checks, so one real failure among benign per-entity notices is never tolerated.
     stdout: what GAM printed on stdout before the non-zero exit, scrubbed like stderr. Some failures
-        answer there: `check serviceaccount` exits SCOPES_NOT_AUTHORIZED_RC (1) with its PASS/FAIL
+        answer there: `check serviceaccount` exits SCOPES_NOT_AUTHORIZED_RC (10) with its PASS/FAIL
         table and the Admin-console link on stdout (setup's verify reads it). Never in ``message`` or
         the repr, so a logged error carries no directory data.
     """

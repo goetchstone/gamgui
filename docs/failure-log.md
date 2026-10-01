@@ -21,6 +21,35 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
 
 ---
 
+## 2026-10-01 — Setup verify read GAM's scope-failure and rejected-key exits as 1; the build uses 10 and 16
+
+- **Symptom:** found by the improve-rules pass, not by an operator: on a real tenant, a scope not
+  authorized still made Setup's verify show "GAM failed (unknown, exit=10)" — the generic error the
+  2026-09-25 fix ("Setup verify hid which scopes failed…") was meant to replace — and a rejected
+  service-account key showed GAM's "Does not exist or has invalid format" line instead of naming the
+  key check. Neither was ever seen live; both entries say the failing shapes were "read from the
+  vendored build, not captured".
+- **Cause:** `core/setup.py` set `SCOPES_NOT_AUTHORIZED_RC = 1`, with a comment that USAGE_ERROR_RC and
+  ACTION_FAILED_RC "are 1 as well". The vendored 7.48.14 build's table says 10, 2 and 50. A rejected
+  key goes through `invalidOauth2serviceJsonExit` (stderr error + instructions, exit
+  `OAUTH2SERVICE_JSON_REQUIRED_RC`, 16), not a silent exit 1. The message texts had been read from the
+  build; the exit codes and streams were guessed, and the mock was taught the guess.
+- **Why not caught:** the mock lied in exactly the way CLAUDE.md warns about — `mock_gam.sh` exited 1
+  on both paths, and every test asserted the mock's code (`exit_code == 1`), so the tests agreed with
+  the mock instead of with GAM. GamCommands.txt proves syntax only; nothing checked a status code
+  against the build.
+- **Fix:** the constants are the build's (10, 16); verify reads either exit as the check's answer
+  only when stdout carries the PASS/FAIL rows (`CHECK_ANSWER_RCS`), so a missing key file (16, empty
+  stdout) stays a plain error. The mock exits 10 on a failing scope, and on a rejected key prints the
+  rows, then GAM's stderr error and instructions, and exits 16. The tests compare against the
+  constants, not literals.
+- **Prevention:** `tests/test_gam_exit_codes.py` reads the build's `*_RC` table out of the vendored
+  binary's PyInstaller archive and fails if any `NAME_RC` the app defines differs, and holds the mock's
+  two `check serviceaccount` failures to the same constants — so mock, app and build agree, and a GAM
+  bump re-checks it. It skips without the binary or PyInstaller (CI's lint/test jobs lack PyInstaller,
+  so it bites locally and on a GAM bump run here). Still unproven live: no failing scope or rejected
+  key has been captured from a real tenant.
+
 ## 2026-09-30 — Property tests found six input-handling bugs on their first run
 
 - **Symptom:** the first Hypothesis properties (`test_props_parsing.py`, written for fuzzing) failed
