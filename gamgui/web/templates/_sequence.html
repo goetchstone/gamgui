@@ -13,11 +13,11 @@
         <span class="rounded px-1.5 py-0.5 text-[10px] uppercase {{ {0:'bg-emerald-50 text-emerald-700',1:'bg-brand-blue/10 text-brand-blueink',2:'bg-red-100 text-red-700'}[s.risk] }}">{{ {0:'read',1:'change',2:'destructive'}[s.risk] }}</span>
         <span class="min-w-0 flex-1 truncate"><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-grayink">→ {{ s.target }}</span></span>
         <button class="text-xs text-brand-grayink hover:text-brand-black disabled:opacity-30" title="move up"
-                hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 - 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.first }}>↑</button>
+                hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 - 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.first }}><span aria-hidden="true">↑</span><span class="sr-only">Move step {{ loop.index }} up</span></button>
         <button class="text-xs text-brand-grayink hover:text-brand-black disabled:opacity-30" title="move down"
-                hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 + 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.last }}>↓</button>
+                hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 + 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.last }}><span aria-hidden="true">↓</span><span class="sr-only">Move step {{ loop.index }} down</span></button>
         <button class="text-xs text-red-600 hover:text-red-800" title="remove"
-                hx-post="/builder/sequence/remove" hx-vals='{"index": {{ loop.index0 }}}' hx-target="#sequence" hx-swap="innerHTML">✕</button>
+                hx-post="/builder/sequence/remove" hx-vals='{"index": {{ loop.index0 }}}' hx-target="#sequence" hx-swap="innerHTML"><span aria-hidden="true">✕</span><span class="sr-only">Remove step {{ loop.index }}</span></button>
       </li>
       {% endfor %}
     </ol>
