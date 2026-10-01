@@ -22,7 +22,11 @@ Always:
    values in `ENUM_ARGS` (`tests/test_command_contract.py` checks every builder against the grammar).
 4. If UI-facing, add a curated `CatalogCommand` (`gamgui/core/catalog/catalog.py`) with typed slots +
    authoritative `RiskLevel`, and a `tests/test_builder.py` web test.
-5. Run `pytest`; report exactly what changed and any command you could **not** verify in the grammar.
+5. Classify the builder in `tests/test_mock_gam.py`: a write needs a strict `tests/fixtures/mock_gam.sh`
+   handler that accepts only the grammar shape and fails the way GAM fails; a read with a new output
+   shape needs a canned branch. A new write route runs from its preview's `web/previews.py` token and
+   is classified in `tests/test_write_routes_guarded.py`.
+6. Run `pytest`; report exactly what changed and any command you could **not** verify in the grammar.
 
 Never assemble argv from raw grammar tokens, expose a destructive op outside the guard, or leave the
 suite red.
