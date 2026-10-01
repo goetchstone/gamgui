@@ -79,7 +79,7 @@ class _KeyringBackend:
     def delete_password(self, service: str, username: str) -> None:
         try:
             self._keyring.delete_password(service, username)
-        except Exception:
+        except Exception:  # noqa: S110 — reason on the line below
             # keyring raises PasswordDeleteError if absent; deleting a missing item is a no-op.
             pass
 

@@ -71,13 +71,23 @@ target-version = "py310"
 [tool.ruff.lint]
 # Rule sets that catch bugs. UP and SIM are left out: they would rewrite ~570 working lines
 # (typing.List -> list, contextlib.suppress) with no change in behaviour.
-select = ["E", "F", "W", "B", "ASYNC", "PLE", "T10", "RUF006"]
+# S (bandit) and TID251 are a tripwire for invariant 1, argv-only: S602/S604/S605 catch a sync shell,
+# the banned-api list below the asyncio one (which S misses). Each other S hit carries a `noqa`.
+select = ["E", "F", "W", "B", "ASYNC", "PLE", "T10", "RUF006", "S", "TID251"]
 ignore = [
+    "S101",  # assert: pytest's idiom; the app's one assert only narrows a type for mypy
+    "S603",  # subprocess without a shell: argv lists are the design (invariant 1)
+    "S607",  # partial executable path: the scripts call git/codesign/plutil from PATH on purpose
     "E501",  # the ~80 lines past 120 are one-line asserts, route signatures and embedded JS; not a bug
     "E702",  # `errors.append(...); continue` guard lines are house style
 ]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"asyncio.create_subprocess_shell".msg = "Invariant 1: run gam with create_subprocess_exec(*argv), never a shell."
+
 [tool.ruff.lint.per-file-ignores]
+# Fake tokens and passwords, and /tmp paths, are test data.
+"tests/**" = ["S105", "S106", "S108"]
 # A one-shot CLI that blocks its own event loop while Chrome starts, before anything else runs on it.
 "scripts/readme_screenshots.py" = ["ASYNC"]
 

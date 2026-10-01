@@ -61,6 +61,18 @@ file, the ledgers — is committed and benefits any contributor; the *enforcemen
 wiring* — `.claude/hooks/*` and `.claude/settings.json` — stays local to this
 operator. (To share the gates too, un-ignore those two.)
 
+**Review skills are a probe, not a home.** `/code-review`, `/security-review`
+and the `gam-command-reviewer` agent run on each PR's diff (the
+[`pre-commit`](../.claude/skills/pre-commit/SKILL.md) "Before the PR" items), and
+a `claude-security` scan runs once per release. They find breaks; they enforce
+nothing. A real finding goes in RULE-FEEDBACK, and the rule it implies still
+needs one of the three homes above.
+
+Plugins that keep their own lessons or failure ledger (harness kits, crew
+frameworks) are deliberately not wired in: a second ledger drifts from
+`failure-log.md` and `RULE-FEEDBACK.md`, and the observer would read half the
+evidence.
+
 ## 3. The learning loop
 
 ```

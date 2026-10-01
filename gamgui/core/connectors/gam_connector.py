@@ -334,7 +334,7 @@ class GAMConnector(Connector):
                 if r.email:
                     cals.append(IndexedCalendar(id=r.email, summary=r.name or r.email, owner="",
                                                 kind="room", subscribers=0))
-        except Exception:  # noqa: BLE001 — rooms are a bonus; keep the secondary-calendar index
+        except Exception:  # noqa: BLE001, S110 — rooms are a bonus; keep the secondary-calendar index
             pass
         return cals
 

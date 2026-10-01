@@ -72,7 +72,7 @@ def ago(seconds: Optional[float]) -> str:
 TEMPLATES.env.filters["ago"] = ago
 TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
 TEMPLATES.env.globals["active_tenant"] = _active_tenant
-TOKEN_COOKIE = "gamgui_token"
+TOKEN_COOKIE = "gamgui_token"  # noqa: S105 — a cookie name, not a secret
 DOMAINS_RETRY = 600   # seconds before a failed `gam print domains` is tried again (a success is kept)
 
 

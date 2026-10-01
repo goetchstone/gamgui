@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures"
 PORT = 8766
-TOKEN = "t"
+TOKEN = "t"  # noqa: S105 — a fixed token for the offline mock preview
 DOMAIN = "example.com"
 
 # Secondary calendars carry ids this long, and they are what overflows a narrow column.
