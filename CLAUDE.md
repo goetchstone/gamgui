@@ -130,7 +130,7 @@ by design (they cost nothing until needed):
   mock-lies traps.
 - **Skills** — [.claude/skills/](.claude/skills): procedures for a moment
   (`start-session`, `pre-commit`, `post-failure`, `end-of-session`,
-  `improve-rules`, `add-builder-command`).
+  `improve-rules`, `add-builder-command`, `live-verify`).
 - **Local hooks** (`.claude/hooks/`, gitignored) inject a short orient digest at session start and
   the diff-relevant checklist before a commit, and hard-block a `fix:` commit that has no fresh
   failure-log entry — intended, not a malfunction.

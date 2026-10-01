@@ -17,6 +17,9 @@ ratchets the codebase up a notch. This repo's defining failure class is
    path, a flag the grammar rejects that the mock accepted.
 4. **What would have prevented it?** A check, a test, a stricter mock, a rule.
 
+For a live break, capture the exit code, stream and wording the way
+[live-verify](../live-verify/SKILL.md) §3 says — never by re-running the write.
+
 ## Step 2 — Reproduce before fixing
 
 Produce a failing test (or, for a live-only break, a faithful mock case that
