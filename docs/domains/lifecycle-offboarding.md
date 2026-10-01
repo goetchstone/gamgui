@@ -84,6 +84,21 @@ no app-side scheduler. The final
 account **delete** is a distinct guarded action on the user detail page (`delete_user`,
 `RiskLevel.DESTRUCTIVE`).
 
+**Why there is no scheduler.** This is deliberate. GamGUI's server runs only while its window is
+open (`app.py` stops it when the window closes), and the window is normally closed long before the
+reminder falls due (30 days by default, `web/routes/lifecycle.py`). Its jobs live only in memory
+(`AppState.jobs` / `offboard_jobs`, `web/server.py`). An in-app timer would therefore seldom fire, and
+a persisted queue would be a second place to keep state. Durable state lives in Google instead: the
+reminder is an event on the manager's calendar, onboarding's checklist is a Tasks list, and the delete
+screen reads pending transfers live (`incomplete_transfers_for`). Offboarding keeps nothing locally
+but its audit records (`audit.jsonl`, like every write); onboarding's only local state is its role
+templates (onboarding.md). "Run the delete automatically on day N" is also out on its own merits:
+`delete_apply` refuses without the exact address typed (`guard.enforce`), and the pending-transfer
+check is only a warning `delete_confirm` shows a person. That warning is advisory and stays silent on
+a read error (`incomplete_transfers_for` returns `[]`). A timer can neither type the address nor heed
+the warning. Revisit this only if the app gains a component that runs while the window is closed. Even
+then, the delete stays a typed confirm in the apply route (CLAUDE.md #2), not a timer.
+
 **Stop (plan U5).** The running panel and the header's jobs tray have a Stop for the run. It asks first
 (`hx-confirm`; `POST /jobs/stop` refuses an offboarding's Stop without `confirmed=1`), then only sets
 `job.cancel_requested`: `run_offboard` checks it before each step, so the step in progress always

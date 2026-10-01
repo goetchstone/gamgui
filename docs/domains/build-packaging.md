@@ -64,6 +64,21 @@
   the ruleset in the same change. Scorecard runs only on push and schedule — never require it. A
   **bot PR** (gam-watch's, opened with `github.token`) gets no CI until the maintainer clicks
   **Approve and run workflows**; that human gate is intended — don't hand the workflow a PAT.
+  **No approving review is required, deliberately.** One maintainer (`.github/CODEOWNERS`,
+  `docs/FRAMEWORK.md`) authors every PR except Dependabot's and gam-watch's, and GitHub does not
+  accept an author's approval of their own PR. A required review would block each of the
+  maintainer's own merges or make each one a logged bypass, and then a bypass would no longer signal
+  a red or stuck check. Review is the pre-commit skill's "Before the PR" probe instead, scaled to the
+  diff: `/code-review`, `/security-review` and the `gam-command-reviewer` agent (5a4645b). It finds
+  breaks but enforces nothing (FRAMEWORK, "Review skills are a probe, not a home").
+  Scorecard marks all of this down on every run (`scorecard.yml`, Security → Code scanning).
+  Branch-Protection (3/10 on 2026-10-01) warns that `main` requires no approvers, does not require
+  up-to-date branches and does not apply its rules to administrators (the admin bypass), and
+  Code-Review scores 0 (no approved changesets). That is expected, not a regression. Revisit when a
+  second person gets write access: require one approving review, and add them to
+  `.github/CODEOWNERS` before turning on code-owner review, because with `@goetchstone` as the only
+  owner the owner's own PRs could never get one. Also revisit when two PRs that each passed CI break
+  `main` together (go strict, with a failure-log entry).
 - **gam-watch runs the new GAM without the write token** (2026-09-30). The bump used to run in one
   job holding `contents: write` + `pull-requests: write`: the new GAM binary, the pip install and the
   whole suite ran next to a token that could push. Now `prepare` (read-only, `persist-credentials:

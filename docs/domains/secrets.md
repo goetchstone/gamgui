@@ -26,6 +26,19 @@
   chunks would fill the disk instead, so don't drop the cap.
 - **All-or-nothing `__enter__`.** If materialization dies partway (e.g. `KeyboardInterrupt`), `__enter__` wipes and re-raises so the caller never gets a path it can't `__exit__` — otherwise a half-populated dir strands in `_LIVE` for the process lifetime.
 - **Registration order:** `_LIVE.add` happens *before* any secret is written, so the `atexit` backstop can never miss a populated dir.
+- **No Touch ID gate: it was tried and removed.** `bc563f4` added `gamgui/core/biometrics.py`;
+  `ff60d86` removed it, along with the `pyobjc-framework-LocalAuthentication` dependency and
+  `NSFaceIDUsageDescription`. The gate only guarded app launch, it was built to fail open, and
+  `GAMGUI_NO_BIOMETRICS=1` turned it off (see the module docstring at
+  `git show ff60d86^:gamgui/core/biometrics.py`, which calls it a convenience, "not the boundary").
+  It never replaced the Keychain's own per-credential prompts, so it added a step without guarding
+  any credential. The Keychain item's ACL is the boundary (see #4 above). What stops the repeated
+  prompts is the stable `GamGUI Local` signature, which lets "Always Allow" persist across launches
+  and rebuilds (`scripts/build_app.sh` picks it up; README → "Stop the Keychain prompts"). The
+  in-process secret cache only covers a burst of calls within one session. Revisit this only if
+  biometrics can be bound to the credential read itself, as a user-presence access control on the
+  Keychain item. `_KeyringBackend` stores items with `keyring.set_password`, and keyring's macOS
+  backend takes no access-control argument, so that would need a Security-framework call of its own.
 
 ## Gotchas / mock-lies traps
 - `tests/fixtures/mock_gam.sh` fails any call but `version` unless `GAMCFGDIR` is set and holds non-empty `oauth2service.json` + `oauth2.txt`, and with `GAM_MOCK_REFRESH` rewrites `oauth2.txt` — so the materialization + write-back path *is* exercised offline. (Until 2026-09-23 its header claimed the check but never made it.) But the mock cannot prove real GAM writes `oauth2.txt` on refresh with the same filename/format, or that the Keychain backend prompts/permits as expected. `_KeyringBackend` is **never** touched by the suite (all tests use `InMemoryBackend`); Keychain behavior (prompts, `keyring` availability, item ACLs) is unverified by tests — trust only from real-tenant use.
