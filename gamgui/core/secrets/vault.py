@@ -26,6 +26,9 @@ FILENAMES: Dict[str, str] = {
     "oauth2service": "oauth2service.json",
 }
 CREDENTIAL_NAMES = tuple(FILENAMES.keys())
+# clear_domain's order: the most dangerous first (oauth2service.json can impersonate anyone), so a
+# delete that fails part-way never leaves it behind with the lesser credentials already gone.
+_DELETE_ORDER = ("oauth2service", "oauth2", "client_secrets")
 
 # Credentials required before GAM can act as the domain (service-account flow).
 _REQUIRED = ("oauth2service", "oauth2")
@@ -99,8 +102,12 @@ class _KeyringBackend:
         try:
             self._keyring.delete_password(service, username)
         except self._delete_error as exc:
-            if not _item_not_found(exc):
-                raise
+            if _item_not_found(exc):
+                return
+            # Another keyring backend reports a missing item with no Security status: look again.
+            if exc.__cause__ is None and self._keyring.get_password(service, username) is None:
+                return
+            raise
 
 
 class SecretsVault:
@@ -191,7 +198,7 @@ class SecretsVault:
 
     def clear_domain(self, domain: str) -> None:
         # A delete that fails raises before the domain leaves the index: its secrets are still there.
-        for name in CREDENTIAL_NAMES:
+        for name in _DELETE_ORDER:
             self.delete(domain, name)
         self._unregister_domain(domain)
 

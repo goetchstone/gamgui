@@ -5,7 +5,7 @@ import sys
 import pytest
 from keyring.errors import NoKeyringError, PasswordDeleteError
 
-from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault, _KeyringBackend
+from gamgui.core.secrets.vault import CREDENTIAL_NAMES, InMemoryBackend, SecretsVault, _KeyringBackend
 
 
 @pytest.fixture
@@ -236,6 +236,34 @@ def test_clear_domain_that_cannot_delete_raises_and_keeps_the_domain(status):
         v.clear_domain("a.com")
     assert v.get("a.com", "oauth2service") == "{}"     # still in the Keychain, and still reported there
     assert v.list_domains() == ["a.com"]                # not dropped from the index while it is
+    assert v.get("a.com", "oauth2") == "tok"            # oauth2service goes first: nothing else went
+
+
+def test_clear_domain_deletes_every_credential_most_dangerous_first():
+    from gamgui.core.secrets.vault import _DELETE_ORDER
+
+    assert sorted(_DELETE_ORDER) == sorted(CREDENTIAL_NAMES) and _DELETE_ORDER[0] == "oauth2service"
+
+
+class _PlainKeyring(_FakeKeyring):
+    """A non-macOS backend: a failed delete is a PasswordDeleteError with no Security status behind it."""
+
+    def delete_password(self, service, username):
+        if (service, username) not in self.store or (service, username) in self.deny:
+            raise PasswordDeleteError("Password not found")
+        del self.store[(service, username)]
+
+
+def test_another_backends_delete_of_an_absent_item_is_a_no_op():
+    _keyring_backend(_PlainKeyring()).delete_password("gamgui:a.com", "client_secrets")
+
+
+def test_another_backends_failed_delete_of_a_present_item_raises():
+    fake = _PlainKeyring()
+    fake.store[("gamgui:a.com", "oauth2")] = "tok"
+    fake.deny[("gamgui:a.com", "oauth2")] = 1
+    with pytest.raises(PasswordDeleteError):
+        _keyring_backend(fake).delete_password("gamgui:a.com", "oauth2")
 
 
 @_macos_only

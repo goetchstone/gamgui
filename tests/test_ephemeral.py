@@ -320,6 +320,31 @@ def test_wipe_live_configs_reports_a_failed_wipe_on_stderr(vault, domain, tmp_pa
     real(cfgdir)
 
 
+def test_a_per_call_wipe_that_leaves_the_dir_reports_it_and_keeps_it_for_atexit(vault, domain, tmp_path,
+                                                                                monkeypatch, capsys):
+    # The common path: __exit__ wipes after each gam call. _shred_dir swallows a failed removal, and the
+    # dir used to leave _LIVE first, so plaintext stayed on disk with no word and no atexit retry.
+    real = _shred_dir
+    monkeypatch.setattr(ephemeral, "_shred_dir", lambda path: None)     # a removal that silently failed
+    with EphemeralConfig(vault, domain, base_dir=tmp_path) as cfgdir:
+        key = os.path.realpath(cfgdir)
+    assert key in capsys.readouterr().err
+    assert key in ephemeral._LIVE                                       # the atexit wipe tries again
+    monkeypatch.setattr(ephemeral, "_shred_dir", real)
+    wipe_live_configs()
+    assert not os.path.lexists(key) and key not in ephemeral._LIVE
+
+
+def test_a_symlink_in_place_of_a_live_dir_is_not_reported(tmp_path, capsys):
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    link = tmp_path / "gamcfg-link"
+    link.symlink_to(target)
+    ephemeral._LIVE.add(str(link))
+    wipe_live_configs()
+    assert "could not wipe" not in capsys.readouterr().err and target.exists()
+
+
 def test_wipe_live_configs_survives_having_no_stderr(vault, domain, tmp_path, monkeypatch):
     cfgdir = EphemeralConfig(vault, domain, base_dir=tmp_path).__enter__()
     real = _shred_dir

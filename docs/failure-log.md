@@ -41,13 +41,21 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
 - **Fix:** only a `PasswordDeleteError` whose cause carries errSecItemNotFound (-25300) is a no-op;
   anything else propagates, and `clear_domain` keeps the domain listed. `wipe_live_configs` writes the
   dir's path and the exception's type name (never its message) to stderr, and reports a dir still on
-  disk after the shred; it still never raises. No route removes credentials today (`clear_domain` has
+  disk after the shred; it still never raises. Review found the common path had the same gap: the
+  per-call `_wipe()` dropped the dir from `_LIVE` before shredding, so a removal that failed there
+  was silent and the atexit backstop never saw it. It now reports a dir that survives and keeps it in
+  `_LIVE` for the exit-time retry (a symlink in its place is not ours, and is not reported).
+  `clear_domain` deletes `oauth2service` first, so a denial part-way never leaves the
+  impersonate-anyone key behind with the lesser credentials gone; a non-macOS keyring backend, whose
+  failed delete carries no Security status, is checked with a read before it is called a miss. No
+  route removes credentials today (`clear_domain` has
   no caller outside tests), so there was no success message to correct; a future caller gets the error.
 - **Prevention:** `tests/test_vault.py`'s fake keyring raises the macOS backend's exact shape, and
   `test_fake_raises_what_the_real_macos_backend_raises` (macOS only, which CI's macOS leg runs) drives
   keyring's real `delete_password` with only `SecItemDelete` stubbed and fails if the fake drifts;
   `test_keyring_backend_over_the_real_macos_backend` classifies the real errors.
-  `test_atexit_wipe_reports_a_dir_it_could_not_remove` holds the exit-time report end to end.
+  `test_atexit_wipe_reports_a_dir_it_could_not_remove` holds the exit-time report end to end;
+  `test_a_per_call_wipe_that_leaves_the_dir_reports_it_and_keeps_it_for_atexit` holds the common path.
   Unproven live: the statuses come from keyring's `api.py`, not from a denial captured on a real
   Keychain.
 

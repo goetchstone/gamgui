@@ -132,9 +132,15 @@ def wipe_live_configs() -> None:
         except Exception as exc:  # a failed cleanup must never mask the real exit, nor go unseen
             _report_unwiped(key, type(exc).__name__)
         else:
-            if os.path.lexists(key):  # _shred_dir swallows a failed removal; this is where it shows
+            if _survived(key):  # _shred_dir swallows a failed removal; this is where it shows
                 _report_unwiped(key, "still on disk")
     _LIVE.clear()
+
+
+def _survived(key: str) -> bool:
+    """True when the credential dir at *key* is still there after a shred. A symlink in its place
+    is not ours (``_shred_dir`` leaves it alone by design), so it isn't reported as a leak."""
+    return os.path.lexists(key) and not os.path.islink(key)
 
 
 def _report_unwiped(key: str, reason: str) -> None:
@@ -322,7 +328,11 @@ class EphemeralConfig:
     def _wipe(self) -> None:
         if not self.path:
             return
-        _LIVE.discard(_key(self.path))
+        key = _key(self.path)
         if self.path.exists():
             _shred_dir(self.path)
+        if _survived(key):
+            _report_unwiped(key, "still on disk")  # stays in _LIVE: the atexit wipe tries again
+        else:
+            _LIVE.discard(key)
         self.path = None
