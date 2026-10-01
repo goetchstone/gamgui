@@ -19,7 +19,8 @@ GamGUI is a **local, single-operator desktop app**. It runs a FastAPI server bou
 on a random port, gated by a per-launch token, and displays it in a native WKWebView window. (Without
 pywebview it can instead be opened in a normal browser — a developer fallback with a known weakness,
 below; the packaged `.app` never uses it.) There is no hosted service, no multi-tenancy, and no
-remote users. Nothing is sent anywhere except to Google, by the bundled `gam` binary.
+remote users. Nothing is sent anywhere except to Google, by the bundled `gam` binary — and, when a
+signature preview renders, the image requests its HTML names (see Known limitations).
 
 The stakes are nonetheless high, because of what the app can reach:
 
@@ -125,6 +126,18 @@ Accepted and documented rather than fixed; reports that only restate these will 
   any same-user process can read the plaintext files. The wipe keeps that window short; it does not
   close it. The real boundary against same-user code is the Keychain item's access control, which
   asks before any other app reads the credentials at rest.
+- **Previewing a user's current signature can tell a remote host that you looked.** The CSP keeps
+  `img-src 'self' https: data:` rather than `'self'` (`gamgui/web/server.py`), and the sandboxed
+  `srcdoc` frame that shows a signature read from Gmail (`_sig_current.html`) inherits it. Any
+  `https:` image in that signature is fetched when the preview renders, so a tracking image learns
+  the operator's network address and the time. No script runs in the frame, and no Referer is sent
+  (`Referrer-Policy: no-referrer`). The Signatures screen's template preview (`_sig_preview.html`)
+  is the same kind of frame and loads its images the same way. Clamping `img-src` was declined
+  because Gmail accepts only public HTTPS images in a signature
+  ([Hosting signature images](README.md#hosting-signature-images-logo-social-icons)). With the
+  clamp, every real logo would be missing and the preview would quietly misrepresent what
+  recipients see. Revisit this if the preview gains an explicit "load remote images" step, or if
+  Gmail starts accepting inline images.
 
 ## Which Python a CVE report is about
 
