@@ -26,6 +26,9 @@ FILENAMES: Dict[str, str] = {
     "oauth2service": "oauth2service.json",
 }
 CREDENTIAL_NAMES = tuple(FILENAMES.keys())
+# clear_domain's order: the most dangerous first (oauth2service.json can impersonate anyone), so a
+# delete that fails part-way never leaves it behind with the lesser credentials already gone.
+_DELETE_ORDER = ("oauth2service", "oauth2", "client_secrets")
 
 # Credentials required before GAM can act as the domain (service-account flow).
 _REQUIRED = ("oauth2service", "oauth2")
@@ -62,13 +65,30 @@ class InMemoryBackend:
         self._store.pop(self._k(service, username), None)
 
 
+# errSecItemNotFound (Security/SecBase.h): the one Keychain status that means "there is no such item".
+_ERR_SEC_ITEM_NOT_FOUND = -25300
+
+
+def _item_not_found(exc: BaseException) -> bool:
+    """True when *exc*, a keyring ``PasswordDeleteError``, means the item wasn't there.
+
+    keyring's macOS backend raises that same error for every failed delete: an absent item, a
+    denied or locked Keychain, an unsigned binary. It raises it ``from`` the Security-API error,
+    whose first arg is the OSStatus, and that status is the only thing that tells them apart.
+    """
+    cause = exc.__cause__
+    return cause is not None and cause.args[:1] == (_ERR_SEC_ITEM_NOT_FOUND,)
+
+
 class _KeyringBackend:
     """Default backend — lazily imports ``keyring`` so core tests don't require it installed."""
 
     def __init__(self) -> None:
         import keyring  # noqa: F401  (import-time check that it's available)
+        from keyring.errors import PasswordDeleteError
 
         self._keyring = keyring
+        self._delete_error = PasswordDeleteError
 
     def get_password(self, service: str, username: str) -> Optional[str]:
         return self._keyring.get_password(service, username)
@@ -77,11 +97,17 @@ class _KeyringBackend:
         self._keyring.set_password(service, username, password)
 
     def delete_password(self, service: str, username: str) -> None:
+        # Deleting an absent item is a no-op. Any other failure (a denied or locked Keychain, no
+        # keyring backend) propagates: the secret may still be in the Keychain.
         try:
             self._keyring.delete_password(service, username)
-        except Exception:  # noqa: S110 — reason on the line below
-            # keyring raises PasswordDeleteError if absent; deleting a missing item is a no-op.
-            pass
+        except self._delete_error as exc:
+            if _item_not_found(exc):
+                return
+            # Another keyring backend reports a missing item with no Security status: look again.
+            if exc.__cause__ is None and self._keyring.get_password(service, username) is None:
+                return
+            raise
 
 
 class SecretsVault:
@@ -171,7 +197,8 @@ class SecretsVault:
         return ""
 
     def clear_domain(self, domain: str) -> None:
-        for name in CREDENTIAL_NAMES:
+        # A delete that fails raises before the domain leaves the index: its secrets are still there.
+        for name in _DELETE_ORDER:
             self.delete(domain, name)
         self._unregister_domain(domain)
 
