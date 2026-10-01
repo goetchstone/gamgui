@@ -81,7 +81,7 @@
           <button class="{{ btn_primary }} ml-auto shrink-0 {{ '' if d.has_required else 'opacity-70' }}"
                   hx-post="/setup/import" hx-target="#wizard-next" hx-swap="innerHTML"
                   hx-include="[name='domain'],[name='admin']"
-                  hx-vals='{"config_dir": {{ d.path | tojson }} }'>Import</button>
+                  hx-vals='{"config_dir": {{ d.path | tojson }} }'>Import<span class="sr-only"> {{ d.label }}</span></button>
         </div>
       {% else %}
         <p class="text-sm text-brand-grayink">No existing GAM config found in the usual places.</p>

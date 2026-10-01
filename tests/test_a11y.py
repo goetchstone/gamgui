@@ -21,7 +21,7 @@ reads Chrome's accessibility tree: a polled panel speaks through base.html's one
 poll replaces (plan A3).
 
 The Chrome runs are marked a11y and deselected from the default run (pyproject addopts: they start
-Chrome); the checksum and ratchet-logic tests and the template checks (every field named, every focus
+Chrome); the checksum and ratchet-logic tests and the template checks (every field named, every looped button naming its item, every focus
 target focusable, every tab strip an ARIA tablist, every polled panel's line and marks) run by default. Skipped when Google Chrome
 isn't installed, unless A11Y_REQUIRE_CHROME is set (CI). Chrome gets scripts/readme_screenshots.py's
 CHROME_FLAGS — --use-mock-keychain keeps it off the login Keychain (tests/test_headless_chrome.py) —
@@ -1169,6 +1169,97 @@ def test_a_saved_lists_repeated_buttons_name_their_item():
         assert not repeated, f"{template}: buttons that share a name: {repeated}"
         for verb in (("Load", "Delete") if template == "_sig_templates.html" else ("Edit", "Delete")):
             assert [n for n in names if n.startswith(verb)] == [f"{verb} {i}" for i in items], (template, names)
+
+
+# A template token: a Jinja comment, statement or expression; an HTML comment, script or style (skipped);
+# a start tag (Jinja allowed inside it) or an end tag. The text between tokens is the page's own words.
+_TOKEN = re.compile(r"""
+    \{\#.*?\#\}
+  | \{%-?\s*(?P<kw>\w+)(?P<args>.*?)-?%\}
+  | (?P<expr>\{\{.*?\}\})
+  | <!--.*?--> | <script\b.*?</script> | <style\b.*?</style>
+  | <(?P<tag>[a-zA-Z][\w-]*)(?P<attrs>(?:[^>{]|\{\{.*?\}\}|\{%.*?%\}|\{\#.*?\#\}|\{(?![{%\#]))*)>
+  | </(?P<end>[a-zA-Z][\w-]*)\s*>
+""", re.S | re.X)
+_BLOCKS = {"for", "if", "macro", "call", "block", "filter", "with", "autoescape", "trans"}
+_VOID = {"input", "br", "img", "meta", "link", "hr", "source", "wbr"}
+_HIDDEN = re.compile(r"""aria-hidden\s*=\s*["']true|(?:^|\s)hidden(?=[\s=/]|$)""")
+
+
+def _looped_buttons() -> list[tuple[str, int, bool]]:
+    """(template, line, its name carries a {{ }}) for every <button> that can render more than once: inside
+    a {% for %}, in a template a loop includes, or in a macro a loop calls — followed through includes and
+    macro calls to any depth. A for's {% else %} renders once, so it is no loop. The name carries an
+    expression when an aria-label/aria-labelledby holds one or the button's text does (sr-only text too;
+    never an aria-hidden or hidden part)."""
+    buttons, includes, calls, macros = [], [], [], set()
+    for path in sorted((ROOT / "gamgui" / "web" / "templates").glob("*.html")):
+        text, name = path.read_text(), path.name
+        stack: list[list] = []          # [keyword, macro name, still looping] per open Jinja block
+        button: dict | None = None
+        for m in _TOKEN.finditer(text):
+            depth = sum(1 for kw, _, looping in stack if kw == "for" and looping)
+            where = (name, next((mac for kw, mac, _ in reversed(stack) if kw == "macro"), None))
+            if m["kw"]:
+                kw, args = m["kw"], m["args"]
+                if kw in _BLOCKS or (kw == "set" and "=" not in args):
+                    mac = re.match(r"\s*(\w+)", args)[1] if kw == "macro" else None
+                    macros.add(mac)
+                    if kw == "call":
+                        calls += [(c, where, depth) for c in re.findall(r"(\w+)\s*\(", args)]
+                    stack.append([kw, mac, kw == "for"])
+                elif kw in ("else", "elif") and stack[-1][0] == "for":
+                    stack[-1][2] = False
+                elif kw.startswith("end"):
+                    stack.pop()
+                elif kw == "include":
+                    includes += [(t, where, depth) for t in re.findall(r"""["']([^"']+)["']""", args)]
+            elif m["expr"]:
+                calls += [(c, where, depth) for c in re.findall(r"(\w+)\s*\(", m["expr"])]
+                if button is not None and not any(button["hidden"]):
+                    button["named"] = True
+            elif m["tag"] == "button":
+                label = re.search(r"""aria-label(?:ledby)?\s*=\s*("[^"]*"|'[^']*')""", m["attrs"])
+                button = {"where": where, "depth": depth, "line": text.count("\n", 0, m.start()) + 1,
+                          "named": bool(label and "{{" in label[1]), "hidden": []}
+            elif button is not None and m["tag"] and m["tag"] not in _VOID:
+                button["hidden"].append(bool(_HIDDEN.search(m["attrs"])))
+            elif button is not None and m["end"] == "button":
+                buttons.append(button)
+                button = None
+            elif button is not None and m["end"] and button["hidden"]:
+                button["hidden"].pop()
+        assert not stack and button is None, f"{name}: unbalanced {stack or 'button'}"
+
+    looped_templates: set[str] = set()
+    looped_macros: set[str] = set()
+
+    def repeats(where: tuple[str, str | None], depth: int) -> bool:
+        template, macro = where
+        return depth > 0 or (macro in looped_macros if macro else template in looped_templates)
+
+    grew = True
+    while grew:                         # until no include or call marks another template or macro looped
+        before = len(looped_templates) + len(looped_macros)
+        looped_templates |= {t for t, where, depth in includes if repeats(where, depth)}
+        looped_macros |= {c for c, where, depth in calls if c in macros and repeats(where, depth)}
+        grew = len(looped_templates) + len(looped_macros) > before
+    return [(b["where"][0], b["line"], b["named"]) for b in buttons if repeats(b["where"], b["depth"])]
+
+
+def test_no_looped_button_is_named_by_literal_text_alone():
+    """The class behind the tray's Stop and the saved lists' Load/Edit/Delete (failure-log 2026-09-25) and
+    the fresh-setup Copy (2026-10-01): a button a loop renders once per item, named by literal text alone,
+    gives every copy one name — a screen reader's button list reads "Copy, Copy, Copy". Each names its
+    item, in a visually hidden span (`Copy<span class="sr-only"> {{ c.name }}</span>`) or an aria-label
+    carrying a {{ }}. This reads every template, through includes and macro calls, so a new loop can't ship
+    it again; test_a_saved_lists_repeated_buttons_name_their_item renders two of them to hear the names."""
+    looped = _looped_buttons()
+    assert any(t == "_command_row.html" for t, _, _ in looped), "the scan stopped following an include in a loop"
+    assert any(t == "_job_live.html" for t, _, _ in looped), "the scan stopped following a macro a loop calls"
+    bare = [f"{t}:{line}" for t, line, named in looped if not named]
+    assert not bare, "a looped <button> named by literal text alone (every copy shares the name):\n  " + \
+        "\n  ".join(bare)
 
 
 def test_a_focus_target_can_take_focus_and_a_dropped_outline_leaves_a_ring():
