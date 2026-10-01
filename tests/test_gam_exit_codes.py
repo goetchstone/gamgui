@@ -9,16 +9,19 @@ from __future__ import annotations
 
 import ast
 import dis
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from gamgui.core.gam.commands import GAMCommands as C
 from gamgui.core.gam.errors import GAMError
-from gamgui.core.setup import DWD_SCOPES, OAUTH2SERVICE_JSON_REQUIRED_RC, SCOPES_NOT_AUTHORIZED_RC
+from gamgui.core.setup import DWD_SCOPES, OAUTH2SERVICE_JSON_REQUIRED_RC
 
 ROOT = Path(__file__).resolve().parent.parent
 GAM_BIN = ROOT / "gamgui" / "resources" / "gam7" / "gam"
+MOCK_GAM = ROOT / "tests" / "fixtures" / "mock_gam.sh"
 DWD = [scope for scope, _ in DWD_SCOPES]
 
 
@@ -61,13 +64,20 @@ def test_every_gam_exit_code_the_app_names_is_the_builds(build_rc):
     assert not wrong, f"(file, name, ours, the build's): {wrong}"
 
 
-async def test_the_mock_fails_a_scope_check_with_the_builds_code(runner, domain):
-    with pytest.raises(GAMError) as ei:
-        await runner.run_authenticated(domain, C.check_svcacct("partialdwd@example.com", DWD))
-    assert ei.value.exit_code == SCOPES_NOT_AUTHORIZED_RC
-
-
 async def test_the_mock_fails_a_rejected_key_with_the_builds_code(runner, domain):
     with pytest.raises(GAMError) as ei:
         await runner.run_authenticated(domain, C.check_svcacct("badkey-admin@example.com", DWD))
     assert ei.value.exit_code == OAUTH2SERVICE_JSON_REQUIRED_RC
+
+
+@pytest.mark.parametrize("present,rc", [
+    ([], "OAUTH2SERVICE_JSON_REQUIRED_RC"),               # no key file: GAM stops before anything else
+    (["oauth2service.json"], "OAUTH2_TXT_REQUIRED_RC"),   # a key but no admin token
+])
+def test_the_mock_fails_a_missing_credentials_file_with_the_builds_code(build_rc, tmp_path, present, rc):
+    for name in present:
+        (tmp_path / name).write_text("{}")
+    env = {**os.environ, "GAMCFGDIR": str(tmp_path), "GAM_MOCK_FIXTURES": str(MOCK_GAM.parent)}
+    done = subprocess.run(["bash", str(MOCK_GAM), "info", "domain"], env=env, capture_output=True, text=True,
+                          timeout=15)
+    assert done.returncode == build_rc[rc], (rc, done.returncode, done.stderr)

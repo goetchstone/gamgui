@@ -150,19 +150,20 @@ case "${1:-}" in
 esac
 
 # Every other call is authenticated: GamGUI must have materialized the Keychain credentials into a
-# private per-call GAMCFGDIR (never ~/.gam), and GAM can't act without its credential files. (The
-# wording and exit code of GAM's missing-file error are approximate.)
+# private per-call GAMCFGDIR (never ~/.gam), and GAM can't act without its credential files. The exit
+# codes are the build's (OAUTH2SERVICE_JSON_REQUIRED_RC and OAUTH2_TXT_REQUIRED_RC, both 16; they were
+# once a guessed 12); the wording is approximate.
 if [ -z "${GAMCFGDIR:-}" ]; then
   echo "ERROR: mock: GAMCFGDIR is not set - an authenticated call escaped the ephemeral config" 1>&2
   exit 2
 fi
 if [ ! -s "$GAMCFGDIR/oauth2service.json" ]; then
   printf 'ERROR: Service Account OAuth2 File: %s, Does not exist\n' "$GAMCFGDIR/oauth2service.json" 1>&2
-  exit 12
+  exit 16
 fi
 if [ ! -s "$GAMCFGDIR/oauth2.txt" ]; then
   printf 'ERROR: Client OAuth2 File: %s, Does not exist\nPlease run: gam oauth create\n' "$GAMCFGDIR/oauth2.txt" 1>&2
-  exit 12
+  exit 16
 fi
 # GAM rewrites oauth2.txt whenever it refreshes the access token, on any authenticated call.
 if [ -n "${GAM_MOCK_REFRESH:-}" ]; then

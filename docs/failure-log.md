@@ -40,15 +40,20 @@ whose only proof is a greener mock is not proven; say so in the Prevention field
   against the build.
 - **Fix:** the constants are the build's (10, 16); verify reads either exit as the check's answer
   only when stdout carries the PASS/FAIL rows (`CHECK_ANSWER_RCS`), so a missing key file (16, empty
-  stdout) stays a plain error. The mock exits 10 on a failing scope, and on a rejected key prints the
-  rows, then GAM's stderr error and instructions, and exits 16. The tests compare against the
-  constants, not literals.
+  stdout) stays a plain error, showing GAM's `ERROR:` line: the instructions GAM prints after it
+  (`Msg.INSTRUCTIONS_OAUTH2SERVICE_JSON`) are skipped like progress chatter, where the service-account
+  pattern had read "…to create and authorize a Service account." as the error line to quote. The
+  mock exits 10 on a failing scope; on a rejected key it prints the rows, then GAM's stderr error and
+  instructions, and exits 16; a missing key file or `oauth2.txt` exits 16 too (it had guessed 12). The
+  tests compare against the constants and build errors with `from_run`, as the runner does.
 - **Prevention:** `tests/test_gam_exit_codes.py` reads the build's `*_RC` table out of the vendored
-  binary's PyInstaller archive and fails if any `NAME_RC` the app defines differs, and holds the mock's
-  two `check serviceaccount` failures to the same constants — so mock, app and build agree, and a GAM
-  bump re-checks it. It skips without the binary or PyInstaller (CI's lint/test jobs lack PyInstaller,
-  so it bites locally and on a GAM bump run here). Still unproven live: no failing scope or rejected
-  key has been captured from a real tenant.
+  binary's PyInstaller archive and fails if any module-level `NAME_RC` the app defines differs from it,
+  and holds the mock's rejected-key and missing-credentials exits to the build (the failing-scope exit
+  is held by `test_mock_gam.py` through the constant). It covers those paths only — the mock's other
+  `exit N` literals (2, 50, 56, 73) were checked by hand against the table on 2026-10-01 and are not
+  guarded. The build half skips without PyInstaller, which CI's test jobs do not install, so it bites
+  locally and not on CI's automated GAM bump PRs (tracked separately). Still unproven live: no failing
+  scope or rejected key has been captured from a real tenant.
 
 ## 2026-09-30 — Property tests found six input-handling bugs on their first run
 
