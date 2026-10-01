@@ -127,7 +127,7 @@ def wipe_live_configs() -> None:
     for key in list(_LIVE):
         try:
             _shred_dir(Path(key))
-        except Exception:
+        except Exception:  # noqa: S110 — reason on the line below
             pass  # a failed cleanup must never mask the real exit
     _LIVE.clear()
 

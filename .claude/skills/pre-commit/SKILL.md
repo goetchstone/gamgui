@@ -63,6 +63,23 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
 10. **Bound anything polled (invariant 9).** Live progress feeds keep a fixed
     rolling window and cap retained failure lists.
 
+## Before the PR
+
+Model review is the step between the checklist and CI. Scale it to the stakes (CLAUDE.md, "Working
+here economically"):
+
+12. **`/code-review medium`** on every PR's diff. Use **`high`** when it touches `core/secrets/`,
+    `core/setup.py`, `core/audit.py`, `core/gam/runner.py`, `core/guard.py`, `web/server.py` or a
+    write route.
+13. **`/security-review`** when the diff touches those same paths, or anything that parses operator
+    or Google-supplied input.
+14. **The `gam-command-reviewer` agent** when it touches `core/gam/commands.py`, `core/connectors/`,
+    `core/catalog/` or the Builder routes.
+15. **Fix what's real; feed the loop.** A finding an invariant *should* have stopped is evidence: one
+    entry in [RULE-FEEDBACK.md](../../../docs/RULE-FEEDBACK.md) ("only if enforced differently" is
+    the valuable answer). Multi-agent scans (`claude-security`, `review-council`) are release-time,
+    not per PR.
+
 ## Scope
 
 11. **macOS-only is deliberate** — keep platform specifics (window, Keychain,

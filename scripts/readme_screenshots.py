@@ -117,8 +117,8 @@ def _serve(state_dir: Path) -> None:
                      "log_level": "warning"}, daemon=True).start()
     for _ in range(60):
         try:
-            req = urllib.request.Request(f"{BASE}/healthz", headers={"Host": f"127.0.0.1:{PORT}"})
-            if urllib.request.urlopen(req).status == 200:
+            req = urllib.request.Request(f"{BASE}/healthz", headers={"Host": f"127.0.0.1:{PORT}"})  # noqa: S310 — a localhost URL this script builds itself
+            if urllib.request.urlopen(req).status == 200:  # noqa: S310 — a localhost URL this script builds itself
                 return
         except Exception:  # noqa: BLE001 - not up yet
             time.sleep(0.25)

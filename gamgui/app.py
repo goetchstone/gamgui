@@ -128,7 +128,7 @@ def main() -> None:
             w, h = _fit_size(sw, sh)
             window.resize(w, h)
             window.move(max(0, (sw - w) // 2), max(20, (sh - h) // 3))
-        except Exception:
+        except Exception:  # noqa: S110 — window sizing is cosmetic; the default size stands
             pass
 
     try:

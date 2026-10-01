@@ -108,7 +108,7 @@ async def _resolve_name(st, email: str) -> str:
         for u in await st.users():
             if u.primary_email.lower() == email.lower():
                 return u.full_name
-    except Exception:
+    except Exception:  # noqa: S110 — display name is cosmetic; the email stands in
         pass
     return email
 

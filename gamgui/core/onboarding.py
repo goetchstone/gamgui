@@ -220,7 +220,7 @@ class RunbookStore:
                 data["roles"] = {n: _as_role(v) for n, v in data["roles"].items()}  # migrate old list form
                 data.setdefault("welcome", dict(_DEFAULT["welcome"]))
                 return data
-            except Exception:  # noqa: BLE001 — corrupt/old file: fall back to the seed
+            except Exception:  # noqa: BLE001, S110 — corrupt/old file: fall back to the seed
                 pass
         return json.loads(json.dumps(_DEFAULT))   # deep copy of the seed
 

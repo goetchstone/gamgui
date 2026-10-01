@@ -21,7 +21,8 @@ compaction) inherits what this one learned. Update docs, not the constitution.
    **Do not edit CLAUDE.md here** — [improve-rules](../improve-rules/SKILL.md)
    reads the pile later, with distance, and proposes the change as a PR. A
    session editing the constitution while the incident is warm is exactly how it
-   bloats.
+   bloats. A real finding from a review skill (`/code-review`, `/security-review`,
+   `gam-command-reviewer`) that an invariant should have stopped counts too.
 3. **Did a domain's behavior turn out different from its runbook?** Update the
    relevant [docs/domains](../../../docs/domains) runbook so the correction
    isn't relearned. New area with no runbook → add one in the house template.

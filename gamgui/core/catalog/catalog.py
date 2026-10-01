@@ -270,7 +270,7 @@ def _load_shallow() -> Tuple[List[CatalogCommand], str]:
         try:
             data = json.loads(js.read_text())
             return [CatalogCommand.from_json(c) for c in data.get("commands", [])], str(data.get("version", ""))
-        except Exception:  # noqa: BLE001 — fall back to a live parse below
+        except Exception:  # noqa: BLE001, S110 — fall back to a live parse below
             pass
     txt = _resource("GamCommands.txt")
     if txt.exists():
@@ -289,7 +289,7 @@ def _make_reads_buildable(commands: List[CatalogCommand]) -> None:
             continue
         try:
             slots, template = parse_read_template(c.raw_syntax)
-        except Exception:  # noqa: BLE001 — leave an un-parseable line browse-only
+        except Exception:  # noqa: BLE001, S112 — leave an un-parseable line browse-only
             continue
         c.slots = slots
         c.build = make_build(template)

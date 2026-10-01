@@ -208,7 +208,7 @@ class SignatureStore:
                 data = json.loads(self.path.read_text())
                 if isinstance(data, dict) and isinstance(data.get("templates"), dict):
                     return data
-            except Exception:  # noqa: BLE001 — corrupt/old file: fall back to the seed
+            except Exception:  # noqa: BLE001, S110 — corrupt/old file: fall back to the seed
                 pass
         return json.loads(json.dumps({"templates": _DEFAULT_TEMPLATES}))   # deep copy of the seed
 

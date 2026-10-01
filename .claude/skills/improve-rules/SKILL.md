@@ -25,7 +25,7 @@ edit, for a human to accept or reject. Nothing here writes to `main`.
 This is a solo, mostly-single-operator repo — there is no PR-review signal to
 mine. The substitute is **the commit that had to clean up after the last one**:
 a `fix:` or `revert:` commit is literally "what the agent proposed versus what
-reality required." Read all four sources since the last run:
+reality required." Read all five sources since the last run:
 
 1. **Fix/revert commits.**
    ```bash
@@ -44,6 +44,11 @@ reality required." Read all four sources since the last run:
    mock-lies test, or a `.claude/hooks/*` block that fired and caught something
    is evidence its rule earns its place. `gh run list --status failure` if CI is
    in play.
+
+5. **Review findings before merge.** A real finding from `/code-review`, `/security-review`,
+   `gam-command-reviewer` or a `claude-security` release scan is the same signal as a `fix:` commit,
+   caught earlier: the PR bodies and RULE-FEEDBACK entries name them. Ask the same question —
+   which invariant should have stopped it, and in which layer?
 
 ## The judgment
 

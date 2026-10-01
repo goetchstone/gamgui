@@ -31,7 +31,7 @@ from typing import Any, Callable, Dict, Hashable, Optional, Tuple
 
 from ..core import clock
 
-TOKEN_FIELD = "preview"   # what a confirm step posts back: the token its preview rendered
+TOKEN_FIELD = "preview"   # noqa: S105 — a field name: what a confirm step posts back, the token its preview rendered
 PREVIEW_TTL = 15 * 60     # seconds a preview stays runnable
 PREVIEWS_KEPT = 8         # per flow; the oldest goes first
 
