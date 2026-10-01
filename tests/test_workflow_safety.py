@@ -141,6 +141,19 @@ def test_ci_builds_and_smoke_checks_the_app():
     assert "run: build/venv/bin/python scripts/check_app.py dist/GamGUI.app\n" in job
 
 
+def test_jobs_that_vendor_gam_and_run_the_suite_require_its_exit_code_table():
+    # tests/test_gam_exit_codes.py skips where GAM isn't vendored, which is every test leg. In a job that
+    # vendors it and runs the suite, EXIT_CODES_REQUIRE_GAM turns that skip, or a build this runner's
+    # Python can't read, into a failure; without it the check could pass green without ever running.
+    vendoring = {}
+    for wf in WORKFLOWS:
+        for name, body in _jobs(wf.read_text()).items():
+            if re.search(r"scripts/(?:fetch_gam\.sh|bump_gam\.py)", body) and re.search(r"pytest -q(?: *>.*)?$", body, re.M):
+                vendoring[f"{wf.name}:{name}"] = bool(re.search(r'^ +EXIT_CODES_REQUIRE_GAM: "1"', body, re.M))
+    assert {"ci.yml:gam-compat", "gam-watch.yml:prepare"} <= set(vendoring), vendoring
+    assert all(vendoring.values()), vendoring
+
+
 def test_every_job_has_a_timeout():
     # The default is six hours: a hung test, or a download that never finishes, burns it all and
     # holds a runner (and, in gam-watch, a token) that long.
