@@ -305,6 +305,68 @@ def test_wipe_live_configs_keeps_going_past_a_failed_wipe(vault, domain, tmp_pat
         real(p)
 
 
+def test_wipe_live_configs_reports_a_failed_wipe_on_stderr(vault, domain, tmp_path, monkeypatch, capsys):
+    cfgdir = EphemeralConfig(vault, domain, base_dir=tmp_path).__enter__()
+    real = _shred_dir
+
+    def failing(path):
+        raise OSError(f"{path}/oauth2.txt: fake-oauth2-token")    # a message that could echo data
+
+    monkeypatch.setattr(ephemeral, "_shred_dir", failing)
+    wipe_live_configs()
+    err = capsys.readouterr().err
+    assert os.path.realpath(cfgdir) in err and "OSError" in err  # which dir, and what kind of failure
+    assert "fake-oauth2-token" not in err                        # never the exception's message
+    real(cfgdir)
+
+
+def test_wipe_live_configs_survives_having_no_stderr(vault, domain, tmp_path, monkeypatch):
+    cfgdir = EphemeralConfig(vault, domain, base_dir=tmp_path).__enter__()
+    real = _shred_dir
+
+    def failing(path):
+        raise OSError("disk error")
+
+    monkeypatch.setattr(ephemeral, "_shred_dir", failing)
+    monkeypatch.setattr(sys, "stderr", None)          # a windowed app can run without one
+    wipe_live_configs()                               # atexit runs this; it must not raise
+    assert os.path.realpath(cfgdir) not in _LIVE
+    real(cfgdir)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root removes entries from a read-only dir")
+def test_atexit_wipe_reports_a_dir_it_could_not_remove(tmp_path):
+    """The shred swallows a failed removal; at exit the operator must still learn plaintext was left."""
+    script = textwrap.dedent(
+        """
+        import os, sys
+        from gamgui.core.secrets.ephemeral import EphemeralConfig
+        from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
+
+        vault = SecretsVault(backend=InMemoryBackend())
+        vault.set_all("example.com", {"oauth2": "SECRET-OAUTH2-VALUE", "oauth2service": "{}"})
+        cfgdir = EphemeralConfig(vault, "example.com", base_dir=sys.argv[1]).__enter__()
+        os.chmod(cfgdir, 0o500)       # its files can't be unlinked, so the removal fails
+        print(cfgdir, flush=True)
+        """
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    left = Path(proc.stdout.strip())
+    try:
+        assert left.exists()
+        assert os.path.realpath(left) in proc.stderr and "still on disk" in proc.stderr
+        assert "SECRET" not in proc.stderr
+    finally:
+        os.chmod(left, 0o700)
+        _shred_dir(left)
+
+
 def test_sweep_continues_past_an_entry_that_vanishes_mid_sweep(tmp_path, monkeypatch):
     racing = _make_cfgdir(tmp_path, "gamcfg-racing", pid=_dead_pid())
     stale = _make_cfgdir(tmp_path, "gamcfg-stale", pid=_dead_pid())

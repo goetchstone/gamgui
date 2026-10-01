@@ -20,10 +20,12 @@ owning process (recorded in a ``.pid`` file) is gone — or that have outlived a
 from __future__ import annotations
 
 import atexit
+import contextlib
 import hashlib
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -127,9 +129,23 @@ def wipe_live_configs() -> None:
     for key in list(_LIVE):
         try:
             _shred_dir(Path(key))
-        except Exception:  # noqa: S110 — reason on the line below
-            pass  # a failed cleanup must never mask the real exit
+        except Exception as exc:  # a failed cleanup must never mask the real exit, nor go unseen
+            _report_unwiped(key, type(exc).__name__)
+        else:
+            if os.path.lexists(key):  # _shred_dir swallows a failed removal; this is where it shows
+                _report_unwiped(key, "still on disk")
     _LIVE.clear()
+
+
+def _report_unwiped(key: str, reason: str) -> None:
+    """Tell stderr a credential dir may still hold plaintext: its path and *reason*, an exception's
+    type name, never its message, which could echo file data. Never raises: it runs at exit."""
+    stream = sys.stderr
+    if stream is None:  # a windowed app can run without one
+        return
+    with contextlib.suppress(OSError, ValueError):  # a closed or broken stderr at interpreter exit
+        stream.write(f"gamgui: could not wipe credential dir {key} ({reason})\n")
+        stream.flush()
 
 
 atexit.register(wipe_live_configs)
