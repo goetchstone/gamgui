@@ -765,6 +765,9 @@ def test_remove_deletes_only_that_spellings_credentials_and_redraws_the_panel(ct
     assert vault.backend.get_password("gamgui:example.com", "oauth2service") is not None   # its own: kept
     assert 'id="tenant-panel"' in r.text and "Removed Example.com" in r.text
     assert 'id="tenant-check"' in r.text                             # one domain left: Check access
+    rec = state.connector.audit.tail()[-1]                           # a key deleted is a change recorded
+    assert (rec["connector"], rec["action"], rec["target"], rec["ok"]) == ("keychain", "remove_domain", "Example.com", True)
+    assert rec["extra"]["outcome"] == "deleted" and rec["argv"] is None
 
 
 def test_remove_refuses_the_active_domain_and_one_not_listed(ctx):
@@ -775,6 +778,7 @@ def test_remove_refuses_the_active_domain_and_one_not_listed(ctx):
     assert "is the active domain" in client.post("/setup/remove", data={"remove": "example.com"}).text
     assert "No credentials for that domain" in client.post("/setup/remove", data={"remove": "example.net"}).text
     assert vault.list_domains() == ["example.com", "example.org"] and vault.has_credentials("example.com")
+    assert state.connector.audit.tail() == []                       # refused before any change: no record
 
 
 def test_a_refused_keychain_delete_says_so_and_keeps_the_domain_listed(ctx, monkeypatch):
@@ -790,6 +794,9 @@ def test_a_refused_keychain_delete_says_so_and_keeps_the_domain_listed(ctx, monk
     r = client.post("/setup/remove", data={"remove": "example.org"})
     assert "The Keychain refused" in r.text and 'role="alert"' in r.text
     assert vault.list_domains() == ["example.com", "example.org"]
+    rec = state.connector.audit.tail()[-1]                           # part of the set may be gone: recorded
+    assert (rec["action"], rec["target"], rec["ok"]) == ("remove_domain", "example.org", False)
+    assert "-25293" in rec["extra"]["error"]
 
 
 def test_a_failed_case_probe_says_the_keychain_refused_and_removes_nothing(ctx, monkeypatch):
@@ -819,6 +826,8 @@ def test_removing_a_twin_where_the_keychain_folds_case_forgets_it_and_keeps_the_
     r = client.post("/setup/remove", data={"remove": "Example.com"})
     assert "were kept" in r.text and vault.list_domains() == ["example.com"]
     assert vault.backend.get_password("gamgui:Example.com", "oauth2service") is not None   # nothing deleted
+    extra = state.connector.audit.tail()[-1]["extra"]                # which way the probe went, kept
+    assert extra["outcome"] == "forgotten" and extra["twin"] == "example.com"
 
 
 def test_a_passing_import_verify_redraws_the_tenant_panel(ctx):

@@ -59,6 +59,7 @@ def _matches(record: Dict[str, Any], q: str) -> bool:
         str(record.get("action") or ""),
         str(record.get("target") or ""),
         str(record.get("extra", {}).get("error") or "") if isinstance(record.get("extra"), dict) else "",
+        str(record.get("extra", {}).get("detail") or "") if isinstance(record.get("extra"), dict) else "",
         " ".join(str(a) for a in (record.get("argv") or [])),
     ]
     return any(q in h.lower() for h in haystack)
@@ -125,17 +126,19 @@ def _export_csv(path: Path, q: str, failed: bool) -> Iterator[str]:
         buf.truncate(0)
         return chunk
 
-    writer.writerow(["ts", "action", "target", "ok", "exit_code", "error", "argv"])
+    # "detail" is last so the earlier columns keep their places: what a change with no argv did.
+    writer.writerow(["ts", "action", "target", "ok", "exit_code", "error", "argv", "detail"])
     yield flush()
     for r in iter_records(path):
         if not _keep(r, q, failed):
             continue
         extra = r.get("extra") if isinstance(r.get("extra"), dict) else {}
         error = (extra or {}).get("error", "")
+        detail = (extra or {}).get("detail", "")
         argv = " ".join(str(a) for a in (r.get("argv") or []))
         writer.writerow([_csv_safe(c) for c in
                          (r.get("ts", ""), r.get("action", ""), r.get("target", ""),
-                          r.get("ok"), r.get("exit_code"), error, argv)])
+                          r.get("ok"), r.get("exit_code"), error, argv, detail)])
         yield flush()
 
 

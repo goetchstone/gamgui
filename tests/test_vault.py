@@ -338,8 +338,8 @@ def test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_sh
     v = SecretsVault(backend=_FoldingBackend())
     v.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
     v.set_all("example.com", {"oauth2": "tok", "oauth2service": "{}"})
-    note = SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
-    assert "were kept" in note
+    removal = SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
+    assert removal.outcome == "forgotten" and removal.twin == "example.com" and "were kept" in removal.message
     assert v.list_domains() == ["example.com"] and v.has_credentials("example.com")
 
 

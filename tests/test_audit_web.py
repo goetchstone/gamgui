@@ -211,6 +211,20 @@ def test_audit_rows_failed_filter(client):
     assert "alice@example.com" not in r.text
 
 
+def test_a_change_with_no_argv_shows_searches_and_exports_its_detail(client):
+    # Removing a domain's Keychain credentials runs no gam: its record says what it did in extra.detail.
+    _seed(client.audit_path, [
+        {"ts": "2026-10-02T12:00:00+00:00", "connector": "keychain", "action": "remove_domain",
+         "target": "Example.com", "argv": None, "ok": True,
+         "extra": {"outcome": "deleted", "detail": "Credentials deleted from the Keychain."}},
+    ])
+    rows = client.get("/audit/rows").text
+    assert "Credentials deleted from the Keychain." in rows and "remove_domain" in rows
+    assert "Example.com" in client.get("/audit/rows", params={"q": "deleted from the keychain"}).text
+    lines = client.get("/audit/export.csv").text.splitlines()
+    assert lines[1].endswith(",Credentials deleted from the Keychain.")
+
+
 def test_audit_rows_query_filter(client):
     _seed(client.audit_path, [
         {"ts": "t1", "action": "set_vacation", "target": "alice@example.com", "ok": True},
@@ -289,7 +303,7 @@ def test_audit_export_csv(client):
     assert "attachment" in r.headers["content-disposition"]
     assert "audit-export.csv" in r.headers["content-disposition"]
     lines = r.text.splitlines()
-    assert lines[0] == "ts,action,target,ok,exit_code,error,argv"
+    assert lines[0] == "ts,action,target,ok,exit_code,error,argv,detail"
     assert "alice@example.com" in lines[1]
 
 
@@ -406,7 +420,7 @@ def test_audit_export_csv_no_records_still_200(client):
     r = client.get("/audit/export.csv")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
-    assert r.text.splitlines()[0] == "ts,action,target,ok,exit_code,error,argv"
+    assert r.text.splitlines()[0] == "ts,action,target,ok,exit_code,error,argv,detail"
 
 
 # --- unconnected: routes shouldn't 500 even with no connector -----------------------------

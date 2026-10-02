@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from ...core.audit import AuditLog
 from ...core.connectors.gam_connector import GAMConnector
 from ...core.setup import SetupService
 from ..server import TEMPLATES
@@ -156,18 +157,32 @@ async def _verify_and_activate(request: Request, domain: str, admin: str, switch
 async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLResponse:
     """Delete a listed, inactive domain's credentials from the Keychain (``SetupService.remove_domain``)
     and re-render the tenant panel with what happened. Local only: no gam call. ``remove`` is the
-    index's exact spelling, never lowercased, so a capitalized entry from before can be removed."""
+    index's exact spelling, never lowercased, so a capitalized entry from before can be removed.
+
+    Audited as ``remove_domain`` (connector ``keychain``): deleting a domain-wide key is a change worth
+    a record, and the record keeps which way the case probe went (``extra.outcome``). A refusal by the
+    app (the active domain, one not listed) changed nothing and isn't recorded; one by the Keychain
+    may have deleted part of the set, so it is, with the error."""
     st = request.app.state.gamgui
     active = st.connector.domain if st.connector else ""
+    audit = st.connector.audit if st.connector else AuditLog()     # the log the Audit page reads
+    domain = remove.strip()
     notice = error = ""
     try:
         # Keychain deletes and the case probe are synchronous: off the event loop.
-        notice = await asyncio.to_thread(_service(request).remove_domain, remove.strip(), active)
+        removal = await asyncio.to_thread(_service(request).remove_domain, domain, active)
     except ValueError as exc:
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 — a refused or locked Keychain: the items may remain
         # It may be the case probe or a delete that failed: say only that the Keychain refused.
-        error = f"The Keychain refused the change ({exc}), so {remove.strip()} stays listed. Try Remove again."
+        error = f"The Keychain refused the change ({exc}), so {domain} stays listed. Try Remove again."
+        audit.record("remove_domain", connector="keychain", target=domain, ok=False, extra={"error": str(exc)})
+    else:
+        notice = removal.message
+        detail = ("Credentials deleted from the Keychain." if removal.outcome == "deleted" else
+                  f"Dropped from the list; its credentials are {removal.twin}'s and were kept.")
+        audit.record("remove_domain", connector="keychain", target=domain, ok=True,
+                     extra={"outcome": removal.outcome, "detail": detail, **({"twin": removal.twin} if removal.twin else {})})
     return TEMPLATES.TemplateResponse(
         request, "_tenant_panel.html",
         {"domains": st.vault.list_domains(), "active": active, "notice": notice, "error": error},

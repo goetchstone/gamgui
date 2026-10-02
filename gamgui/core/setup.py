@@ -401,6 +401,14 @@ class DirInspection:
 
 
 @dataclass
+class Removal:
+    """What :meth:`SetupService.remove_domain` did, for the page and the audit log."""
+    outcome: str          # "deleted": its items are gone; "forgotten": only dropped from the index
+    message: str
+    twin: str = ""        # for "forgotten": the spelling whose items it shared, which were kept
+
+
+@dataclass
 class VerifyResult:
     ok: bool
     summary: str
@@ -683,9 +691,9 @@ class SetupService:
     def is_ready(self, domain: str) -> bool:
         return self.vault.has_credentials(domain)
 
-    def remove_domain(self, domain: str, active: str) -> str:
+    def remove_domain(self, domain: str, active: str) -> Removal:
         """Delete ``domain``'s credentials from the Keychain and drop it from the index; returns what
-        happened, for the page. ``domain`` is the index's exact spelling (one imported before domains
+        happened, for the page and the audit log. ``domain`` is the index's exact spelling (one imported before domains
         were lowercased may be capitalized). Refuses a domain the index doesn't list and the active
         one. A spelling that differs only in case from another listed domain is forgotten, not
         deleted, when the Keychain folds case: its items are the other's too
@@ -701,10 +709,11 @@ class SetupService:
         twins = sorted({d for d in (*listed, active) if d and d != domain and d.lower() == domain.lower()})
         if twins and self.vault.folds_case():
             self.vault.forget_domain(domain)
-            return (f"Removed {domain} from the list. This Keychain's deletes ignore capitalization, so "
-                    f"deleting its credentials would delete {twins[0]}'s too: they were kept.")
+            return Removal("forgotten", f"Removed {domain} from the list. This Keychain's deletes ignore "
+                           f"capitalization, so deleting its credentials would delete {twins[0]}'s too: they "
+                           "were kept.", twin=twins[0])
         self.vault.clear_domain(domain)
-        return f"Removed {domain}: its credentials are deleted from the Keychain."
+        return Removal("deleted", f"Removed {domain}: its credentials are deleted from the Keychain.")
 
     # --- Domain-Wide Delegation helper -------------------------------------------------
     def dwd_details(self, domain: str) -> Dict[str, object]:
