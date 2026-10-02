@@ -35,6 +35,9 @@ _REQUIRED = ("oauth2service", "oauth2")
 
 _INDEX_SERVICE = "gamgui"
 _INDEX_KEY = "_domains"
+# folds_case's throwaway item: mixed case, so its lowercased lookup only matches if the store folds.
+_PROBE_SERVICE = "gamgui-probe:CaseProbe"   # outside the gamgui:<domain> namespace
+_PROBE_KEY = "probe"
 
 
 class VaultBackend(Protocol):
@@ -201,6 +204,30 @@ class SecretsVault:
         for name in _DELETE_ORDER:
             self.delete(domain, name)
         self._unregister_domain(domain)
+
+    def forget_domain(self, domain: str) -> None:
+        """Drop ``domain`` from the index and the cache, deleting no Keychain item: for a spelling whose
+        items the store may share with another (see :meth:`folds_case`)."""
+        for name in CREDENTIAL_NAMES:
+            self._cache.pop((domain, name), None)
+        self._unregister_domain(domain)
+
+    def folds_case(self) -> bool:
+        """Whether deleting a service also deletes it under another capitalization. Domains were once
+        stored as typed, so ``Example.com`` and ``example.com`` can both be listed; if the store folds
+        case, deleting either deletes both. SecItem matching is documented as case-sensitive, but a
+        delete of a key that can impersonate anyone isn't left to a document: this stores a throwaway
+        item (no secret) under both spellings, deletes the capitalized one and looks for the other —
+        the delete itself, not a lookup, is what has to be case-exact."""
+        upper, lower = _PROBE_SERVICE, _PROBE_SERVICE.lower()
+        try:
+            self.backend.set_password(lower, _PROBE_KEY, "probe")
+            self.backend.set_password(upper, _PROBE_KEY, "probe")
+            self.backend.delete_password(upper, _PROBE_KEY)
+            return self.backend.get_password(lower, _PROBE_KEY) is None
+        finally:
+            self.backend.delete_password(upper, _PROBE_KEY)
+            self.backend.delete_password(lower, _PROBE_KEY)
 
     # --- domain index ------------------------------------------------------------------
     def list_domains(self) -> list:

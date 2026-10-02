@@ -12,6 +12,8 @@ GAM_MOCK_ARGV_LOG=<file> to record every argv the mock receives.
                           brand-new Google account does, and the retries wait seconds, not minutes —
                           to look at "waiting for Google" (e.g. 3, with a role that has a signature
                           and a calendar)
+    --case-twin           the Keychain also lists "Example.com", as an import from before domains
+                          were lowercased left it — to look at Setup's switcher and Remove
 
 A write that "works" here only proves the mock accepted it (CLAUDE.md, "the mock lies").
 """
@@ -52,11 +54,14 @@ def build_app(state_dir: Path):
     from gamgui.web.server import AppState, create_app, loopback_hosts
 
     vault = SecretsVault(backend=InMemoryBackend())
-    vault.set_all(DOMAIN, {
+    fake = {
         "client_secrets": '{"installed": {"client_id": "fake"}}',
         "oauth2": "fake-oauth2-token",
         "oauth2service": '{"type": "service_account", "private_key": "fake"}',
-    })
+    }
+    vault.set_all(DOMAIN, fake)
+    if "--case-twin" in sys.argv:
+        vault.set_all(DOMAIN.capitalize(), fake)   # an import from before domains were lowercased
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=state_dir)
     connector = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(state_dir / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=connector, token=TOKEN)

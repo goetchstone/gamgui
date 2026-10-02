@@ -1,0 +1,16 @@
+{# The active tenant (plan U10b), on Setup. Re-rendered whole by POST /setup/remove, and sent out of band by
+   a passing import verify (_verify.html, whose answer lands in #wizard-next), so the list follows a domain
+   just connected. Switching and checking are one verify through /setup/switch, a read: the connector
+   changes only on a pass, and re-checking the active domain keeps its previews. Hidden, not absent, when
+   there is nothing to show, so those swaps always find it. #}
+{% set show = domains | length > 1 or active %}
+<div id="tenant-panel"{% if panel_oob %} hx-swap-oob="true"{% endif %}{% if not show %} hidden{% endif %}>
+{% if show %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    {% include "_tenant_controls.html" %}
+    {% if notice %}<p class="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">{{ notice }}</p>{% endif %}
+    {% if error %}<p class="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="alert">{{ error }}</p>{% endif %}
+    <div id="tenant-result"></div>
+  </div>
+{% endif %}
+</div>

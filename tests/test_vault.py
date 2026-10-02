@@ -294,3 +294,61 @@ def test_keyring_backend_over_the_real_macos_backend(status, raises, monkeypatch
             backend.delete_password("gamgui:a.com", "oauth2")
     else:
         backend.delete_password("gamgui:a.com", "oauth2")
+
+
+# --- a domain stored twice by capitalization (failure-log 2026-10-02) --------------------------------
+
+class _FoldingBackend(InMemoryBackend):
+    """A store that matches service names whatever their case, as the Keychain is documented not to:
+    the one where deleting "Example.com" would delete "example.com"'s items too."""
+
+    @staticmethod
+    def _k(service: str, username: str) -> str:
+        return f"{service.lower()}\x00{username}"
+
+
+class _DeleteFoldingBackend(InMemoryBackend):
+    """Lookups case-exact, deletes not: the store a lookup-only probe would have called safe."""
+
+    def delete_password(self, service: str, username: str) -> None:
+        target = self._k(service, username).lower()
+        for key in [k for k in self._store if k.lower() == target]:
+            del self._store[key]
+
+
+@pytest.mark.parametrize(("backend", "folds"),
+                         [(InMemoryBackend, False), (_FoldingBackend, True), (_DeleteFoldingBackend, True)])
+def test_folds_case_probes_the_store_and_leaves_nothing_behind(backend, folds):
+    store = backend()
+    assert SecretsVault(backend=store).folds_case() is folds
+    assert store._store == {}                                      # the probe item is gone either way
+
+
+def test_forget_domain_drops_the_name_and_deletes_no_item(empty_vault):
+    empty_vault.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
+    empty_vault.forget_domain("Example.com")
+    assert empty_vault.list_domains() == []
+    assert empty_vault.backend.get_password("gamgui:Example.com", "oauth2") == "tok"
+
+
+def test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_share():
+    # Two index entries, one item set: deleting "Example.com" would take "example.com"'s key with it.
+    from gamgui.core.setup import SetupService
+
+    v = SecretsVault(backend=_FoldingBackend())
+    v.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
+    v.set_all("example.com", {"oauth2": "tok", "oauth2service": "{}"})
+    note = SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
+    assert "were kept" in note
+    assert v.list_domains() == ["example.com"] and v.has_credentials("example.com")
+
+
+def test_an_unlisted_active_spelling_still_counts_as_the_twin():
+    # Verify lowercases: on a folding store "example.com" can be active through "Example.com"'s items
+    # without being listed. Removing "Example.com" must not delete the key the active tenant runs on.
+    from gamgui.core.setup import SetupService
+
+    v = SecretsVault(backend=_FoldingBackend(), cache_ttl=0)
+    v.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
+    SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
+    assert v.has_credentials("example.com")

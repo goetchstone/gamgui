@@ -1,0 +1,50 @@
+{# The tenant panel's controls: Check access for one connected domain, else the switcher and a Remove per
+   inactive domain (POST /setup/remove). A passing switch sends this back out of band (_verify.html), so the
+   "(active)" mark and the Remove list follow the new active domain; #tenant-result, where the switch's own
+   answer lands, sits outside it. Each branch holds the one [name='tenant'] that its button and
+   _verify.html's "Verify again" post; Remove sends its domain in hx-vals, so it adds no second one. #}
+{% set input_cls = "w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set btn_primary = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}
+<div id="tenant-controls"{% if controls_oob %} hx-swap-oob="true"{% endif %}>
+  {% if domains | length <= 1 %}
+  <h2 class="eyebrow text-brand-grayink">Connected tenant</h2>
+  <p class="text-sm text-brand-blueink mt-2 max-w-2xl">Check access runs setup's verify again for {{ active }}: a read-only GAM check of the service account's key and its Domain-Wide Delegation scopes (Gmail, Calendar, Drive, Tasks). Use it when a page says a scope isn't authorized: it names what failed and links to the fix. It doesn't check the admin sign-in.</p>
+  <div id="tenant-check" class="mt-4">
+    <input type="hidden" name="tenant" value="{{ active }}" />
+    <button class="{{ btn_primary }}" hx-post="/setup/switch" hx-target="#tenant-result" hx-swap="innerHTML"
+            hx-include="[name='tenant'],[name='admin']">Check access</button>
+  </div>
+  {% else %}
+  <h2 class="eyebrow text-brand-grayink">Switch tenant</h2>
+  <p class="text-sm text-brand-blueink mt-2">The Keychain holds credentials for {{ domains | length }} domains. Switching verifies the one you pick, then makes it active; pick the active one to check its access again.</p>
+  <div id="tenant-switch" class="mt-4 flex items-end gap-3">
+    <label class="block">
+      <span class="text-sm text-brand-blueink">Domain</span>
+      <select class="{{ input_cls }} mt-1.5" name="tenant">
+        {% for d in domains %}<option value="{{ d }}"{% if d == active %} selected{% endif %}>{{ d }}{% if d == active %} (active){% endif %}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="{{ btn_primary }}" hx-post="/setup/switch" hx-target="#tenant-result" hx-swap="innerHTML"
+            hx-include="[name='tenant'],[name='admin']">Switch</button>
+  </div>
+  {% set others = domains | reject("equalto", active) | list %}
+  {% if others %}
+  <div id="tenant-remove" class="mt-5 border-t border-brand-gray/30 pt-4">
+    <p class="text-sm text-brand-blueink">Remove a domain you no longer use: its credentials are deleted from the Keychain. Only importing its GAM config again brings it back. The active domain can't be removed; switch away from it first.</p>
+    <ul class="mt-3 space-y-2">
+      {% for d in others %}
+      {# Another listed spelling of this domain (stored as typed before domains were lowercased) stays. #}
+      {% set twin = domains | reject("equalto", d) | map("lower") | select("equalto", d | lower) | list %}
+      <li class="flex items-center justify-between gap-3 text-sm border-b border-brand-gray/20 pb-2">
+        <span class="min-w-0 truncate text-brand-black">{{ d }}</span>
+        <button class="shrink-0 text-xs text-red-700 hover:underline"
+                hx-post="/setup/remove" hx-target="#tenant-panel" hx-swap="outerHTML" hx-disabled-elt="this"
+                hx-confirm="{% if twin %}Remove {{ d }}? It's another spelling of a listed domain, which stays connected.{% else %}Remove {{ d }} and delete its credentials from the Keychain?{% endif %}"
+                hx-vals='{"remove": {{ d | tojson }} }'>Remove<span class="sr-only"> {{ d }}</span></button>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>

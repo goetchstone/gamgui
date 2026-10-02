@@ -621,7 +621,11 @@ class SetupService:
 
         Expected filesystem trouble (a vanished, unreadable or non-text credential file) is skipped
         quietly; the only exception this raises is an operator-facing ``ValueError`` about the folder.
+
+        ``domain`` is stored lowercased: the Keychain keys a domain by its spelling, and "Example.com"
+        once sat beside "example.com" as a second tenant (failure-log 2026-10-02).
         """
+        domain = domain.strip().lower()
         p = self.resolve_dir(path)
         dir_fd = _pin_bounded_dir(p, self._allowed_root_ids())
         if dir_fd is None:
@@ -678,6 +682,29 @@ class SetupService:
 
     def is_ready(self, domain: str) -> bool:
         return self.vault.has_credentials(domain)
+
+    def remove_domain(self, domain: str, active: str) -> str:
+        """Delete ``domain``'s credentials from the Keychain and drop it from the index; returns what
+        happened, for the page. ``domain`` is the index's exact spelling (one imported before domains
+        were lowercased may be capitalized). Refuses a domain the index doesn't list and the active
+        one. A spelling that differs only in case from another listed domain is forgotten, not
+        deleted, when the Keychain folds case: its items are the other's too
+        (:meth:`SecretsVault.folds_case`). A refused delete raises from the vault and leaves the
+        domain listed, so Remove can be tried again."""
+        listed = self.vault.list_domains()
+        if domain not in listed:
+            raise ValueError("No credentials for that domain in the Keychain.")
+        if domain == active:
+            raise ValueError(f"{domain} is the active domain: switch to another first, then remove it.")
+        # The active spelling counts though unlisted: verify lowercases, so on a store that folds case it
+        # can be connected through a capitalized entry's items.
+        twins = sorted({d for d in (*listed, active) if d and d != domain and d.lower() == domain.lower()})
+        if twins and self.vault.folds_case():
+            self.vault.forget_domain(domain)
+            return (f"Removed {domain} from the list. This Keychain's deletes ignore capitalization, so "
+                    f"deleting its credentials would delete {twins[0]}'s too: they were kept.")
+        self.vault.clear_domain(domain)
+        return f"Removed {domain}: its credentials are deleted from the Keychain."
 
     # --- Domain-Wide Delegation helper -------------------------------------------------
     def dwd_details(self, domain: str) -> Dict[str, object]:
