@@ -70,7 +70,9 @@ Users → Print filelist for the leaver's Drive) and export to a Sheet or CSV.
 - **P1.3** Transfer options: a recipient (default the manager; checked at preview and at run like the
   manager), services (Drive, Calendar, Looker Studio), and `release_resources` only after the mock is
   tightened (it accepts it without Calendar, likely more permissively than GAM). The preview states
-  what a skipped transfer costs ("Drive is not transferred; deleting the account loses it").
+  what a skipped transfer costs ("Drive is not transferred; deleting the account loses it"). With
+  every manager-facing step left out (delegate, auto-reply, transfer, reminder) the manager field
+  should become optional instead of required and checked (P1.1 review).
 - **P1.4** Auto-reply end date, held as an absolute date.
 - **P1.5** A parametrized test: changing any option changes the form key.
 

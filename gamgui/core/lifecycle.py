@@ -78,6 +78,11 @@ NOT_APPLICABLE_COST = {
 }
 
 
+def left_out_line(not_applicable: FrozenSet[str]) -> str:
+    """The one sentence naming the steps left out, in run order — the run log's and the audit's."""
+    return "Doesn't apply, left out: " + ", ".join(STEP_NAMES[k] for k in OPTIONAL_STEPS if k in not_applicable)
+
+
 def effective_requires(key: str, not_applicable: FrozenSet[str] = frozenset()) -> Tuple[str, ...]:
     """``REQUIRES[key]`` with each step that doesn't apply replaced by that step's own requirements:
     leaving the delegate out means the auto-reply and the transfer need only the reset, not that they
@@ -363,10 +368,9 @@ async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str
     offboarding: named in the log and ``job.not_applicable``, never counted as succeeded, and not
     "not run" either, so a routine without them can still be complete. Stop (``job.cancel_requested``)
     ends it between steps, never during one; the rest are "not run: stopped"."""
-    left_out = [k for k in OPTIONAL_STEPS if k in not_applicable]
-    if left_out:
-        job.not_applicable.extend(left_out)
-        job.log.append("· Doesn't apply, left out: " + ", ".join(STEP_NAMES[k] for k in left_out))
+    if not_applicable:
+        job.not_applicable.extend(k for k in OPTIONAL_STEPS if k in not_applicable)
+        job.log.append("· " + left_out_line(not_applicable))
     succeeded = set(done)
     labels = {s.key: s.label for s in steps}
     handled = 0   # steps fully accounted for (run or deliberately skipped)

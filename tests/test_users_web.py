@@ -1721,6 +1721,39 @@ def test_offboarding_without_a_delegate_or_reminder_runs_what_its_preview_showed
     assert plan["target"] == LEAVER and plan["extra"]["not_applicable"] == na
 
 
+def test_leaving_the_delegate_out_skips_its_read_and_warning(client, gam_calls):
+    # The preview's delegate read warns about a step that runs; with the delegate left out it would
+    # warn about nothing (and a failed read would block nothing).
+    _offboard_preview(client, na=["delegate"])
+    assert not [c for c in gam_calls() if "delegates" in c]
+
+
+def test_a_rerun_mixing_done_and_left_out_runs_only_the_rest(client, gam_calls):
+    # First run's reset and sign-out succeeded; the delegate never applied. The re-run runs the rest.
+    shown, token = _offboard_preview(client, done=["password", "revoke"], na=["delegate"])
+    assert "5 of 8 steps (2 ticked as already done, 1 left out)" in unescape(shown.text)
+    job = _job(client, _offboard_run(client, token, done=["password", "revoke"], na=["delegate"]).text,
+               "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    assert [w[:4] for w in gam_writes(gam_calls())] == [
+        ["user", LEAVER, "forward", "off"], ["user", LEAVER, "vacation", "on"],
+        ["create", "datatransfer", LEAVER, "drive,calendar"], ["all", "users", "delete", "calendaracls"],
+        ["user", MGR, "add", "event"]]
+    assert (job.applied, job.skipped) == (5, [])
+
+
+def test_the_live_autoreply_says_none_when_it_is_left_out(client):
+    r = client.post("/lifecycle/offboard/autoreply", data={**OFFBOARD_FORM, "na": ["vacation"]})
+    assert "No auto-reply: it is left out" in r.text and "Thank you" not in r.text
+
+
+def test_nothing_left_to_run_says_why(client, gam_calls):
+    r = client.post("/lifecycle/offboard/preview",
+                    data={**OFFBOARD_FORM, "done": ["password", "revoke", "forward"],
+                          "na": ["delegate", "vacation", "transfer", "calacls", "reminder"]})
+    assert "ticked as already done or left out" in r.text and gam_writes(gam_calls()) == []
+
+
 def test_a_step_cannot_be_both_already_done_and_left_out(client, gam_calls):
     r = client.post("/lifecycle/offboard/preview", data={**OFFBOARD_FORM, "done": ["transfer"], "na": ["transfer"]})
     assert "ticked both as already done and as doesn" in r.text and "pick one" in r.text

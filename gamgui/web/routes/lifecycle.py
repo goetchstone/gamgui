@@ -73,7 +73,8 @@ def _running(st, user: str):
 def _already_running(request: Request, job, user: str) -> HTMLResponse:
     """The refusal, with the running job's own progress panel — the way back to it after a reload."""
     return TEMPLATES.TemplateResponse(request, "_offboard_running.html",
-                                      {"job": job, "user": user, "revoke_label": lifecycle.STEP_NAMES["revoke"]})
+                                      {"job": job, "user": user, "revoke_label": lifecycle.STEP_NAMES["revoke"],
+                                       "step_names": lifecycle.STEP_NAMES})
 
 
 async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
@@ -179,7 +180,7 @@ async def offboard_preview(
     if both := [lifecycle.STEP_NAMES[k] for k in lifecycle.REQUIRES if k in done & na]:
         return error_partial(request, f"“{both[0]}” is ticked both as already done and as doesn't apply — pick one.")
     if not frozenset(lifecycle.REQUIRES) - done - na:
-        return error_partial(request, "Every step is ticked as already done — there is nothing to run.")
+        return error_partial(request, "Every step is ticked as already done or left out — there is nothing to run.")
     check = await _check(st, user, manager)
     if check.errors:
         return error_partial(request, " ".join(check.errors))
@@ -217,6 +218,8 @@ async def offboard_autoreply(
     st = request.app.state.gamgui
     if st.connector is None:
         return HTMLResponse("")
+    if "vacation" in _not_applicable(await request.form()):   # left out: no reply will be sent
+        return HTMLResponse('<p class="text-xs text-brand-grayink">No auto-reply: it is left out of this offboarding.</p>')
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_autoreply.html", {"subject": ar_subject, "message": ar_message})
@@ -259,10 +262,9 @@ async def offboard_run(
     if held.not_applicable:
         # Every write is audited as it runs; this says a missing step was left out on purpose (a
         # transfer nobody wanted), not forgotten.
-        left_out = [lifecycle.STEP_NAMES[k] for k in lifecycle.OPTIONAL_STEPS if k in held.not_applicable]
         conn.audit.record("offboard_plan", target=user, ok=True,
                           extra={"not_applicable": sorted(held.not_applicable),
-                                 "detail": "Doesn't apply, left out: " + ", ".join(left_out)})
+                                 "detail": lifecycle.left_out_line(held.not_applicable)})
     job.task = asyncio.create_task(_run_offboard(st, job, conn, steps, held.done, held.not_applicable))
     st.invalidate_users()  # password/org/etc. are about to change
     return _panel(request, job, user)
