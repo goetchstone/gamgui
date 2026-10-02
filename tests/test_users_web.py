@@ -2236,3 +2236,14 @@ def test_each_calendar_access_remove_button_names_its_row(client, path, params):
     assert_ok_partial(r)
     rows = re.findall(r">Remove(<span class=\"sr-only\">[^<]*</span>)?</button>", r.text)
     assert rows and all(rows), f"an unnamed Remove on {path}"
+
+
+@pytest.mark.parametrize(("na", "sentence"), [
+    ([], "A failed access revoke, auto-reply or calendar clean-up is reported"),
+    (["vacation"], "A failed access revoke or calendar clean-up is reported"),
+    (["calacls"], "A failed access revoke or auto-reply is reported"),
+    (["vacation", "calacls"], "A failed access revoke is reported"),
+])
+def test_the_preview_names_only_the_reported_steps_that_run(client, na, sentence):
+    shown, _ = _offboard_preview(client, na=na)
+    assert sentence in unescape(shown.text)
