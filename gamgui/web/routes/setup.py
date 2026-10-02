@@ -52,7 +52,9 @@ async def do_import(
     admin: Annotated[str, Form()] = "",
     config_dir: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    domain, admin, config_dir = domain.strip(), admin.strip(), config_dir.strip()
+    # Lowercased: the Keychain keys a domain by its spelling, so "Example.com" once made a second entry
+    # beside "example.com" for one tenant (failure-log 2026-10-02).
+    domain, admin, config_dir = domain.strip().lower(), admin.strip(), config_dir.strip()
     if not domain or not admin or not config_dir:
         return TEMPLATES.TemplateResponse(
             request, "_error.html",
@@ -95,7 +97,7 @@ async def fresh(
     info = svc.setup_commands(admin.strip() or "admin@yourdomain.com")
     return TEMPLATES.TemplateResponse(
         request, "_commands.html",
-        {"info": info, "domain": domain.strip(), "admin": admin.strip()},
+        {"info": info, "domain": domain.strip().lower(), "admin": admin.strip()},
     )
 
 
@@ -105,7 +107,7 @@ async def verify(
     domain: Annotated[str, Form()] = "",
     admin: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    domain, admin = domain.strip(), admin.strip()
+    domain, admin = domain.strip().lower(), admin.strip()     # the key import stored
     if not domain or not admin:
         return TEMPLATES.TemplateResponse(
             request, "_error.html", {"message": "Domain and super-admin email are required to verify."}
@@ -145,5 +147,29 @@ async def _verify_and_activate(request: Request, domain: str, admin: str, switch
         audit = st.connector.audit if st.connector else None          # one audit log across a switch
         st.activate(GAMConnector(runner=st.runner, domain=domain, audit=audit))   # busts what the old tenant left
     return TEMPLATES.TemplateResponse(
-        request, "_verify.html", {"result": result, "domain": domain, "admin": admin, "switched": switched}
+        request, "_verify.html",
+        {"result": result, "domain": domain, "admin": admin, "switched": switched,
+         "domains": st.vault.list_domains(), "active": st.connector.domain if st.connector else ""},
+    )
+
+
+@router.post("/remove", response_class=HTMLResponse)
+async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Delete a listed, inactive domain's credentials from the Keychain (``SetupService.remove_domain``)
+    and re-render the tenant panel with what happened. Local only: no gam call. ``remove`` is the
+    index's exact spelling, never lowercased, so a capitalized entry from before can be removed."""
+    st = request.app.state.gamgui
+    active = st.connector.domain if st.connector else ""
+    notice = error = ""
+    try:
+        # Keychain deletes and the case probe are synchronous: off the event loop.
+        notice = await asyncio.to_thread(_service(request).remove_domain, remove.strip(), active)
+    except ValueError as exc:
+        error = str(exc)
+    except Exception as exc:  # noqa: BLE001 — a refused or locked Keychain: the items may remain
+        error = (f"The Keychain refused to delete {remove.strip()}'s credentials ({exc}). It stays listed; "
+                 "try Remove again.")
+    return TEMPLATES.TemplateResponse(
+        request, "_tenant_panel.html",
+        {"domains": st.vault.list_domains(), "active": active, "notice": notice, "error": error},
     )

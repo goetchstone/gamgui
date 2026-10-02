@@ -50,7 +50,10 @@ Open **Setup** (every screen points you there until a domain is connected).
    runs the verify again for the connected domain (when a page says a scope isn't authorized, it
    re-checks the delegated scopes GamGUI's own commands use and links to authorize any that fail),
    and with more than one domain in the Keychain you switch there instead (pick the active one to
-   check it).
+   check it). **Remove** deletes another domain's credentials from the Keychain, for one you no
+   longer use; to remove the active one, switch away from it first. Domains are stored lowercased,
+   so `Example.com` and `example.com` are one domain (an import from before that may have listed
+   both: remove the extra one).
 
 macOS asks for Keychain access the first time each credential is used. **Always Allow** sticks only
 if the app is signed with a stable certificate — see

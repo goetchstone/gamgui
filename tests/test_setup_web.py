@@ -739,6 +739,71 @@ def test_check_access_with_a_failed_scope_shows_it_and_keeps_the_tenant(ctx):
     assert state.connector.domain == "example.com"
 
 
+def test_import_and_verify_store_a_capitalized_domain_lowercased(ctx):
+    # "Example.com" typed at import made a second Keychain entry beside "example.com" for one tenant.
+    client, base, vault, state = ctx
+    cfg = base / "cfg"
+    cfg.mkdir()
+    (cfg / "oauth2.txt").write_text(_oauth2_for("admin@example.com"))
+    (cfg / "oauth2service.json").write_text(json.dumps({"client_id": "x", "type": "service_account"}))
+    client.post("/setup/import", data={"domain": " Example.COM ", "admin": "admin@example.com", "config_dir": str(cfg)})
+    assert vault.list_domains() == ["example.com"]
+    r = client.post("/setup/verify", data={"domain": "Example.com", "admin": "admin@example.com"})
+    assert "All scopes authorized." in r.text and state.connector.domain == "example.com"
+
+
+def test_remove_deletes_only_that_spellings_credentials_and_redraws_the_panel(ctx):
+    client, _, vault, state = ctx
+    _store(vault, "Example.com", "admin@example.com")               # the same tenant, imported as typed
+    _store(vault, "example.com", "admin@example.com")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    page = client.get("/setup").text
+    assert '"remove": "Example.com"' in page and '"remove": "example.com"' not in page   # not the active one
+    r = client.post("/setup/remove", data={"remove": "Example.com"})
+    assert vault.list_domains() == ["example.com"]
+    assert vault.backend.get_password("gamgui:Example.com", "oauth2service") is None
+    assert vault.backend.get_password("gamgui:example.com", "oauth2service") is not None   # its own: kept
+    assert 'id="tenant-panel"' in r.text and "Removed Example.com" in r.text
+    assert 'id="tenant-check"' in r.text                             # one domain left: Check access
+
+
+def test_remove_refuses_the_active_domain_and_one_not_listed(ctx):
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    _store(vault, "example.org", "boss@example.org")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    assert "is the active domain" in client.post("/setup/remove", data={"remove": "example.com"}).text
+    assert "No credentials for that domain" in client.post("/setup/remove", data={"remove": "example.net"}).text
+    assert vault.list_domains() == ["example.com", "example.org"] and vault.has_credentials("example.com")
+
+
+def test_a_refused_keychain_delete_says_so_and_keeps_the_domain_listed(ctx, monkeypatch):
+    from keyring.errors import PasswordDeleteError
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    _store(vault, "example.org", "boss@example.org")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+
+    def refuse(domain):
+        raise PasswordDeleteError("Can't delete password in keychain: (-25293)")
+    monkeypatch.setattr(vault, "clear_domain", refuse)
+    r = client.post("/setup/remove", data={"remove": "example.org"})
+    assert "The Keychain refused" in r.text and 'role="alert"' in r.text
+    assert vault.list_domains() == ["example.com", "example.org"]
+
+
+def test_a_passing_switch_redraws_the_remove_list_for_the_new_active_domain(ctx):
+    # Launch picks the first sorted, "Example.com": to remove it, switch away, then Remove must offer it.
+    client, _, vault, state = ctx
+    _store(vault, "Example.com", "admin@example.com")
+    _store(vault, "example.com", "admin@example.com")
+    state.connector = GAMConnector(runner=state.runner, domain="Example.com")
+    assert '"remove": "Example.com"' not in client.get("/setup").text
+    r = client.post("/setup/switch", data={"tenant": "example.com"})
+    oob = r.text.split('id="tenant-remove" hx-swap-oob="true"')[1]
+    assert '"remove": "Example.com"' in oob and '"remove": "example.com"' not in oob
+
+
 def test_two_domains_offer_a_switcher_and_switching_verifies_and_busts_the_caches(ctx, monkeypatch):
     from gamgui.core.setup import VerifyResult
     client, _, vault, state = ctx

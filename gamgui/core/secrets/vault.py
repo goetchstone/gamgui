@@ -35,6 +35,9 @@ _REQUIRED = ("oauth2service", "oauth2")
 
 _INDEX_SERVICE = "gamgui"
 _INDEX_KEY = "_domains"
+# folds_case's throwaway item: mixed case, so its lowercased lookup only matches if the store folds.
+_PROBE_SERVICE = "gamgui-probe:CaseProbe"   # outside the gamgui:<domain> namespace
+_PROBE_KEY = "probe"
 
 
 class VaultBackend(Protocol):
@@ -201,6 +204,25 @@ class SecretsVault:
         for name in _DELETE_ORDER:
             self.delete(domain, name)
         self._unregister_domain(domain)
+
+    def forget_domain(self, domain: str) -> None:
+        """Drop ``domain`` from the index and the cache, deleting no Keychain item: for a spelling whose
+        items the store may share with another (see :meth:`folds_case`)."""
+        for name in CREDENTIAL_NAMES:
+            self._cache.pop((domain, name), None)
+        self._unregister_domain(domain)
+
+    def folds_case(self) -> bool:
+        """Whether the store finds a service under another capitalization. Domains were once stored as
+        typed, so ``Example.com`` and ``example.com`` can both be listed; if the store folds case they
+        name one set of items, and deleting either deletes both. SecItem matching is documented as
+        case-sensitive, but a delete of a key that can impersonate anyone isn't left to a document:
+        this writes, looks up and deletes one throwaway item that holds no secret."""
+        self.backend.set_password(_PROBE_SERVICE, _PROBE_KEY, "probe")
+        try:
+            return self.backend.get_password(_PROBE_SERVICE.lower(), _PROBE_KEY) is not None
+        finally:
+            self.backend.delete_password(_PROBE_SERVICE, _PROBE_KEY)
 
     # --- domain index ------------------------------------------------------------------
     def list_domains(self) -> list:

@@ -679,6 +679,27 @@ class SetupService:
     def is_ready(self, domain: str) -> bool:
         return self.vault.has_credentials(domain)
 
+    def remove_domain(self, domain: str, active: str) -> str:
+        """Delete ``domain``'s credentials from the Keychain and drop it from the index; returns what
+        happened, for the page. ``domain`` is the index's exact spelling (one imported before domains
+        were lowercased may be capitalized). Refuses a domain the index doesn't list and the active
+        one. A spelling that differs only in case from another listed domain is forgotten, not
+        deleted, when the Keychain folds case: its items are the other's too
+        (:meth:`SecretsVault.folds_case`). A refused delete raises from the vault and leaves the
+        domain listed, so Remove can be tried again."""
+        listed = self.vault.list_domains()
+        if domain not in listed:
+            raise ValueError("No credentials for that domain in the Keychain.")
+        if domain == active:
+            raise ValueError(f"{domain} is the active domain: switch to another first, then remove it.")
+        twins = [d for d in listed if d != domain and d.lower() == domain.lower()]
+        if twins and self.vault.folds_case():
+            self.vault.forget_domain(domain)
+            return (f"Removed {domain} from the list. This Keychain ignores capitalization, so its "
+                    f"credentials are {twins[0]}'s and were kept.")
+        self.vault.clear_domain(domain)
+        return f"Removed {domain}: its credentials are deleted from the Keychain."
+
     # --- Domain-Wide Delegation helper -------------------------------------------------
     def dwd_details(self, domain: str) -> Dict[str, object]:
         """Everything the manual DWD step needs up front: the service account's client ID, the
