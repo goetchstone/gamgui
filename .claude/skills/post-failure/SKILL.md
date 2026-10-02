@@ -54,8 +54,9 @@ Match the lesson to its enforcement home (see
 
 ## Step 5 — Log it
 
-Add a five-field entry to [docs/failure-log.md](../../../docs/failure-log.md),
-newest first: **symptom / cause / why not caught / fix / prevention**. Name the
+Add a five-field entry as a new file in [docs/failure-log/](../../../docs/failure-log/),
+`YYYY-MM-DD-<slug>.md` opening `# YYYY-MM-DD — <title>`: **symptom / cause /
+why not caught / fix / prevention**. Name the
 tripwire in the prevention field — "nothing yet" is a valid and telling answer.
 Touching the failure log is what clears the pre-commit hook's `fix:` block, so
 do this before committing the fix.

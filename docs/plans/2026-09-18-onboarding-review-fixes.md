@@ -17,7 +17,7 @@ read `docs/domains/onboarding.md` before starting (the domain runbook).
 **Repo conventions you must follow (session-specific, not in CLAUDE.md):**
 - Test command: `.venv/bin/python -m pytest -q` (must stay green; expect 576 passed after this).
 - Commit **directly to `main`** (no PR). A local **pre-commit hook hard-blocks any `fix:`/`fix(`
-  commit unless `docs/failure-log.md` was modified within the last hour** — Step 4 below satisfies it.
+  commit unless `docs/failure-log/` was modified within the last hour** — Step 4 below satisfies it.
 - Push as the repo owner (the active `gh` account may lack write access).
 - End the commit message with the `Co-Authored-By:` line your session's attribution reminder gives.
 - Docs follow code in the same commit (Step 5).
@@ -127,7 +127,7 @@ async def test_provision_hire_skips_signature_for_existing_account(connector, tm
                               _hire(name="Ada Byte", email="ada@example.com", create_account=False))
     assert r["ok"] and r["account_created"] is False and r["signature"] is None
 ```
-**4b.** Add this entry to `docs/failure-log.md` directly **below the `---` line** (newest first):
+**4b.** Add this entry to `docs/failure-log/` directly **below the `---` line** (newest first):
 ```markdown
 ## 2026-09-18 — Bulk onboarding applied the role signature to existing accounts
 
@@ -161,7 +161,7 @@ with
 3. Existing `tests/test_onboarding.py::test_add_and_delete_role` must still pass (role save works
    with the detached `q` inputs).
 4. Stage exactly: `gamgui/web/routes/onboarding.py gamgui/web/jobs.py
-   gamgui/web/templates/onboarding.html tests/test_onboarding.py docs/failure-log.md
+   gamgui/web/templates/onboarding.html tests/test_onboarding.py docs/failure-log/
    docs/domains/onboarding.md` (plus this plan file if you want it in history). Do **not** stage
    anything under `.claude/hooks/` or `.claude/settings.json` (gitignored local wiring).
 5. Commit to `main` with a message starting `fix(onboarding): apply the role signature only to

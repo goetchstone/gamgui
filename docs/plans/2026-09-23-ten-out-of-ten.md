@@ -8,7 +8,7 @@ the `docs/domains/` runbook for its area (index: `docs/domains/README.md`). When
 item, update its line below in the same commit.
 
 ## Status by item
-Derived from `git log main..harden-2026-09-23` and `docs/failure-log.md`, which cite the items they
+Derived from `git log main..harden-2026-09-23` and `docs/failure-log/`, which cite the items they
 close. Commits and failure-log entries that cite **"review F<n>"** or **"Finding F<n>"** answer a
 *second* review of this branch (28 findings, kept in session scratch, not in the repo) — not this
 plan's Phase 0 F1–F3.
@@ -328,7 +328,7 @@ lacks sign-out, group removal, licence release; one tenant only; reports you can
 ## Conventions for executing this plan
 One item (or a tight group) per commit, straight to `main` when the operator asks for commits.
 `.venv/bin/python -m pytest -q` green before each commit. A `fix:` commit needs a fresh
-`docs/failure-log.md` entry (the local hook blocks it otherwise) — every CONFIRMED defect below is a
+`docs/failure-log/` entry (the local hook blocks it otherwise) — every CONFIRMED defect below is a
 real incident and gets one. Docs follow code in the same commit (the area's runbook). For the
 security items, one adversarial verification pass on the finished diff earns its cost (CLAUDE.md
 "Working here economically"); for everything else, none. Mutations are never run against the real

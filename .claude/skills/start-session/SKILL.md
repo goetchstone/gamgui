@@ -36,7 +36,7 @@ CLAUDE.md is always loaded — the constitution. The area-specific knowledge is
 **not**: read the [docs/domains](../../../docs/domains) runbook(s) for the area
 you're about to touch (index: [docs/domains/README.md](../../../docs/domains/README.md)),
 including its failure history. If the area has entries in
-[docs/failure-log.md](../../../docs/failure-log.md), read those too.
+[docs/failure-log/](../../../docs/failure-log/), read those too.
 
 ## 4. Live priorities
 

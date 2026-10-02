@@ -20,7 +20,7 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    or a recollection.
 3. **Docs follow code in the same commit.** Touched a domain? Update its
    [docs/domains](../../../docs/domains) runbook in this commit. Fixed a
-   regression? Add a [failure-log](../../../docs/failure-log.md) entry — the
+   regression? Add a [failure-log](../../../docs/failure-log/) entry — the
    pre-commit hook hard-blocks a `fix:`/`fix(` commit that skipped it (bypass
    with `no-failure-log:` in the body for a non-regression fix). See
    [post-failure](../post-failure/SKILL.md). Closed an item of a

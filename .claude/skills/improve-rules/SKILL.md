@@ -14,7 +14,7 @@ drop either and it becomes rule bloat.
 agent that just got burned is the worst judge of whether its bruise deserves a
 constitutional invariant. Evidence accumulates in
 [RULE-FEEDBACK.md](../../../docs/RULE-FEEDBACK.md) and
-[failure-log.md](../../../docs/failure-log.md); judgment happens here, later,
+[failure-log/](../../../docs/failure-log/); judgment happens here, later,
 over the pile.
 
 **It proposes, it does not decide.** Output is a PR against `main`, one focused
@@ -37,7 +37,7 @@ reality required." Read all five sources since the last run:
 2. **The ledger** — `docs/RULE-FEEDBACK.md`, entries since the last run.
    Entries answering *"only if enforced differently"* are the highest value:
    the invariant exists and is simply in the wrong layer.
-3. **The failure log** — `docs/failure-log.md`. A recurring symptom shape across
+3. **The failure log** — `docs/failure-log/`. A recurring symptom shape across
    entries is a candidate for a new invariant or a new tripwire.
 4. **Tripwire / hook / CI firings.** A drift guard (`test_required_command_tokens_present`,
    `test_catalog_matches_grammar`, `test_pinned_version_consistent`), a

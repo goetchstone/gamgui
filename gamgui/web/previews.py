@@ -2,7 +2,7 @@
 
 A confirm button that posts the live form (``hx-include``) runs whatever the form holds when it is
 clicked — a scope widened, an email retyped or another Builder command loaded after Preview ran
-values nobody had checked (docs/failure-log.md, 2026-09-23). So a preview holds the values it
+values nobody had checked (docs/failure-log/, 2026-09-23). So a preview holds the values it
 showed, keyed by the form it was built from, under a fresh token its confirm step posts back as
 ``preview``. The route then runs the held values only when the live form still matches; an edited
 form, a used token and an expired one are refused with a "preview again" message, never run.
