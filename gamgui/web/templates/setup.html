@@ -27,11 +27,22 @@
   <div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ gam_version_warning }}</div>
   {% endif %}
 
-  {% if domains | length > 1 %}
-  <!-- tenant switcher (plan U10b): the Keychain holds several domains; switching is a verify -->
+  {% if domains | length > 1 or active %}
+  <!-- the active tenant (plan U10b). Switching and checking are one verify through /setup/switch, a read:
+       the connector changes only on a pass, and re-checking the active domain keeps its previews. Each
+       branch holds the one [name='tenant'] that the button and _verify.html's "Verify again" post. -->
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    {% if domains | length <= 1 %}
+    <h2 class="eyebrow text-brand-grayink">Connected tenant</h2>
+    <p class="text-sm text-brand-blueink mt-2 max-w-2xl">Check access runs setup's verify again for {{ active }}: a read-only GAM check of the service account's key and its Domain-Wide Delegation scopes (Gmail, Calendar, Drive, Tasks). Use it when a page says a scope isn't authorized: it names what failed and links to the fix. It doesn't check the admin sign-in.</p>
+    <div id="tenant-check" class="mt-4">
+      <input type="hidden" name="tenant" value="{{ active }}" />
+      <button class="{{ btn_primary }}" hx-post="/setup/switch" hx-target="#tenant-result" hx-swap="innerHTML"
+              hx-include="[name='tenant'],[name='admin']">Check access</button>
+    </div>
+    {% else %}
     <h2 class="eyebrow text-brand-grayink">Switch tenant</h2>
-    <p class="text-sm text-brand-blueink mt-2">The Keychain holds credentials for {{ domains | length }} domains. Switching verifies the one you pick, then makes it active.</p>
+    <p class="text-sm text-brand-blueink mt-2">The Keychain holds credentials for {{ domains | length }} domains. Switching verifies the one you pick, then makes it active; pick the active one to check its access again.</p>
     <div id="tenant-switch" class="mt-4 flex items-end gap-3">
       <label class="block">
         <span class="text-sm text-brand-blueink">Domain</span>
@@ -42,6 +53,7 @@
       <button class="{{ btn_primary }}" hx-post="/setup/switch" hx-target="#tenant-result" hx-swap="innerHTML"
               hx-include="[name='tenant'],[name='admin']">Switch</button>
     </div>
+    {% endif %}
     <div id="tenant-result"></div>
   </div>
   {% endif %}

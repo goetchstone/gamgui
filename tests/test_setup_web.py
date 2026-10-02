@@ -706,6 +706,35 @@ def test_one_domain_offers_no_switcher(ctx):
     _store(vault, "example.com", "admin@example.com")
     r = client.get("/setup")
     assert 'id="tenant-switch"' not in r.text
+    assert 'id="tenant-check"' not in r.text                         # nothing connected: nothing to check
+
+
+def test_one_connected_domain_offers_check_access_which_re_verifies_it_in_place(ctx):
+    # A scope error says to fix delegation on Setup, which offered a connected domain nothing to re-run.
+    # Check access posts what the switcher posts, for the active domain, through the mock's real check.
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    page = client.get("/setup").text
+    assert 'id="tenant-check"' in page and 'id="tenant-switch"' not in page
+    assert '<input type="hidden" name="tenant" value="example.com" />' in page
+    assert page.count('name="tenant"') == 1                          # the one value "Verify again" posts
+
+    token = state.previews.hold("signatures", ("form",), "held")
+    r = client.post("/setup/switch", data={"tenant": "example.com", "admin": ""})
+    assert "All scopes authorized." in r.text and 'hx-swap-oob="true"' in r.text
+    assert state.connector.domain == "example.com"
+    assert state.previews.take("signatures", token, ("form",)) == ("held", None)   # a re-check isn't a switch
+
+
+def test_check_access_with_a_failed_scope_shows_it_and_keeps_the_tenant(ctx):
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "partialdwd@example.com")           # the mock's tenant missing two scopes
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    r = client.post("/setup/switch", data={"tenant": "example.com", "admin": ""})
+    assert ">FAIL<" in r.text and "Authorize Domain-Wide Delegation" in r.text
+    assert 'hx-post="/setup/switch"' in r.text                     # Verify again re-checks the same domain
+    assert state.connector.domain == "example.com"
 
 
 def test_two_domains_offer_a_switcher_and_switching_verifies_and_busts_the_caches(ctx, monkeypatch):
