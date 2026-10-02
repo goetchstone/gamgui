@@ -55,7 +55,10 @@ ACCOUNT_WIDE_KINDS = frozenset({GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTH
 
 # Human remediation text shown alongside the raw error.
 _REMEDIATION = {
-    GAMErrorKind.AUTH_EXPIRED: "Your sign-in expired. Re-run setup to refresh authorization.",
+    # The admin token in oauth2.txt was revoked or expired: Setup's Check access tests the service
+    # account, not this, and an import is the only way to replace it.
+    GAMErrorKind.AUTH_EXPIRED: ("Your sign-in expired. Run `gam oauth create` again (Setup's guided commands "
+                                "show how), then import the folder on Setup."),
     # Two places grant a scope, and GAM's usual words ("insufficient authentication scopes") don't say
     # which: an admin-token (client-access) scope — Directory, Reports, admin.directory.user.security for
     # sign-out — is picked in `gam oauth create`; delegation cannot grant it. A per-user API scope

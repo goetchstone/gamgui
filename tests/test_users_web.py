@@ -545,7 +545,7 @@ def test_signatures_apply_stops_when_the_sign_in_has_expired(client, gam_calls, 
     assert (job.done, job.applied, job.failed_total) == (1, 0, 1)      # alice tried; carol never was
     assert _audited(client, 1) == [("set_signature", "alice@example.com", False)]
     done = client.get("/signatures/apply/status", params={"job": job.id}).text
-    assert "Stopped: Your sign-in expired. Re-run setup to refresh authorization." in done
+    assert "Stopped: Your sign-in expired. Run `gam oauth create` again (Setup's guided commands show how), then import the folder on Setup." in unescape(done)
     assert "The remaining 1 was not attempted." in done and "Applied to 0 of 2 before stopping." in done
     assert "<details" in done and "invalid_grant" in done               # GAM's own error, one click away
 
@@ -2028,7 +2028,7 @@ def test_users_page_shows_friendly_error_not_500(client, monkeypatch):
     monkeypatch.setattr(client.app.state.gamgui.connector, "list_users", boom)
     r = client.get("/users")
     assert r.status_code == 200
-    assert "Re-run setup" in r.text  # GAMError.remediation, not a 500
+    assert "then import the folder on Setup" in r.text  # GAMError.remediation, not a 500
 
 
 def test_table_not_connected_shows_message(unconnected_client):

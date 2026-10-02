@@ -24,7 +24,7 @@ USER_QUERY_NOTE = (
 # gam print cros query <QueryCrOS>  — Admin SDK Directory chromeosdevices.list 'query'
 CROS_QUERY_HINTS = [
     "status:provisioned", "asset_id:1234", 'user:"tom sawyer"', "location:seattle",
-    "recent_user:user@domain.com", "sync:2026-01-01..",
+    "recent_user:user@example.com", "sync:2026-01-01..",
     "last_user_activity:2026-06-01..2026-06-30", "aue:2026-01-01..2026-12-31",
     "chrome_version:111", 'public_model_name:"Pixelbook Go"',
 ]
@@ -38,7 +38,7 @@ CROS_QUERY_NOTE = (
 DRIVE_QUERY_HINTS = [
     "'me' in owners", "name contains 'budget'", "fullText contains 'confidential'",
     "mimeType='application/vnd.google-apps.folder'", "trashed=false", "starred=true",
-    "'user@domain.com' in writers", "sharedWithMe=true",
+    "'user@example.com' in writers", "sharedWithMe=true",
     "modifiedTime > '2026-01-01T00:00:00'", "and", "or",
 ]
 DRIVE_QUERY_NOTE = (

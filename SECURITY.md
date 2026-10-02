@@ -59,10 +59,13 @@ guarding them:
   (no `DYLD_*`, no `PYTHON*`); the packaged app always runs its bundled `gam`, ignoring the
   `GAMGUI_GAM_BINARY` development override; and the app and `gam` are signed with the hardened
   runtime, so dyld ignores injected `DYLD_*` variables.
-- **Every mutation is guarded and audited.** `guard.evaluate()` classifies risk and resolves the
-  concrete affected set for a preview; the route that applies it re-checks the posted confirmation
-  with `guard.enforce()` before any write, so a POST that skips the confirm step writes nothing (a
-  tripwire posts to every route to prove it); an account delete needs the exact address typed on
+- **Every mutation goes through the guard and is audited.** `guard.evaluate()` classifies risk and
+  resolves the concrete affected set for a preview; for a destructive change, or any change to many
+  targets, the route that applies it re-checks the posted confirmation with `guard.enforce()` before
+  any write, so a POST that skips the confirm step writes nothing (a tripwire posts to every route,
+  each either gated or exempt with a stated reason). By policy (`core/guard.py`) a single-target,
+  low-risk change runs on one click: a delegate, a signature, an auto-reply, a calendar share, and
+  the Builder's export of a read to a Google Sheet in a named user's Drive. An account delete needs the exact address typed on
   every path; a confirm step that posts the page's form runs the values its preview held under a
   single-use token, so a form edited after the preview writes nothing; and the write is then
   appended to a local audit log — as failed and "interrupted" if quitting cut it off mid-call.
@@ -158,6 +161,7 @@ CPython security release, rebuild `.venv` from the new python.org 3.14.x (`make 
   [Live verification status](README.md#live-verification-status) and rehearse anything unproven on a
   throwaway user, event, or calendar first.
 - Account deletion is reversible only within Google's ~20-day window.
-- Build and run it yourself. Released builds are not notarized for distribution to other Macs.
+- There are no released builds: build and run it yourself. A build is signed for your own Mac (a
+  local certificate or ad hoc), not notarized for distribution to other Macs.
 - GamGUI is provided **as-is under the MIT License, with no warranty**. You are responsible for what
   you run against your own tenant.

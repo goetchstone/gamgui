@@ -1,6 +1,6 @@
 # Plan: GamGUI to 10/10 — security, quality, usability, value
 
-**Status: IN PROGRESS — partly APPLIED on branch `harden-2026-09-23`. Do not re-apply an item that
+**Status: IN PROGRESS — partly APPLIED; the `harden-2026-09-23` branch is merged into `main` and deleted. Do not re-apply an item that
 [Status by item](#status-by-item) marks applied:** its file:line pointers and snippets no longer
 match the code. Written 2026-09-23 at `d5d775b` (597 passed, 1 skipped). Self-contained for a reader
 with no session context. `CLAUDE.md` is auto-loaded — honor its invariants. Before each item, read

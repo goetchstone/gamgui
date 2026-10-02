@@ -13,10 +13,14 @@ dist/
 gamgui/resources/gam7/*
 !gamgui/resources/gam7/.gitkeep
 !gamgui/resources/gam7/VERSION
+# GAM's Apache-2.0 license: the committed catalog below is derived from its grammar
+!gamgui/resources/gam7/LICENSE
 # …but the derived command catalog IS committed (small, powers the Builder + contract test)
 !gamgui/resources/gam7/command_catalog.json
 
-# Secrets / local runtime state must never be committed
+# Secrets / local runtime state must never be committed (the bare names too: a glob like
+# `*.name.json` needs a character before the dot, so it never matched GAM's own file name)
+oauth2service.json
 *.oauth2service.json
 oauth2.txt
 client_secrets.json

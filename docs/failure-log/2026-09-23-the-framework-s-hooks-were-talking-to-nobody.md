@@ -13,6 +13,6 @@
   JSON `additionalContext`), and the checklist is trimmed to the items relevant to the changed files.
   Verified in-session: the injected checklist arrived as hook context. The nudge now also skips
   RULE-FEEDBACK entries marked **Resolved**.
-- **Prevention:** [FRAMEWORK.md](FRAMEWORK.md) §2 now states the channel rule. No automated tripwire
+- **Prevention:** [FRAMEWORK.md](../FRAMEWORK.md) §2 now states the channel rule. No automated tripwire
   (the hooks are local, gitignored wiring) — verify a new or changed hook by looking for its text in
   the model's context, not in a terminal.

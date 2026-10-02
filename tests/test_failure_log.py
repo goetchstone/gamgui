@@ -41,3 +41,13 @@ def test_each_entry_has_the_five_fields():
         text = path.read_text()
         missing = [f for f in fields if f"**{f}" not in text]
         assert not missing, f"{path.name}: missing {missing}"
+
+
+def test_every_relative_link_in_an_entry_resolves():
+    # Entries moved one folder deeper when the log was split; a link written for docs/ breaks silently.
+    broken = []
+    for path in _entries():
+        for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", path.read_text()):
+            if not target.startswith(("http://", "https://", "mailto:")) and not (path.parent / target).exists():
+                broken.append(f"{path.name} -> {target}")
+    assert not broken, broken

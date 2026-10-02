@@ -148,8 +148,9 @@ Every write is audited, so this table comes from real audit logs rather than mem
 means the operation has succeeded at least once against a production Google Workspace domain. **Not
 yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
 it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
-reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
-2026-09-25 on GAM 7.48.11, together with setup's scoped `check serviceaccount scopes …`, `print domains`
+reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`; last full
+run 2026-09-25 on GAM 7.48.11 — the pin is now 7.48.14, on which setup's scope check passed live on
+2026-10-02 — together with setup's scoped `check serviceaccount scopes …`, `print domains`
 for the Builder's External-only filter, and reading the connected admin and its granted scopes from
 `oauth2.txt`).
 
@@ -238,7 +239,7 @@ GAM stores credentials as plaintext files (`client_secrets.json`, `oauth2.txt`,
 `oauth2service.json`) in its config dir. `oauth2service.json` can impersonate **any** user in the
 domain and `oauth2.txt` is effectively an admin password, so GamGUI:
 
-1. keeps the canonical copies in the **Keychain** (`keyring`, device-bound, not synced);
+1. keeps the canonical copies in your login **Keychain** (`keyring`; not synced to iCloud);
 2. materializes them into a `chmod 700` temp dir (files `chmod 600`) set as `GAMCFGDIR` only for
    each `gam` call;
 3. wipes that dir on completion (success or failure) — and, because "the app quit mid-call" is the
@@ -470,4 +471,6 @@ Size icons ~2× their display size and set explicit `width`/`height` on each `<i
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). GamGUI drives [GAM7](https://github.com/GAM-team/GAM) (GAM-team,
+Apache-2.0): the binary is fetched, not committed, and the committed command catalog is derived from
+GAM's grammar, so GAM's license is in [`gamgui/resources/gam7/LICENSE`](gamgui/resources/gam7/LICENSE).

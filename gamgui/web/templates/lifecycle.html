@@ -20,9 +20,9 @@
   <form id="offboard-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
     <div class="grid gap-3 sm:grid-cols-2">
       <label class="block"><span class="text-sm text-brand-blueink">Departing user</span>
-        <input class="{{ fld }}" type="email" name="user" placeholder="leaver@domain.com" required /></label>
+        <input class="{{ fld }}" type="email" name="user" placeholder="leaver@example.com" required /></label>
       <label class="block"><span class="text-sm text-brand-blueink">Manager (delegate / data + reminder)</span>
-        <input class="{{ fld }}" type="email" name="manager" placeholder="manager@domain.com" required /></label>
+        <input class="{{ fld }}" type="email" name="manager" placeholder="manager@example.com" required /></label>
     </div>
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply subject</span>
       <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
@@ -38,7 +38,7 @@
       <label class="block"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
         <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
       <label class="block"><span class="text-sm text-brand-blueink">Also invite to the reminder (IT/HR) — optional</span>
-        <input class="{{ fld }}" type="email" name="notify" placeholder="it@domain.com" /></label>
+        <input class="{{ fld }}" type="email" name="notify" placeholder="it@example.com" /></label>
     </div>
     <fieldset>
       <legend class="text-sm text-brand-blueink">Re-running after a failure? Tick the steps that already succeeded</legend>

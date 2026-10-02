@@ -31,13 +31,13 @@
       <label class="block text-sm"><span class="text-brand-blueink">New hire name</span>
         <input class="{{ fld }} mt-1" name="name" placeholder="Jordan Lee" /></label>
       <label class="block text-sm"><span class="text-brand-blueink">New hire email</span>
-        <input class="{{ fld }} mt-1" type="email" name="email" placeholder="jordan@domain.com" /></label>
+        <input class="{{ fld }} mt-1" type="email" name="email" placeholder="jordan@example.com" /></label>
       <label class="block text-sm"><span class="text-brand-blueink">Role</span>
         <select class="{{ fld }} mt-1" name="role">{% for r in roles %}<option value="{{ r.name }}">{{ r.name }} ({{ r.steps | length }} steps)</option>{% endfor %}</select></label>
       <label class="block text-sm"><span class="text-brand-blueink">Manager</span>
-        <input class="{{ fld }} mt-1" type="email" name="manager" placeholder="manager@domain.com" /></label>
+        <input class="{{ fld }} mt-1" type="email" name="manager" placeholder="manager@example.com" /></label>
       <label class="block text-sm sm:col-span-2"><span class="text-brand-blueink">Assignee — whose Google Tasks gets the checklist <span class="text-brand-grayink">(blank = the new hire)</span></span>
-        <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@domain.com" /></label>
+        <input class="{{ fld }} mt-1" type="email" name="assignee" placeholder="you@example.com" /></label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="send_welcome" value="1" /> Also send the welcome email to the new hire</label>
       <label class="flex items-center gap-2 text-sm text-brand-blueink sm:col-span-2"><input type="checkbox" name="create_account" value="1" data-reveals="ob-create-fields" /> <span><strong>Create the Google account</strong> — with a temp password on a printable sheet; the user must reset it at first login. Uses the role's org unit &amp; signature.</span></label>
       <div id="ob-create-fields" class="hidden gap-3 sm:grid-cols-2 sm:col-span-2">

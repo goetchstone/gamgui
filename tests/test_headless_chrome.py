@@ -11,12 +11,17 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_every_headless_chrome_launch_uses_the_mock_keychain():
-    tracked = subprocess.run(["git", "ls-files", "*.py", "*.sh", "*.js"], cwd=ROOT, capture_output=True,
-                             text=True, check=True).stdout.split()
+    try:
+        tracked = subprocess.run(["git", "ls-files", "*.py", "*.sh", "*.js"], cwd=ROOT, capture_output=True,
+                                 text=True, check=True).stdout.split()
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("not a git checkout (a source ZIP): nothing tracked to scan")
     offenders = [
         f for f in tracked
         if f != "tests/test_headless_chrome.py"
