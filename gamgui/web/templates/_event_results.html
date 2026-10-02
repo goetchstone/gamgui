@@ -12,7 +12,7 @@
     </span>
     <button class="shrink-0 text-xs text-red-700 hover:underline"
             hx-post="/calendars/event/preview" hx-target="#event-action" hx-swap="innerHTML"
-            hx-vals='{"cal": {{ cal | tojson }}, "event_id": {{ e.id | tojson }} }'>Delete…</button>
+            hx-vals='{"cal": {{ cal | tojson }}, "event_id": {{ e.id | tojson }} }'>Delete<span class="sr-only"> {{ e.summary }}, {{ e.when }}</span>…</button>
   </li>
   {% endfor %}
 </ul>
