@@ -3,7 +3,7 @@
 {% set t = active_tenant(request) %}
 <a id="tenant" href="/setup"{% if tenant_oob %} hx-swap-oob="true"{% endif %}
    class="min-w-0 max-w-[13rem] leading-tight hover:text-brand-black transition-colors"
-   title="{{ (t[0] ~ (' as ' ~ t[1] if t[1] else '') ~ ' — switch or reconnect on Setup') if t[0] else 'Connect Google Workspace on Setup' }}">
+   title="{{ (t[0] ~ (' as ' ~ t[1] if t[1] else '') ~ ' — check access or switch on Setup') if t[0] else 'Connect Google Workspace on Setup' }}">
   {% if t[0] %}
   <span class="sr-only">Connected tenant: </span>
   <span class="block truncate text-sm text-brand-black">{{ t[0] }}</span>

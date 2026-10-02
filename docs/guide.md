@@ -48,8 +48,9 @@ Open **Setup** (every screen points you there until a domain is connected).
 4. **Check the header.** Once verified, the top left of every page names the connected domain and
    the admin GamGUI acts as. Glance at it before any change. Click it for Setup: **Check access**
    runs the verify again for the connected domain (when a page says a scope isn't authorized, it
-   names the scope and links to the fix), and with more than one domain in the Keychain you switch
-   there instead (pick the active one to check it).
+   re-checks the delegated scopes GamGUI's own commands use and links to authorize any that fail),
+   and with more than one domain in the Keychain you switch there instead (pick the active one to
+   check it).
 
 macOS asks for Keychain access the first time each credential is used. **Always Allow** sticks only
 if the app is signed with a stable certificate — see

@@ -63,7 +63,8 @@ _REMEDIATION = {
     GAMErrorKind.SCOPE_MISSING: (
         "A required API scope is not authorized. An admin (Directory, Reports) scope is granted by "
         "re-running `gam oauth create` and ticking it; a per-user (Gmail, Calendar, Drive) scope by "
-        "Domain-Wide Delegation: Check access on Setup names the missing one and links to the fix."
+        "Domain-Wide Delegation. Setup re-checks the delegated scopes GamGUI's own commands use and links "
+        "to authorize any that fail."
     ),
     GAMErrorKind.RATE_LIMITED: "Google is rate-limiting requests. Wait a moment and retry.",
     GAMErrorKind.NOT_FOUND: "The requested user, group, or resource was not found.",

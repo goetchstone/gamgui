@@ -719,6 +719,8 @@ def test_one_connected_domain_offers_check_access_which_re_verifies_it_in_place(
     assert 'id="tenant-check"' in page and 'id="tenant-switch"' not in page
     assert '<input type="hidden" name="tenant" value="example.com" />' in page
     assert page.count('name="tenant"') == 1                          # the one value "Verify again" posts
+    check = page.split('id="tenant-check"')[1].split("</div>")[0]    # the button posts that tenant to switch
+    assert 'hx-post="/setup/switch"' in check and "hx-include=\"[name='tenant'],[name='admin']\"" in check
 
     token = state.previews.hold("signatures", ("form",), "held")
     r = client.post("/setup/switch", data={"tenant": "example.com", "admin": ""})
