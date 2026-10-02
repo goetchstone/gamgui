@@ -696,11 +696,13 @@ class SetupService:
             raise ValueError("No credentials for that domain in the Keychain.")
         if domain == active:
             raise ValueError(f"{domain} is the active domain: switch to another first, then remove it.")
-        twins = [d for d in listed if d != domain and d.lower() == domain.lower()]
+        # The active spelling counts though unlisted: verify lowercases, so on a store that folds case it
+        # can be connected through a capitalized entry's items.
+        twins = sorted({d for d in (*listed, active) if d and d != domain and d.lower() == domain.lower()})
         if twins and self.vault.folds_case():
             self.vault.forget_domain(domain)
-            return (f"Removed {domain} from the list. This Keychain ignores capitalization, so its "
-                    f"credentials are {twins[0]}'s and were kept.")
+            return (f"Removed {domain} from the list. This Keychain's deletes ignore capitalization, so "
+                    f"deleting its credentials would delete {twins[0]}'s too: they were kept.")
         self.vault.clear_domain(domain)
         return f"Removed {domain}: its credentials are deleted from the Keychain."
 

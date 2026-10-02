@@ -341,3 +341,14 @@ def test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_sh
     note = SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
     assert "were kept" in note
     assert v.list_domains() == ["example.com"] and v.has_credentials("example.com")
+
+
+def test_an_unlisted_active_spelling_still_counts_as_the_twin():
+    # Verify lowercases: on a folding store "example.com" can be active through "Example.com"'s items
+    # without being listed. Removing "Example.com" must not delete the key the active tenant runs on.
+    from gamgui.core.setup import SetupService
+
+    v = SecretsVault(backend=_FoldingBackend(), cache_ttl=0)
+    v.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
+    SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
+    assert v.has_credentials("example.com")
