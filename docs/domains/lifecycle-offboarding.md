@@ -130,12 +130,31 @@ step (failure-log).
 | Remove from everyone's calendars | continue | Needs only the reset. The account is locked, so a leftover share grants nothing; the reminder doesn't depend on it. **Scope:** every *active* user's *primary* calendar — secondary calendars other users shared with the leaver, and suspended users' calendars, are not swept. |
 | Manager reminder | (last) | — |
 
+### Leaving a step out ("doesn't apply")
+Not every org hands a leaver's mailbox to the manager or moves their data (plan
+`docs/plans/2026-10-02-configurable-offboarding.md`). The form's "Doesn't apply to this leaver" boxes
+(posted as `na`) list `lifecycle.OPTIONAL_STEPS` only — delegate, auto-reply, transfer, calendar
+sweep, reminder; the reset, the sign-out and forwarding off are the minimum lock and always run (a
+crafted `na=password` is ignored, `build_offboard_steps` raises on one). A step left out is not run
+and **never counts as succeeded** — unlike an "already done" tick — so `effective_requires` routes
+the others around it: no delegate means the auto-reply and the transfer need only the reset; no
+transfer means the reminder still needs the delegate (and says "nothing transferred"). `REQUIRES`
+itself is unchanged and pinned. The left-out keys are in the frozen form and the held preview like
+the ticks; ticking one step both ways is refused. The preview strikes it through with
+`NOT_APPLICABLE_COST`'s line (no transfer: "deleting the account loses them") and its dependency,
+auto-reply, reminder and transfer paragraphs follow what runs. The run logs one "· Doesn't apply,
+left out: …" line and fills `job.not_applicable`, which never makes the panel "stopped": a routine
+without them is complete. The run route records `offboard_plan` (target the leaver,
+`extra.not_applicable`, a readable `extra.detail`) whenever a step is left out, so a missing transfer
+reads as decided, not forgotten. With nothing left out every command is today's, byte for byte
+(`test_the_default_offboarding_is_pinned_byte_for_byte`).
+
 ### Re-running after a failure
 The form has one "already done" box per step (`lifecycle.STEP_NAMES`, posted as `done`; the page's
 opening sentence joins the same names, in run order — it once went stale by hand). A ticked
 step is not run and **counts as succeeded** for the steps that require it; the preview shows it
 struck through, without a command, and the ticks are part of the frozen form (tick one after Preview
-and Run refuses). All eight ticked is refused ("nothing to run"). **Tick exactly the `✓` lines of the
+and Run refuses). All eight ticked (or every step ticked or left out) is refused ("nothing to run"). On a re-run, leave out the same steps as before. **Tick exactly the `✓` lines of the
 failed run** — ticking a step that did not succeed tells the routine it did (tick the transfer and
 the reminder runs without one). What each step does if run again after it succeeded (GAM 7.48.11):
 

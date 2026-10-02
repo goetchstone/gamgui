@@ -116,6 +116,14 @@ the routine as a whole, have not yet run on a live domain, so **work through the
 [first live run checklist](domains/lifecycle-offboarding.md#first-live-run-checklist)** with it
 open: what to look at in the preview, and what to verify in Google afterwards.
 
+**A step that doesn't fit your process:** tick it under **Doesn't apply to this leaver? Leave a step
+out**. Any of the hand-over steps can go: no delegate, no auto-reply, no transfer, no calendar sweep,
+no reminder. The preview says what leaving each one out means (no transfer: the files are lost when
+the account is deleted), the run skips it without calling the routine incomplete, and the audit log
+records what was left out. The password reset, the sign-out and turning off forwarding always run.
+Anything beyond these steps, like listing the leaver's Drive files first, is a read in the
+**Builder**, which can export the result to a Sheet or CSV.
+
 **While it runs:** the calendar sweep can take minutes. Don't quit the app; to halt it, use
 **Stop** (see [Jobs](#jobs-and-stop)).
 

@@ -41,6 +41,15 @@
         <input class="{{ fld }}" type="email" name="notify" placeholder="it@example.com" /></label>
     </div>
     <fieldset>
+      <legend class="text-sm text-brand-blueink">Doesn't apply to this leaver? Leave a step out</legend>
+      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {% for key in optional_steps %}
+        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="na" value="{{ key }}" /> {{ step_names[key] }}</label>
+        {% endfor %}
+      </div>
+      <span class="text-xs text-brand-grayink">A step left out is not run and never counts as done; the preview says what leaving it out means. The password reset, the sign-out and turning off forwarding always run.</span>
+    </fieldset>
+    <fieldset>
       <legend class="text-sm text-brand-blueink">Re-running after a failure? Tick the steps that already succeeded</legend>
       <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
         {% for key, name in step_names.items() %}

@@ -409,6 +409,38 @@ READ_BY_CONTRACT = {
 }
 
 
+# Audit records written outside the connector: local changes that run no gam, so they have no
+# _run_write to go through. Each names its function; a new one elsewhere fails below.
+AUDITED_OUTSIDE_CONNECTOR = {
+    ("gamgui/core/setup.py", "remove_domain"): "Setup's Remove deletes a domain's Keychain credentials",
+    ("gamgui/web/routes/lifecycle.py", "offboard_run"): "`offboard_plan`: the steps left out of an offboarding",
+}
+
+
+def test_audit_record_outside_the_connector_only_in_its_allowlist():
+    """The connector test below sees one file; a record written anywhere else in the package would
+    slip past it (Setup's Remove was the first). Every ``audit.record(`` outside the connector must
+    sit in a function named in ``AUDITED_OUTSIDE_CONNECTOR``, so a new one is a decision, not an accident."""
+    import ast
+    offenders = []
+    for path in sorted((ROOT / "gamgui").rglob("*.py")):
+        rel = str(path.relative_to(ROOT))
+        if rel in ("gamgui/core/connectors/gam_connector.py", "gamgui/core/audit.py"):
+            continue
+        src = path.read_text()
+        if "audit.record(" not in src:
+            continue
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                own = [n for n in ast.walk(node) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                       and n.func.attr == "record" and "audit" in ast.unparse(n.func.value)]
+                if own and (rel, node.name) not in AUDITED_OUTSIDE_CONNECTOR:
+                    offenders.append(f"{rel}:{node.name}")
+    assert not offenders, f"audit.record() outside the connector and its allowlist: {sorted(set(offenders))}"
+    for rel, fn in AUDITED_OUTSIDE_CONNECTOR:
+        assert f"def {fn}(" in (ROOT / rel).read_text(), f"stale allowlist entry {rel}:{fn}"
+
+
 def test_audit_record_only_in_run_write_or_allowlist():
     """Invariant #2: every ``self.audit.record(`` in the connector is inside ``_run_write`` or a small,
     named allowlist of documented non-chokepoint audited paths. A NEW audited write path outside them

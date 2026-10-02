@@ -15,10 +15,10 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
   (inactive 90+ days, no 2SV, suspended, missing recovery). Every one is currently a dead end you
   can only click through one user at a time (Home counts them, too). The bulk executor, the guard,
   a job's Stop and "Retry the N that failed" already handle exactly this shape of operation.
-- **Offboarding: skip a step that doesn't apply.** Half there: each step has an "already done" box,
-  so a re-run skips the steps that succeeded, and preview and run stay in sync off the step `key`s.
-  Left: a "doesn't apply" choice (transferring 40 GB of Drive nobody wants) that the preview shows
-  as skipped rather than counting it as done.
+- **Offboarding options.** "Doesn't apply" per step shipped; next, per the plan
+  (`docs/plans/2026-10-02-configurable-offboarding.md`): who receives the data, which services, an
+  auto-reply end date, then a few common steps off by default (GAL off, groups, admin roles,
+  recovery info). Kept simple on purpose: no playbooks; anything else is a Builder read.
 
 ## Then — bigger, still clearly worth it
 

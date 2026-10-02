@@ -220,9 +220,9 @@ def test_offboarding_drops_the_directory_cache_when_its_run_finishes(client, mon
     st = client.app.state.gamgui
     real = core_lifecycle.run_offboard
 
-    async def run_with_a_page_load_mid_run(job, conn, steps, done=frozenset()):
+    async def run_with_a_page_load_mid_run(job, conn, steps, done=frozenset(), not_applicable=frozenset()):
         st.user_cache._items, st.user_cache._at = ["read before the run changed it"], clock.now()
-        await real(job, conn, steps, done=done)
+        await real(job, conn, steps, done=done, not_applicable=not_applicable)
     monkeypatch.setattr(core_lifecycle, "run_offboard", run_with_a_page_load_mid_run)
     body = {"user": "carol@example.com", "manager": "alice@example.com", "subject": "s", "message": "m",
             "days": "30", "notify": ""}

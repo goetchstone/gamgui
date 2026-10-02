@@ -120,6 +120,7 @@ class Job:
 class BatchJob(Job):
     log: List[str] = field(default_factory=list)      # per-step outcome lines (offboarding's handful of steps)
     skipped: List[str] = field(default_factory=list)  # not run: a step it relies on failed (offboarding's few)
+    not_applicable: List[str] = field(default_factory=list)  # offboarding step keys left out on purpose
 
 
 J = TypeVar("J", bound=Job)
