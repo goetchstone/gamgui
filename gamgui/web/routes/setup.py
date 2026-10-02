@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from ...core.audit import AuditLog
 from ...core.connectors.gam_connector import GAMConnector
 from ...core.setup import SetupService
 from ..server import TEMPLATES
@@ -156,18 +157,22 @@ async def _verify_and_activate(request: Request, domain: str, admin: str, switch
 async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLResponse:
     """Delete a listed, inactive domain's credentials from the Keychain (``SetupService.remove_domain``)
     and re-render the tenant panel with what happened. Local only: no gam call. ``remove`` is the
-    index's exact spelling, never lowercased, so a capitalized entry from before can be removed."""
+    index's exact spelling, never lowercased, so a capitalized entry from before can be removed.
+    ``remove_domain`` writes the audit record, to the log the Audit page reads."""
     st = request.app.state.gamgui
     active = st.connector.domain if st.connector else ""
+    audit = st.connector.audit if st.connector else AuditLog()
+    domain = remove.strip()
     notice = error = ""
     try:
         # Keychain deletes and the case probe are synchronous: off the event loop.
-        notice = await asyncio.to_thread(_service(request).remove_domain, remove.strip(), active)
+        removal = await asyncio.to_thread(_service(request).remove_domain, domain, active, audit=audit)
+        notice = removal.message
     except ValueError as exc:
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 — a refused or locked Keychain: the items may remain
         # It may be the case probe or a delete that failed: say only that the Keychain refused.
-        error = f"The Keychain refused the change ({exc}), so {remove.strip()} stays listed. Try Remove again."
+        error = f"The Keychain refused the change ({exc}), so {domain} stays listed. Try Remove again."
     return TEMPLATES.TemplateResponse(
         request, "_tenant_panel.html",
         {"domains": st.vault.list_domains(), "active": active, "notice": notice, "error": error},

@@ -19,5 +19,7 @@
   `test_remove_deletes_only_that_spellings_credentials_and_redraws_the_panel`, and
   `test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_share`, which uses a
   case-folding fake store because the real Keychain can't be tested here. The probe decides at
-  Remove time against the real store, rather than trusting either the document or the mock. Not yet
-  proven live: the operator's removal of the capitalized entry is the first real run.
+  Remove time against the real store, rather than trusting either the document or the mock. Proven
+  live the same day: the operator removed the capitalized entry, and Setup was left with one domain
+  and Check access. Which way the probe went wasn't captured: the page said so once, and nothing
+  kept it. So Remove is now audited (`remove_domain`, with `extra.outcome`).

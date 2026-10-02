@@ -331,24 +331,62 @@ def test_forget_domain_drops_the_name_and_deletes_no_item(empty_vault):
     assert empty_vault.backend.get_password("gamgui:Example.com", "oauth2") == "tok"
 
 
-def test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_share():
-    # Two index entries, one item set: deleting "Example.com" would take "example.com"'s key with it.
+def _remove(v, domain, active, audit):
     from gamgui.core.setup import SetupService
+    return SetupService(v, None).remove_domain(domain, active, audit=audit)  # type: ignore[arg-type]
+
+
+def test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_share(tmp_path):
+    # Two index entries, one item set: deleting "Example.com" would take "example.com"'s key with it.
+    from gamgui.core.audit import AuditLog
 
     v = SecretsVault(backend=_FoldingBackend())
     v.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
     v.set_all("example.com", {"oauth2": "tok", "oauth2service": "{}"})
-    note = SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
-    assert "were kept" in note
+    log = AuditLog(tmp_path / "audit.jsonl")
+    removal = _remove(v, "Example.com", "example.com", log)
+    assert removal.outcome == "forgotten" and removal.twin == "example.com" and "were kept" in removal.message
     assert v.list_domains() == ["example.com"] and v.has_credentials("example.com")
+    assert log.tail()[-1]["extra"] == {"outcome": "forgotten", "detail": removal.detail, "twin": "example.com"}
 
 
-def test_an_unlisted_active_spelling_still_counts_as_the_twin():
+def test_an_unlisted_active_spelling_still_counts_as_the_twin(tmp_path):
     # Verify lowercases: on a folding store "example.com" can be active through "Example.com"'s items
     # without being listed. Removing "Example.com" must not delete the key the active tenant runs on.
-    from gamgui.core.setup import SetupService
+    from gamgui.core.audit import AuditLog
 
     v = SecretsVault(backend=_FoldingBackend(), cache_ttl=0)
     v.set_all("Example.com", {"oauth2": "tok", "oauth2service": "{}"})
-    SetupService(v, None).remove_domain("Example.com", active="example.com")  # type: ignore[arg-type]
+    _remove(v, "Example.com", "example.com", AuditLog(tmp_path / "audit.jsonl"))
     assert v.has_credentials("example.com")
+
+
+def test_a_removal_the_keychain_refuses_partway_records_what_went_first(tmp_path):
+    # The record exists to answer "is its service-account key still there?": oauth2service goes first.
+    from gamgui.core.audit import AuditLog
+
+    fake = _FakeKeyring()
+    v = SecretsVault(backend=_keyring_backend(fake), cache_ttl=0)
+    v.set_all("a.com", {"oauth2": "tok", "oauth2service": "{}"})
+    v.set_all("b.com", {"oauth2": "tok", "oauth2service": "{}"})
+    fake.deny[("gamgui:a.com", "oauth2")] = _DENIED
+    log = AuditLog(tmp_path / "audit.jsonl")
+    with pytest.raises(PasswordDeleteError):
+        _remove(v, "a.com", "b.com", log)
+    rec = log.tail()[-1]
+    assert (rec["action"], rec["target"], rec["ok"]) == ("remove_domain", "a.com", False)
+    assert rec["extra"]["deleted"] == ["oauth2service"] and "before it did: oauth2service." in rec["extra"]["detail"]
+    assert v.list_domains() == ["a.com", "b.com"]                  # still listed: Remove can be tried again
+
+
+def test_a_removal_whose_record_cannot_be_written_still_says_it_happened():
+    class _FullDisk:
+        def record(self, *args, **kwargs):
+            raise OSError(28, "No space left on device")
+
+    v = SecretsVault(backend=InMemoryBackend())
+    v.set_all("a.com", {"oauth2": "tok", "oauth2service": "{}"})
+    v.set_all("b.com", {"oauth2": "tok", "oauth2service": "{}"})
+    removal = _remove(v, "a.com", "b.com", _FullDisk())
+    assert removal.outcome == "deleted" and "couldn't record it" in removal.message
+    assert v.list_domains() == ["b.com"]
