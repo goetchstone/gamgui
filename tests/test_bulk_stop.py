@@ -17,7 +17,7 @@ from gamgui.core.connectors.base import ChangePreview, ChangeResult, ConnectorID
 from gamgui.core.gam.errors import ACCOUNT_WIDE_KINDS, GAMErrorKind
 from gamgui.core.gam.models import GAMUser
 
-EXPIRED = "Your sign-in expired. Re-run setup to refresh authorization."
+EXPIRED = "Your sign-in expired. Run `gam oauth create` again (Setup's guided commands show how), then import the folder on Setup."
 
 
 class _Conn:

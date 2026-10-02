@@ -30,6 +30,21 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-10-02 — Invariant #3 says only the 26 curated commands "can change anything"; a read's Sheet export does too
+- **What happened:** a repo-wide review found SECURITY.md promising every mutation is confirmed and
+  invariant #3 saying the curated commands are the only ones that can *change* anything. The Builder's
+  export of any runnable read (`todrive`) writes a Google Sheet into a named user's Drive on one click
+  (it is audited, through `_run_write`), and 13 single-target LOW writes run without a confirm step by
+  `core/guard.py`'s stated policy. SECURITY.md was corrected (chore/repo-hygiene); the invariant text was not.
+- **Invariant in force:** #3 (only read-only commands may become runnable automatically) and #2.
+- **Why it didn't hold:** weak wording, not a broken guard: "the only ones that can change anything"
+  reads as absolute, and a reviewer took the export and the one-click LOW writes for violations.
+- **Would a rule have caught it?** Only if worded precisely: name the read export as the one write a
+  promoted read can make (a new Sheet, never a change to an existing object), and say where the
+  one-click policy lives.
+- **Enforcement home if changed:** CLAUDE.md wording for #3, plus a tripwire case in
+  `tests/test_write_routes_guarded.py` posting the Builder's export (`td_export`), which no case covers.
+
 ## 2026-10-01 — improve-rules pass: the mock-lies rule held in prose, not for exit codes
 - **What happened:** the observer pass over 8 fix commits since 92e8f36, the 2026-09-30 failure-log
   entries, a failed CI run and two pre-merge review findings. One gap was still open live:

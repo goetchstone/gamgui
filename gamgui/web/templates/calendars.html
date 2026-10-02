@@ -29,7 +29,7 @@
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
       <h2 class="eyebrow text-brand-grayink">A user's calendars</h2>
       <form class="mt-2 flex gap-2" hx-get="/calendars/user" hx-target="#cal-results" hx-swap="innerHTML">
-        <input class="{{ fld }} flex-1" type="email" name="email" aria-label="User's email" placeholder="person@domain.com" />
+        <input class="{{ fld }} flex-1" type="email" name="email" aria-label="User's email" placeholder="person@example.com" />
         <button class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Find</button>
       </form>
     </div>

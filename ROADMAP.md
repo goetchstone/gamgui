@@ -5,7 +5,8 @@ how much a **solo Workspace admin at a 50–5,000 person company** would actuall
 against the effort to build it on top of what already exists.
 
 The organizing constraint: every mutation must keep going through the same chokepoint —
-`GAMCommands` argv builder → `guard.evaluate()` → audited `_run_write()`. A feature that needs a way
+`GAMCommands` argv builder → `ChangePreview` → `guard.enforce()` in the apply route → audited
+`_run_write()` (`guard.evaluate()` only draws the Confirm button). A feature that needs a way
 around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Next — small, and each closes a real daily gap
