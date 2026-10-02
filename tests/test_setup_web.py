@@ -792,6 +792,49 @@ def test_a_refused_keychain_delete_says_so_and_keeps_the_domain_listed(ctx, monk
     assert vault.list_domains() == ["example.com", "example.org"]
 
 
+def test_a_failed_case_probe_says_the_keychain_refused_and_removes_nothing(ctx, monkeypatch):
+    from keyring.errors import KeyringLocked
+    client, _, vault, state = ctx
+    _store(vault, "Example.com", "admin@example.com")
+    _store(vault, "example.com", "admin@example.com")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+
+    def locked():
+        raise KeyringLocked("Can't store password on keychain")
+    monkeypatch.setattr(vault, "folds_case", locked)
+    r = client.post("/setup/remove", data={"remove": "Example.com"})
+    assert "The Keychain refused the change" in r.text and "stays listed" in r.text
+    assert vault.list_domains() == ["Example.com", "example.com"]
+    assert vault.backend.get_password("gamgui:Example.com", "oauth2service") is not None
+
+
+def test_removing_a_twin_where_the_keychain_folds_case_forgets_it_and_keeps_the_items(ctx, monkeypatch):
+    client, _, vault, state = ctx
+    _store(vault, "Example.com", "admin@example.com")
+    _store(vault, "example.com", "admin@example.com")
+    state.connector = GAMConnector(runner=state.runner, domain="example.com")
+    page = client.get("/setup").text
+    assert "Remove Example.com? It's another spelling of a listed domain" in page   # the confirm says so
+    monkeypatch.setattr(vault, "folds_case", lambda: True)
+    r = client.post("/setup/remove", data={"remove": "Example.com"})
+    assert "were kept" in r.text and vault.list_domains() == ["example.com"]
+    assert vault.backend.get_password("gamgui:Example.com", "oauth2service") is not None   # nothing deleted
+
+
+def test_a_passing_import_verify_redraws_the_tenant_panel(ctx):
+    client, base, vault, state = ctx
+    _store(vault, "example.org", "boss@example.org")
+    state.connector = GAMConnector(runner=state.runner, domain="example.org")
+    cfg = base / "cfg"
+    cfg.mkdir()
+    (cfg / "oauth2.txt").write_text(_oauth2_for("admin@example.com"))
+    (cfg / "oauth2service.json").write_text(json.dumps({"client_id": "x", "type": "service_account"}))
+    client.post("/setup/import", data={"domain": "example.com", "admin": "admin@example.com", "config_dir": str(cfg)})
+    r = client.post("/setup/verify", data={"domain": "example.com", "admin": "admin@example.com"})
+    panel = r.text.split('id="tenant-panel" hx-swap-oob="true"')[1]
+    assert '"remove": "example.org"' in panel and '"remove": "example.com"' not in panel
+
+
 def test_a_passing_switch_redraws_the_remove_list_for_the_new_active_domain(ctx):
     # Launch picks the first sorted, "Example.com": to remove it, switch away, then Remove must offer it.
     client, _, vault, state = ctx
@@ -800,8 +843,10 @@ def test_a_passing_switch_redraws_the_remove_list_for_the_new_active_domain(ctx)
     state.connector = GAMConnector(runner=state.runner, domain="Example.com")
     assert '"remove": "Example.com"' not in client.get("/setup").text
     r = client.post("/setup/switch", data={"tenant": "example.com"})
-    oob = r.text.split('id="tenant-remove" hx-swap-oob="true"')[1]
+    oob = r.text.split('id="tenant-controls" hx-swap-oob="true"')[1]
     assert '"remove": "Example.com"' in oob and '"remove": "example.com"' not in oob
+    assert '<option value="example.com" selected>example.com (active)</option>' in oob   # the mark follows
+    assert 'id="tenant-result"' not in oob                       # where this answer is shown: not replaced
 
 
 def test_two_domains_offer_a_switcher_and_switching_verifies_and_busts_the_caches(ctx, monkeypatch):

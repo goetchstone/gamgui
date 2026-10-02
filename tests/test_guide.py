@@ -45,7 +45,7 @@ TEMPLATES = ROOT / "gamgui" / "web" / "templates"
 # Each section of the guide → the templates of the screen it walks through. base.html (the nav and
 # the header) counts for every section.
 SCREENS = {
-    "First setup": ["setup.html", "_tenant_panel.html", "_tenant_remove.html", "_dwd.html", "_verify.html", "_tenant.html"],
+    "First setup": ["setup.html", "_tenant_panel.html", "_tenant_controls.html", "_dwd.html", "_verify.html", "_tenant.html"],
     "Find a user": ["users.html", "_users_table.html", "_as_of.html"],
     "Onboard a new hire": ["onboarding.html", "_onboard_*.html"],
     "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html"],

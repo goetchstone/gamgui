@@ -213,16 +213,21 @@ class SecretsVault:
         self._unregister_domain(domain)
 
     def folds_case(self) -> bool:
-        """Whether the store finds a service under another capitalization. Domains were once stored as
-        typed, so ``Example.com`` and ``example.com`` can both be listed; if the store folds case they
-        name one set of items, and deleting either deletes both. SecItem matching is documented as
-        case-sensitive, but a delete of a key that can impersonate anyone isn't left to a document:
-        this writes, looks up and deletes one throwaway item that holds no secret."""
-        self.backend.set_password(_PROBE_SERVICE, _PROBE_KEY, "probe")
+        """Whether deleting a service also deletes it under another capitalization. Domains were once
+        stored as typed, so ``Example.com`` and ``example.com`` can both be listed; if the store folds
+        case, deleting either deletes both. SecItem matching is documented as case-sensitive, but a
+        delete of a key that can impersonate anyone isn't left to a document: this stores a throwaway
+        item (no secret) under both spellings, deletes the capitalized one and looks for the other —
+        the delete itself, not a lookup, is what has to be case-exact."""
+        upper, lower = _PROBE_SERVICE, _PROBE_SERVICE.lower()
         try:
-            return self.backend.get_password(_PROBE_SERVICE.lower(), _PROBE_KEY) is not None
+            self.backend.set_password(lower, _PROBE_KEY, "probe")
+            self.backend.set_password(upper, _PROBE_KEY, "probe")
+            self.backend.delete_password(upper, _PROBE_KEY)
+            return self.backend.get_password(lower, _PROBE_KEY) is None
         finally:
-            self.backend.delete_password(_PROBE_SERVICE, _PROBE_KEY)
+            self.backend.delete_password(upper, _PROBE_KEY)
+            self.backend.delete_password(lower, _PROBE_KEY)
 
     # --- domain index ------------------------------------------------------------------
     def list_domains(self) -> list:

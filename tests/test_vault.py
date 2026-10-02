@@ -307,7 +307,17 @@ class _FoldingBackend(InMemoryBackend):
         return f"{service.lower()}\x00{username}"
 
 
-@pytest.mark.parametrize(("backend", "folds"), [(InMemoryBackend, False), (_FoldingBackend, True)])
+class _DeleteFoldingBackend(InMemoryBackend):
+    """Lookups case-exact, deletes not: the store a lookup-only probe would have called safe."""
+
+    def delete_password(self, service: str, username: str) -> None:
+        target = self._k(service, username).lower()
+        for key in [k for k in self._store if k.lower() == target]:
+            del self._store[key]
+
+
+@pytest.mark.parametrize(("backend", "folds"),
+                         [(InMemoryBackend, False), (_FoldingBackend, True), (_DeleteFoldingBackend, True)])
 def test_folds_case_probes_the_store_and_leaves_nothing_behind(backend, folds):
     store = backend()
     assert SecretsVault(backend=store).folds_case() is folds

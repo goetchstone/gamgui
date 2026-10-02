@@ -621,7 +621,11 @@ class SetupService:
 
         Expected filesystem trouble (a vanished, unreadable or non-text credential file) is skipped
         quietly; the only exception this raises is an operator-facing ``ValueError`` about the folder.
+
+        ``domain`` is stored lowercased: the Keychain keys a domain by its spelling, and "Example.com"
+        once sat beside "example.com" as a second tenant (failure-log 2026-10-02).
         """
+        domain = domain.strip().lower()
         p = self.resolve_dir(path)
         dir_fd = _pin_bounded_dir(p, self._allowed_root_ids())
         if dir_fd is None:

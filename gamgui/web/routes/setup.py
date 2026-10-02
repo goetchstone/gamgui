@@ -52,8 +52,7 @@ async def do_import(
     admin: Annotated[str, Form()] = "",
     config_dir: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    # Lowercased: the Keychain keys a domain by its spelling, so "Example.com" once made a second entry
-    # beside "example.com" for one tenant (failure-log 2026-10-02).
+    # Lowercased as import_dir stores it, so the DWD step and its verify name the same key.
     domain, admin, config_dir = domain.strip().lower(), admin.strip(), config_dir.strip()
     if not domain or not admin or not config_dir:
         return TEMPLATES.TemplateResponse(
@@ -167,8 +166,8 @@ async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLR
     except ValueError as exc:
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 — a refused or locked Keychain: the items may remain
-        error = (f"The Keychain refused to delete {remove.strip()}'s credentials ({exc}). It stays listed; "
-                 "try Remove again.")
+        # It may be the case probe or a delete that failed: say only that the Keychain refused.
+        error = f"The Keychain refused the change ({exc}), so {remove.strip()} stays listed. Try Remove again."
     return TEMPLATES.TemplateResponse(
         request, "_tenant_panel.html",
         {"domains": st.vault.list_domains(), "active": active, "notice": notice, "error": error},

@@ -8,7 +8,9 @@
   the field, so a second import under another capitalization made a second entry.
 - **Why not caught:** every test and the mock used lowercase domains. The in-memory vault is
   case-sensitive, as the Keychain's `SecItem` matching is documented to be, so nothing modelled a
-  second spelling, and no screen listed the Keychain's domains with a way to remove one.
+  second spelling, and no screen listed the Keychain's domains with a way to remove one. The case
+  had been seen once and patched only for display: the header lowercases the domain ("setup kept
+  whatever was typed", `_active_tenant`), which also hid which spelling was connected.
 - **Fix:** import and verify lowercase the domain. The Setup switcher offers Remove for an inactive
   domain, by its exact stored spelling so an old capitalized entry stays removable. Before deleting a
   spelling that has a case twin, `SecretsVault.folds_case()` probes the real Keychain with a
