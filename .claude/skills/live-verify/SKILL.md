@@ -47,7 +47,8 @@ Only a live run proves a write; the mock has been wrong about flags, group looku
 
 ## 1. Reads
 
-- **`.venv/bin/python scripts/acceptance.py`**, after the warning, is the parser pass for every GAM bump (per-user
+- **`GAMGUI_LIVE_OK=1 .venv/bin/python scripts/acceptance.py`**, after the warning and the operator's go (the
+  local credential-guard hook refuses it without the prefix), is the parser pass for every GAM bump (per-user
   reads on the directory's first user). Exit 0 passed, 1 a FAIL or traceback, 2 no domain. Only a parse error or GAM
   rejecting the shape is a break (§4); an auth or scope FAIL means the operator re-runs setup.
 - **Other reads go through the app** (a `READ_ONLY` Builder command, invariant 3, or a screen); check the values are

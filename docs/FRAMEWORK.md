@@ -36,7 +36,7 @@ had the third layer before it had the other two — the drift guards and the
 | Home | What it is | Strength | Example in this repo |
 |---|---|---|---|
 | **Skill** | A checklist the model reads when activated | Persuasive | [`pre-commit`](../.claude/skills/pre-commit/SKILL.md): "route the mutation through `_run_write`" |
-| **Hook** | Code on a tool event; can hard-block | Hard gate | [`.claude/hooks/pre-commit-check.sh`](../.claude/hooks): blocks a `fix:` commit that skipped the failure log |
+| **Hook** | Code on a tool event; can hard-block | Hard gate | [`.claude/hooks/pre-commit-check.sh`](../.claude/hooks): blocks a `fix:` commit that skipped the failure log; `credential-guard.sh` blocks Keychain reads, shell `gam`, credential paths and unannounced live runs (with `permissions.deny` Read rules for the same paths) |
 | **Tripwire test** | A test that fails CI if a guard is missing or the mock lies | Backstop | `test_required_command_tokens_present`, `test_catalog_matches_grammar`, `test_pinned_version_consistent`; the mock-must-fail-like-GAM tests |
 
 The question every incident asks: **where does this rule live so it can't be
