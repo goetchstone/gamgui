@@ -42,8 +42,9 @@ _FLOW = "offboard"
 class _Preview:
     user: str                  # the directory's primary addresses the steps act on
     manager: str
-    steps: List[lifecycle.OffboardStep]   # the steps to run — the previewed ones not ticked done
+    steps: List[lifecycle.OffboardStep]   # the steps to run — the previewed ones not ticked or left out
     done: FrozenSet[str]                  # keys ticked "already done": not run, and count as succeeded
+    not_applicable: FrozenSet[str] = frozenset()   # keys left out ("doesn't apply"): not run, never succeeded
 
 
 def _done(form) -> FrozenSet[str]:
@@ -51,10 +52,15 @@ def _done(form) -> FrozenSet[str]:
     return frozenset(form.getlist("done")).intersection(lifecycle.REQUIRES)
 
 
+def _not_applicable(form) -> FrozenSet[str]:
+    """The steps the operator left out of this offboarding ("doesn't apply"); only the optional ones."""
+    return frozenset(form.getlist("na")).intersection(lifecycle.OPTIONAL_STEPS)
+
+
 def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str,
-              done: FrozenSet[str]) -> tuple:
+              done: FrozenSet[str], not_applicable: FrozenSet[str] = frozenset()) -> tuple:
     return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
-            tuple(sorted(done)))
+            tuple(sorted(done)), tuple(sorted(not_applicable)))
 
 
 def _running(st, user: str):
@@ -148,7 +154,8 @@ async def page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(
         request, "lifecycle.html",
         {"connected": connector(request) is not None, "subject": lifecycle.DEFAULT_SUBJECT,
-         "message": lifecycle.DEFAULT_MESSAGE, "days": 30, "step_names": lifecycle.STEP_NAMES},
+         "message": lifecycle.DEFAULT_MESSAGE, "days": 30, "step_names": lifecycle.STEP_NAMES,
+         "optional_steps": lifecycle.OPTIONAL_STEPS},
     )
 
 
@@ -163,12 +170,15 @@ async def offboard_preview(
     tenant = st.tenant_key()   # before the address checks read the directory (web/previews.py)
     if st.connector is None:
         return error_partial(request, NOT_CONNECTED)
-    done = _done(await request.form())
-    form = _form_key(user, manager, subject, message, days, notify, done)
+    posted = await request.form()
+    done, na = _done(posted), _not_applicable(posted)
+    form = _form_key(user, manager, subject, message, days, notify, done, na)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return error_partial(request, "Enter both the departing user and the manager email.")
-    if done == frozenset(lifecycle.REQUIRES):
+    if both := [lifecycle.STEP_NAMES[k] for k in lifecycle.REQUIRES if k in done & na]:
+        return error_partial(request, f"“{both[0]}” is ticked both as already done and as doesn't apply — pick one.")
+    if not frozenset(lifecycle.REQUIRES) - done - na:
         return error_partial(request, "Every step is ticked as already done — there is nothing to run.")
     check = await _check(st, user, manager)
     if check.errors:
@@ -177,7 +187,7 @@ async def offboard_preview(
     user, manager = check.user.primary_email, check.manager.primary_email
     if running := _running(st, user):
         return _already_running(request, running, user)
-    if "delegate" not in done and (warning := await _delegate_warning(st.connector, user, manager)):
+    if "delegate" not in done | na and (warning := await _delegate_warning(st.connector, user, manager)):
         check.warnings.append(warning)
     # An emptied field runs the default text — the auto-reply block below shows the default too.
     subject, message = subject or lifecycle.DEFAULT_SUBJECT, message or lifecycle.DEFAULT_MESSAGE
@@ -185,13 +195,14 @@ async def offboard_preview(
     steps = lifecycle.build_offboard_steps(
         user, manager, subject, message, days_i, date.today(),
         notify=notify.strip(), employee_name=await _employee_name(st, user),
-        manager_contact=await _manager_contact(st, manager))
-    to_run = [s for s in steps if s.key not in done]
-    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done), tenant=tenant)
+        manager_contact=await _manager_contact(st, manager), not_applicable=na)
+    to_run = [s for s in steps if s.key not in done | na]
+    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done, na), tenant=tenant)
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
-        {"steps": steps, "done": done, "run_count": len(to_run), "user": user, "manager": manager,
+        {"steps": steps, "done": done, "na": na, "costs": lifecycle.NOT_APPLICABLE_COST,
+         "run_count": len(to_run), "user": user, "manager": manager,
          "days": days_i, "warnings": check.warnings, "token": token,
          "ar_subject": ar_subject, "ar_message": ar_message},
     )
@@ -231,7 +242,8 @@ async def offboard_run(
         return error_partial(request, refusal)
     # Single use: a second Run, or a Run after the form was edited, needs a new preview.
     held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
-                                                               _done(form)), again="click Preview steps again")
+                                                               _done(form), _not_applicable(form)),
+                                     again="click Preview steps again")
     if refusal:
         return error_partial(request, refusal)
     check = await _check(st, held.user, held.manager)   # the directory may have changed since
@@ -244,16 +256,24 @@ async def offboard_run(
     job = start_job(st.jobs, len(steps), kind="offboard", title=f"Offboarding {user}")
     st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
     st.offboard_jobs[user.lower()] = job.id
-    job.task = asyncio.create_task(_run_offboard(st, job, conn, steps, held.done))
+    if held.not_applicable:
+        # Every write is audited as it runs; this says a missing step was left out on purpose (a
+        # transfer nobody wanted), not forgotten.
+        left_out = [lifecycle.STEP_NAMES[k] for k in lifecycle.OPTIONAL_STEPS if k in held.not_applicable]
+        conn.audit.record("offboard_plan", target=user, ok=True,
+                          extra={"not_applicable": sorted(held.not_applicable),
+                                 "detail": "Doesn't apply, left out: " + ", ".join(left_out)})
+    job.task = asyncio.create_task(_run_offboard(st, job, conn, steps, held.done, held.not_applicable))
     st.invalidate_users()  # password/org/etc. are about to change
     return _panel(request, job, user)
 
 
-async def _run_offboard(st, job, conn, steps: List[lifecycle.OffboardStep], done: FrozenSet[str]) -> None:
+async def _run_offboard(st, job, conn, steps: List[lifecycle.OffboardStep], done: FrozenSet[str],
+                        not_applicable: FrozenSet[str] = frozenset()) -> None:
     """The run, then the directory list dropped again: a page loaded while it ran re-read the leaver as
     they were before it (suspended state, org unit, aliases), and the list must not keep that for its TTL."""
     try:
-        await lifecycle.run_offboard(job, conn, steps, done=done)
+        await lifecycle.run_offboard(job, conn, steps, done=done, not_applicable=not_applicable)
     finally:
         st.invalidate_users()
 
@@ -269,4 +289,5 @@ async def offboard_status(request: Request, job: str = "") -> HTMLResponse:
 def _panel(request: Request, job, user: str) -> HTMLResponse:
     """The run's progress panel (polls itself), then its outcome."""
     return TEMPLATES.TemplateResponse(request, "_offboard_run.html",
-                                      {"job": job, "user": user, "revoke_label": lifecycle.STEP_NAMES["revoke"]})
+                                      {"job": job, "user": user, "revoke_label": lifecycle.STEP_NAMES["revoke"],
+                                       "step_names": lifecycle.STEP_NAMES})

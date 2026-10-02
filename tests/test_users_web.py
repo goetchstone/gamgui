@@ -1691,8 +1691,53 @@ def test_offboard_run_executes_exactly_the_previewed_commands(client, gam_calls)
     assert [command_line(c) for c in gam_writes(gam_calls())] == previewed
 
 
+def test_the_offboard_form_offers_doesnt_apply_only_for_the_optional_steps(client):
+    page = client.get("/lifecycle").text
+    boxes = re.findall(r'name="na" value="([a-z]+)"', page)
+    assert boxes == ["delegate", "vacation", "transfer", "calacls", "reminder"]   # never the minimum lock
+
+
+def test_offboarding_without_a_delegate_or_reminder_runs_what_its_preview_showed(client, gam_calls):
+    # "Someone may not want a delegate": left out, said so with its cost, not run, and recorded.
+    import html
+
+    from gamgui.core.lifecycle import command_line
+
+    na = ["delegate", "reminder"]
+    shown, token = _offboard_preview(client, na=na)
+    text = html.unescape(shown.text)
+    assert "doesn't apply: left out. Nobody is given access to the leaver's mailbox." in text
+    assert "No reminder: nothing prompts the account's deletion later." in text
+    assert "or the delegate fails" not in text and "no reminder is set" in text
+    previewed = [html.unescape(t) for t in re.findall(r"<pre[^>]*>(.*?)</pre>", shown.text, re.S)]
+    job = _job(client, _offboard_run(client, token, na=na).text, "/lifecycle/offboard/status")
+    wait_for_job(client, job)
+    written = gam_writes(gam_calls())
+    assert [command_line(c) for c in written] == previewed and len(written) == 6
+    finished = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
+    assert "Offboarding complete" in finished and "left out: Set delegate, Manager reminder" in finished
+    assert "No reminder was set" in finished
+    plan = next(r for r in client.app.state.gamgui.connector.audit.tail() if r["action"] == "offboard_plan")
+    assert plan["target"] == LEAVER and plan["extra"]["not_applicable"] == na
+
+
+def test_a_step_cannot_be_both_already_done_and_left_out(client, gam_calls):
+    r = client.post("/lifecycle/offboard/preview", data={**OFFBOARD_FORM, "done": ["transfer"], "na": ["transfer"]})
+    assert "ticked both as already done and as doesn" in r.text and "pick one" in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_the_minimum_lock_posted_as_left_out_still_runs(client, gam_calls):
+    # The form never offers it; a crafted post is ignored, not obeyed.
+    shown, token = _offboard_preview(client, na=["password", "revoke", "forward"])
+    assert "left out" not in shown.text
+    wait_for_job(client, _job(client, _offboard_run(client, token, na=["password", "revoke", "forward"]).text,
+                              "/lifecycle/offboard/status"))
+    assert _offboard_writes(gam_calls()) == offboard_writes(LEAVER, MGR)
+
+
 @pytest.mark.parametrize("edit", [{"manager": "bob@example.com"}, {"subject": "Changed"}, {"days": "7"},
-                                  {"done": ["password"]}])
+                                  {"done": ["password"]}, {"na": ["delegate"]}])
 def test_offboard_run_refuses_a_form_edited_after_the_preview(client, gam_calls, edit):
     _, token = _offboard_preview(client)
     r = _offboard_run(client, token, **edit)

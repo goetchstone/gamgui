@@ -24,6 +24,76 @@ def test_offboard_steps_order_and_due_date():
     assert "2026-07-23" in steps[-1].summary  # 2026-06-23 + 30 days
 
 
+def test_the_default_offboarding_is_pinned_byte_for_byte():
+    # Configurable offboarding (plan 2026-10-02) must leave the default exactly as it was: every
+    # option at its default sends these eight commands, with these dependencies, in this order.
+    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "{employee} has left",
+                                 "Line one.\nAsk {manager}", 30, date(2026, 6, 23), notify="it@example.com",
+                                 employee_name="Lee Ver", manager_contact="Mo Gr (mgr@example.com)")
+    assert [(s.key, s.requires, s.commands) for s in steps] == [
+        ("password", (), [["update", "user", "leaver@example.com", "password", "random", "changepassword", "off"]]),
+        ("revoke", ("password",), [["user", "leaver@example.com", "deprovision", "signout"]]),
+        ("forward", ("password",), [["user", "leaver@example.com", "forward", "off"]]),
+        ("delegate", ("password",), [["user", "leaver@example.com", "add", "delegate", "mgr@example.com"]]),
+        ("vacation", ("password", "delegate"), [[
+            "user", "leaver@example.com", "vacation", "on", "subject", "Lee Ver has left",
+            "message", "Line one.<br/>Ask Mo Gr (mgr@example.com)", "html", "contactsonly", "false",
+            "domainonly", "false", "start", "Started", "end", "NotSpecified"]]),
+        ("transfer", ("password", "delegate"), [
+            ["create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com", "all"]]),
+        ("calacls", ("password",), [["all", "users", "delete", "calendaracls", "primary", "leaver@example.com"]]),
+        ("reminder", ("password", "delegate", "transfer"), [[
+            "user", "mgr@example.com", "add", "event", "primary",
+            "summary", "Offboarding leaver@example.com: confirm with IT whether to delete the account",
+            "start", "allday", "2026-07-23", "end", "allday", "2026-07-24",
+            "description", "leaver@example.com was offboarded on 2026-06-23 (password reset; data + calendars "
+                           "transferred to mgr@example.com). When you're sure it's safe, tell IT to delete the account.",
+            "attendee", "it@example.com", "sendupdates", "all"]]),
+    ]
+
+
+def test_a_step_left_out_is_routed_around_never_counted_as_succeeded():
+    from gamgui.core.lifecycle import REQUIRES, effective_requires
+
+    assert all(effective_requires(k) == REQUIRES[k] for k in REQUIRES)     # nothing left out: unchanged
+    # No delegate: the auto-reply and the transfer need only the reset, and the reminder the transfer.
+    assert effective_requires("vacation", frozenset({"delegate"})) == ("password",)
+    assert effective_requires("transfer", frozenset({"delegate"})) == ("password",)
+    assert effective_requires("reminder", frozenset({"delegate"})) == ("password", "transfer")
+    # No transfer: the reminder still needs the delegate, through which the manager was first reached.
+    assert effective_requires("reminder", frozenset({"transfer"})) == ("password", "delegate")
+    assert effective_requires("reminder", frozenset({"delegate", "transfer"})) == ("password",)
+
+
+@pytest.mark.parametrize("lock", ["password", "revoke", "forward"])
+def test_the_minimum_lock_cannot_be_left_out(lock):
+    with pytest.raises(ValueError, match="always run"):
+        build_offboard_steps("l@e.com", "m@e.com", "S", "M", 30, date(2026, 6, 23), not_applicable=frozenset({lock}))
+
+
+def test_the_reminder_does_not_claim_a_transfer_that_was_left_out():
+    steps = build_offboard_steps("l@e.com", "m@e.com", "S", "M", 30, date(2026, 6, 23),
+                                 not_applicable=frozenset({"transfer"}))
+    reminder = " ".join(next(s for s in steps if s.key == "reminder").commands[0])
+    assert "nothing transferred" in reminder and "data + calendars transferred" not in reminder
+
+
+async def test_a_run_without_the_steps_left_out_is_complete(connector, gam_calls):
+    from gamgui.web.jobs import start_job
+
+    na = frozenset({"delegate", "reminder"})
+    steps = [s for s in build_offboard_steps("leaver@example.com", "mgr@example.com", "S", "M", 30,
+                                             date(2026, 6, 23), not_applicable=na) if s.key not in na]
+    job = start_job({}, len(steps))
+    await run_offboard(job, connector, steps, not_applicable=na)
+    assert (job.applied, job.failed_items, job.skipped) == (len(steps), [], [])   # complete: none "not run"
+    assert job.not_applicable == ["delegate", "reminder"]
+    assert job.log[0] == "· Doesn't apply, left out: Set delegate, Manager reminder"
+    written = [argv[:4] for argv in gam_writes(gam_calls())]
+    assert ["user", "leaver@example.com", "add", "delegate"] not in written
+    assert ["user", "leaver@example.com", "vacation", "on"] in written            # ran without the delegate
+
+
 async def test_offboard_steps_call_the_right_connector_methods():
     calls = []
 

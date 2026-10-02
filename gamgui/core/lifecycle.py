@@ -64,6 +64,33 @@ REQUIRES: Dict[str, Tuple[str, ...]] = {
     "calacls": ("password",),
     "reminder": ("password", "delegate", "transfer"),
 }
+# The steps an operator may leave out of an offboarding ("doesn't apply"): the hand-over, the sweep and
+# the reminder, for an org that doesn't delegate a leaver's mailbox, set an auto-reply or move their data
+# (plan 2026-10-02). The reset, the sign-out and forwarding off are the minimum lock: they always run.
+OPTIONAL_STEPS: Tuple[str, ...] = ("delegate", "vacation", "transfer", "calacls", "reminder")
+# What leaving each one out costs, said in the preview beside it.
+NOT_APPLICABLE_COST = {
+    "delegate": "Nobody is given access to the leaver's mailbox.",
+    "vacation": "No auto-reply: people who email the leaver get no notice.",
+    "transfer": "Drive files and calendars are not transferred: deleting the account loses them.",
+    "calacls": "Colleagues' calendars stay shared with the leaver's address.",
+    "reminder": "No reminder: nothing prompts the account's deletion later.",
+}
+
+
+def effective_requires(key: str, not_applicable: FrozenSet[str] = frozenset()) -> Tuple[str, ...]:
+    """``REQUIRES[key]`` with each step that doesn't apply replaced by that step's own requirements:
+    leaving the delegate out means the auto-reply and the transfer need only the reset, not that they
+    can't run. A step that doesn't apply never counts as succeeded (unlike one ticked as already done),
+    so it can't satisfy a dependency itself. With nothing left out this is ``REQUIRES[key]``."""
+    out: List[str] = []
+    for req in REQUIRES[key]:
+        for r in (effective_requires(req, not_applicable) if req in not_applicable else (req,)):
+            if r not in out:
+                out.append(r)
+    return tuple(out)
+
+
 # The steps as the form's "already done" boxes name them (a re-run skips a ticked step).
 STEP_NAMES = {"password": "Reset password", "revoke": "Revoke access & sign out", "forward": "Turn off forwarding",
               "delegate": "Set delegate", "vacation": "Auto-reply", "transfer": "Transfer Drive & Calendar",
@@ -247,12 +274,21 @@ class OffboardStep:
 def build_offboard_steps(
     user: str, manager: str, subject: str, message: str, days: int, today: date,
     notify: str = "", employee_name: str = "", manager_contact: str = "",
+    not_applicable: FrozenSet[str] = frozenset(),
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence).
+
+    ``not_applicable`` are the steps left out of this offboarding (only ``OPTIONAL_STEPS``): every step
+    is still returned, for the preview to show, but the others' ``requires`` route around them
+    (:func:`effective_requires`) and the reminder doesn't claim a transfer that won't happen. The caller
+    runs only the steps not left out. With nothing left out the list is today's, byte for byte.
 
     ``employee_name`` / ``manager_contact`` are the directory-resolved display forms used only in the
     auto-reply TEXT; the raw ``manager`` email is still what the delegate/transfer/reminder steps act on.
     """
+    if not not_applicable <= set(OPTIONAL_STEPS):
+        raise ValueError(f"only {', '.join(OPTIONAL_STEPS)} can be left out; the reset, the sign-out and "
+                         f"forwarding off always run")
     employee = employee_name or user
     contact = manager_contact or manager
     subject = fill_autoreply(subject, employee, contact)
@@ -260,9 +296,11 @@ def build_offboard_steps(
     body = autoreply_html(message)   # what's sent; the preview and the step summary show `message`
     due = today + timedelta(days=days)
     reminder_summary = f"Offboarding {user}: confirm with IT whether to delete the account"
+    moved = ("nothing transferred" if "transfer" in not_applicable
+             else f"data + calendars transferred to {manager}")
     reminder_desc = (
-        f"{user} was offboarded on {today.isoformat()} (password reset; data + calendars transferred to "
-        f"{manager}). When you're sure it's safe, tell IT to delete the account."
+        f"{user} was offboarded on {today.isoformat()} (password reset; {moved}). When you're sure it's "
+        f"safe, tell IT to delete the account."
     )
     start, end = due.isoformat(), (due + timedelta(days=1)).isoformat()
     steps = [
@@ -312,16 +350,23 @@ def build_offboard_steps(
                          manager, reminder_summary, start, end, description=reminder_desc, attendee=notify)]),
     ]
     for step in steps:
-        step.requires = REQUIRES[step.key]
+        step.requires = effective_requires(step.key, not_applicable)
     return steps
 
 
-async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str] = frozenset()) -> None:
+async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str] = frozenset(),
+                       not_applicable: FrozenSet[str] = frozenset()) -> None:
     """Run the steps in order into ``job`` (a ``web/jobs.py`` ``BatchJob``, which the route polls). A
     step whose ``requires`` did not all succeed is not run (logged "–"), so a failed reset or delegate
     stops the routine instead of half-offboarding the account. ``done`` are the steps ticked as
-    already done by an earlier run: they satisfy ``requires``. Stop (``job.cancel_requested``) ends
-    it between steps, never during one; the rest are "not run: stopped"."""
+    already done by an earlier run: they satisfy ``requires``. ``not_applicable`` were left out of this
+    offboarding: named in the log and ``job.not_applicable``, never counted as succeeded, and not
+    "not run" either, so a routine without them can still be complete. Stop (``job.cancel_requested``)
+    ends it between steps, never during one; the rest are "not run: stopped"."""
+    left_out = [k for k in OPTIONAL_STEPS if k in not_applicable]
+    if left_out:
+        job.not_applicable.extend(left_out)
+        job.log.append("· Doesn't apply, left out: " + ", ".join(STEP_NAMES[k] for k in left_out))
     succeeded = set(done)
     labels = {s.key: s.label for s in steps}
     handled = 0   # steps fully accounted for (run or deliberately skipped)

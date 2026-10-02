@@ -17,13 +17,15 @@
 {% set clean = not job.failed_total and not job.skipped and job.applied == job.total %}
 {% set interrupted = job.interrupted %}
 <div class="rounded-2xl border px-5 py-4 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if clean else 'border-amber-300 bg-amber-50 text-amber-800' }}">
-  <p class="font-medium" {{ live.ended(job) }} data-announce="{{ job.id }}">Offboarding {{ "complete" if clean else ("interrupted" if interrupted else ("stopped" if job.skipped else "incomplete")) }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed_items | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}.{% if job.error %} {{ job.error }}{% endif %}</p>
+  <p class="font-medium" {{ live.ended(job) }} data-announce="{{ job.id }}">Offboarding {{ "complete" if clean else ("interrupted" if interrupted else ("stopped" if job.skipped else "incomplete")) }} — {{ job.applied }} of {{ job.total }} steps succeeded{% if job.failed %}; failed: {{ job.failed_items | join(", ") }}{% endif %}{% if job.skipped %}; not run: {{ job.skipped | join(", ") }}{% endif %}{% if job.not_applicable %}; left out: {% for k in job.not_applicable %}{{ step_names[k] }}{{ ", " if not loop.last }}{% endfor %}{% endif %}.{% if job.error %} {{ job.error }}{% endif %}</p>
   {% if job.log %}<ul class="mt-2 space-y-1 text-xs font-mono">{% for line in job.log %}{{ live.log_line(line) }}{% endfor %}</ul>{% endif %}
   {% if revoke_label and (revoke_label in job.failed_items or revoke_label in job.skipped) %}
   <p class="mt-3 text-xs"><strong>The leaver may still be signed in</strong>, and their app passwords and connected apps may still work: “{{ revoke_label }}” didn't run to completion. Fix what the log reports and run it again (it is safe to repeat); “Sign out everywhere” on the user's page ends the sessions on its own.</p>
   {% endif %}
   {% if not clean %}
-  <p class="mt-3 text-xs">To finish: fix what the failed step reports, tick the steps marked ✓ as already done, preview again and run the rest. <strong>Don't delete the account</strong> until the Drive &amp; Calendar transfer has succeeded and finished.</p>
+  <p class="mt-3 text-xs">To finish: fix what the failed step reports, tick the steps marked ✓ as already done, leave out the same steps as before, preview again and run the rest.{% if "transfer" not in job.not_applicable %} <strong>Don't delete the account</strong> until the Drive &amp; Calendar transfer has succeeded and finished.{% endif %}</p>
+  {% elif "reminder" in job.not_applicable %}
+  <p class="mt-3 text-xs">No reminder was set (it was left out). When it's safe, delete the account from the user's detail page{% if "transfer" not in job.not_applicable %}, after the transfer has finished{% endif %}.</p>
   {% else %}
   <p class="mt-3 text-xs">The manager now has a calendar reminder. When they confirm it's safe, delete the account from the user's detail page.</p>
   {% endif %}
