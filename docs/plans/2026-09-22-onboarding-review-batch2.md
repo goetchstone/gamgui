@@ -17,7 +17,7 @@ invariants; read `docs/domains/onboarding.md` first.
 **Repo conventions (session-specific, not in CLAUDE.md):**
 - Tests: `.venv/bin/python -m pytest -q` (stay green).
 - Commit **directly to `main`** (no PR). A local **pre-commit hook hard-blocks a `fix:`/`fix(` commit
-  unless `docs/failure-log.md` was touched in the last hour** — Batch A adds an entry, satisfying it.
+  unless `docs/failure-log/` was touched in the last hour** — Batch A adds an entry, satisfying it.
 - Push as the repo owner (the active `gh` account may lack write access).
 - End commit messages with the `Co-Authored-By:` line from your session's attribution reminder.
 - Docs follow code in the same commit. After code changes that a running app would show, rebuild:
@@ -135,7 +135,7 @@ async def test_run_keeps_credentials_when_tasklist_fails(client, monkeypatch):
     assert "Couldn't create the task list" in r.text    # failure surfaced, not swallowed
 ```
 
-### A5 — failure-log entry (prepend below the `---` in `docs/failure-log.md`, newest first)
+### A5 — failure-log entry (prepend below the `---` in `docs/failure-log/`, newest first)
 ```markdown
 ## 2026-09-22 — Single /run stranded a created account's one-time password on a later failure
 

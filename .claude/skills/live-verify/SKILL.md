@@ -6,7 +6,7 @@ description: Prove a GAM command or GamGUI flow works against the operator's rea
 # Live verification
 
 Only a live run proves a write; the mock has been wrong about flags, group lookups and exit codes
-([failure-log](../../../docs/failure-log.md)). It runs where `oauth2service.json` can impersonate anyone.
+([failure-log](../../../docs/failure-log/)). It runs where `oauth2service.json` can impersonate anyone.
 
 ## Boundaries
 

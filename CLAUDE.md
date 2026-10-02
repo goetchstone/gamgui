@@ -138,7 +138,7 @@ by design (they cost nothing until needed):
   re-apply one marked APPLIED.
 
 Sessions **don't add, reword, or retire the numbered invariants here directly** —
-log the incident in [docs/failure-log.md](docs/failure-log.md), append the
+log the incident in [docs/failure-log/](docs/failure-log/), append the
 rule-strain to [docs/RULE-FEEDBACK.md](docs/RULE-FEEDBACK.md), and let the
 `improve-rules` observer pass propose one focused edit as a PR, with distance.
 (Fixing a mechanical fact — the catalog counts after a GAM bump, a renamed test —

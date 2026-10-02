@@ -11,7 +11,7 @@ It is pure, and a template renders its decision.
 posted form before its first GAM write and refuses when the form lacks what the decision requires.
 A template showing a Confirm button proves nothing about the POST that comes back — five routes
 once ran a suspend, an event delete, a company-wide signature overwrite and a whole offboarding on a
-bare POST because only their templates asked (docs/failure-log.md, 2026-09-23).
+bare POST because only their templates asked (docs/failure-log/, 2026-09-23).
 
 What does not call it: single-target LOW writes (by this policy they need no confirmation), and
 calendar delete, whose route demands a stronger typed value (``DELETE``). Account delete does call

@@ -2,7 +2,7 @@
 
 macOS Chrome with a fresh --user-data-dir asks the Keychain for its "Chrome Safe Storage" key, which
 pops a Keychain prompt on the operator's screen for every screenshot or accessibility run
-(docs/failure-log.md, 2026-09-24). --use-mock-keychain prevents it. A text scan: any tracked script
+(docs/failure-log/, 2026-09-24). --use-mock-keychain prevents it. A text scan: any tracked script
 or test that starts Chrome headless must also pass that flag.
 """
 

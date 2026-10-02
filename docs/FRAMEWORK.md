@@ -50,7 +50,7 @@ non-blocking PreToolUse hook must print JSON
 `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "…"}}`
 on stdout; stderr is fed back only on a blocking **exit 2**. Anything else on
 stderr at exit 0 reaches nobody — these hooks ran that way for weeks unnoticed
-(see [failure-log.md](failure-log.md), 2026-09-23). Test a hook by finding its
+(see [failure-log/](failure-log/), 2026-09-23). Test a hook by finding its
 text in the model's context, not by running it in a terminal. Keep what hooks
 inject short and specific: a few lines relevant to *this* diff are read; a
 40-line checklist on every commit is noise.
@@ -70,7 +70,7 @@ needs one of the three homes above.
 
 Plugins that keep their own lessons or failure ledger (harness kits, crew
 frameworks) are deliberately not wired in: a second ledger drifts from
-`failure-log.md` and `RULE-FEEDBACK.md`, and the observer would read half the
+`failure-log/` and `RULE-FEEDBACK.md`, and the observer would read half the
 evidence.
 
 ## 3. The learning loop
@@ -78,7 +78,7 @@ evidence.
 ```
 Something breaks (a test late, a live tenant, a regression)
         ↓  post-failure skill
-docs/failure-log.md entry: symptom / cause / why-not-caught / fix / prevention
+docs/failure-log/ entry: symptom / cause / why-not-caught / fix / prevention
         ↓
 Recurring shape? ── yes ─→ a tripwire test that asserts it can't recur silently
         │                   (and/or a note in docs/RULE-FEEDBACK.md)
@@ -108,7 +108,7 @@ Two moving parts keep it honest:
 
 The bug this repo keeps hitting is **"the mock passed, the live tenant broke."**
 It has happened more than once: a command that rejects `formatjson` while the
-mock accepted it (see [failure-log.md](failure-log.md)); a mock that returned
+mock accepted it (see [failure-log/](failure-log/)); a mock that returned
 group members for *any* address, so a user looked like a group. So the standing
 discipline: when you touch `tests/fixtures/mock_gam.sh`, make it **fail the way
 real GAM fails**, checking syntax against the vendored grammar
@@ -144,7 +144,7 @@ CLAUDE.md                          # Constitution — numbered invariants #1–#
 ROADMAP.md                         # Ranked backlog + deliberate trade-offs
 docs/
 ├── FRAMEWORK.md                   # This file
-├── failure-log.md                 # Five-field incident entries (shared)
+├── failure-log/                   # Five-field incident entries, one file each
 ├── RULE-FEEDBACK.md               # Low-friction ledger the observer reads (shared)
 └── domains/                       # Load-on-demand runbooks, one per area
     ├── README.md                  #   the index + "by task" map

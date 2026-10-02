@@ -12,7 +12,7 @@ compaction) inherits what this one learned. Update docs, not the constitution.
 
 1. **Any incident this session?** A regression, a broken test, a live break, a
    "the mock lied" surprise → a five-field entry in
-   [docs/failure-log.md](../../../docs/failure-log.md) via
+   [docs/failure-log/](../../../docs/failure-log/) via
    [post-failure](../post-failure/SKILL.md), if you didn't already.
 2. **Did an invariant strain?** An invariant almost let something through, sat
    in the wrong enforcement layer, read too loosely, or a failure hit a shape no
