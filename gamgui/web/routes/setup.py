@@ -119,7 +119,8 @@ async def switch(
     tenant: Annotated[str, Form()] = "",
     admin: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
-    """Activate another domain the Keychain holds credentials for — by the same verify, so a switch
+    """Activate a domain the Keychain holds credentials for — another, or the active one again (Setup's
+    Check access) — by the same verify, so a switch
     is a `check serviceaccount` read, the connector only changes on a pass, and the caches are busted.
     The admin is the one its ``oauth2.txt`` names, else the one typed in "Your domain"."""
     st = request.app.state.gamgui
@@ -132,7 +133,7 @@ async def switch(
     if not admin:
         return TEMPLATES.TemplateResponse(
             request, "_error.html",
-            {"message": f"Enter {tenant}'s super-admin email in \"Your domain\" above, then switch."},
+            {"message": f"Enter {tenant}'s super-admin email in \"Your domain\" above, then try again."},
         )
     return await _verify_and_activate(request, tenant, admin, switched=True)
 
