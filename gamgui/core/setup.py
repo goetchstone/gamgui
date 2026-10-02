@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlencode
 
+from .audit import AuditLog
 from .gam.commands import EXPECTED_GAM_VERSION, GAMCommands
 from .gam.errors import GAMError
 from .gam.runner import GAMRunner
@@ -404,7 +405,8 @@ class DirInspection:
 class Removal:
     """What :meth:`SetupService.remove_domain` did, for the page and the audit log."""
     outcome: str          # "deleted": its items are gone; "forgotten": only dropped from the index
-    message: str
+    message: str          # for the page
+    detail: str           # for the audit log's extra.detail
     twin: str = ""        # for "forgotten": the spelling whose items it shared, which were kept
 
 
@@ -691,14 +693,18 @@ class SetupService:
     def is_ready(self, domain: str) -> bool:
         return self.vault.has_credentials(domain)
 
-    def remove_domain(self, domain: str, active: str) -> Removal:
+    def remove_domain(self, domain: str, active: str, *, audit: AuditLog) -> Removal:
         """Delete ``domain``'s credentials from the Keychain and drop it from the index; returns what
-        happened, for the page and the audit log. ``domain`` is the index's exact spelling (one imported before domains
-        were lowercased may be capitalized). Refuses a domain the index doesn't list and the active
-        one. A spelling that differs only in case from another listed domain is forgotten, not
-        deleted, when the Keychain folds case: its items are the other's too
-        (:meth:`SecretsVault.folds_case`). A refused delete raises from the vault and leaves the
-        domain listed, so Remove can be tried again."""
+        happened. ``domain`` is the index's exact spelling (one imported before domains were lowercased
+        may be capitalized). Refuses a domain the index doesn't list and the active one. A spelling that
+        differs only in case from another listed domain is forgotten, not deleted, when the Keychain
+        folds case: its items are the other's too (:meth:`SecretsVault.folds_case`).
+
+        The one place a domain's credentials are removed, so the record is written here, not by a
+        caller (``audit`` is required): ``remove_domain`` under connector ``keychain``, with
+        ``extra.outcome``. A refusal raised here changed nothing and isn't recorded. One by the Keychain
+        is, with what was deleted before it (``extra.deleted``, most dangerous first), then re-raised;
+        the domain stays listed so Remove can be tried again."""
         listed = self.vault.list_domains()
         if domain not in listed:
             raise ValueError("No credentials for that domain in the Keychain.")
@@ -707,13 +713,33 @@ class SetupService:
         # The active spelling counts though unlisted: verify lowercases, so on a store that folds case it
         # can be connected through a capitalized entry's items.
         twins = sorted({d for d in (*listed, active) if d and d != domain and d.lower() == domain.lower()})
-        if twins and self.vault.folds_case():
-            self.vault.forget_domain(domain)
-            return Removal("forgotten", f"Removed {domain} from the list. This Keychain's deletes ignore "
-                           f"capitalization, so deleting its credentials would delete {twins[0]}'s too: they "
-                           "were kept.", twin=twins[0])
-        self.vault.clear_domain(domain)
-        return Removal("deleted", f"Removed {domain}: its credentials are deleted from the Keychain.")
+        deleted: List[str] = []
+        try:
+            if twins and self.vault.folds_case():
+                self.vault.forget_domain(domain)
+                removal = Removal(
+                    "forgotten",
+                    f"Removed {domain} from the list. This Keychain's deletes ignore capitalization, so "
+                    f"deleting its credentials would delete {twins[0]}'s too: they were kept.",
+                    f"Dropped from the list; its credentials are {twins[0]}'s and were kept.", twin=twins[0])
+            else:
+                self.vault.clear_domain(domain, deleted=deleted)
+                removal = Removal("deleted", f"Removed {domain}: its credentials are deleted from the Keychain.",
+                                  "Credentials deleted from the Keychain.")
+        except Exception as exc:
+            gone = ", ".join(deleted) or "nothing"
+            audit.record("remove_domain", connector="keychain", target=domain, ok=False,
+                         extra={"error": str(exc), "deleted": deleted,
+                                "detail": f"The Keychain refused; deleted before it did: {gone}."})
+            raise
+        extra = {"outcome": removal.outcome, "detail": removal.detail}
+        if removal.twin:
+            extra["twin"] = removal.twin
+        try:
+            audit.record("remove_domain", connector="keychain", target=domain, ok=True, extra=extra)
+        except OSError as exc:      # the removal happened: say so, and that its record didn't
+            removal.message += f" The audit log couldn't record it ({exc})."
+        return removal
 
     # --- Domain-Wide Delegation helper -------------------------------------------------
     def dwd_details(self, domain: str) -> Dict[str, object]:

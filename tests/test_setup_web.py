@@ -770,6 +770,19 @@ def test_remove_deletes_only_that_spellings_credentials_and_redraws_the_panel(ct
     assert rec["extra"]["outcome"] == "deleted" and rec["argv"] is None
 
 
+def test_remove_with_no_domain_connected_records_where_the_audit_page_reads(ctx):
+    from gamgui.core.audit import default_audit_path, read_records
+    client, _, vault, state = ctx
+    _store(vault, "example.com", "admin@example.com")
+    _store(vault, "example.org", "boss@example.org")
+    assert state.connector is None
+    client.post("/setup/remove", data={"remove": "example.org"})
+    assert vault.list_domains() == ["example.com"]
+    rec = read_records(default_audit_path())[0]
+    assert (rec["action"], rec["target"], rec["ok"]) == ("remove_domain", "example.org", True)
+    assert "remove_domain" in client.get("/audit/rows").text
+
+
 def test_remove_refuses_the_active_domain_and_one_not_listed(ctx):
     client, _, vault, state = ctx
     _store(vault, "example.com", "admin@example.com")
@@ -788,7 +801,7 @@ def test_a_refused_keychain_delete_says_so_and_keeps_the_domain_listed(ctx, monk
     _store(vault, "example.org", "boss@example.org")
     state.connector = GAMConnector(runner=state.runner, domain="example.com")
 
-    def refuse(domain):
+    def refuse(domain, deleted=None):
         raise PasswordDeleteError("Can't delete password in keychain: (-25293)")
     monkeypatch.setattr(vault, "clear_domain", refuse)
     r = client.post("/setup/remove", data={"remove": "example.org"})

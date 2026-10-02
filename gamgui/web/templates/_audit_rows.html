@@ -38,7 +38,7 @@
               <span class="font-mono text-xs break-words">{{ (r.argv | join(" "))[:160] }}{{ "…" if (r.argv | join(" "))|length > 160 else "" }}</span>
             {% elif r.extra is mapping and r.extra.detail %}
               {# A change with no gam argv (removing a domain's Keychain credentials) says what it did. #}
-              <span class="text-xs break-words">{{ r.extra.detail[:160] }}</span>
+              <span class="text-xs break-words">{{ (r.extra.detail | string)[:160] }}</span>
             {% else %}
               —
             {% endif %}

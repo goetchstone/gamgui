@@ -199,10 +199,14 @@ class SecretsVault:
                 return email.strip().lower()
         return ""
 
-    def clear_domain(self, domain: str) -> None:
+    def clear_domain(self, domain: str, deleted: Optional[list] = None) -> None:
         # A delete that fails raises before the domain leaves the index: its secrets are still there.
+        # ``deleted`` collects each name as it goes (gone or never there), for a caller that records
+        # how far a refused removal got.
         for name in _DELETE_ORDER:
             self.delete(domain, name)
+            if deleted is not None:
+                deleted.append(name)
         self._unregister_domain(domain)
 
     def forget_domain(self, domain: str) -> None:
