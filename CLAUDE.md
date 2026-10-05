@@ -113,7 +113,7 @@ make gam TAG=vX.Y.Z                 # re-vendor GAM (fails closed on an unpinned
 make app                            # build dist/GamGUI.app
 ```
 
-GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.14); three drift
+GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.17); three drift
 guards (`test_required_command_tokens_present`, `test_catalog_matches_grammar`,
 `test_pinned_version_consistent`) fail if a bump breaks a command we use. Bump with
 `scripts/bump_gam.py vX.Y.Z` — runbook in [build-packaging](docs/domains/build-packaging.md); the
