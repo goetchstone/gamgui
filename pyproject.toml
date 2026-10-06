@@ -33,9 +33,9 @@ dev = [
     # Coverage-guided fuzzing of those properties in CI (fuzz/). Wheels only for Linux x86_64 CPython
     # 3.12+, so it installs there and nowhere else; exact, since a new release can find a new crash.
     "atheris==3.1.0; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.12'",
-    "ruff==0.16.9",         # exact: a ruff minor release can stabilize new rules and fail unchanged code
-    "mypy==2.3.1",          # exact, for the same reason: a release can infer more and fail unchanged code
-    "uv==0.12.19",          # `make lock`; exact, since another uv can resolve the same inputs differently
+    "ruff==0.16.10",         # exact: a ruff minor release can stabilize new rules and fail unchanged code
+    "mypy==2.4.0",          # exact, for the same reason: a release can infer more and fail unchanged code
+    "uv==0.12.22",          # `make lock`; exact, since another uv can resolve the same inputs differently
 ]
 
 [project.scripts]
