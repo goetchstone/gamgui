@@ -323,9 +323,10 @@ NotSpecified`, and the single `create datatransfer … drive,calendar … all` c
 not recorded). The sweep visited every user and ended exit 50 on the leaver's own primary calendar,
 "Cannot change your own access level" — `all users` includes the still-active leaver, so this happens
 on **every** offboarding and is tolerated as `OWN_ACL` (the mock's default sweep now does the same;
-`SWEEPCLEAN` keeps the exit-0 path for a leaver suspended first). Still unproven live: that the
-transfer completed with nothing left owned, that a colleague's share was removed (only the last
-stderr line of each kind is audited), the reminder with an invitee (`sendupdates all`), and
+`SWEEPCLEAN` keeps the exit-0 path for a leaver suspended first). The operator then worked through
+the after-run checks in Google and reported every effect as expected: the transfer completed, the
+manager has the mailbox, an outside sender gets the auto-reply, the sweep and the reminder did their
+part. Still unproven live: the reminder with an invitee (`sendupdates all`; this run had none) and
 `delete_user`.
 
 ## First live run checklist

@@ -112,8 +112,8 @@ transfer has finished.
 **Before:** enter the leaver and the manager and click **Preview steps**. Read every warning. GamGUI
 refuses to offboard the admin it is connected as — revoking that account's access would cut off
 GamGUI mid-run — so connect as a different super admin first if you need to. The routine has run
-live once, every step succeeding; a few effects (the transfer finishing, a colleague's calendar share
-removed) are still unconfirmed, so **work through the
+live, every step succeeding and its effects checked in Google afterwards; for your own first run,
+still **work through the
 [first live run checklist](domains/lifecycle-offboarding.md#first-live-run-checklist)** with it
 open: what to look at in the preview, and what to verify in Google afterwards.
 
