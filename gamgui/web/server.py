@@ -69,7 +69,26 @@ def ago(seconds: Optional[float]) -> str:
     return f"{s // 3600} h ago" if s < 86400 else f"{s // 86400} d ago"
 
 
+def cell(value) -> str:
+    """A result value as a person reads it: a structured value GAM returned as JSON (a user's name, a
+    list of aliases) was shown as Python's repr. Lists join with ", ", a name dict shows the name
+    (fullName, else given + family), any other dict reads "key: value · key: value". The CSV export
+    keeps the raw data."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return ", ".join(cell(v) for v in value)
+    if isinstance(value, dict):
+        if value.get("fullName"):
+            return str(value["fullName"])
+        if value.get("givenName") or value.get("familyName"):     # a name without its fullName
+            return " ".join(str(value[k]) for k in ("givenName", "familyName") if value.get(k))
+        return " · ".join(f"{k}: {cell(v)}" for k, v in value.items())
+    return str(value)
+
+
 TEMPLATES.env.filters["ago"] = ago
+TEMPLATES.env.filters["cell"] = cell
 TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
 TEMPLATES.env.globals["active_tenant"] = _active_tenant
 TOKEN_COOKIE = "gamgui_token"  # noqa: S105 — a cookie name, not a secret

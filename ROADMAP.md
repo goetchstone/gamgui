@@ -40,7 +40,10 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Delegate & forwarding review, domain-wide.** "Who can read whose mailbox, and whose mail is
   leaving the building?" is answerable today only one user at a time, so nobody audits it.
 - **Shared drives** — inventory, membership, and the orphaned-drive check before deleting a
-  departing user.
+  departing user. Also: moving a folder of mixed ownership into a shared drive as one previewed
+  Builder recipe — a read that counts what will move (internal) and what must be copied (external),
+  then `move drivefile … retainsourcefolders duplicatefolders merge` and `copy drivefile … recursive
+  copysubfilesownedby others duplicatefolders merge` (GAM has no dry run for either).
 
 ## Later
 

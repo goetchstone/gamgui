@@ -3,6 +3,37 @@
 (function () {
   "use strict";
 
+  // Hide/show the command list: a wide result then gets the whole width. Remembered per viewer (a
+  // convenience: storage can be blocked, and the page works the same without it).
+  function setList(shown) {
+    var grid = document.getElementById("builder-grid");
+    var col = document.getElementById("catalog-col");
+    var btn = document.getElementById("list-toggle");
+    if (!grid || !col || !btn) return;
+    col.classList.toggle("hidden", !shown);
+    grid.classList.toggle("lg:grid-cols-[22rem_minmax(0,1fr)]", shown);
+    grid.classList.toggle(grid.dataset.collapsedCols, !shown);
+    btn.setAttribute("aria-expanded", shown ? "true" : "false");
+    btn.textContent = shown ? "Hide list" : "Show list";
+    try { localStorage.setItem("gamgui.builder.list", shown ? "shown" : "hidden"); } catch (e) { /* blocked */ }
+  }
+  GamGUI.actions["builder-list"] = function (btn) { setList(btn.getAttribute("aria-expanded") !== "true"); };
+
+  // A result cell cut short (one line, ellipsis) shows all of itself on a click, and folds back on
+  // another. Its title carries the whole value too, and the CSV export keeps every value whole.
+  document.addEventListener("click", function (e) {
+    var td = e.target.closest && e.target.closest("#builder-result td[title]");
+    if (!td || e.target.closest("button")) return;
+    var table = td.closest("table");
+    var wide = (table && table.dataset.expanded || "").split(" ").filter(Boolean);
+    var open = td.classList.contains("truncate");
+    if (open && td.scrollWidth <= td.clientWidth) return;   // nothing hidden: leave it
+    td.classList.toggle("truncate", !open);
+    td.classList.toggle("whitespace-nowrap", !open);
+    wide.forEach(function (c) { td.classList.toggle(c, open); });
+  });
+  try { if (localStorage.getItem("gamgui.builder.list") === "hidden") setList(false); } catch (e) { /* blocked */ }
+
   // After a Preview swaps the confirm panel into the result area, scroll the build pane so its
   // Run button is in reach (the pane scrolls as one unit, so a tall form can't leave Run below the
   // fold). Only when an actionable Run/confirm is present — not for a plain results table.

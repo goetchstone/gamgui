@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Builder — GamGUI Console{% endblock %}
 {% block container_class %}max-w-none{% endblock %}
+{# A fixed-height workspace: the footer line's height goes to the results instead. #}
+{% block footer %}{% endblock %}
 {% block content %}
 {% if not connected %}
   <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
@@ -10,16 +12,12 @@
   </div>
 {% else %}
 {% set fld = "w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
-<!-- Fixed-height workspace: fills the window and never grows. Results scroll inside their own
-     panel instead of pushing the page down, so the window stays a constant size. -->
-<div id="builder-root" class="flex flex-col gap-2.5 h-[calc(100vh-14.5rem)] min-h-[26rem]">
-  <div class="flex items-baseline gap-3 shrink-0">
-    <h1 class="font-serif text-xl text-brand-black tracking-tight">Command builder</h1>
-    <p class="text-xs text-brand-grayink">Browse every GAM command; build &amp; run the buildable ones, or queue a sequence.</p>
-  </div>
-
-  <!-- Search-first faceted controls: search · area · buildable-only (one row, one request) -->
+<!-- Fixed-height workspace: fills the window (header and main's padding aside: no footer here) and
+     never grows. Results scroll inside their own panel instead of pushing the page down. -->
+<div id="builder-root" class="flex flex-col gap-2.5 h-[calc(100vh-9.5rem)] min-h-[26rem]">
+  <!-- One row: the title, then search · area · buildable-only (one request), then the list toggle -->
   <form id="cat-controls" class="flex items-center gap-2 shrink-0">
+    <h1 class="shrink-0 font-serif text-xl text-brand-black tracking-tight">Command builder</h1>
     <input class="{{ fld }} min-w-0 flex-1" type="search" name="q" aria-label="Search commands" placeholder="Search 1,000+ commands…"
            hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML"
            hx-trigger="keyup changed delay:300ms, search" />
@@ -33,11 +31,15 @@
              hx-get="/builder/catalog" hx-include="#cat-controls" hx-target="#catalog" hx-swap="innerHTML" />
       Buildable only
     </label>
+    <!-- Hide the command list so a wide result gets the whole width (remembered per viewer, builder.js). -->
+    <button type="button" id="list-toggle" data-action="builder-list" aria-controls="catalog-col" aria-expanded="true"
+            class="shrink-0 rounded-lg border border-brand-gray/40 px-3 py-2 text-sm text-brand-blueink hover:bg-paper">Hide list</button>
   </form>
 
-  <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)] min-h-0 flex-1">
+  <div id="builder-grid" class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)] min-h-0 flex-1"
+       data-collapsed-cols="lg:grid-cols-[minmax(0,1fr)]">
     <!-- LEFT: the paginated catalog (one page at a time, fills its column) -->
-    <section class="min-h-0">
+    <section id="catalog-col" class="min-h-0">
       <div id="catalog" class="h-full overflow-y-auto rounded-2xl border border-brand-gray/40 bg-brand-white p-3 shadow-sm"
            hx-get="/builder/catalog?buildable=1" hx-trigger="load" hx-swap="innerHTML">
         <p class="text-sm text-brand-grayink">Loading…</p>
@@ -49,7 +51,7 @@
     <section id="build-pane" class="min-h-0 overflow-y-auto pr-0.5">
       <div id="cmd-form">
         <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-grayink">
-          Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Click a User field to choose someone.
+          Browse every GAM command; build &amp; run the buildable ones, or queue a sequence. Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Click a User field to choose someone.
         </div>
       </div>
       <div id="builder-result" class="mt-3"></div>
