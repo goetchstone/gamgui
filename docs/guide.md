@@ -111,8 +111,9 @@ transfer has finished.
 
 **Before:** enter the leaver and the manager and click **Preview steps**. Read every warning. GamGUI
 refuses to offboard the admin it is connected as — revoking that account's access would cut off
-GamGUI mid-run — so connect as a different super admin first if you need to. Several steps, and
-the routine as a whole, have not yet run on a live domain, so **work through the
+GamGUI mid-run — so connect as a different super admin first if you need to. The routine has run
+live once, every step succeeding; a few effects (the transfer finishing, a colleague's calendar share
+removed) are still unconfirmed, so **work through the
 [first live run checklist](domains/lifecycle-offboarding.md#first-live-run-checklist)** with it
 open: what to look at in the preview, and what to verify in Google afterwards.
 
@@ -127,7 +128,9 @@ Anything beyond these steps, like listing the leaver's Drive files first, is a r
 **While it runs:** the calendar sweep can take minutes. Don't quit the app; to halt it, use
 **Stop** (see [Jobs](#jobs-and-stop)).
 
-**After:** the panel should say "Offboarding complete — 8 of 8 steps succeeded". If a step failed,
+**After:** the panel should say "Offboarding complete — 8 of 8 steps succeeded". In **Audit**, the
+calendar clean-up's record shows "Cannot change your own access level": that is GAM declining to change
+the leaver's own calendar, which it visits too, and is expected on every run. If a step failed,
 its line says why and later steps that depended on it were not run. Fix the cause, tick the steps
 that already succeeded, preview again and run — the checklist covers each failure.
 

@@ -95,9 +95,9 @@ the leaver group by group, the memberships recorded in the preview so it can be 
 
 ## Before P2 ships
 
-Offboarding has never run on a real user (README "Live verification status", runbook "first live run
-checklist"). Prove today's eight on a throwaway user first, so new steps aren't layered on unproven
-ones.
+Done in part: the operator's first live offboarding (2026-10-07) ran all eight `ok`. Still open
+before relying on new steps: the transfer's completion and a colleague's share actually removed (the
+runbook's after-run checks).
 
 ## Status by item
 
