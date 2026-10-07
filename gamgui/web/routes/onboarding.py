@@ -174,19 +174,32 @@ async def page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, "onboarding.html", {"connected": False})
     store = _store(request)
     return TEMPLATES.TemplateResponse(request, "onboarding.html", {
-        "connected": True, "roles": store.roles(), "welcome": store.welcome(),
+        "connected": True, "roles": store.roles(), **_welcome_ctx(store),
         "vars": onboarding.WELCOME_VARS, "sig_templates": signature_store(request).names(),
     })
+
+
+def _welcome_ctx(store: RunbookStore) -> dict:
+    """The named welcome emails, for the Welcome email tab and the role editor's picker."""
+    return {"welcomes": [(n, store.welcome(n)) for n in store.welcome_names()],
+            "welcome_names": store.welcome_names(), "default_welcome": onboarding.DEFAULT_WELCOME}
+
+
+def _welcome_panel(request: Request, store: RunbookStore, saved: str = "", error: str = "") -> HTMLResponse:
+    """The Welcome email tab, plus the role editor's picker out of band (a new name must be pickable)."""
+    return TEMPLATES.TemplateResponse(request, "_onboard_welcome.html", {
+        **_welcome_ctx(store), "vars": onboarding.WELCOME_VARS, "saved": saved, "error": error, "picker_oob": True})
 
 
 @router.post("/role", response_class=HTMLResponse)
 async def save_role(request: Request, name: Annotated[str, Form()], steps: Annotated[str, Form()] = "",
                     signature: Annotated[str, Form()] = "", org_unit: Annotated[str, Form()] = "",
-                    groups: Annotated[str, Form()] = "", calendars: Annotated[str, Form()] = "") -> HTMLResponse:
+                    groups: Annotated[str, Form()] = "", calendars: Annotated[str, Form()] = "",
+                    welcome: Annotated[str, Form()] = "") -> HTMLResponse:
     store = _store(request)
     try:
         store.set_role(name, steps.splitlines(), signature=signature, org_unit=org_unit,
-                       groups=groups.splitlines(), calendars=calendars.splitlines())
+                       groups=groups.splitlines(), calendars=calendars.splitlines(), welcome=welcome)
     except ValueError as exc:
         return error_partial(request, str(exc))
     return TEMPLATES.TemplateResponse(request, "_onboard_roles.html", {"roles": store.roles()})
@@ -200,11 +213,26 @@ async def delete_role(request: Request, name: Annotated[str, Form()]) -> HTMLRes
 
 
 @router.post("/welcome", response_class=HTMLResponse)
-async def save_welcome(request: Request, subject: Annotated[str, Form()] = "", body: Annotated[str, Form()] = "") -> HTMLResponse:
+async def save_welcome(request: Request, subject: Annotated[str, Form()] = "", body: Annotated[str, Form()] = "",
+                       name: Annotated[str, Form()] = onboarding.DEFAULT_WELCOME) -> HTMLResponse:
+    """Save a named welcome email (a new name adds one; an existing name replaces it). Local only."""
     store = _store(request)
-    store.set_welcome(subject, body)
-    return TEMPLATES.TemplateResponse(request, "_onboard_welcome.html",
-                                      {"welcome": store.welcome(), "vars": onboarding.WELCOME_VARS, "saved": True})
+    try:
+        store.set_welcome(subject, body, name=name)
+    except ValueError as exc:
+        return _welcome_panel(request, store, error=str(exc))
+    return _welcome_panel(request, store, saved=name.strip())
+
+
+@router.post("/welcome/delete", response_class=HTMLResponse)
+async def delete_welcome(request: Request, name: Annotated[str, Form()]) -> HTMLResponse:
+    """Delete a named welcome email: never Default, never one a role still picks. Local only."""
+    store = _store(request)
+    try:
+        store.delete_welcome(name.strip())
+    except ValueError as exc:
+        return _welcome_panel(request, store, error=str(exc))
+    return _welcome_panel(request, store)
 
 
 # Run executes the hire its preview showed: the form's values, the role template and the welcome email
@@ -241,11 +269,16 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
     cfg = store.role(role)
     if cfg is None or not cfg.steps:
         return error_partial(request, "That role has no steps yet — add some in Role templates.")
-    w, ctx = store.welcome(), onboarding.welcome_context(name, email, role, manager)
+    w, ctx = store.welcome_for(cfg), onboarding.welcome_context(name, email, role, manager)
+    if w is None:
+        if send_welcome:
+            return error_partial(request, f"The role “{role}” sends the welcome email “{cfg.welcome}”, which no "
+                                          f"longer exists. Pick another for the role in Role templates.")
+        w = {"subject": "", "body": ""}   # not sent: nothing to show or hold
     given, family = onboarding.split_name(name, first, last)
     hire = {"role": role, "name": name, "email": email.strip(), "manager": manager, "assignee": assignee,
             "create_account": bool(create_account), "first": first, "last": last,
-            "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
+            "send_welcome": bool(send_welcome), "notify": "", "welcome": w, "welcome_name": cfg.welcome_name}
     token = app_state(request).previews.hold(
         _FLOW, _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last),
         (hire, cfg), tenant=tenant)
@@ -257,6 +290,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
         "org_unit": cfg.org_unit or "/", "signature": cfg.signature,
         "groups": cfg.groups, "calendars": cfg.calendars,
         "subject": onboarding.render(w["subject"], ctx), "body": onboarding.render(w["body"], ctx),
+        "welcome_name": cfg.welcome_name,
     })
 
 

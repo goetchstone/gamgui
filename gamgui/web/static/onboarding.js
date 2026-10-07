@@ -24,10 +24,35 @@
     f.querySelector("[name=name]").value = btn.dataset.name;
     f.querySelector("[name=steps]").value = btn.dataset.steps;
     f.querySelector("[name=org_unit]").value = btn.dataset.org || "";
-    ["signature", "groups", "calendars"].forEach(function (k) {
+    ["signature", "groups", "calendars", "welcome"].forEach(function (k) {
       var el = f.querySelector("[name=" + k + "]");
       if (el) el.value = btn.dataset[k] || "";
     });
+    f.querySelector("[name=name]").focus();
+  };
+
+  // Saving or deleting a welcome email re-sends the role editor's picker out of band (a new name must be
+  // pickable). Keep the choice of a role being edited across that swap, if it still exists: otherwise it
+  // would silently fall back to Default and be saved that way.
+  var keptWelcome = null;
+  document.addEventListener("htmx:oobBeforeSwap", function (e) {
+    var old = document.getElementById("ob-role-welcome");
+    if (old && e.detail.target === old) keptWelcome = old.value;
+  });
+  document.addEventListener("htmx:oobAfterSwap", function () {
+    var picker = document.getElementById("ob-role-welcome");
+    if (!picker || keptWelcome === null) return;
+    if (Array.prototype.some.call(picker.options, function (o) { return o.value === keptWelcome; })) {
+      picker.value = keptWelcome;
+    }
+    keptWelcome = null;
+  });
+
+  // Edit a welcome email: copy its name, subject and body into the welcome form.
+  GamGUI.actions["ob-welcome-edit"] = function (btn) {
+    var f = document.querySelector('form[hx-post="/onboard/welcome"]');
+    if (!f) return;
+    ["name", "subject", "body"].forEach(function (k) { f.querySelector("[name=" + k + "]").value = btn.dataset[k] || ""; });
     f.querySelector("[name=name]").focus();
   };
 

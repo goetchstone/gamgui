@@ -63,7 +63,7 @@ PREVIEWS = {
 LOCAL_ONLY = {
     "/builder/sequence/add", "/builder/sequence/remove", "/builder/sequence/move", "/builder/sequence/clear",
     "/signatures/templates/save", "/signatures/templates/delete",
-    "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/bulk/done",
+    "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/welcome/delete", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
     "/calendars/index/rebuild", "/jobs/stop",
 }

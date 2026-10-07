@@ -65,14 +65,26 @@ _DEFAULT: Dict[str, Any] = {
             "org_unit": "",
             "groups": [],
             "calendars": [],
+            "welcome": "",
         },
     },
-    "welcome": {
-        "subject": "Welcome to the team, {name}!",
-        "body": ("Hi {name},\n\nWelcome aboard as our new {role}. Your account is {email} — "
-                 "your manager {manager} will help you get set up.\n\nGlad to have you here."),
+    "welcomes": {
+        "Default": {
+            "subject": "Welcome to the team, {name}!",
+            "body": ("Hi {name},\n\nWelcome aboard as our new {role}. Your account is {email} — "
+                     "your manager {manager} will help you get set up.\n\nGlad to have you here."),
+        },
     },
 }
+# The welcome email a role without its own choice sends; it can be edited, never deleted. Files written
+# before named welcome emails held one "welcome": it becomes this one on load.
+DEFAULT_WELCOME = "Default"
+
+
+def _as_welcome(value) -> Dict[str, str]:
+    """A stored welcome email as {subject, body}, tolerating a missing or malformed entry."""
+    value = value if isinstance(value, dict) else {}
+    return {"subject": str(value.get("subject", "") or ""), "body": str(value.get("body", "") or "")}
 
 
 def _as_str_list(value) -> List[str]:
@@ -88,7 +100,8 @@ def _as_role(value) -> Dict:
     """Normalise a stored role to {steps, signature, org_unit, groups, calendars} — tolerating the old
     list-of-steps form and dicts written before groups/calendars existed."""
     if isinstance(value, list):
-        return {"steps": [str(s) for s in value], "signature": "", "org_unit": "", "groups": [], "calendars": []}
+        return {"steps": [str(s) for s in value], "signature": "", "org_unit": "", "groups": [], "calendars": [],
+                "welcome": ""}
     if isinstance(value, dict):
         return {
             "steps": [str(s) for s in value.get("steps", [])],
@@ -96,8 +109,9 @@ def _as_role(value) -> Dict:
             "org_unit": str(value.get("org_unit", "") or ""),
             "groups": _as_str_list(value.get("groups")),
             "calendars": _as_str_list(value.get("calendars")),
+            "welcome": str(value.get("welcome", "") or ""),
         }
-    return {"steps": [], "signature": "", "org_unit": "", "groups": [], "calendars": []}
+    return {"steps": [], "signature": "", "org_unit": "", "groups": [], "calendars": [], "welcome": ""}
 
 
 @dataclass
@@ -108,6 +122,11 @@ class RoleTemplate:
     org_unit: str = ""    # the OU the account is created in (blank = domain default "/")
     groups: List[str] = field(default_factory=list)      # group emails the new hire is added to (as member)
     calendars: List[str] = field(default_factory=list)   # calendar ids the new hire is subscribed to
+    welcome: str = ""     # the named welcome email this role sends (blank = DEFAULT_WELCOME)
+
+    @property
+    def welcome_name(self) -> str:
+        return self.welcome or DEFAULT_WELCOME
 
 
 def render(template: str, ctx: Dict[str, str]) -> str:
@@ -218,7 +237,14 @@ class RunbookStore:
                 data = json.loads(self.path.read_text())
                 data.setdefault("roles", {})
                 data["roles"] = {n: _as_role(v) for n, v in data["roles"].items()}  # migrate old list form
-                data.setdefault("welcome", dict(_DEFAULT["welcome"]))
+                welcomes = data.get("welcomes")
+                if not isinstance(welcomes, dict):
+                    welcomes = {}
+                old = data.pop("welcome", None)            # the single welcome email of an older file
+                if isinstance(old, dict) and DEFAULT_WELCOME not in welcomes:
+                    welcomes[DEFAULT_WELCOME] = old
+                welcomes.setdefault(DEFAULT_WELCOME, dict(_DEFAULT["welcomes"][DEFAULT_WELCOME]))
+                data["welcomes"] = {str(n): _as_welcome(w) for n, w in welcomes.items()}
                 return data
             except Exception:  # noqa: BLE001, S110 — corrupt/old file: fall back to the seed
                 pass
@@ -241,7 +267,8 @@ class RunbookStore:
         out = []
         for n, v in sorted(self._data["roles"].items()):
             r = _as_role(v)
-            out.append(RoleTemplate(n, r["steps"], r["signature"], r["org_unit"], r["groups"], r["calendars"]))
+            out.append(RoleTemplate(n, r["steps"], r["signature"], r["org_unit"], r["groups"], r["calendars"],
+                                    r["welcome"]))
         return out
 
     def role_names(self) -> List[str]:
@@ -252,22 +279,30 @@ class RunbookStore:
         if v is None:
             return None
         r = _as_role(v)
-        return RoleTemplate(name, r["steps"], r["signature"], r["org_unit"], r["groups"], r["calendars"])
+        return RoleTemplate(name, r["steps"], r["signature"], r["org_unit"], r["groups"], r["calendars"],
+                            r["welcome"])
 
     def steps_for(self, name: str) -> List[str]:
         return _as_role(self._data["roles"].get(name, {}))["steps"]
 
     def set_role(self, name: str, steps: List[str], signature: str = "", org_unit: str = "",
-                 groups: Optional[List[str]] = None, calendars: Optional[List[str]] = None) -> None:
+                 groups: Optional[List[str]] = None, calendars: Optional[List[str]] = None,
+                 welcome: str = "") -> None:
         name = (name or "").strip()
         if not name:
             raise ValueError("Role name is required.")
+        welcome = (welcome or "").strip()
+        if welcome == DEFAULT_WELCOME:
+            welcome = ""                     # blank means Default, stored one way
+        if welcome and welcome not in self._data["welcomes"]:
+            raise ValueError(f"There is no welcome email named “{welcome}”.")
         self._data["roles"][name] = {
             "steps": [s.strip() for s in steps if s.strip()],
             "signature": (signature or "").strip(),
             "org_unit": (org_unit or "").strip(),
             "groups": _as_str_list(groups),
             "calendars": _as_str_list(calendars),
+            "welcome": welcome,
         }
         self._save()
 
@@ -275,13 +310,43 @@ class RunbookStore:
         self._data["roles"].pop(name, None)
         self._save()
 
-    # --- welcome email ---
-    def welcome(self) -> Dict[str, str]:
-        w = self._data.get("welcome", {})
-        return {"subject": w.get("subject", ""), "body": w.get("body", "")}
+    # --- welcome emails (named; a role picks one, blank = DEFAULT_WELCOME) ---
+    def welcome_names(self) -> List[str]:
+        """Default first, then the rest by name."""
+        return [DEFAULT_WELCOME] + sorted(n for n in self._data["welcomes"] if n != DEFAULT_WELCOME)
 
-    def set_welcome(self, subject: str, body: str) -> None:
-        self._data["welcome"] = {"subject": (subject or "").strip(), "body": body or ""}
+    def welcome(self, name: str = "") -> Dict[str, str]:
+        """The named welcome email, or Default for a blank name. An unknown name is an error, not Default:
+        sending a different email than the role names would be worse than refusing (see ``welcome_for``)."""
+        w = self._data["welcomes"].get(name or DEFAULT_WELCOME)
+        if w is None:
+            raise KeyError(name)
+        return {"subject": w["subject"], "body": w["body"]}
+
+    def welcome_for(self, cfg: "RoleTemplate") -> Optional[Dict[str, str]]:
+        """The welcome email ``cfg`` sends, or None when it names one that no longer exists."""
+        try:
+            return self.welcome(cfg.welcome)
+        except KeyError:
+            return None
+
+    def set_welcome(self, subject: str, body: str, name: str = DEFAULT_WELCOME) -> None:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("A welcome email needs a name.")
+        self._data["welcomes"][name] = {"subject": (subject or "").strip(), "body": body or ""}
+        self._save()
+
+    def delete_welcome(self, name: str) -> None:
+        """Delete a named welcome email. Default stays (the one a role without a choice sends), and one a
+        role still picks is refused, naming the roles: they would otherwise send nothing, or the wrong one."""
+        if name == DEFAULT_WELCOME:
+            raise ValueError("The Default welcome email can be edited but not deleted.")
+        users = [n for n, r in sorted(self._data["roles"].items()) if _as_role(r)["welcome"] == name]
+        if users:
+            raise ValueError(f"“{name}” is the welcome email of {', '.join(users)}: pick another for "
+                             f"{'that role' if len(users) == 1 else 'those roles'} first.")
+        self._data["welcomes"].pop(name, None)
         self._save()
 
 
@@ -528,8 +593,8 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
                 res["errors"].append("tasks: " + str(getattr(exc, "remediation", exc)))
 
     if hire.get("send_welcome") and email:
-        # The single flow holds the welcome template its preview rendered; a bulk row uses the store's.
-        w = hire.get("welcome") or store.welcome()
+        # Both flows hold the welcome email their preview resolved for the role (the hire's "welcome").
+        w = hire.get("welcome") or store.welcome(cfg.welcome)
         ctx = welcome_context(name, email, hire["role"], hire.get("manager", ""))
         try:
             we = await conn.send_welcome_email(email, render(w["subject"], ctx), render(w["body"], ctx))
@@ -546,8 +611,9 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
 # --- bulk: resolve a parsed CSV against the role templates, then tally what a run would do ---
 
 def resolve_hires(rows: List[Dict], store: RunbookStore) -> Tuple[List[Tuple[Dict, RoleTemplate]], List[str]]:
-    """Pair each parsed row with its role template. A row whose role is unknown or has no steps
-    becomes an error, not a pair."""
+    """Pair each parsed row with its role template, and snapshot the role's welcome email into the row
+    (Run sends what the preview resolved, not the store at run time). A row whose role is unknown, has no
+    steps, or names a welcome email that no longer exists becomes an error, not a pair."""
     cfgs: Dict[str, Optional[RoleTemplate]] = {}
     pairs: List[Tuple[Dict, RoleTemplate]] = []
     errors: List[str] = []
@@ -560,7 +626,13 @@ def resolve_hires(rows: List[Dict], store: RunbookStore) -> Tuple[List[Tuple[Dic
             who = hire.get("email") or hire.get("name") or "a row"
             errors.append("{}: unknown role '{}' (or it has no steps).".format(who, role))
             continue
-        pairs.append((hire, cfg))
+        welcome = store.welcome_for(cfg)
+        if hire.get("send_welcome") and welcome is None:
+            who = hire.get("email") or hire.get("name") or "a row"
+            errors.append("{}: role '{}' sends the welcome email '{}', which no longer exists.".format(
+                who, role, cfg.welcome))
+            continue
+        pairs.append(({**hire, "welcome": welcome, "welcome_name": cfg.welcome_name}, cfg))
     return pairs, errors
 
 
@@ -568,9 +640,12 @@ def tally_hires(pairs: List[Tuple[Dict, RoleTemplate]]) -> Dict[str, Any]:
     """What running ``pairs`` would do: hires per role, and the accounts created — their sign-in
     emailed (``notify``) or on the printable sheet."""
     per_role: Dict[str, int] = {}
+    welcomes: Dict[str, str] = {}
     creates = notifies = sheets = 0
-    for hire, _cfg in pairs:
+    for hire, cfg in pairs:
         per_role[hire["role"]] = per_role.get(hire["role"], 0) + 1
+        if hire.get("send_welcome"):
+            welcomes[hire["role"]] = cfg.welcome_name
         if hire["create_account"]:
             creates += 1
             if (hire.get("notify") or "").strip():
@@ -578,4 +653,4 @@ def tally_hires(pairs: List[Tuple[Dict, RoleTemplate]]) -> Dict[str, Any]:
             else:
                 sheets += 1
     return {"total": len(pairs), "creates": creates, "notifies": notifies, "sheets": sheets,
-            "per_role": sorted(per_role.items())}
+            "per_role": sorted(per_role.items()), "welcomes": sorted(welcomes.items())}
