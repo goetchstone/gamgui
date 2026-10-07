@@ -4,6 +4,7 @@
   <ul class="text-sm text-brand-black space-y-0.5">
     <li><strong>{{ summary.creates }}</strong> account{{ '' if summary.creates == 1 else 's' }} to create{% if summary.creates %} — {{ summary.notifies }} emailed by GAM, {{ summary.sheets }} on the printable sheet{% endif %}.</li>
     {% if summary.per_role %}<li class="text-xs text-brand-grayink">By role: {% for role, n in summary.per_role %}<span class="text-brand-blueink">{{ role }}</span> ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}</li>{% endif %}
+    {% if summary.welcomes %}<li class="text-xs text-brand-grayink">Welcome email by role: {% for role, w in summary.welcomes %}<span class="text-brand-blueink">{{ role }}</span> → {{ w }}{% if not loop.last %} · {% endif %}{% endfor %}</li>{% endif %}
   </ul>
   {% endif %}
   {% if errors %}

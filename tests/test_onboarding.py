@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -278,6 +279,104 @@ def test_run_uses_the_role_as_previewed(client, gam_calls):
     assert tasks == ["Set up POS"] and not [c for c in gam_writes(gam_calls()) if c[:2] == ["update", "group"]]
 
 
+# --- named welcome emails: a role picks one, Default for the rest ---------------------------------------
+
+def _sent_subjects(calls):
+    return [c[c.index("subject") + 1] for c in gam_writes(calls) if c[:1] == ["sendemail"]]
+
+
+def test_an_older_store_s_single_welcome_becomes_default_unchanged(tmp_path):
+    path = tmp_path / "ob.json"
+    path.write_text(json.dumps({"roles": {"Sales": {"steps": ["POS"]}},
+                                "welcome": {"subject": "Hi {name}", "body": "Old body"}}))
+    store = onboarding.RunbookStore(path)
+    assert store.welcome_names() == ["Default"]
+    assert store.welcome() == {"subject": "Hi {name}", "body": "Old body"}
+    assert store.role("Sales").welcome_name == "Default"
+
+
+def test_a_role_sends_the_welcome_email_it_picks_and_run_sends_the_previewed_one(client, gam_calls):
+    client.post("/onboard/welcome", data={"name": "Contractor", "subject": "Hello contractor {name}", "body": "B"})
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "welcome": "Contractor"})
+    page, token = _preview_token(client, **JORDAN, send_welcome="1")
+    assert "Welcome email “Contractor”" in unescape(page) and "Hello contractor Jordan Lee" in page
+    client.post("/onboard/welcome", data={"name": "Contractor", "subject": "Edited after preview", "body": "B"})
+    _run(client, token, **JORDAN, send_welcome="1")
+    assert _sent_subjects(gam_calls()) == ["Hello contractor Jordan Lee"]    # held, not re-read
+
+
+def test_a_role_without_a_choice_sends_default(client, gam_calls):
+    client.post("/onboard/welcome", data={"subject": "Default {name}", "body": "B"})   # name defaults to Default
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    _preview_and_run(client, **JORDAN, send_welcome="1")
+    assert _sent_subjects(gam_calls()) == ["Default Jordan Lee"]
+
+
+def test_bulk_rows_send_their_role_s_welcome_email_as_previewed(client, gam_calls):
+    client.post("/onboard/welcome", data={"name": "Intern", "subject": "Intern {name}", "body": "B"})
+    client.post("/onboard/role", data={"name": "Sales", "steps": "POS"})
+    client.post("/onboard/role", data={"name": "Interns", "steps": "Badge", "welcome": "Intern"})
+    csv = ("role,name,email,send_welcome\nSales,Ada Byte,ada@example.com,yes\n"
+           "Interns,Bo Bit,bo@example.com,yes\n")
+    r = client.post("/onboard/bulk/preview", files={"csv_file": ("h.csv", csv, "text/csv")})
+    assert "Interns</span> → Intern" in r.text and "Sales</span> → Default" in r.text
+    token = re.search(r'name="preview" value="([A-Za-z0-9_\-]+)"', r.text).group(1)
+    client.post("/onboard/welcome", data={"name": "Intern", "subject": "Changed after preview", "body": "B"})
+    done = client.post("/onboard/bulk/run", data={"csv_text": csv, "confirmed": "1", "preview": token})
+    wait_for_job(client, client.app.state.gamgui.jobs[re.search(r"job=([A-Za-z0-9_\-]+)", done.text).group(1)])
+    assert sorted(_sent_subjects(gam_calls())) == ["Intern Bo Bit", "Welcome to the team, Ada Byte!"]   # Default
+
+
+def test_a_welcome_email_in_use_or_default_cannot_be_deleted(client):
+    client.post("/onboard/welcome", data={"name": "Intern", "subject": "S", "body": "B"})
+    client.post("/onboard/role", data={"name": "Interns", "steps": "Badge", "welcome": "Intern"})
+    r = client.post("/onboard/welcome/delete", data={"name": "Intern"})
+    assert "is the welcome email of Interns" in unescape(r.text) and 'role="alert"' in r.text
+    assert "can be edited but not deleted" in client.post("/onboard/welcome/delete", data={"name": "Default"}).text
+    client.post("/onboard/role", data={"name": "Interns", "steps": "Badge", "welcome": ""})
+    r = client.post("/onboard/welcome/delete", data={"name": "Intern"})
+    assert 'data-name="Intern"' not in r.text and 'hx-swap-oob="true"' in r.text   # gone, and the picker follows
+
+
+def test_saving_a_welcome_email_keeps_it_in_the_editor_and_adds_it_to_the_role_picker(client):
+    r = client.post("/onboard/welcome", data={"name": "Contractor", "subject": "Hi contractor", "body": "B"})
+    assert 'name="name" value="Contractor"' in r.text and 'value="Hi contractor"' in r.text
+    picker = r.text.split('id="ob-role-welcome"')[1].split("</select>")[0]
+    assert 'hx-swap-oob="true"' in picker and '<option value="Contractor">Contractor</option>' in picker
+    assert '<option value="">Default</option>' in picker                      # blank is Default
+
+
+def test_a_welcome_name_that_differs_only_by_case_saves_over_the_existing_one(tmp_path):
+    store = onboarding.RunbookStore(tmp_path / "ob.json")
+    store.set_welcome("S1", "B", name="Contractor")
+    assert store.set_welcome("S2", "B", name="contractor") == "Contractor"
+    assert store.welcome_names() == ["Default", "Contractor"] and store.welcome("Contractor")["subject"] == "S2"
+
+
+async def test_a_held_hire_without_its_welcome_email_records_a_failed_send_not_a_crash(tmp_path, connector):
+    store = onboarding.RunbookStore(tmp_path / "ob.json")
+    cfg = onboarding.RoleTemplate("Sales", ["POS"], welcome="Gone")
+    hire = {**_hire(email="ada@example.com", send_welcome=True)}       # no held "welcome"
+    res = await onboarding.provision_hire(connector, None, store, cfg, hire)
+    assert res["email_sent"] is False and "welcome email: failed to send" in res["errors"]
+
+
+def test_a_role_cannot_pick_a_welcome_email_that_does_not_exist(client):
+    r = client.post("/onboard/role", data={"name": "Sales", "steps": "POS", "welcome": "Nope"})
+    assert "There is no welcome email named" in unescape(r.text)
+
+
+def test_a_role_whose_welcome_email_vanished_blocks_the_send_not_the_hire(tmp_path, client, gam_calls):
+    # Only a hand-edited file gets here (delete refuses one in use): refuse to send the wrong email.
+    client.post("/onboard/welcome", data={"name": "Intern", "subject": "S", "body": "B"})
+    client.post("/onboard/role", data={"name": "Sales", "steps": "POS", "welcome": "Intern"})
+    store = client.app.state.gamgui.runbooks
+    store._data["welcomes"].pop("Intern")
+    page, token = _preview_token(client, **JORDAN, send_welcome="1")
+    assert "which no longer exists" in unescape(page) and token == ""
+    assert _preview_token(client, **JORDAN)[1]                             # without the email it previews
+
+
 def test_run_is_single_use(client, gam_calls):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     _, token = _preview_token(client, **JORDAN)
@@ -511,7 +610,7 @@ def test_resolve_hires_pairs_rows_with_roles_and_the_tally_is_separate(tmp_path)
     assert errors == ["d@example.com: unknown role 'Empty' (or it has no steps).",
                       "e@example.com: unknown role 'Nope' (or it has no steps)."]
     assert onboarding.tally_hires(pairs) == {"total": 3, "creates": 2, "notifies": 1, "sheets": 1,
-                                             "per_role": [("Sales", 3)]}
+                                             "per_role": [("Sales", 3)], "welcomes": []}
 
 
 def test_bulk_run_needs_confirmation(client):

@@ -1,15 +1,46 @@
-<form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-2"
-      hx-post="/onboard/welcome" hx-target="#onboard-welcome" hx-swap="innerHTML">
-  <div class="flex items-center gap-2">
-    <h2 class="eyebrow text-brand-grayink">Welcome email template</h2>
-    {% if saved %}<span class="text-xs text-emerald-700">Saved ✓</span>{% endif %}
+{# The named welcome emails (a role picks one; Default is for roles without a choice), and the editor.
+   Swapped whole into #onboard-welcome on save or delete; the role editor's picker follows out of band. #}
+{% set fld = "mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start">
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+    <h2 class="eyebrow text-brand-grayink">Welcome emails</h2>
+    <p class="mt-1 text-xs text-brand-grayink">Each role sends one, picked in Role templates. A role without a choice sends {{ default_welcome }}.</p>
+    {% if error %}<p class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">{{ error }}</p>{% endif %}
+    <ul class="mt-3 space-y-2 text-sm">
+      {% for n, w in welcomes %}
+      <li class="rounded border border-brand-gray/30 p-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="min-w-0 truncate font-medium text-brand-black">{{ n }}{% if n == default_welcome %} <span class="text-[11px] font-normal text-brand-grayink">(default)</span>{% endif %}</span>
+          <span class="flex shrink-0 gap-3">
+            <button type="button" class="text-xs text-brand-blueink hover:underline" data-action="ob-welcome-edit"
+                    data-name="{{ n }}" data-subject="{{ w.subject }}" data-body="{{ w.body }}">Edit<span class="sr-only"> {{ n }}</span></button>
+            {% if n != default_welcome %}
+            <button class="text-xs text-red-600 hover:underline" hx-post="/onboard/welcome/delete" hx-vals='{"name": {{ n | tojson }}}'
+                    hx-target="#onboard-welcome" hx-swap="innerHTML" hx-confirm="Delete the welcome email “{{ n }}”?">Delete<span class="sr-only"> {{ n }}</span></button>
+            {% endif %}
+          </span>
+        </div>
+        <p class="mt-1 truncate text-xs text-brand-grayink">{{ w.subject }}</p>
+      </li>
+      {% endfor %}
+    </ul>
   </div>
-  <p class="text-xs text-brand-grayink">Variables: {% for v in vars %}<code>{{ "{" ~ v ~ "}" }}</code> {% endfor %}— filled in per new hire.</p>
-  <label class="block text-xs text-brand-grayink">Subject
-  <input class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-         name="subject" value="{{ welcome.subject }}" /></label>
-  <label class="block text-xs text-brand-grayink">Body
-  <textarea class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm font-mono text-[12.5px] text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-            name="body" rows="8">{{ welcome.body }}</textarea></label>
-  <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save template</button>
-</form>
+  <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-2"
+        hx-post="/onboard/welcome" hx-target="#onboard-welcome" hx-swap="innerHTML">
+    <div class="flex items-center gap-2">
+      <h2 class="eyebrow text-brand-grayink">Add / edit a welcome email</h2>
+      {% if saved %}<span class="text-xs text-emerald-700" role="status">Saved “{{ saved }}” ✓</span>{% endif %}
+    </div>
+    <p class="text-xs text-brand-grayink">Saving an existing name replaces it; a new name adds another (roles keep the one they pick, so to rename, save the new one, pick it in Role templates, then delete the old). Variables: {% for v in vars %}<code>{{ "{" ~ v ~ "}" }}</code> {% endfor %}— filled in per new hire.</p>
+    {# After a save, keep the saved one in the editor; otherwise start on Default. #}
+    {% set shown = (welcomes | selectattr(0, "equalto", saved) | list | first) or (welcomes | first) %}
+    <label class="block text-xs text-brand-grayink">Name
+      <input class="{{ fld }}" name="name" value="{{ shown[0] }}" required placeholder="e.g. Contractor" /></label>
+    <label class="block text-xs text-brand-grayink">Subject
+      <input class="{{ fld }}" name="subject" value="{{ shown[1].subject }}" /></label>
+    <label class="block text-xs text-brand-grayink">Body
+      <textarea class="{{ fld }} font-mono text-[12.5px]" name="body" rows="8">{{ shown[1].body }}</textarea></label>
+    <button class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" type="submit">Save welcome email</button>
+  </form>
+</div>
+{% if picker_oob %}{% with oob = True %}{% include "_onboard_welcome_picker.html" %}{% endwith %}{% endif %}

@@ -1,0 +1,7 @@
+{# The role editor's welcome-email picker. Blank is Default (stored that way); re-sent out of band when the
+   Welcome email tab adds or deletes one, so a new name is pickable without a reload. Its own class string,
+   so the page and the out-of-band copy match whichever template includes it. #}
+<select id="ob-role-welcome" name="welcome" aria-label="Welcome email for this role"{% if oob %} hx-swap-oob="true"{% endif %}
+        class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
+  {% for n in welcome_names %}<option value="{{ '' if n == default_welcome else n }}">{{ n }}</option>{% endfor %}
+</select>

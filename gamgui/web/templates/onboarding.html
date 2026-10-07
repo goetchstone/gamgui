@@ -14,7 +14,7 @@
 <div class="space-y-4">
   <div>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Onboard a new hire</h1>
-    <p class="text-brand-blueink text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send a welcome email. Roles &amp; the email are yours to edit.</p>
+    <p class="text-brand-blueink text-sm">Pick a role → it fires off a setup checklist to the assignee's Google Tasks, and can send the role's welcome email. Roles &amp; the emails are yours to edit.</p>
   </div>
 
   <div role="tablist" aria-label="Onboarding" class="flex gap-1 border-b border-brand-gray/30 text-sm">
@@ -78,6 +78,8 @@
             <option value="">— none —</option>
             {% for t in sig_templates %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
           </select></label>
+        <label class="block text-xs text-brand-grayink">Welcome email (when sent)
+          {% include "_onboard_welcome_picker.html" %}</label>
         <div class="block text-xs text-brand-grayink">Groups (search, or type one email per line)
           <input type="search" name="q" form="ob-picker-noop" autocomplete="off" aria-label="Search your groups" placeholder="Search your groups…" class="{{ fld }} mt-1"
                  hx-get="/onboard/search/groups" hx-trigger="keyup changed delay:300ms, focus" hx-target="#ob-group-picker" hx-swap="innerHTML" />

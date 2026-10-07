@@ -70,14 +70,17 @@ profile, groups, delegates, vacation responder, signature and calendar sharing.
 ## Onboard a new hire
 
 **Before:** on **Onboard → Role templates**, check the role you'll use — its org unit, signature,
-groups, shared calendars and checklist steps. Check the new address isn't already taken (search
+groups, shared calendars, checklist steps and **Welcome email (when sent)**. Each role sends one of
+the emails on **Onboard → Welcome email**: keep a few (say, one for staff and one for contractors)
+and pick one per role; a role without a choice sends "Default". An email a role still uses can't
+be deleted. Check the new address isn't already taken (search
 Users). Creating an account needs a free license: with none left, Google refuses it and GamGUI says
 so. A CSV run then skips the rest of its new accounts without trying them, and still runs the rows
 for people who already have one.
 
 **One person** — **Onboard → Generate**: name, email, role, manager, and whose Google Tasks gets the
 setup checklist. Tick **Create the Google account** to create it, and **Also send the welcome
-email to the new hire** if you want one. **Preview** lists every step with its `gam` command; the
+email to the new hire** if you want one (the preview names which). **Preview** lists every step with its `gam` command; the
 button under it (**Create account & run onboarding**, or **Create the task list** without an
 account) runs exactly that (change the form and you must preview again). The temporary password
 appears once, on a sheet you can copy or print — the new hire must change it at first sign-in.
