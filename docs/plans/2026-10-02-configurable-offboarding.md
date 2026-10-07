@@ -95,9 +95,8 @@ the leaver group by group, the memberships recorded in the preview so it can be 
 
 ## Before P2 ships
 
-Done in part: the operator's first live offboarding (2026-10-07) ran all eight `ok`. Still open
-before relying on new steps: the transfer's completion and a colleague's share actually removed (the
-runbook's after-run checks).
+Done: the operator's first live offboarding (2026-10-07) ran all eight `ok`, and its effects
+checked out in Google.
 
 ## Status by item
 

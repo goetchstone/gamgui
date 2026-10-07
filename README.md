@@ -173,8 +173,8 @@ for the Builder's External-only filter, and reading the connected admin and its 
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Delete an account | Users, Builder | not yet |
 | Undelete an account | Builder | not yet |
-| Transfer Drive + calendar data | Offboarding, Builder | **confirmed**: as two calls, and the single call offboarding makes (`drive,calendar … all`) was accepted (the first live offboarding, 2026-10-07, GAM 7.48.14); that the transfer *completed* and moved every file is not yet recorded |
-| Remove the leaver from everyone's calendars | Offboarding | **confirmed** the shape (the first live offboarding, 2026-10-07, GAM 7.48.14): GAM visited every user and ended, as expected, on the leaver's own calendar ("Cannot change your own access level", exit 50, tolerated); that a colleague's share was removed is not yet recorded |
+| Transfer Drive + calendar data | Offboarding, Builder | **confirmed**: as two calls, and the single call offboarding makes (`drive,calendar … all`) ran (the first live offboarding, 2026-10-07, GAM 7.48.14), and the operator checked the effects in Google afterwards: the transfer completed |
+| Remove the leaver from everyone's calendars | Offboarding | **confirmed** the shape (the first live offboarding, 2026-10-07, GAM 7.48.14): GAM visited every user and ended, as expected, on the leaver's own calendar ("Cannot change your own access level", exit 50, tolerated); the operator checked the effects in Google afterwards |
 | Add a calendar event (the manager's reminder) | Offboarding | **confirmed**; with an invitee it now adds `sendupdates all` (so they get the invitation email), not yet run live |
 | Share a calendar (add an ACL) | Calendars, Users (their own calendar) | **confirmed** |
 | Subscribe someone, so a shared calendar appears | Calendars, Onboard | **confirmed** |
