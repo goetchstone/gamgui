@@ -283,13 +283,18 @@ async def test_offboard_calendar_sweep_tolerates_own_acl(connector):
 
 @pytest.mark.asyncio
 async def test_offboard_calendar_sweep_clean_success_and_real_failure(connector):
-    # The sweep's exit-0 path (the mock used to fail it unconditionally, so it was never exercised)
-    # and a failure the connector must NOT tolerate (a missing scope is not a per-entity notice).
-    ok = await connector.remove_from_all_calendars("leaver@example.com")
-    assert ok.ok and not ok.detail
+    # The live run (2026-10-07): an active leaver is among `all users`, so the sweep always ends on their
+    # own calendar, exit 50 "Cannot change your own access level" — tolerated, and audited as such.
+    live = await connector.remove_from_all_calendars("leaver@example.com")
+    assert live.ok and "best-effort" in (live.detail or "")
     rec = connector.audit.tail()[-1]
     assert rec["ok"] is True and rec["argv"] == ["all", "users", "delete", "calendaracls", "primary", "leaver@example.com"]
-    assert "tolerated" not in rec.get("extra", {})
+    assert rec["extra"]["tolerated"] is True and "own access level" in rec["extra"]["error"]
+    # The exit-0 path (a leaver suspended first, so never visited), and a failure the connector must NOT
+    # tolerate (a missing scope is not a per-entity notice).
+    ok = await connector.remove_from_all_calendars("SWEEPCLEAN-leaver@example.com")
+    assert ok.ok and not ok.detail
+    assert "tolerated" not in connector.audit.tail()[-1].get("extra", {})
 
     bad = await connector.remove_from_all_calendars("SWEEPFAIL@example.com")
     assert not bad.ok and "insufficient authentication scopes" in bad.detail

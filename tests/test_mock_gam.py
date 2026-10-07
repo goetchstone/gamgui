@@ -43,7 +43,8 @@ WRITES = {
                            C.subscribe_calendar("bob@example.com", CAL, selected=False)],
     "remove_calendar": [C.remove_calendar("alice@example.com", CAL)],
     "delete_event": [C.delete_event(CAL, "evt-1")],
-    "remove_all_calendar_acls": [C.remove_all_calendar_acls("leaver@example.com")],
+    # A leaver suspended first (SWEEPCLEAN): an active one ends exit 50 on their own calendar (a test below).
+    "remove_all_calendar_acls": [C.remove_all_calendar_acls("SWEEPCLEAN-leaver@example.com")],
     "add_calendar_event": [C.add_calendar_event("mgr@example.com", "Confirm", "2026-07-23", "2026-07-24"),
                            C.add_calendar_event("mgr@example.com", "Confirm", "2026-07-23", "2026-07-24",
                                                 description="d", attendee="it@example.com")],
@@ -129,6 +130,16 @@ def test_every_builder_has_a_caller_in_the_app():
                          ids=lambda a: " ".join(a)[:60])
 async def test_mock_accepts_every_shape_the_app_emits(runner, domain, argv):
     await runner.run_authenticated(domain, argv, serialize=True)
+
+
+async def test_mock_sweep_of_an_active_leaver_ends_on_their_own_calendar_as_live_gam_did(runner, domain):
+    # Live, 2026-10-07 (GAM 7.48.14): `all users` includes the still-active leaver, so the sweep's last
+    # word is GAM refusing to change their own primary calendar — exit 50, tolerated by the connector.
+    with pytest.raises(GAMError) as err:
+        await runner.run_authenticated(domain, C.remove_all_calendar_acls("leaver@example.com"), serialize=True)
+    assert err.value.exit_code == 50 and err.value.kind == GAMErrorKind.OWN_ACL
+    assert ("Calendar: leaver@example.com, Calendar ACL: (Scope: user:leaver@example.com), "
+            "Delete Failed: Cannot change your own access level.") in err.value.stderr
 
 
 @pytest.mark.hand_built_argv   # partial `vacation` shapes (set_vacation names every field) to seed the merge
