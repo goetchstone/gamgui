@@ -144,7 +144,7 @@ acl_notify_tail() {
 
 case "${1:-}" in
   version)
-    echo "GAM 7.48.17 - mock"
+    echo "GAM 7.48.22 - mock"
     exit 0
     ;;
 esac
@@ -934,6 +934,10 @@ if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && 
   scope="$1"
   case "$scope" in
     *SWEEPSLOW*) exec sleep 30 ;;
+    *SWEEPCLEAN*)
+      # A leaver suspended before offboarding is not among `all users`: no own calendar visited, exit 0.
+      printf 'User: alice@example.com, Calendar: alice@example.com, Calendar ACL: (Scope: user:%s), Deleted\n' "$scope"
+      exit 0 ;;
     *OWNACL*)
       printf '    Calendar: %s, Calendar ACL: (Scope: user:%s), Delete Failed: Cannot change your own access level.\n' "$scope" "$scope" 1>&2
       exit 50 ;;
@@ -951,8 +955,12 @@ if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "delete" ] && 
       printf '    Calendar: %s, Calendar ACL: (Scope: user:%s), Delete Failed: Cannot change your own access level.\n' "$scope" "$scope" 1>&2
       exit 50 ;;
   esac
+  # Seen live (2026-10-07, GAM 7.48.14): `all users` includes the leaver, who is still active after the
+  # reset, so every sweep ends on their own primary calendar, which GAM refuses to change — exit 50 with
+  # this line, tolerated as OWN_ACL. A clean exit 0 never happens for an active leaver.
   printf 'User: alice@example.com, Calendar: alice@example.com, Calendar ACL: (Scope: user:%s), Deleted\n' "$scope"
-  exit 0
+  printf '    Calendar: %s, Calendar ACL: (Scope: user:%s), Delete Failed: Cannot change your own access level.\n' "$scope" "$scope" 1>&2
+  exit 50
 fi
 
 # `gam user <owner> remove calendars <UserCalendarEntity>` -> PERMANENTLY delete a secondary calendar.

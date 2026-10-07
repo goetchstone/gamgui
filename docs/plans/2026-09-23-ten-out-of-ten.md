@@ -220,9 +220,10 @@ plan's Phase 0 F1–F3.
   that ends at the guide; `make setup`'s interpreter choice stated as it is; screenshots regenerated
   with the tenant header). **Open:** V1; V3–V5 are new
   scope, and D6 says none for now.
-- **Phase 8** — **open** (D8). The operator's first real offboarding is its first live test: README
-  "Live verification status" marks every step still unproven, and
-  `docs/domains/lifecycle-offboarding.md` has the first live run checklist.
+- **Phase 8** — **mostly done** (D8). The operator's first real offboarding ran 2026-10-07, all eight
+  steps `ok`; README "Live verification status" and the offboarding runbook record what it confirmed.
+  Open: the transfer's completion, a colleague's share removed, the reminder with an invitee, and the
+  account delete.
 
 **Beyond the plan**, also on the branch (each has a failure-log entry): every confirm step runs what
 its preview held, under a single-use token — offboarding, signatures, onboarding, bulk department,
