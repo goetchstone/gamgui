@@ -181,8 +181,9 @@ async def page(request: Request) -> HTMLResponse:
 
 def _welcome_ctx(store: RunbookStore) -> dict:
     """The named welcome emails, for the Welcome email tab and the role editor's picker."""
-    return {"welcomes": [(n, store.welcome(n)) for n in store.welcome_names()],
-            "welcome_names": store.welcome_names(), "default_welcome": onboarding.DEFAULT_WELCOME}
+    names = store.welcome_names()
+    return {"welcomes": [(n, store.welcome(n)) for n in names],
+            "welcome_names": names, "default_welcome": onboarding.DEFAULT_WELCOME}
 
 
 def _welcome_panel(request: Request, store: RunbookStore, saved: str = "", error: str = "") -> HTMLResponse:
@@ -218,10 +219,10 @@ async def save_welcome(request: Request, subject: Annotated[str, Form()] = "", b
     """Save a named welcome email (a new name adds one; an existing name replaces it). Local only."""
     store = _store(request)
     try:
-        store.set_welcome(subject, body, name=name)
+        saved = store.set_welcome(subject, body, name=name)
     except ValueError as exc:
         return _welcome_panel(request, store, error=str(exc))
-    return _welcome_panel(request, store, saved=name.strip())
+    return _welcome_panel(request, store, saved=saved)
 
 
 @router.post("/welcome/delete", response_class=HTMLResponse)
@@ -278,7 +279,7 @@ async def preview(request: Request, role: Annotated[str, Form()], name: Annotate
     given, family = onboarding.split_name(name, first, last)
     hire = {"role": role, "name": name, "email": email.strip(), "manager": manager, "assignee": assignee,
             "create_account": bool(create_account), "first": first, "last": last,
-            "send_welcome": bool(send_welcome), "notify": "", "welcome": w, "welcome_name": cfg.welcome_name}
+            "send_welcome": bool(send_welcome), "notify": "", "welcome": w}
     token = app_state(request).previews.hold(
         _FLOW, _form_key(role, name, email, manager, assignee, send_welcome, create_account, first, last),
         (hire, cfg), tenant=tenant)

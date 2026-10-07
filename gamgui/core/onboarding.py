@@ -330,12 +330,16 @@ class RunbookStore:
         except KeyError:
             return None
 
-    def set_welcome(self, subject: str, body: str, name: str = DEFAULT_WELCOME) -> None:
+    def set_welcome(self, subject: str, body: str, name: str = DEFAULT_WELCOME) -> str:
+        """Save a named welcome email; returns the name it was saved under."""
         name = (name or "").strip()
         if not name:
             raise ValueError("A welcome email needs a name.")
+        # "contractor" saves over "Contractor" rather than adding a near-duplicate every picker would show.
+        name = next((n for n in self._data["welcomes"] if n.lower() == name.lower()), name)
         self._data["welcomes"][name] = {"subject": (subject or "").strip(), "body": body or ""}
         self._save()
+        return name
 
     def delete_welcome(self, name: str) -> None:
         """Delete a named welcome email. Default stays (the one a role without a choice sends), and one a
@@ -594,9 +598,11 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
 
     if hire.get("send_welcome") and email:
         # Both flows hold the welcome email their preview resolved for the role (the hire's "welcome").
-        w = hire.get("welcome") or store.welcome(cfg.welcome)
+        w = hire.get("welcome") or store.welcome_for(cfg)
         ctx = welcome_context(name, email, hire["role"], hire.get("manager", ""))
         try:
+            if w is None:       # the role's email vanished and nothing was held: a failed send, not a crash
+                raise LookupError(cfg.welcome)
             we = await conn.send_welcome_email(email, render(w["subject"], ctx), render(w["body"], ctx))
             res["email_sent"] = bool(we.ok)
         except Exception:  # noqa: BLE001
@@ -632,7 +638,7 @@ def resolve_hires(rows: List[Dict], store: RunbookStore) -> Tuple[List[Tuple[Dic
             errors.append("{}: role '{}' sends the welcome email '{}', which no longer exists.".format(
                 who, role, cfg.welcome))
             continue
-        pairs.append(({**hire, "welcome": welcome, "welcome_name": cfg.welcome_name}, cfg))
+        pairs.append(({**hire, "welcome": welcome}, cfg))
     return pairs, errors
 
 

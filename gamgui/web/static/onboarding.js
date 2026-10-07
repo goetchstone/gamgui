@@ -28,6 +28,17 @@
       var el = f.querySelector("[name=" + k + "]");
       if (el) el.value = btn.dataset[k] || "";
     });
+    // A welcome email the role names but the list no longer has: show it as missing rather than let the
+    // picker go blank and the save silently re-point the role to Default (the server refuses the name).
+    var picker = f.querySelector("[name=welcome]");
+    var wanted = btn.dataset.welcome || "";
+    if (picker && picker.value !== wanted) {
+      var opt = document.createElement("option");
+      opt.value = wanted;
+      opt.textContent = wanted + " (missing)";
+      picker.appendChild(opt);
+      picker.value = wanted;
+    }
     f.querySelector("[name=name]").focus();
   };
 

@@ -31,7 +31,7 @@
       <h2 class="eyebrow text-brand-grayink">Add / edit a welcome email</h2>
       {% if saved %}<span class="text-xs text-emerald-700" role="status">Saved “{{ saved }}” ✓</span>{% endif %}
     </div>
-    <p class="text-xs text-brand-grayink">Saving an existing name replaces it. Variables: {% for v in vars %}<code>{{ "{" ~ v ~ "}" }}</code> {% endfor %}— filled in per new hire.</p>
+    <p class="text-xs text-brand-grayink">Saving an existing name replaces it; a new name adds another (roles keep the one they pick, so to rename, save the new one, pick it in Role templates, then delete the old). Variables: {% for v in vars %}<code>{{ "{" ~ v ~ "}" }}</code> {% endfor %}— filled in per new hire.</p>
     {# After a save, keep the saved one in the editor; otherwise start on Default. #}
     {% set shown = (welcomes | selectattr(0, "equalto", saved) | list | first) or (welcomes | first) %}
     <label class="block text-xs text-brand-grayink">Name

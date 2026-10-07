@@ -346,6 +346,21 @@ def test_saving_a_welcome_email_keeps_it_in_the_editor_and_adds_it_to_the_role_p
     assert '<option value="">Default</option>' in picker                      # blank is Default
 
 
+def test_a_welcome_name_that_differs_only_by_case_saves_over_the_existing_one(tmp_path):
+    store = onboarding.RunbookStore(tmp_path / "ob.json")
+    store.set_welcome("S1", "B", name="Contractor")
+    assert store.set_welcome("S2", "B", name="contractor") == "Contractor"
+    assert store.welcome_names() == ["Default", "Contractor"] and store.welcome("Contractor")["subject"] == "S2"
+
+
+async def test_a_held_hire_without_its_welcome_email_records_a_failed_send_not_a_crash(tmp_path, connector):
+    store = onboarding.RunbookStore(tmp_path / "ob.json")
+    cfg = onboarding.RoleTemplate("Sales", ["POS"], welcome="Gone")
+    hire = {**_hire(email="ada@example.com", send_welcome=True)}       # no held "welcome"
+    res = await onboarding.provision_hire(connector, None, store, cfg, hire)
+    assert res["email_sent"] is False and "welcome email: failed to send" in res["errors"]
+
+
 def test_a_role_cannot_pick_a_welcome_email_that_does_not_exist(client):
     r = client.post("/onboard/role", data={"name": "Sales", "steps": "POS", "welcome": "Nope"})
     assert "There is no welcome email named" in unescape(r.text)
