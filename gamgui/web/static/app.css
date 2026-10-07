@@ -838,10 +838,6 @@ video {
   display: table;
 }
 
-.\!grid {
-  display: grid !important;
-}
-
 .grid {
   display: grid;
 }

@@ -114,6 +114,15 @@ def test_result_cells_never_break_mid_word_and_carry_their_whole_value(client):
     assert 'data-expanded="whitespace-normal break-words min-w-[24rem]"' in r.text    # a click expands a cut-off value
 
 
+def test_the_row_filter_finds_what_the_table_shows_and_still_the_raw_field(client):
+    r = client.post("/builder/run", data={"cid": "build.find_users", "query": "isSuspended=true"})
+    rid = re.search(r'name="rid" value="([^"]+)"', r.text).group(1)
+    shown = client.get("/builder/results", params={"rid": rid, "q": "Alice Anders"}).text
+    assert "alice@example.com" in shown                                 # the name as displayed
+    raw = client.get("/builder/results", params={"rid": rid, "q": "familyName"}).text
+    assert "alice@example.com" in raw                                   # a raw field name still matches
+
+
 def test_export_offered_exactly_for_todrive_reads(client):
     # Export-to-Sheet shows iff the GAM command actually supports `todrive`.
     cat = load_catalog()
