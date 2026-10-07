@@ -82,6 +82,47 @@ def test_curated_search_commands_run(client):
     assert rf.status_code == 200 and "Q4 Budget" in rf.text       # a mock file name
 
 
+@pytest.mark.parametrize(("value", "shown"), [
+    (None, ""), (True, "True"), (3, "3"), ("a@example.com", "a@example.com"),
+    (["a@example.com", "b@example.com"], "a@example.com, b@example.com"),
+    ({"givenName": "Ada", "familyName": "Byte", "fullName": "Ada Byte"}, "Ada Byte"),
+    ({"givenName": "Ada", "familyName": "Byte"}, "Ada Byte"),
+    ({"type": "work", "value": "123"}, "type: work · value: 123"),
+    ([{"address": "a@example.com", "primary": True}], "address: a@example.com · primary: True"),
+])
+def test_a_result_cell_reads_as_text_not_python(value, shown):
+    from gamgui.web.server import cell
+    assert cell(value) == shown
+
+
+def test_the_builder_gives_results_the_room_the_footer_and_title_row_took(client):
+    page = client.get("/builder").text
+    assert "<footer" not in page                                        # a fixed workspace: no footer line
+    controls = page.split('id="cat-controls"')[1].split("</form>")[0]
+    assert "Command builder" in controls                                # the title shares the search row
+    toggle = controls.split('id="list-toggle"')[1].split("</button>")[0]
+    assert 'aria-controls="catalog-col"' in toggle and 'aria-expanded="true"' in toggle and "Hide list" in toggle
+    assert 'id="catalog-col"' in page and 'data-collapsed-cols="lg:grid-cols-[minmax(0,1fr)]"' in page
+    assert "<footer" in client.get("/audit").text                       # other screens keep it
+
+
+def test_result_cells_never_break_mid_word_and_carry_their_whole_value(client):
+    r = client.post("/builder/run", data={"cid": "build.find_users", "query": "isSuspended=true"})
+    cells = re.findall(r'<td class="([^"]*)" title="([^"]*)"', r.text)
+    assert cells and all("break-all" not in c and "truncate" in c and "whitespace-nowrap" in c for c, _ in cells)
+    assert not any(t.startswith(("{", "[")) for _, t in cells)          # structured values read as text
+    assert 'data-expanded="whitespace-normal break-words min-w-[24rem]"' in r.text    # a click expands a cut-off value
+
+
+def test_the_row_filter_finds_what_the_table_shows_and_still_the_raw_field(client):
+    r = client.post("/builder/run", data={"cid": "build.find_users", "query": "isSuspended=true"})
+    rid = re.search(r'name="rid" value="([^"]+)"', r.text).group(1)
+    shown = client.get("/builder/results", params={"rid": rid, "q": "Alice Anders"}).text
+    assert "alice@example.com" in shown                                 # the name as displayed
+    raw = client.get("/builder/results", params={"rid": rid, "q": "familyName"}).text
+    assert "alice@example.com" in raw                                   # a raw field name still matches
+
+
 def test_export_offered_exactly_for_todrive_reads(client):
     # Export-to-Sheet shows iff the GAM command actually supports `todrive`.
     cat = load_catalog()

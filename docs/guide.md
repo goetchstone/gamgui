@@ -182,6 +182,10 @@ and the CSV download takes the filtered rows.
 Clicking an address in a result offers follow-ups for that person (delegates, forwarding,
 signature, suspend and more). A Builder change only ever runs from its preview.
 
+A wide result? **Hide list** (top right) gives the result the whole width; the Builder remembers
+your choice until you click it again ("Show list"). Each value stays on one line: a long one is cut short —
+click it to read all of it, or hover. The CSV download always has every value whole.
+
 ## Jobs and Stop
 
 Longer runs — a signature rollout, a bulk department change, a CSV of hires, an offboarding, a group

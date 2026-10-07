@@ -30,7 +30,7 @@ from ...core.bulk import stop_requested
 from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
-from ..server import TEMPLATES
+from ..server import TEMPLATES, cell
 from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly
 
 router = APIRouter(prefix="/builder")
@@ -178,12 +178,19 @@ _SWITCHED = "The active domain changed while this ran — run it again to read t
 
 def _columns_and_texts(last: dict) -> tuple:
     """Every column any row has, the first row's first (ragged JSON: the table and the CSV show the same
-    columns), and each row's lowercased text to filter on — worked out once per result."""
+    columns), and each row's lowercased text to filter on — worked out once per result. The text is what
+    the table shows (``cell``: a name as "Alice Anders") and, for a structured value, its raw form too,
+    so a search finds what is on screen and still matches a field name."""
     if "texts" not in last:
         records = last["records"]
         last["cols"] = list(dict.fromkeys(k for r in records for k in r))
-        last["texts"] = ["\n".join(str(r.get(k, "")) for k in last["cols"]).lower() for r in records]
+        last["texts"] = ["\n".join(_filter_text(r.get(k, "")) for k in last["cols"]).lower() for r in records]
     return last["cols"], last["texts"]
+
+
+def _filter_text(value) -> str:
+    shown = cell(value)
+    return shown if isinstance(value, str) or str(value) == shown else f"{shown}\t{value}"
 
 
 def _is_internal(address: str, domains: tuple) -> bool:
