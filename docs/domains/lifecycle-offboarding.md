@@ -315,12 +315,23 @@ one run per leaver (`test_offboard_refuses_a_second_run_for_a_leaver_whose_offbo
 and the preview's commands: each step's exact `gam` line in the page, and the previewed argv = what the mock received
 (`test_offboard_preview_commands_are_what_runs`).
 **Not proven offline** (the mock lies): a live DTS transfer of a real user's Drive+Calendar, the
-actual per-user calendar sweep at domain scale, `deprovision signout` and `forward off` (never run
-live: their output, and `deprovision` for a user with no app passwords or tokens), and `delete_user`
-itself. Per CLAUDE.md, these must be run against a **throwaway** account before being trusted.
+actual per-user calendar sweep at domain scale, `deprovision signout` and `forward off`, and
+`delete_user` itself. Per CLAUDE.md, these must be run against a **throwaway** account before being trusted.
+**First live run (2026-10-07, GAM 7.48.14, a real leaver, plan D8):** all eight steps `ok` in Audit,
+"8 of 8". Confirmed: `deprovision signout`, `forward off`, the auto-reply's `start Started end
+NotSpecified`, and the single `create datatransfer … drive,calendar … all` call (accepted; completion
+not recorded). The sweep visited every user and ended exit 50 on the leaver's own primary calendar,
+"Cannot change your own access level" — `all users` includes the still-active leaver, so this happens
+on **every** offboarding and is tolerated as `OWN_ACL` (the mock's default sweep now does the same;
+`SWEEPCLEAN` keeps the exit-0 path for a leaver suspended first). Still unproven live: that the
+transfer completed with nothing left owned, that a colleague's share was removed (only the last
+stderr line of each kind is audited), the reminder with an invitee (`sendupdates all`), and
+`delete_user`.
 
 ## First live run checklist
-Offboarding a real user is the live test (plan D8). Keep this page open.
+Offboarding a real user is the live test (plan D8; first run 2026-10-07, all eight `ok` — see
+"Testing / live-verification status" for what it proved and what is still open). Keep this page open
+for the next one: the after-run checks in Google are what remain.
 
 **In the preview, before Run**
 - The header names the right person and says "8 steps" (nothing ticked as already done).

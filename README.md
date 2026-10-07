@@ -165,16 +165,16 @@ for the Builder's External-only filter, and reading the connected admin and its 
 | Remove group member | Groups, Users, Builder | **confirmed** |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
 | Remove delegate | Users, Builder | **confirmed** |
-| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed**, including the explicit `contactsonly false domainonly false` and dated `start`/`end` the user page sends; offboarding's "starts now, no end" `start Started end NotSpecified`, not yet |
+| Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed**, including the explicit `contactsonly false domainonly false` and dated `start`/`end` the user page sends; and offboarding's "starts now, no end" `start Started end NotSpecified` (the first live offboarding, 2026-10-07, GAM 7.48.14) |
 | Clear vacation | Users, Builder | **confirmed** |
 | Reset password (it runs no sign-out: offboarding's next step does, or *Sign out everywhere*) | Offboarding, Builder | **confirmed** |
 | Sign out everywhere | Users, Builder | not yet |
-| Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | not yet |
+| Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14) |
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Delete an account | Users, Builder | not yet |
 | Undelete an account | Builder | not yet |
-| Transfer Drive + calendar data | Offboarding, Builder | **confirmed** as two calls; the single call offboarding now makes (with `all`: private and shared Drive files) is not yet |
-| Remove the leaver from everyone's calendars | Offboarding | not yet |
+| Transfer Drive + calendar data | Offboarding, Builder | **confirmed**: as two calls, and the single call offboarding makes (`drive,calendar … all`) was accepted (the first live offboarding, 2026-10-07, GAM 7.48.14); that the transfer *completed* and moved every file is not yet recorded |
+| Remove the leaver from everyone's calendars | Offboarding | **confirmed** the shape (the first live offboarding, 2026-10-07, GAM 7.48.14): GAM visited every user and ended, as expected, on the leaver's own calendar ("Cannot change your own access level", exit 50, tolerated); that a colleague's share was removed is not yet recorded |
 | Add a calendar event (the manager's reminder) | Offboarding | **confirmed**; with an invitee it now adds `sendupdates all` (so they get the invitation email), not yet run live |
 | Share a calendar (add an ACL) | Calendars, Users (their own calendar) | **confirmed** |
 | Subscribe someone, so a shared calendar appears | Calendars, Onboard | **confirmed** |
@@ -182,7 +182,7 @@ for the Builder's External-only filter, and reading the connected admin and its 
 | Unshare a calendar (remove an ACL) | Calendars, Users | not yet |
 | Delete an event | Calendars | not yet |
 | Delete a secondary calendar | Calendars | **confirmed** |
-| Forwarding: add an address, forward on / off | Builder (forward off also Offboarding) | not yet |
+| Forwarding: add an address, forward on / off | Builder (forward off also Offboarding) | forward off **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14); adding an address and forward on, not yet |
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
 | Export a result to a Google Sheet | Builder | not yet |
