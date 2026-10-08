@@ -16,5 +16,4 @@
   token cookie included).
 - **Prevention:** `tests/test_app_window_downloads.py` finds every GET route that sends
   `Content-Disposition: attachment` and fails unless each is linked, and every link carries `download`.
-  It reasons from pywebview 6.2.1's source; that the save panel appears is unproven until the operator
-  clicks Download CSV in the rebuilt app.
+  Confirmed in the rebuilt app the same day: Download CSV opens the save panel and the page stays put.
