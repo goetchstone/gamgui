@@ -9,7 +9,7 @@
       <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Audit log</h1>
       <p class="text-brand-blueink mt-1 text-sm">{{ total }} action{{ "s" if total != 1 else "" }} logged · {{ failures }} failure{{ "s" if failures != 1 else "" }}</p>
     </div>
-    <a href="/audit/export.csv" class="text-sm font-medium text-brand-blueink hover:text-brand-black">Export CSV ↓</a>
+    <a href="/audit/export.csv" download class="text-sm font-medium text-brand-blueink hover:text-brand-black">Export CSV ↓</a>
   </div>
   <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads the full log (filters aren't applied to the download in v1).</p>
 

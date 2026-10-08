@@ -171,7 +171,7 @@ scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Sign out everywhere | Users, Builder | not yet |
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14) |
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
-| Delete an account | Users, Builder | not yet |
+| Delete an account | Users, Builder | **confirmed** (2026-10-08, GAM 7.48.22, from the user page: the offboarded leaver, after the transfer completed) |
 | Undelete an account | Builder | not yet |
 | Transfer Drive + calendar data | Offboarding, Builder | **confirmed**: as two calls, and the single call offboarding makes (`drive,calendar … all`) ran (the first live offboarding, 2026-10-07, GAM 7.48.14), and the operator checked the effects in Google afterwards: the transfer completed |
 | Remove the leaver from everyone's calendars | Offboarding | **confirmed** the shape (the first live offboarding, 2026-10-07, GAM 7.48.14): GAM visited every user and ended, as expected, on the leaver's own calendar ("Cannot change your own access level", exit 50, tolerated); the operator checked the effects in Google afterwards |
