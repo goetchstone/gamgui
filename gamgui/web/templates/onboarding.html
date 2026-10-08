@@ -107,7 +107,7 @@
         <h2 class="eyebrow text-brand-grayink">Import a CSV of hires</h2>
         <p class="mt-1 text-xs text-brand-grayink">One row per hire; the <span class="font-mono">role</span> column picks the template (its steps, signature, org unit, groups &amp; calendars). Columns: <span class="font-mono">role, name, email, manager, assignee, create_account, first, last, send_welcome, notify</span>.
           Leave <span class="font-mono">notify</span> blank to put that hire's temp password on the printable sheet, or set it to an email and GAM sends the sign-in info there directly.</p>
-        <a href="/onboard/bulk/template.csv" class="mt-1 inline-block text-xs text-brand-blueink hover:underline">Download a template CSV ↓</a>
+        <a href="/onboard/bulk/template.csv" download class="mt-1 inline-block text-xs text-brand-blueink hover:underline">Download a template CSV ↓</a>
       </div>
       <form hx-post="/onboard/bulk/preview" hx-target="#onboard-bulk-result" hx-swap="innerHTML"
             hx-encoding="multipart/form-data" class="flex flex-wrap items-center gap-2">
