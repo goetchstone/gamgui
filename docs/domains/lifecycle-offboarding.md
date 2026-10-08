@@ -326,8 +326,7 @@ on **every** offboarding and is tolerated as `OWN_ACL` (the mock's default sweep
 `SWEEPCLEAN` keeps the exit-0 path for a leaver suspended first). The operator then worked through
 the after-run checks in Google and reported every effect as expected: the transfer completed, the
 manager has the mailbox, an outside sender gets the auto-reply, the sweep and the reminder did their
-part. Still unproven live: the reminder with an invitee (`sendupdates all`; this run had none) and
-`delete_user`.
+part. The account delete followed live on 2026-10-08 (GAM 7.48.22, from the user page, after the transfer completed): `delete user` ok. Still unproven live: the reminder with an invitee (`sendupdates all`; this run had none).
 
 ## First live run checklist
 Offboarding a real user is the live test (plan D8; first run 2026-10-07, all eight `ok` — see
