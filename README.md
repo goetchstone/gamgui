@@ -148,11 +148,11 @@ Every write is audited, so this table comes from real audit logs rather than mem
 means the operation has succeeded at least once against a production Google Workspace domain. **Not
 yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
 it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
-reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`; last full
-run 2026-09-25 on GAM 7.48.11 — the pin is now 7.48.14, on which setup's scope check passed live on
-2026-10-02 — together with setup's scoped `check serviceaccount scopes …`, `print domains`
-for the Builder's External-only filter, and reading the connected admin and its granted scopes from
-`oauth2.txt`).
+reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
+2026-10-08 on GAM 7.48.22, all eight checks passing). Three reads it doesn't run were last confirmed
+separately: setup's scoped `check serviceaccount scopes …` (2026-10-02, GAM 7.48.14), and `print
+domains` for the Builder's External-only filter and reading the connected admin and its granted
+scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 
 | Write | Where | Live |
 |---|---|---|
