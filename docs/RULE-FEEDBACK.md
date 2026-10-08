@@ -30,6 +30,22 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-10-08 — A CSV link worked in every test and stranded the operator in the app window
+- **What happened:** Download CSV replaced the app window's page with the CSV as text, with no way back
+  (failure-log 2026-10-08). pywebview's WKWebView downloads only what WebKit can't show, or a `download`
+  link; a browser downloads either way.
+- **Invariant in force:** none — new shape: the app window behaves differently from a browser.
+- **Why it didn't hold:** not covered. Every test, the a11y run and the mock preview use TestClient or
+  Chrome; CI builds the `.app` (`check_app.py`) but never launches it, so WKWebView's choices are never
+  exercised.
+- **Would a rule have caught it?** Only if enforced differently: a launched-app smoke test (open the
+  window, click each download) would, but the `.app` launch is deliberately the operator's. The narrow
+  tripwire (`tests/test_app_window_downloads.py`) now covers downloads; other WKWebView-only behaviour
+  (navigation, dialogs, printing) has no equivalent.
+- **Enforcement home if changed:** a CLAUDE.md "Corollary" line for the observer pass to weigh:
+  passing browser tests do not mean the app window behaves the same; a change to links, navigation or
+  dialogs is unproven until clicked in the app.
+
 ## 2026-10-02 — Invariant #3 says only the 26 curated commands "can change anything"; a read's Sheet export does too
 - **What happened:** a repo-wide review found SECURITY.md promising every mutation is confirmed and
   invariant #3 saying the curated commands are the only ones that can *change* anything. The Builder's
