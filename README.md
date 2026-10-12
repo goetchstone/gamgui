@@ -102,8 +102,8 @@ Actively developed and used against live Google Workspace tenants. Working today
   password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
   OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
   setup, and a templated welcome email — for one person, or a CSV of hires as a background job.
-- **Command Builder** — browse/search the full categorized GAM catalog (1,075 commands, 538 of them
-  runnable: 26 hand-curated, the only ones that can change anything, plus 512 read-only commands
+- **Command Builder** — browse/search the full categorized GAM catalog (1,077 commands, 540 of them
+  runnable: 26 hand-curated, the only ones that can change anything, plus 514 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
   preview → run, linear sequencing, and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
