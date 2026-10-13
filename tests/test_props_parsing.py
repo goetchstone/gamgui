@@ -76,7 +76,7 @@ def _cell(value: str) -> str:
 
 
 def _csv(rows, lineterminator="\n") -> str:
-    """Rows as a conforming writer prints them — GAM's own Python (3.14) included: a cell holding a
+    """Rows as a conforming writer prints them — GAM's own Python (3.15) included: a cell holding a
     comma, quote, CR or LF is quoted. Not csv.writer: on 3.10 it leaves a lone CR unquoted when lines
     end in LF (3.11 changed that), which the reader then takes for a line break — the py3.10 legs failed
     on the test's own CSV, not on the parser."""

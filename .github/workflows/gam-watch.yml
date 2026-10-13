@@ -85,11 +85,40 @@ jobs:
         # Never expand an expression inside run: — pass it through env so the shell sees data.
         run: python scripts/bump_gam.py "v$LATEST"
 
+      # The new build's *_RC table loads only in the Python that froze it (see ci.yml's gam-compat). A
+      # failure here leaves no table, so the suite below goes red and the PR still opens, flagged.
+      - name: Which Python froze the new gam
+        if: steps.check.outputs.todo == 'true'
+        id: buildpy
+        continue-on-error: true
+        run: |
+          version=$(python -I scripts/gam_rc_table.py --python-version gamgui/resources/gam7/gam)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up the build's own Python (off PATH; the suite stays on 3.14)
+        if: steps.check.outputs.todo == 'true'
+        id: gampy
+        continue-on-error: true
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ steps.buildpy.outputs.version }}
+          allow-prereleases: true
+          update-environment: false
+
+      - name: Read the new build's exit-code table with its own Python (stdlib only)
+        if: steps.check.outputs.todo == 'true'
+        continue-on-error: true
+        env:
+          GAM_PYTHON: ${{ steps.gampy.outputs.python-path }}
+        run: |
+          "$GAM_PYTHON" -I scripts/gam_rc_table.py gamgui/resources/gam7/gam > "$RUNNER_TEMP/gam_rc.json"
+
       - name: Run the suite (drift guards included)
         if: steps.check.outputs.todo == 'true'
         id: tests
         env:
-          EXIT_CODES_REQUIRE_GAM: "1"   # the new build's *_RC table must be read, not skipped
+          EXIT_CODES_REQUIRE_GAM: "1"   # the new build's *_RC table must be compared, not skipped
+          GAM_RC_TABLE: ${{ runner.temp }}/gam_rc.json
         run: |
           set +e
           python -m pytest -q > /tmp/pytest.log 2>&1

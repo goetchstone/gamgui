@@ -22,8 +22,8 @@ Each of these exists because something went wrong. Several have tests guarding t
    ran on a bare POST — against what the preview showed: a confirm step that posts the live form
    runs the changes its preview held (single-use `web/previews.py` token), never a rebuild of that
    form. `tests/test_write_routes_guarded.py` holds every POST route to this or a stated exemption.
-3. **Only read-only commands may become runnable automatically.** Of 1075 catalog entries, 538 run:
-   26 hand-curated (the only ones that can *change* anything) plus 512 grammar-derived commands
+3. **Only read-only commands may become runnable automatically.** Of 1077 catalog entries, 540 run:
+   26 hand-curated (the only ones that can *change* anything) plus 514 grammar-derived commands
    auto-promoted by `core/catalog/readbuilder.py` **because they are confidently `READ_ONLY` and not
    flagged uncertain**. Everything else is inert, syntax display only. Adding write coverage is a
    deliberate act of curation. (Two agent-facing docs once claimed only the 26 curated commands run —
@@ -113,7 +113,7 @@ make gam TAG=vX.Y.Z                 # re-vendor GAM (fails closed on an unpinned
 make app                            # build dist/GamGUI.app
 ```
 
-GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.22); three drift
+GAM is pinned at `EXPECTED_GAM_VERSION` in `core/gam/commands.py` (currently 7.48.26); three drift
 guards (`test_required_command_tokens_present`, `test_catalog_matches_grammar`,
 `test_pinned_version_consistent`) fail if a bump breaks a command we use. Bump with
 `scripts/bump_gam.py vX.Y.Z` — runbook in [build-packaging](docs/domains/build-packaging.md); the
