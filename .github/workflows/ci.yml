@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"   # the vendored gam's own Python: test_gam_exit_codes unmarshals its bytecode
+          python-version: "3.14"   # the suite's; the build's own Python reads its exit codes below
       - name: Install (hash-locked, wheels only)
         run: |
           python -m pip install --require-hashes --only-binary :all: -r requirements/dev.txt
@@ -110,16 +110,36 @@ jobs:
           PY
       - name: Restore the committed command catalog (fetch_gam.sh replaces resources/gam7 wholesale)
         run: git checkout -- gamgui/resources/gam7/command_catalog.json
+      # The build's *_RC table is marshalled bytecode, which loads only in the Python that froze it (3.15
+      # for 7.48.26, ahead of the dev lock's wheels). So that Python, set up beside the suite's and left
+      # off PATH, reads it with the stdlib-only script, and the suite gets the table as JSON.
+      - name: Which Python froze the vendored gam
+        id: buildpy
+        run: |
+          version=$(python -I scripts/gam_rc_table.py --python-version gamgui/resources/gam7/gam)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        id: gampy
+        with:
+          python-version: ${{ steps.buildpy.outputs.version }}
+          allow-prereleases: true
+          update-environment: false
+      - name: Read the build's exit-code table with its own Python (stdlib only, nothing installed)
+        env:
+          GAM_PYTHON: ${{ steps.gampy.outputs.python-path }}
+        run: |
+          "$GAM_PYTHON" -I scripts/gam_rc_table.py gamgui/resources/gam7/gam > "$RUNNER_TEMP/gam_rc.json"
       - name: The whole suite against the REAL reference (the command contract, and every argv sent to the mock)
         run: pytest -q
         env:
-          # tests/test_gam_exit_codes.py reads the build's *_RC table here; a skip would hide that it didn't.
+          # tests/test_gam_exit_codes.py compares the build's *_RC table here; a skip would hide that it didn't.
           EXIT_CODES_REQUIRE_GAM: "1"
+          GAM_RC_TABLE: ${{ runner.temp }}/gam_rc.json
 
   app:
     # Freezes the .app exactly as `make app` does, so a spec, lock or signing change that breaks the
     # bundle fails here rather than at the next local build. The runner has no signing identity, so
-    # build_app.sh signs ad-hoc (hardened runtime). The pinned gam's libpython needs macOS >= 26.5.
+    # build_app.sh signs ad-hoc (hardened runtime). The pinned gam's libpython needs macOS >= 26.6.
     name: app (build + smoke check)
     runs-on: macos-latest
     timeout-minutes: 20

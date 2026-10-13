@@ -5,22 +5,23 @@ read `check serviceaccount`'s scope failure as exit 1 because three changes gues
 agreed; the build exits SCOPES_NOT_AUTHORIZED_RC (10), and a rejected key OAUTH2SERVICE_JSON_REQUIRED_RC
 (16). So the codes come from the build's *_RC table, and the mock must exit with the same constants.
 
-The table is read with the stdlib, not PyInstaller: CI's jobs install only the dev lock, so a PyInstaller
-import skipped the check everywhere it mattered. Where GAM isn't vendored the build half skips; a job
-that vendors it sets EXIT_CODES_REQUIRE_GAM, which turns that skip, or a build this Python can't read,
-into a failure (tests/test_workflow_safety.py holds every such job to it).
+The table is read with the stdlib, not PyInstaller (scripts/gam_rc_table.py): CI's jobs install only the
+dev lock, so a PyInstaller import skipped the check everywhere it mattered. The build's bytecode loads
+only in its own Python, which can be newer than the suite's, so CI reads the table with that Python and
+hands it over as JSON (GAM_RC_TABLE); without one, the suite reads the build itself when it can. Where
+GAM isn't vendored the build half skips; a job that vendors it sets EXIT_CODES_REQUIRE_GAM, which turns
+that skip, or a build this Python can't read, into a failure (tests/test_workflow_safety.py holds every
+such job to it).
 """
 from __future__ import annotations
 
 import ast
-import dis
+import hashlib
 import importlib.util
-import marshal
+import json
 import os
-import struct
 import subprocess
 import sys
-import zlib
 from pathlib import Path
 
 import pytest
@@ -32,15 +33,20 @@ from gamgui.core.setup import DWD_SCOPES, OAUTH2SERVICE_JSON_REQUIRED_RC
 ROOT = Path(__file__).resolve().parent.parent
 GAM_BIN = ROOT / "gamgui" / "resources" / "gam7" / "gam"
 MOCK_GAM = ROOT / "tests" / "fixtures" / "mock_gam.sh"
+SCRIPT = ROOT / "scripts" / "gam_rc_table.py"
 DWD = [scope for scope, _ in DWD_SCOPES]
 REQUIRE = "EXIT_CODES_REQUIRE_GAM"
+TABLE = "GAM_RC_TABLE"
 
-# PyInstaller's CArchive, appended to the executable (PyInstaller/archive/readers.py): a trailing cookie
-# (magic, archive length, TOC offset, TOC length, Python version, libpython name), and TOC entries
-# (entry length, data offset, data length, uncompressed length, compressed flag, typecode, then the name).
-_COOKIE_MAGIC = b"MEI\014\013\012\013\016"
-_COOKIE = struct.Struct("!8sIIII64s")
-_TOC_ENTRY = struct.Struct("!IIIIBc")
+
+def _load_reader():
+    spec = importlib.util.spec_from_file_location("gam_rc_table", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+rct = _load_reader()
 
 
 def _unavailable(reason: str):
@@ -49,44 +55,22 @@ def _unavailable(reason: str):
     pytest.skip(reason)
 
 
-def _gam_module_code(blob: bytes):
-    """The code object of the `gam` package, from the PYZ inside the executable's CArchive."""
-    at = blob.rfind(_COOKIE_MAGIC)
-    assert at >= 0, "no PyInstaller archive cookie in the vendored gam"
-    _, length, toc_offset, toc_length, pyvers, _ = _COOKIE.unpack_from(blob, at)
-    start = at + _COOKIE.size - length
-    pos, end, pyz = start + toc_offset, start + toc_offset + toc_length, None
-    while pos < end and pyz is None:
-        size, offset, *_, typecode = _TOC_ENTRY.unpack_from(blob, pos)
-        pyz = start + offset if typecode == b"z" else None
-        pos += size
-    # The PYZ (pyimod01_archive.py): magic, the bytecode's Python magic number, TOC offset, then entries
-    # of zlib-compressed marshalled code, and the TOC as a marshalled [(name, (typecode, offset, length))].
-    assert pyz is not None and blob[pyz:pyz + 4] == b"PYZ\0", "no PYZ archive in the vendored gam's CArchive"
-    if blob[pyz + 4:pyz + 8] != importlib.util.MAGIC_NUMBER:   # marshalled code loads only in its own Python
-        _unavailable(f"the build's bytecode is Python {pyvers // 100}.{pyvers % 100}'s; "
-                     f"run under that Python, not {sys.version_info[0]}.{sys.version_info[1]}")
-    (pyz_toc,) = struct.unpack_from("!i", blob, pyz + 8)
-    # The vendored binary is checksum-pinned and runs as the app's own subprocess: trusted, not input.
-    _, offset, size = dict(marshal.loads(blob[pyz + pyz_toc:]))["gam"]  # noqa: S302
-    return marshal.loads(zlib.decompress(blob[pyz + offset:pyz + offset + size]))  # noqa: S302
-
-
 @pytest.fixture(scope="module")
 def build_rc():
-    """The vendored build's NAME_RC -> int table, read from the `gam` module in its PyInstaller archive."""
+    """The vendored build's NAME_RC -> int table: GAM_RC_TABLE's, or read here when this Python can."""
     if not GAM_BIN.exists():
         _unavailable("GAM is not vendored (make gam)")
-    code = _gam_module_code(GAM_BIN.read_bytes())
-    table, prev = {}, None
-    for ins in dis.get_instructions(code):
-        if ins.opname == "EXTENDED_ARG":   # pairing through it reads its argument, not the constant's
-            continue
-        if ins.opname == "STORE_NAME" and str(ins.argval).endswith("_RC") and isinstance(getattr(prev, "argval", None), int):
-            table[ins.argval] = prev.argval
-        prev = ins
-    assert table.get("UNKNOWN_ERROR_RC") == 1 and len(set(table.values())) > 10, "the build's RC table did not parse"
-    return table
+    blob = GAM_BIN.read_bytes()
+    if os.environ.get(TABLE):   # read by the build's own Python (CI runs scripts/gam_rc_table.py with it)
+        text = Path(os.environ[TABLE]).read_text()
+        assert text.strip(), f"{TABLE} is empty: scripts/gam_rc_table.py failed under the build's Python"
+        given = json.loads(text)
+        assert given["sha256"] == hashlib.sha256(blob).hexdigest(), f"{TABLE} was read from another gam"
+        return given["rc"]
+    try:
+        return rct.rc_table(rct.gam_module_code(blob))
+    except rct.WrongPython as e:
+        _unavailable(f"{e} (or set {TABLE} to its JSON, from scripts/gam_rc_table.py under that Python)")
 
 
 def test_a_job_that_requires_the_build_fails_where_others_skip(monkeypatch):
@@ -133,3 +117,21 @@ def test_the_mock_fails_a_missing_credentials_file_with_the_builds_code(build_rc
     done = subprocess.run(["bash", str(MOCK_GAM), "info", "domain"], env=env, capture_output=True, text=True,
                           timeout=15)
     assert done.returncode == build_rc[rc], (rc, done.returncode, done.stderr)
+
+
+def test_the_reader_runs_isolated_and_refuses_another_pythons_build():
+    # CI runs the script with -I under the build's own Python, where nothing is installed: stdlib only.
+    if not GAM_BIN.exists():
+        _unavailable("GAM is not vendored (make gam)")
+
+    def run(*args):
+        return subprocess.run([sys.executable, "-I", str(SCRIPT), *args, str(GAM_BIN)],
+                              capture_output=True, text=True, timeout=60)
+
+    version, table = run("--python-version"), run()
+    assert version.returncode == 0, version.stderr
+    if version.stdout.strip() == f"{sys.version_info[0]}.{sys.version_info[1]}":
+        assert table.returncode == 0 and json.loads(table.stdout)["rc"]["UNKNOWN_ERROR_RC"] == 1, table.stderr
+    else:   # never a guessed table
+        assert (table.returncode, table.stdout) == (1, ""), table.stderr
+        assert "run under that Python" in table.stderr
