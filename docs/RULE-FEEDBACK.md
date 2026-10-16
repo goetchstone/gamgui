@@ -30,6 +30,35 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-10-16 — improve-rules pass: the mock-lies rule named one mock; the fakes that lied were others
+- **What happened:** the observer pass over the window since 2026-10-01: fix commits b6feae3, 383100a,
+  6947456 and 5f8193e, the failure-log entries from 2026-10-01 to 2026-10-08, the two open entries
+  below, and failed CI runs. Three of the four fixes share one shape, a stand-in kinder than the real
+  thing: the in-memory Keychain's delete could not fail, so a refused one read as success (b6feae3);
+  every test and the in-memory store held one spelling of a domain, so a capitalized import became a
+  second tenant (6947456, whose PR added two fake stores the in-memory one can't model); TestClient and
+  headless Chrome download an attachment the app's WKWebView displays as a page (5f8193e).
+- **Invariant in force:** the unnumbered "mock lies" section.
+- **Why it didn't hold:** weak wording. The section names only `tests/fixtures/mock_gam.sh` and GAM, so
+  it read as a rule about the GAM mock; the Keychain fake and the test browser fell outside it.
+- **Would a rule have caught it?** Yes, but it wasn't worded to cover them. Each fix landed its own
+  tripwire; the section now says the rule covers every stand-in and names those tripwires as the model,
+  and pre-commit item 6 says the same. Demonstrated: with the swallow put back in
+  `_KeyringBackend.delete_password`, 11 tests in `test_vault.py` fail; with `download` dropped from the
+  Audit export link, `test_every_link_to_a_download_route_carries_the_download_attribute` fails; both
+  pass restored.
+- **Enforcement home if changed:** CLAUDE.md text and the pre-commit skill (soft), backed by the
+  existing tripwires (`test_fake_raises_what_the_real_macos_backend_raises`,
+  `tests/test_app_window_downloads.py`). No new test.
+- **Not a rules problem (recorded, no change):** 383100a, the third looped-button naming case the last
+  pass was watching, closed the class with `test_no_looped_button_is_named_by_literal_text_alone`, so
+  "a convention tested per template, not per class" is resolved. The hook-test incident (2026-10-01)
+  was already moved to a local hook (`credential-guard.sh`, logged in #32). CI: the 7.48.26 bump's red
+  run was the exit-code tripwire failing rather than skipping on GAM's move to Python 3.15 bytecode,
+  which is evidence it earns its place; a 2026-10-07 Scorecard failure passed on its next runs.
+- **Still open, next candidate:** the 2026-10-02 entry (#3's "the only ones that can change anything").
+  One change per PR, so it waits for the next pass.
+
 ## 2026-10-08 — A CSV link worked in every test and stranded the operator in the app window
 - **What happened:** Download CSV replaced the app window's page with the CSV as text, with no way back
   (failure-log 2026-10-08). pywebview's WKWebView downloads only what WebKit can't show, or a `download`
@@ -45,6 +74,7 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Enforcement home if changed:** a CLAUDE.md "Corollary" line for the observer pass to weigh:
   passing browser tests do not mean the app window behaves the same; a change to links, navigation or
   dialogs is unproven until clicked in the app.
+- **Resolved (2026-10-16):** folded into the widened mock-lies section (chore/improve-rules-20261016).
 
 ## 2026-10-02 — Invariant #3 says only the 26 curated commands "can change anything"; a read's Sheet export does too
 - **What happened:** a repo-wide review found SECURITY.md promising every mutation is confirmed and

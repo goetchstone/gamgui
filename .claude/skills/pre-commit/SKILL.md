@@ -44,6 +44,9 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    live break into a green test. Check every command/flag against the vendored
    grammar `gamgui/resources/gam7/GamCommands.txt`, not memory. Passing tests
    do **not** mean a GAM write works — say so if it's unproven on a tenant.
+   The same holds for any fake you touched (the in-memory Keychain, a fake
+   keyring, TestClient standing in for the app window): it must refuse what
+   the real one refuses.
 7. **Keep the drift guards true.** New builder → the grammar contract in
    `tests/test_command_contract.py` covers it; a validated argument goes in `ENUM_ARGS`. Bumped GAM → regen
    `command_catalog.json` (`scripts/build_command_catalog.py`) and keep the
