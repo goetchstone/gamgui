@@ -57,6 +57,12 @@ is more permissive than GAM is worse than no mock, because it converts a live br
 test. Check syntax against the vendored grammar (`gamgui/resources/gam7/GamCommands.txt`) — it is the
 source of truth, not your memory of GAM.
 
+The same goes for every stand-in, not just the GAM mock. The in-memory Keychain could not fail a
+delete, so a refused one read as success; TestClient and headless Chrome download a CSV that the
+app's WKWebView shows as a page with no way back. A fake for the Keychain, the app window or GAM must
+refuse what the real one refuses, and a test should hold it to the real one wherever the suite can
+reach it (`test_fake_raises_what_the_real_macos_backend_raises`, `tests/test_app_window_downloads.py`).
+
 Corollary: **passing tests do not mean a GAM write works.** Anything that mutates a real domain is
 unproven until it has run against one — see the live-verification status in the README.
 
