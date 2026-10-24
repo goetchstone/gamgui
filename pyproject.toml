@@ -35,7 +35,7 @@ dev = [
     "atheris==3.1.0; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.12'",
     "ruff==0.17.1",         # exact: a ruff minor release can stabilize new rules and fail unchanged code
     "mypy==2.4.0",          # exact, for the same reason: a release can infer more and fail unchanged code
-    "uv==0.13.1",          # `make lock`; exact, since another uv can resolve the same inputs differently
+    "uv==0.13.4",          # `make lock`; exact, since another uv can resolve the same inputs differently
 ]
 
 [project.scripts]
