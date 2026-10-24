@@ -5,6 +5,13 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/goetchstone/gamgui/badge)](https://scorecard.dev/viewer/?uri=github.com/goetchstone/gamgui)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+> [!IMPORTANT]
+> **GamGUI is being replaced by [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**, a
+> native SwiftUI rewrite that runs the same `gam` commands, held to them by tests. New work happens
+> there; GamGUI now takes only GAM updates and dependency fixes. A few things are still only here —
+> sharing a calendar with a group, deleting a calendar or an event, a signature for many people at
+> once, and deleting a leaver's account — so keep GamGUI for those until SwiftGamGui covers them.
+
 A free, local, open-source **macOS app for [GAM7](https://github.com/GAM-team/GAM)**, the Google
 Workspace admin command line. The recurring admin chores get a screen, the big changes show a
 preview and wait for your confirm, and every change lands in an audit log — with GAM's full reach
@@ -64,7 +71,8 @@ Details in [Build from source](#build-from-source).
 
 ## Status
 
-Actively developed and used against live Google Workspace tenants. Working today:
+In maintenance: still used against live Google Workspace tenants and kept current with GAM, while
+new features go to [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
 
 - **Setup wizard** — either **import an existing GAM install** (it auto-detects `$GAMCFGDIR`,
   `~/.gam`, and its own setup dir, shows which credential files each one holds, and moves them into
