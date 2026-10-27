@@ -47,8 +47,8 @@ around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Later
 
-- **Grow the buildable command set — specifically the writes.** Of 1,077 catalog entries, 540 can
-  run today: 26 hand-curated commands (the only ones that can *change* anything) plus 514
+- **Grow the buildable command set — specifically the writes.** Of 1,078 catalog entries, 541 can
+  run today: 26 hand-curated commands (the only ones that can *change* anything) plus 515
   grammar-derived commands auto-promoted because they are confidently read-only. The other 537 —
   every write, and anything whose risk could not be inferred with confidence — are inert, syntax
   display only. That asymmetry is the safety boundary: a command can become runnable automatically
@@ -78,7 +78,7 @@ discover later.
   asked for it, so the effort goes elsewhere. The connector/core split is where you would start if
   that changed.
 - **A free-text `gam …` box.** The tempting escape hatch, and the trade-off is narrower than it
-  sounds. *Reads are already open*: 514 grammar-derived read commands run today with no curation at
+  sounds. *Reads are already open*: 515 grammar-derived read commands run today with no curation at
   all (the handful whose output is a secret or a file — backup codes, browser tokens, and every
   `get` download: Drive files and Docs, Keep attachments, ChromeOS device files, photos — are
   audited when run; SECURITY.md lists them). The line is drawn at **writes** — every command that can change something is hand-modeled, so
