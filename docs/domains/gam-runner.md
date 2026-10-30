@@ -166,6 +166,13 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   the JSON blob win on conflict; multi-entity output (`all users print calendars`) depends on this.
   A mock that returns a bare JSON object per row where GAM returns the `key,JSON` CSV would hide a
   break.
+- **GAM's CSV has an escape character** (failure-log 2026-10-30). GAM's `setDialect` adds a backslash
+  `escapechar` (unless `csv_output_no_escape_char`, off by default), so it doubles every backslash and
+  writes a quote inside a JSON string as `\\""`. `_parse_csv` reads with `escapechar="\\"`; without it a
+  formatjson row holding a quote is dropped silently. Any CSV the suite writes as GAM's must escape too:
+  the mock's `gam_cell`, and `_gam_csv` in the property tests. The hire CSV is a spreadsheet's and has no
+  escape. `scripts/gam_rc_table.py` refuses a build whose dialect moved. On a GAM bump that trips it, read
+  the new tag's `setDialect`, then update `GAM_DIALECT`, the parser and `gam_cell` together.
 - **A cancelled call stops `gam` too** (2026-09-23, review F3). Quitting the app cancels in-flight
   job tasks (`server._lifespan`); `CancelledError` is a `BaseException`, so it skipped the timeout's
   `except` and `gam` kept running on the credentials it had loaded while `EphemeralConfig` wiped the
@@ -185,7 +192,9 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
 
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_runner.py tests/test_errors.py tests/test_parser.py
-tests/test_models.py` — fully offline (mock `gam` + in-memory Keychain). Coverage: argv reaches the
+tests/test_models.py tests/test_gam_csv_dialect.py` — fully offline (mock `gam` + in-memory Keychain);
+`test_gam_csv_dialect.py`'s build half needs the build's Python (set `GAM_RC_TABLE` to
+`python3.15 -I scripts/gam_rc_table.py gamgui/resources/gam7/gam`'s JSON) and skips without it. Coverage: argv reaches the
 binary, the four classified failure kinds, per-line classification of a mixed stderr
 (`test_errors.py`; end to end through the sweep in `test_lifecycle.py`
 `test_offboard_calendar_sweep_multi_user_stderr`), banner stripping, the oauth2 write-back

@@ -57,6 +57,37 @@ check_exists() {  # <entity> <name>: the *missing*/*nonexistent* trigger
 }
 
 in_directory() { grep -qF "\"primaryEmail\": \"$1\"" "$GAM_MOCK_FIXTURES/print_users.json"; }
+
+# GAM writes every CSV in its setDialect: quotes doubled AND a backslash escape character (unless
+# csv_output_no_escape_char, off by default), so a backslash is written doubled and a quote inside a JSON
+# string comes out as \\"". The mock writes the same bytes, or a reader without the escape character passes
+# here and drops rows live (failure log 2026-10-30). tests/test_gam_csv_dialect.py holds gam_cell to
+# Python's csv writer in GAM's dialect. A value here is one line; one with CR or LF isn't modelled.
+CR=$(printf '\r')
+gam_cell() {  # <value>: one CSV field as GAM writes it
+  case "$1" in *"$CR"*|*'
+'*) echo "ERROR: mock: a CSV value with a line break isn't modelled" 1>&2; exit 2 ;; esac
+  escaped=$(printf '%s' "$1" | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/""/g')
+  case "$1" in *[,\"]*) printf '"%s"' "$escaped" ;; *) printf '%s' "$escaped" ;; esac
+}
+gam_row() {  # <value>...: one CSV row as GAM writes it
+  separator=""
+  for value in "$@"; do printf '%s' "$separator"; gam_cell "$value"; separator=","; done
+  printf '\n'
+}
+json_text() {  # <key> <json line>: a top-level string value holding no quote or backslash (an address, an ID)
+  found=$(printf '%s' "$2" | sed -n "s/.*\"$1\": \"\([^\"\\\\]*\)\".*/\1/p")
+  [ -n "$found" ] || { echo "ERROR: mock: no $1 in a data line" 1>&2; exit 2; }
+  printf '%s' "$found"
+}
+# `print … formatjson` (GAM's SetJSONTitles): a header of the key column and `JSON`, then per record its key
+# value and the record. The data file holds one JSON record per line.
+print_formatjson() {  # <key column> <data file>
+  echo "$1,JSON"
+  while IFS= read -r record || [ -n "$record" ]; do   # a last line with no newline still counts
+    [ -n "$record" ] && gam_row "$(json_text "$1" "$record")" "$record"
+  done < "$GAM_MOCK_FIXTURES/$2"
+}
 # A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
 # one that isn't a user the token request fails, and GAM reports the token endpoint's words against it
 # (handleOAuthTokenError -> entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build).
@@ -215,8 +246,11 @@ if [ -n "$td_read" ]; then
 fi
 
 # Read commands -> echo the matching fixture.
+# `gam print users … formatjson` -> GAM's CSV, a `primaryEmail` and a `JSON` column per user, escaped as GAM
+# escapes it (carol's title and department need it). The other formatjson reads below still print NDJSON,
+# which GAM never does (docs/plans/2026-10-30-backport-swiftgamgui.md A5).
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
-  cat "$GAM_MOCK_FIXTURES/print_users.json"
+  print_formatjson primaryEmail print_users.json
   exit 0
 fi
 # `gam info user <addr>` -> THAT user's record, keyed on the address like GAM. An address that isn't in

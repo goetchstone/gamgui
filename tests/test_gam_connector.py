@@ -120,6 +120,14 @@ async def test_list_users_have_titles(connector):
     assert by_email["alice@example.com"].title == "IT Director"
 
 
+async def test_list_users_reads_values_gam_escaped(connector):
+    # The mock prints `print users` as GAM does, escaped: carol's row was dropped, and her backslash
+    # doubled, when the parser read without GAM's escape character (failure log 2026-10-30).
+    carol = {u.primary_email: u for u in await connector.list_users()}["carol@example.com"]
+    assert carol.title == 'Teaching "Lab" Assistant'
+    assert carol.department == "Science\\Lab"
+
+
 async def test_get_signature(connector):
     sig = await connector.get_signature("alice@example.com")
     assert "Best," in sig

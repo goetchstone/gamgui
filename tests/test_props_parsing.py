@@ -61,8 +61,9 @@ _HEADER = st.one_of(
                      "role", "type", "summary", "suspended"]),
     st.from_regex(r"[a-z][A-Za-z0-9]{0,8}(\.[a-z][A-Za-z0-9]{0,8}){0,2}", fullmatch=True),
 ).filter(lambda h: h not in {"true", "false", "null"})
-# Arbitrary text rarely draws the characters CSV quoting is about, so half the cells are made of them.
-_CELL = st.text(_ANY, max_size=15) | st.text(st.sampled_from(',"\r\n a1'), max_size=6)
+# Arbitrary text rarely draws the characters CSV quoting and escaping are about, so half the cells are made
+# of them.
+_CELL = st.text(_ANY, max_size=15) | st.text(st.sampled_from(',"\r\n a1\\'), max_size=6)
 
 _LOCAL = st.text(st.sampled_from("abcxyz019._+-"), min_size=1, max_size=8)
 _LABEL = st.text(st.sampled_from("abcdefxyz09-"), min_size=1, max_size=6)
@@ -71,19 +72,27 @@ _EMAIL = st.builds(lambda loc, labels, up: (loc + "@" + ".".join(labels)).upper(
                    _LOCAL, st.lists(_LABEL, min_size=2, max_size=3), st.booleans())
 
 
-def _cell(value: str) -> str:
-    return '"' + value.replace('"', '""') + '"' if any(c in value for c in ',"\r\n') else value
+def _cell(value: str, escape: bool) -> str:
+    """One field, quoted when it holds a comma, quote, CR or LF, its quotes doubled. ``escape`` is GAM's
+    dialect: its setDialect adds a backslash escape character, so every backslash is doubled, quoted or
+    not (failure log 2026-10-30). A spreadsheet's CSV, the hire file, has none."""
+    out = value.replace("\\", "\\\\") if escape else value
+    return '"' + out.replace('"', '""') + '"' if any(c in value for c in ',"\r\n') else out
 
 
-def _csv(rows, lineterminator="\n") -> str:
-    """Rows as a conforming writer prints them — GAM's own Python (3.15) included: a cell holding a
-    comma, quote, CR or LF is quoted. Not csv.writer: on 3.10 it leaves a lone CR unquoted when lines
-    end in LF (3.11 changed that), which the reader then takes for a line break — the py3.10 legs failed
-    on the test's own CSV, not on the parser."""
-    lines = [",".join(_cell(v) for v in row) for row in rows]
+def _csv(rows, lineterminator="\n", escape=False) -> str:
+    """Rows as a conforming writer prints them: a cell holding a comma, quote, CR or LF is quoted. Not
+    csv.writer: on 3.10 it leaves a lone CR unquoted when lines end in LF (3.11 changed that), which the
+    reader then takes for a line break — the py3.10 legs failed on the test's own CSV, not on the parser."""
+    lines = [",".join(_cell(v, escape) for v in row) for row in rows]
     # csv.writer's rule for a row of one empty field: quote it, or it reads back as a blank line.
     return "".join(('""' if line == "" and len(row) == 1 else line) + lineterminator
                    for line, row in zip(lines, rows, strict=True))
+
+
+def _gam_csv(rows, lineterminator="\n") -> str:
+    """Rows as GAM's own Python (3.15) prints them, in GAM's dialect: _csv with its escape character."""
+    return _csv(rows, lineterminator, escape=True)
 
 
 def _noise() -> st.SearchStrategy[str]:
@@ -143,7 +152,7 @@ def _plain_csv(draw):
         # one spot it does not keep (a quoted cell ends in '"' and is unaffected).
         rows[-1][headers[-1]] = rows[-1][headers[-1]].rstrip()
     lt = draw(st.sampled_from(["\n", "\r\n"]))
-    return _csv([headers] + [[r[h] for h in headers] for r in rows], lt), rows
+    return _gam_csv([headers] + [[r[h] for h in headers] for r in rows], lt), rows
 
 
 @given(_plain_csv())
@@ -180,7 +189,7 @@ def _formatjson_csv(draw):
         rows.append(cells + [cell] + draw(st.lists(_CELL, max_size=2)))
         # Blank sibling cells are dropped; the JSON record wins every key conflict.
         expected += [{**{k: v for k, v in sib.items() if v != ""}, **r} for r in recs]
-    return _csv([siblings + ["JSON"]] + rows), expected
+    return _gam_csv([siblings + ["JSON"]] + rows), expected
 
 
 @given(_formatjson_csv())
@@ -194,9 +203,9 @@ def test_parse_records_round_trips_formatjson_csv(case):
 def test_parse_records_survives_an_oversized_csv_cell(size, formatjson):
     big = "x" * size
     if formatjson:
-        text = _csv([["primaryEmail", "JSON"], ["a@example.com", json.dumps({"notes": big})]])
+        text = _gam_csv([["primaryEmail", "JSON"], ["a@example.com", json.dumps({"notes": big})]])
     else:
-        text = _csv([["primaryEmail", "notes"], ["a@example.com", big]])
+        text = _gam_csv([["primaryEmail", "notes"], ["a@example.com", big]])
     assert parse_records(text)[0]["notes"] == big
 
 

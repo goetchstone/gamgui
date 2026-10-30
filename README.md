@@ -8,7 +8,8 @@
 > [!IMPORTANT]
 > **GamGUI is being replaced by [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**, a
 > native SwiftUI rewrite that runs the same `gam` commands, held to them by tests. New work happens
-> there; GamGUI now takes only GAM updates and dependency fixes. A few things are still only here —
+> there; GamGUI now takes only GAM updates, dependency fixes, and fixes for bugs SwiftGamGui found in the
+> logic the two share ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md), Phase A). A few things are still only here —
 > sharing a calendar with a group, deleting a calendar or an event, a signature for many people at
 > once, and deleting a leaver's account — so keep GamGUI for those until SwiftGamGui covers them.
 
