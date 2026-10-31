@@ -1,6 +1,6 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: PHASE A IN PROGRESS — A1 applied (branch `fix/gam-csv-escape-char`); A2–A9 open. The operator
+**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (branch `fix/gam-progress-lines`); A3–A9 open. The operator
 lifted the freeze for Phase A only (G1 (a), 2026-10-30). Phases B–F stay PROPOSED, and G2–G5 only matter
 if one of them is approved.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
@@ -80,6 +80,10 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   GAM's escaped CSV.
 - **A2. Progress read as the error.** `core/gam/errors.py:131` `_PROGRESS_LINE` covers 2 of GAM's 6 progress
   printers. The others become a failure's message. Swift entry: `2026-10-13-gam-progress-read-as-error`.
+  **Applied:** GamGUI failure log 2026-10-30 "GAM's progress read as the error". `_PROGRESS_LINE` is
+  `(Getting |Got \d+ )`; `scripts/gam_rc_table.py` lists the build's Getting/Got messages and
+  `tests/test_gam_progress.py` holds them. The mock's `report users` and `deprovision` print GAM's progress
+  on stderr.
 - **A3. GAM's command echo read as the failure.** `_error_lines` keeps the echo GAM prints before a usage or
   entity-does-not-exist error. Swift entry: `2026-10-13-gam-command-echo-read-as-the-failure`.
 - **A4. An auto-reply's text hid the auto-reply.** `core/gam/models.py:100` `Vacation.from_show_text` ends the
@@ -244,7 +248,9 @@ README's Status, including what is only in which app; a "Live verification statu
 
 ## Status by item
 
-- **A1** — applied (branch `fix/gam-csv-escape-char`: the parser's escape character, the mock's escaped
-  `print users`, the build's dialect check).
-- A2–A9 — approved, open.
+- **A1** — applied (#67, `add6308`: the parser's escape character, the mock's escaped `print users`, the
+  build's dialect check).
+- **A2** — applied (branch `fix/gam-progress-lines`: every progress printer skipped, the build's progress
+  words held, the mock's progress on stderr).
+- A3–A9 — approved, open.
 - B1–B4, C1–C5, D1–D3, E1–E8, F — proposed, not approved (G1 (a)).

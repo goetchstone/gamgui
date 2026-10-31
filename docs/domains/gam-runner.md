@@ -99,7 +99,7 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   matching *anywhere* — so one "Does not exist" line made a stderr that also held a real failure
   `NOT_FOUND`, and the offboarding calendar sweep (which tolerates that) reported a partial failure
   as success. Now every non-blank line is classified (an unmatched one is `UNKNOWN`), GAM's
-  `Getting all …`/`Got N …` progress chatter (`show_gettings`, on stderr) is skipped, `GAMError.kinds`
+  progress chatter (`show_gettings`, on stderr: any line starting `Getting ` or `Got N `) is skipped, `GAMError.kinds`
   holds every line's kind and `kind` the most severe by `_SEVERITY` (account-wide failures, then
   `UNKNOWN`, then the per-entity `PERMISSION_DENIED`, `OWN_ACL`, `SERVICE_NOT_ENABLED`, `NOT_FOUND`).
   `_run_write` tolerates only when
@@ -173,6 +173,14 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   the mock's `gam_cell`, and `_gam_csv` in the property tests. The hire CSV is a spreadsheet's and has no
   escape. `scripts/gam_rc_table.py` refuses a build whose dialect moved. On a GAM bump that trips it, read
   the new tag's `setDialect`, then update `GAM_DIALECT`, the parser and `gam_cell` together.
+- **GAM's progress has six printers, not two** (failure-log 2026-10-30, progress read as the error). Besides
+  "Getting all Users…" and "Got N Users…", GAM prints a per-entity "Getting Group x (1/3)" and "Getting
+  Reports for all users" / "Getting Access Tokens for alice@…" on stderr. Skipping only "Getting all " made
+  each an `UNKNOWN` line that outranked the real failure and became its message. `_PROGRESS_LINE` is
+  `(Getting |Got \d+ )`, case-sensitive, at the start of the stripped line. `tests/test_gam_progress.py`
+  holds it to the build's glmsgs: if a bump adds a message starting "Getting"/"Got", read where it is
+  printed before changing the expected words. A mock branch that prints GAM's progress puts it on stderr,
+  never stdout.
 - **A cancelled call stops `gam` too** (2026-09-23, review F3). Quitting the app cancels in-flight
   job tasks (`server._lifespan`); `CancelledError` is a `BaseException`, so it skipped the timeout's
   `except` and `gam` kept running on the credentials it had loaded while `EphemeralConfig` wiped the
@@ -192,9 +200,9 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
 
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_runner.py tests/test_errors.py tests/test_parser.py
-tests/test_models.py tests/test_gam_csv_dialect.py` — fully offline (mock `gam` + in-memory Keychain);
-`test_gam_csv_dialect.py`'s build half needs the build's Python (set `GAM_RC_TABLE` to
-`python3.15 -I scripts/gam_rc_table.py gamgui/resources/gam7/gam`'s JSON) and skips without it. Coverage: argv reaches the
+tests/test_models.py tests/test_gam_csv_dialect.py tests/test_gam_progress.py` — fully offline (mock `gam` +
+in-memory Keychain); the build halves of `test_gam_csv_dialect.py` and `test_gam_progress.py` need the build's Python (set `GAM_RC_TABLE` to
+`python3.15 -I scripts/gam_rc_table.py gamgui/resources/gam7/gam`'s JSON) and skip without it. Coverage: argv reaches the
 binary, the four classified failure kinds, per-line classification of a mixed stderr
 (`test_errors.py`; end to end through the sweep in `test_lifecycle.py`
 `test_offboard_calendar_sweep_multi_user_stderr`), banner stripping, the oauth2 write-back

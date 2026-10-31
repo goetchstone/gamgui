@@ -17,35 +17,21 @@ same blind spot. Two holds here:
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import json
-import os
-from pathlib import Path
 
 import pytest
 
 from gamgui.core.gam.commands import GAMCommands as C
 from gamgui.core.gam.parser import parse_records
 
-from .test_gam_exit_codes import GAM_BIN, TABLE, _unavailable, rct
+from .test_gam_exit_codes import build_reading, rct
 
 
 @pytest.fixture(scope="module")
 def build_csv():
     """[{"rows", "text"}]: sample rows and the text the build's own Python writes for them."""
-    if not GAM_BIN.exists():
-        _unavailable("GAM is not vendored (make gam)")
-    blob = GAM_BIN.read_bytes()
-    if os.environ.get(TABLE):   # written by the build's own Python (CI runs scripts/gam_rc_table.py with it)
-        given = json.loads(Path(os.environ[TABLE]).read_text())
-        assert given["sha256"] == hashlib.sha256(blob).hexdigest(), f"{TABLE} was read from another gam"
-        assert "csv" in given, f"{TABLE} has no csv: it came from an older scripts/gam_rc_table.py"
-        return given["csv"]
-    try:
-        return rct.read(GAM_BIN)["csv"]
-    except rct.WrongPython as e:
-        _unavailable(f"{e} (or set {TABLE} to its JSON, from scripts/gam_rc_table.py under that Python)")
+    return build_reading("csv")
 
 
 def _records(rows: list) -> list:

@@ -17,6 +17,8 @@ The JSON also carries `csv`: rows that need every escape GAM's dialect has, as t
 writes them in that dialect — refused (exit 1) unless the build's own setDialect and its
 csv_output_no_escape_char default still say that dialect. tests/test_gam_csv_dialect.py reads them back
 with the app's parser (failure log 2026-10-30: the parser had no escape character and dropped rows).
+And `progress`: every gamlib.glmsgs message that starts "Getting" or "Got", the words core/gam/errors.py
+skips as progress; tests/test_gam_progress.py holds it (failure log 2026-10-30, progress read as the error).
 """
 
 from __future__ import annotations
@@ -170,6 +172,21 @@ def dialect_in_build(blob: bytes, code) -> None:
         raise ValueError("GAM's csv_output_no_escape_char default changed: read gamlib/glcfg.py at the new tag")
 
 
+def progress_messages(blob: bytes) -> dict[str, str]:
+    """Every message in the build's gamlib.glmsgs that starts "Getting" or "Got", in any case: the words of
+    GAM's progress printers. core/gam/errors.py skips a stderr line that starts with one as progress, so a new
+    one (an error worded that way) must be read before a bump is trusted."""
+    found, prev = {}, None
+    for ins in dis.get_instructions(module_code(blob, "gamlib.glmsgs")):
+        if ins.opname == "EXTENDED_ARG":
+            continue
+        if (ins.opname == "STORE_NAME" and getattr(prev, "opname", "") == "LOAD_CONST" and isinstance(prev.argval, str)
+                and prev.argval.lstrip().lower().startswith(("getting", "got"))):
+            found[ins.argval] = prev.argval
+        prev = ins
+    return found
+
+
 def gam_csv(rows) -> str:
     """Rows as GAM prints them, by this (the build's) Python's csv module."""
     out = io.StringIO()
@@ -182,12 +199,12 @@ def read(gam: Path) -> dict:
     code = gam_module_code(blob)
     dialect_in_build(blob, code)
     return {"sha256": hashlib.sha256(blob).hexdigest(), "python": build_python(blob),
-            "rc": rc_table(code),
+            "rc": rc_table(code), "progress": progress_messages(blob),
             "csv": [{"rows": rows, "text": gam_csv(rows)} for rows in CSV_SAMPLES]}
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Print the vendored gam's *_RC table and CSV samples as JSON.")
+    ap = argparse.ArgumentParser(description="Print the vendored gam's *_RC table, CSV samples and progress words as JSON.")
     ap.add_argument("gam", type=Path, help="the vendored gam executable")
     ap.add_argument("--python-version", action="store_true",
                     help="print only the build's Python version (e.g. 3.15); runs under any Python")
