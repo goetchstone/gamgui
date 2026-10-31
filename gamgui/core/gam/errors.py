@@ -126,9 +126,13 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
 ]
 
 
-# GAM's own progress chatter on stderr (gam.cfg show_gettings, on by default): "Getting all Users, may
-# take some time on a large Google Workspace Account..." / "Got 150 Users: a@x - z@x". Not an error line.
-_PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting all |Got \d+ )")
+# GAM's own progress chatter on stderr (gam.cfg show_gettings, on by default), from each of its printers:
+# "Getting all Users, may take some time…", "Getting Reports for all users", "Getting Group sales@x (1/3)",
+# "Got 150 Users: a@x - z@x". Not an error line: GAM's only messages that start "Getting"/"Got" are its
+# progress words (tests/test_gam_progress.py reads them from the build), and its errors start "ERROR:",
+# "WARNING:" or an entity's name. It once skipped only "Getting all ", so a per-entity "Getting …" line read
+# as an unknown failure that outranked the real one and became its message (failure log 2026-10-30).
+_PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting |Got \d+ )")
 # The instructions GAM prints after invalidOauth2serviceJsonExit's error (Msg.INSTRUCTIONS_OAUTH2SERVICE_JSON,
 # read from the vendored build) say what to run, not what failed. Read as error lines, the last one —
 # "to create and authorize a Service account." matches the service-account pattern — became the message.

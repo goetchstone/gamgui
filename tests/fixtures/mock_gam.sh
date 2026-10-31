@@ -315,10 +315,19 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "vacation" ]; 
   exit 0
 fi
 
-# `gam report users ...` -> usage CSV (with a leading progress line, like real GAM).
+# `gam report users ...` -> usage CSV on stdout. GAM's progress goes to stderr (doReport; show_gettings is on
+# by default): "Getting Reports for all users", then the page count, written after a CR and ended with CR LF.
+# A report Google refuses ($GAM_MOCK_STATE/noreports): accessErrorExit's line after the progress, and
+# INVALID_DOMAIN_RC. Wording and codes as SwiftGamGui's mock read them from GAM's source; the "Access
+# Forbidden" message and the exit code are checked against the 7.49.02 build (glmsgs, the *_RC table).
 if [ "${1:-}" = "report" ] && [ "${2:-}" = "users" ]; then
+  printf 'Getting Reports for all users\n' 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/noreports" ]; then
+    printf '\nERROR: Customer ID: my_customer, Domain: example.com, User: admin@example.com, Access Forbidden\n' 1>&2
+    exit 61
+  fi
+  printf '\rGot 3 Reports for all users on 2026-06-16...\r\n' 1>&2
   cat <<'EOF'
-Getting Reports for the customer
 email,date,accounts:used_quota_in_mb,drive:num_items_created,gmail:num_emails_received,gmail:num_emails_sent
 alice@example.com,2026-06-16,608873,1,125,10
 bob@example.com,2026-06-16,1048576,0,5,0
@@ -690,7 +699,8 @@ fi
 # three words in any order. Per user it deletes the app passwords, invalidates the backup codes and
 # deletes the OAuth tokens, then (options) turns off 2SV, signs out, disables POP/IMAP. A failure is
 # reported against the user and stops that user's remaining parts (deprovisionUser, read statically).
-# The stdout wording is GAM's shape from its source conventions, not captured from a tenant.
+# The stdout wording is GAM's shape from its source conventions, not captured from a tenant. Before each
+# part GAM says on stderr what it is getting (printGettingEntityItemForWhom; one user, so no counter).
 if [ "${1:-}" = "user" ] && { [ "${3:-}" = "deprovision" ] || [ "${3:-}" = "deprov" ]; }; then
   user="$2"; signout=""; shift 3
   while [ $# -gt 0 ]; do
@@ -702,8 +712,11 @@ if [ "${1:-}" = "user" ] && { [ "${3:-}" = "deprovision" ] || [ "${3:-}" = "depr
     shift
   done
   check_exists "User" "$user"
+  printf 'Getting Application Specific Password IDs for %s\n' "$user" 1>&2
   echo "User: $user, Application Specific Passwords: 0"
+  printf 'Getting Backup Verification Codes for %s\n' "$user" 1>&2
   echo "User: $user, Backup Verification Codes, Invalidated"
+  printf 'Getting Access Tokens for %s\n' "$user" 1>&2
   echo "User: $user, Access Tokens: 0"
   if [ -n "$signout" ]; then
     case "$user" in *SIGNOUTFAIL*) signout_refused "$user" ;; esac

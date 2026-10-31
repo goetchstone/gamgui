@@ -16,6 +16,7 @@ such job to it).
 from __future__ import annotations
 
 import ast
+import functools
 import hashlib
 import importlib.util
 import json
@@ -55,22 +56,35 @@ def _unavailable(reason: str):
     pytest.skip(reason)
 
 
-@pytest.fixture(scope="module")
-def build_rc():
-    """The vendored build's NAME_RC -> int table: GAM_RC_TABLE's, or read here when this Python can."""
+@functools.cache
+def _build_reading() -> dict:
+    """scripts/gam_rc_table.py's reading of the vendored build, once per session: GAM_RC_TABLE's, or read here
+    when this Python can."""
     if not GAM_BIN.exists():
         _unavailable("GAM is not vendored (make gam)")
-    blob = GAM_BIN.read_bytes()
     if os.environ.get(TABLE):   # read by the build's own Python (CI runs scripts/gam_rc_table.py with it)
         text = Path(os.environ[TABLE]).read_text()
         assert text.strip(), f"{TABLE} is empty: scripts/gam_rc_table.py failed under the build's Python"
         given = json.loads(text)
-        assert given["sha256"] == hashlib.sha256(blob).hexdigest(), f"{TABLE} was read from another gam"
-        return given["rc"]
+        assert given["sha256"] == hashlib.sha256(GAM_BIN.read_bytes()).hexdigest(), f"{TABLE} was read from another gam"
+        return given
     try:
-        return rct.rc_table(rct.gam_module_code(blob))
+        return rct.read(GAM_BIN)
     except rct.WrongPython as e:
         _unavailable(f"{e} (or set {TABLE} to its JSON, from scripts/gam_rc_table.py under that Python)")
+
+
+def build_reading(key: str):
+    """One part of the build's reading: "rc" (NAME_RC -> int), "csv", "progress"."""
+    reading = _build_reading()
+    assert key in reading, f"{TABLE} has no {key}: it came from an older scripts/gam_rc_table.py"
+    return reading[key]
+
+
+@pytest.fixture(scope="module")
+def build_rc():
+    """The vendored build's NAME_RC -> int table."""
+    return build_reading("rc")
 
 
 def test_a_job_that_requires_the_build_fails_where_others_skip(monkeypatch):

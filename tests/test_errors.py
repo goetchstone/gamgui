@@ -100,6 +100,39 @@ def test_no_error_line_is_unknown():
     assert GAMError.from_run(None, "x").kinds == {GAMErrorKind.TIMEOUT}
 
 
+# GAM's per-entity progress (printGettingEntityItem, printGettingEntityItemForWhom), before the failure it
+# precedes. Only "Getting all " was skipped, so each line here read as an unknown failure that outranked the
+# real one and became the message (failure log 2026-10-30, progress read as the error).
+_FORBIDDEN = "ERROR: Customer ID: my_customer, Domain: example.com, User: admin@example.com, Access Forbidden"
+_SIGNOUT = "User: alice@example.com, Sign Out Failed: Not Authorized to access this resource/api"
+_NO_GROUP = "Group: sales@example.com, Does not exist (1/3)"
+
+
+@pytest.mark.parametrize("stderr, kind, line", [
+    (f"Getting Reports for all users\n\n{_FORBIDDEN}\n", GAMErrorKind.PERMISSION_DENIED, _FORBIDDEN),
+    ("Getting Application Specific Password IDs for alice@example.com\n"
+     "Getting Backup Verification Codes for alice@example.com\n"
+     f"Getting Access Tokens for alice@example.com\n{_SIGNOUT}\n", GAMErrorKind.SCOPE_MISSING, _SIGNOUT),
+    (f"Getting Group sales@example.com (1/3)\n{_NO_GROUP}\n", GAMErrorKind.NOT_FOUND, _NO_GROUP),
+])
+def test_a_progress_line_is_never_the_failure(stderr, kind, line):
+    err = GAMError.from_run(61, stderr)
+    assert (err.kind, err.kinds) == (kind, {kind})
+    assert err.message == f"GAM failed ({kind.value}, exit=61): {line}"
+
+
+@pytest.mark.parametrize("line", [
+    "ERROR: Getting Reports for all users failed",     # GAM's progress starts the line
+    "getting all users failed",                        # in GAM's case
+    "GettingReports for all users",                    # a word, then a space
+    "Got many Users",                                  # "Got" takes a count
+    "Got 3Users",
+])
+def test_only_gams_progress_words_are_skipped(line):
+    err = GAMError.from_run(1, line)
+    assert err.kinds == {GAMErrorKind.UNKNOWN} and err.message.endswith(line)
+
+
 
 @pytest.mark.parametrize("line", [
     # GAM 7.48.11's handleOAuthTokenError (read from the vendored build): a per-user Gmail/Calendar

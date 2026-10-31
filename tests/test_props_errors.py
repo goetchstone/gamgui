@@ -7,7 +7,8 @@ whether a bulk loop stops), a message, and a scrubbed stderr. These properties g
 - the most severe line wins, so appending a line can never make a stderr read as *less* severe —
   a real failure is never reported as the benign per-entity notice printed beside it;
 - GAM's per-entity counter " (403/1200)" is never read as an HTTP 403/404/429, and its progress
-  chatter ("Getting all Users…", "Got 150 Users…") and blank lines are never read as an error;
+  chatter ("Getting all Users…", "Getting Group x (1/3)", "Got 150 Users…") and blank lines are never
+  read as an error;
 - the message quotes the last line of the reported kind, never the benign tail beside it, and
   never GAM's stdout (directory data: the error is logged);
 - every kind is reachable, and the documented pattern overlaps resolve the documented way;
@@ -81,13 +82,23 @@ _ONE_LINE = st.text(st.characters(blacklist_categories=("Cs",), blacklist_charac
 _ANY_LINE = st.one_of(_KNOWN_LINE, _ONE_LINE)
 # GAM's counter; the status codes are the numbers it used to be mistaken for.
 _COUNT = st.one_of(st.sampled_from([403, 404, 429]), st.integers(0, 10**6))
-# GAM's progress chatter on stderr (gam.cfg show_gettings, on by default), and blank lines.
+# GAM's progress chatter on stderr (gam.cfg show_gettings, on by default), from each of its printers, and
+# blank lines. Only "Getting all …" and "Got N …" were here, so a per-entity "Getting …" line, read as an
+# unknown failure that outranked the real one, passed (failure log 2026-10-30, progress read as the error).
+_COUNTER = st.one_of(st.just(""), st.builds(" ({}/{})".format, _COUNT, _COUNT))
 _CHATTER = st.one_of(
     st.sampled_from(["Getting all Users, may take some time on a large Google Workspace Account...",
                      "Getting all Groups, may take some time on a large Google Workspace Account...",
-                     "", "   "]),
+                     "Getting Reports for all users", "", "   "]),
     st.builds("Got {} {}: a@example.com - z@example.com".format, st.integers(0, 10**6),
               st.sampled_from(["Users", "Groups", "Calendars"])),
+    st.builds("Got {} Reports for all users on 2026-06-16...".format, st.integers(0, 10**6)),
+    st.builds("Getting {} {}{}".format, st.sampled_from(["Group", "User", "Calendar"]),
+              st.sampled_from(["sales@example.com", "alice@example.com"]), _COUNTER),
+    st.builds("Getting {} for {}{}".format,
+              st.sampled_from(["Access Tokens", "Backup Verification Codes", "Application Specific Password IDs",
+                               "Calendar ACLs"]),
+              st.sampled_from(["alice@example.com", "all users"]), _COUNTER),
 )
 # Marks stdout, to prove it never reaches the message or repr.
 _STDOUT_MARK = "stdout-only-7f3a"
