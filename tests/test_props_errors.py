@@ -7,8 +7,8 @@ whether a bulk loop stops), a message, and a scrubbed stderr. These properties g
 - the most severe line wins, so appending a line can never make a stderr read as *less* severe —
   a real failure is never reported as the benign per-entity notice printed beside it;
 - GAM's per-entity counter " (403/1200)" is never read as an HTTP 403/404/429, and its progress
-  chatter ("Getting all Users…", "Getting Group x (1/3)", "Got 150 Users…") and blank lines are never
-  read as an error;
+  chatter ("Getting all Users…", "Getting Group x (1/3)", "Got 150 Users…"), its framing of a refused
+  command ("Command: gam …", "Help: …") and blank lines are never read as an error;
 - the message quotes the last line of the reported kind, never the benign tail beside it, and
   never GAM's stdout (directory data: the error is logged);
 - every kind is reachable, and the documented pattern overlaps resolve the documented way;
@@ -99,6 +99,12 @@ _CHATTER = st.one_of(
               st.sampled_from(["Access Tokens", "Backup Verification Codes", "Application Specific Password IDs",
                                "Calendar ACLs"]),
               st.sampled_from(["alice@example.com", "all users"]), _COUNTER),
+    # GAM's framing of a refused command: the echo, the bad argument marked, and a usage error's help lines.
+    # Read as error lines, the echo outranked a not-found beside it (failure log 2026-10-31).
+    st.builds("Command: gam {} >>>{}<<< {}".format, st.sampled_from(["create datatransfer", "update user x"]),
+              st.sampled_from(["nobody@example.com", "bogus", ""]), st.sampled_from(["drive", ""])),
+    st.sampled_from(["Help: Syntax in file /Applications/GamGUI.app/Contents/Resources/gam7/GamCommands.txt",
+                     "Help: Documentation is at https://github.com/GAM-team/GAM/wiki"]),
 )
 # Marks stdout, to prove it never reaches the message or repr.
 _STDOUT_MARK = "stdout-only-7f3a"

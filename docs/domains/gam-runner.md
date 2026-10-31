@@ -181,6 +181,13 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   holds it to the build's glmsgs: if a bump adds a message starting "Getting"/"Got", read where it is
   printed before changing the expected words. A mock branch that prints GAM's progress puts it on stderr,
   never stdout.
+- **GAM frames a refused command** (failure-log 2026-10-31). Before a usage error, and before ending a
+  command on an entity that doesn't exist (`entityDoesNotExistExit`, e.g. a transfer owner who isn't a
+  user), GAM echoes "Command: gam … >>>bad<<< …"; after a usage error it prints "Help: Syntax in file …" and
+  "Help: Documentation is at …". `_FRAMING_LINE` skips those. Read as errors, the echo outranked the
+  not-found, and every usage error's message was the wiki's address. `tests/test_gam_framing.py` reads the
+  words from the build. In the mock, `does_not_exist` is GAM's per-entity warning (no echo), and
+  `does_not_exist_exit` is the lookup that ends the command. Pick the one the GAM handler really calls.
 - **A cancelled call stops `gam` too** (2026-09-23, review F3). Quitting the app cancels in-flight
   job tasks (`server._lifespan`); `CancelledError` is a `BaseException`, so it skipped the timeout's
   `except` and `gam` kept running on the credentials it had loaded while `EphemeralConfig` wiped the
@@ -200,8 +207,8 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
 
 ## Testing / live-verification status
 `.venv/bin/python -m pytest -q tests/test_runner.py tests/test_errors.py tests/test_parser.py
-tests/test_models.py tests/test_gam_csv_dialect.py tests/test_gam_progress.py` — fully offline (mock `gam` +
-in-memory Keychain); the build halves of `test_gam_csv_dialect.py` and `test_gam_progress.py` need the build's Python (set `GAM_RC_TABLE` to
+tests/test_models.py tests/test_gam_csv_dialect.py tests/test_gam_progress.py tests/test_gam_framing.py` — fully
+offline (mock `gam` + in-memory Keychain); the build halves of those last three need the build's Python (set `GAM_RC_TABLE` to
 `python3.15 -I scripts/gam_rc_table.py gamgui/resources/gam7/gam`'s JSON) and skip without it. Coverage: argv reaches the
 binary, the four classified failure kinds, per-line classification of a mixed stderr
 (`test_errors.py`; end to end through the sweep in `test_lifecycle.py`

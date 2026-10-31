@@ -133,6 +133,37 @@ def test_only_gams_progress_words_are_skipped(line):
     assert err.kinds == {GAMErrorKind.UNKNOWN} and err.message.endswith(line)
 
 
+# GAM's framing of a refused command (read from the vendored build): the echo before a usage error or an entity
+# that doesn't exist (entityDoesNotExistExit), and the help lines after a usage error. Read as error lines, the
+# echo outranked the not-found and became the message, and a usage error's message was the wiki's address
+# (failure log 2026-10-31).
+_ECHO = "Command: gam create datatransfer >>>nobody@example.com<<< drive alice@example.com all"
+_HELP = ("Help: Syntax in file /Applications/GamGUI.app/Contents/Resources/gam7/GamCommands.txt\n"
+         "Help: Documentation is at https://github.com/GAM-team/GAM/wiki\n")
+
+
+def test_gams_command_echo_is_never_the_failure():
+    err = GAMError.from_run(56, f"{_ECHO}\n\nERROR: User: nobody@example.com, Does not exist\n")
+    assert (err.kind, err.kinds) == (GAMErrorKind.NOT_FOUND, {GAMErrorKind.NOT_FOUND})
+    assert err.message == "GAM failed (not_found, exit=56): ERROR: User: nobody@example.com, Does not exist"
+
+
+def test_a_usage_errors_message_is_its_error_not_the_help():
+    err = GAMError.from_run(2, f"Command: gam create user a@example.com >>>bogus<<<\n\nERROR: Invalid argument\n{_HELP}")
+    assert err.message == "GAM failed (unknown, exit=2): ERROR: Invalid argument"
+
+
+@pytest.mark.parametrize("line", [
+    "Command can not be nested.",                      # GAM's NESTED_LOOP_CMD_NOT_ALLOWED: an error, no colon
+    "ERROR: Command: gam create user x firstname y",   # the echo starts the line
+    "Help me",
+    "command: gam create user x",                      # in GAM's case
+])
+def test_only_gams_framing_is_skipped(line):
+    err = GAMError.from_run(1, line)
+    assert err.kinds == {GAMErrorKind.UNKNOWN} and err.message.endswith(line)
+
+
 
 @pytest.mark.parametrize("line", [
     # GAM 7.48.11's handleOAuthTokenError (read from the vendored build): a per-user Gmail/Calendar

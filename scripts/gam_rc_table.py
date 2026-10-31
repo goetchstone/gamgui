@@ -19,6 +19,8 @@ csv_output_no_escape_char default still say that dialect. tests/test_gam_csv_dia
 with the app's parser (failure log 2026-10-30: the parser had no escape character and dropped rows).
 And `progress`: every gamlib.glmsgs message that starts "Getting" or "Got", the words core/gam/errors.py
 skips as progress; tests/test_gam_progress.py holds it (failure log 2026-10-30, progress read as the error).
+And `framing`: the command echo's text and the help lines GAM prints around a refused command, which errors.py
+also skips; tests/test_gam_framing.py holds them (failure log 2026-10-31).
 """
 
 from __future__ import annotations
@@ -172,19 +174,40 @@ def dialect_in_build(blob: bytes, code) -> None:
         raise ValueError("GAM's csv_output_no_escape_char default changed: read gamlib/glcfg.py at the new tag")
 
 
-def progress_messages(blob: bytes) -> dict[str, str]:
-    """Every message in the build's gamlib.glmsgs that starts "Getting" or "Got", in any case: the words of
-    GAM's progress printers. core/gam/errors.py skips a stderr line that starts with one as progress, so a new
-    one (an error worded that way) must be read before a bump is trusted."""
+def _messages(blob: bytes) -> dict[str, str]:
+    """Every `NAME = '<text>'` in the build's gamlib.glmsgs."""
     found, prev = {}, None
     for ins in dis.get_instructions(module_code(blob, "gamlib.glmsgs")):
         if ins.opname == "EXTENDED_ARG":
             continue
-        if (ins.opname == "STORE_NAME" and getattr(prev, "opname", "") == "LOAD_CONST" and isinstance(prev.argval, str)
-                and prev.argval.lstrip().lower().startswith(("getting", "got"))):
+        if ins.opname == "STORE_NAME" and getattr(prev, "opname", "") == "LOAD_CONST" and isinstance(prev.argval, str):
             found[ins.argval] = prev.argval
         prev = ins
     return found
+
+
+def progress_messages(blob: bytes) -> dict[str, str]:
+    """Every message in the build's gamlib.glmsgs that starts "Getting" or "Got", in any case: the words of
+    GAM's progress printers. core/gam/errors.py skips a stderr line that starts with one as progress, so a new
+    one (an error worded that way) must be read before a bump is trusted."""
+    return {name: text for name, text in _messages(blob).items()
+            if text.lstrip().lower().startswith(("getting", "got"))}
+
+
+def framing_messages(blob: bytes) -> dict:
+    """What GAM prints around a refused command, which core/gam/errors.py skips: the text constants of the
+    command echo (glclargs CommandLineWithBadArgumentMarked, in order), and every glmsgs message that starts
+    "Command" or "Help", in any case (usageErrorExit's two help lines among them), so a new one is read before
+    a bump is trusted."""
+    marked = [c for c in _nested(module_code(blob, "gamlib.glclargs")) if c.co_name == "CommandLineWithBadArgumentMarked"]
+    if len(marked) != 1:
+        raise ValueError("GAM's CommandLineWithBadArgumentMarked changed: read gamlib/glclargs.py at the new tag")
+    messages = {name: text for name, text in _messages(blob).items()
+                if text.lstrip().lower().startswith(("command", "help"))}
+    if not {"HELP_SYNTAX", "HELP_WIKI"} <= messages.keys():
+        raise ValueError("GAM's usage-error help messages changed: read gamlib/glmsgs.py at the new tag")
+    return {"echo": [value for kind, value in _loads(marked[0]) if kind == "const" and isinstance(value, str)],
+            "messages": messages}
 
 
 def gam_csv(rows) -> str:
@@ -199,12 +222,12 @@ def read(gam: Path) -> dict:
     code = gam_module_code(blob)
     dialect_in_build(blob, code)
     return {"sha256": hashlib.sha256(blob).hexdigest(), "python": build_python(blob),
-            "rc": rc_table(code), "progress": progress_messages(blob),
+            "rc": rc_table(code), "progress": progress_messages(blob), "framing": framing_messages(blob),
             "csv": [{"rows": rows, "text": gam_csv(rows)} for rows in CSV_SAMPLES]}
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Print the vendored gam's *_RC table, CSV samples and progress words as JSON.")
+    ap = argparse.ArgumentParser(description="Print the vendored gam's *_RC table, CSV samples, progress and framing words as JSON.")
     ap.add_argument("gam", type=Path, help="the vendored gam executable")
     ap.add_argument("--python-version", action="store_true",
                     help="print only the build's Python version (e.g. 3.15); runs under any Python")
