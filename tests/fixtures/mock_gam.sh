@@ -40,16 +40,23 @@ fi
 
 ARGS="$*"
 
-usage_error() {  # GAM's usage error: the command line, then the reason; USAGE_ERROR_RC
+usage_error() {  # GAM's usage error (usageErrorExit): the command line, the reason, where help is; USAGE_ERROR_RC
   printf 'Command: gam %s\n\nERROR: %s\n' "$ARGS" "$1" 1>&2
+  printf 'Help: Syntax in file %s/GamCommands.txt\nHelp: Documentation is at https://github.com/GAM-team/GAM/wiki\n' \
+    "$(dirname "$0")" 1>&2
   exit 2
 }
 missing_arg() { usage_error "Missing argument: Expected <$1>"; }
 empty_arg() { usage_error "Empty argument: Expected <Non-empty $1>"; }
 invalid_arg() { usage_error "Invalid argument: $1"; }
 invalid_choice() { usage_error "Invalid choice ($1): Expected <$2>"; }
-does_not_exist() {  # <entity> <name>; ENTITY_DOES_NOT_EXIST_RC
+does_not_exist() {  # <entity> <name>; ENTITY_DOES_NOT_EXIST_RC (entityDoesNotExistWarning, a per-entity loop)
   printf '%s: %s, Does not exist\n' "$1" "$2" 1>&2
+  exit 56
+}
+does_not_exist_exit() {  # <entity> <name>: a lookup that ends the command (entityDoesNotExistExit): the command
+  # line first, as a usage error has it (the bad argument's >>>marking<<< isn't modelled), then the error
+  printf 'Command: gam %s\n\nERROR: %s: %s, Does not exist\n' "$ARGS" "$1" "$2" 1>&2
   exit 56
 }
 check_exists() {  # <entity> <name>: the *missing*/*nonexistent* trigger
@@ -1170,8 +1177,11 @@ fi
 # `gam create|add datatransfer|transfer <old> <DataTransferServiceList> <new> [private|shared|all]
 #  [release_resources]` -> succeeds. An <old> containing CONFLICT409 (a second transfer for the same
 # user still in flight) returns the exact "already in progress" error Google emits.
+# GAM resolves each owner to a user ID as it reads it (convertEmailAddressToUID): one that isn't a user ends
+# the command there, before any transfer (entityDoesNotExistExit; here a *missing*/*nonexistent* address).
 if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datatransfer" ] || [ "${2:-}" = "transfer" ]; }; then
   [ -n "${3:-}" ] || missing_arg "OldOwnerID"
+  case "$3" in *missing*|*nonexistent*) does_not_exist_exit "User" "$3" ;; esac
   [ -n "${4:-}" ] || missing_arg "DataTransferServiceList"
   services="calendar|datastudio|lookerstudio|data studio|googledrive|gdrive|drive|drive and docs"
   old_ifs=$IFS; IFS=,
@@ -1183,6 +1193,7 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
   done
   IFS=$old_ifs
   [ -n "${5:-}" ] || missing_arg "NewOwnerID"
+  case "$5" in *missing*|*nonexistent*) does_not_exist_exit "User" "$5" ;; esac
   old="$3"; svcs="$4"; new="$5"; shift 5
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1201,8 +1212,6 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
   case "$old" in
     *CONFLICT409*) echo "ERROR: 409: conflict - Data transfer already in progress for the user." 1>&2; exit 9 ;;
   esac
-  check_exists "User" "$old"
-  check_exists "User" "$new"
   echo "Requested transfer of $svcs from $old to $new"
   exit 0
 fi

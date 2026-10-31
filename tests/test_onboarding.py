@@ -51,10 +51,18 @@ def client(tmp_path, monkeypatch):
 
 @pytest.fixture
 def echoing_gam(tmp_path):
-    """A gam that fails every call by echoing its command line, as GAM does on a usage error — here as
-    the LAST stderr line, the one GAMError.message (so the audit's extra.error and the UI) carries."""
+    """A gam that fails every call as GAM does on a usage error (usageErrorExit): its command line, the password
+    in it, then an error that repeats the password's value (as one naming the bad argument would), then the help
+    lines. The echo is never GAMError.message (failure log 2026-10-31); the error line is, so the audit's
+    extra.error and the UI carry the password unless it is masked by value."""
     path = tmp_path / "echoing_gam.sh"
-    path.write_text("#!/bin/sh\nprintf 'ERROR: Invalid argument\\nCommand: gam %s\\n' \"$*\" 1>&2\nexit 2\n")
+    path.write_text(
+        "#!/bin/sh\n"
+        "bad=''; prev=''\n"
+        "for a in \"$@\"; do [ \"$prev\" = password ] && bad=\"$a\"; prev=\"$a\"; done\n"
+        "printf 'Command: gam %s\\n\\nERROR: Invalid argument: %s\\n' \"$*\" \"$bad\" 1>&2\n"
+        "printf 'Help: Syntax in file /x/GamCommands.txt\\nHelp: Documentation is at https://github.com/GAM-team/GAM/wiki\\n' 1>&2\n"
+        "exit 2\n")
     path.chmod(0o755)
     return path
 
@@ -208,7 +216,8 @@ async def test_create_user_failure_redacts_password_by_value(tmp_path, echoing_g
     assert not res.ok
     audit = (tmp_path / "audit.jsonl").read_text()
     assert "create_user" in audit and secret not in audit
-    assert secret not in (res.detail or "") and "***redacted***" in res.detail   # echoed, then masked
+    assert secret not in (res.detail or "") and "***redacted***" in res.detail   # repeated, then masked
+    assert "Command:" not in res.detail and "Help:" not in res.detail             # GAM's framing isn't the error
     assert secret not in " ".join(res.preview.argv or [])
 
 

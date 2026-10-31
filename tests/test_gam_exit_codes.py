@@ -75,7 +75,7 @@ def _build_reading() -> dict:
 
 
 def build_reading(key: str):
-    """One part of the build's reading: "rc" (NAME_RC -> int), "csv", "progress"."""
+    """One part of the build's reading: "rc" (NAME_RC -> int), "csv", "progress", "framing"."""
     reading = _build_reading()
     assert key in reading, f"{TABLE} has no {key}: it came from an older scripts/gam_rc_table.py"
     return reading[key]

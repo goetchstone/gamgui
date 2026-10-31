@@ -138,6 +138,13 @@ _PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting |Got \d+ )")
 # "to create and authorize a Service account." matches the service-account pattern — became the message.
 _INSTRUCTION_LINE: Pattern[str] = re.compile(
     r"Please run|gam create\|use project|gam user <user> update serviceaccount|to create and authorize a Service account\.")
+# GAM's framing of a command it refused (read from the vendored build): the command line with the bad argument
+# marked, "Command: gam … >>>bad<<< …" (glclargs CommandLineWithBadArgumentMarked), before a usage error or an
+# entity that doesn't exist (entityDoesNotExistExit); and after a usage error, where the syntax and the wiki are
+# (usageErrorExit: Msg.HELP_SYNTAX, HELP_WIKI). They say what ran and where to read, not what failed: read as
+# error lines, the echo outranked "User: x, Does not exist" and a usage error's message was the wiki's address
+# (failure log 2026-10-31). tests/test_gam_framing.py holds these words to the build.
+_FRAMING_LINE: Pattern[str] = re.compile(r"Command: |Help: Syntax in file |Help: Documentation is at ")
 
 # Most severe first, for a stderr whose lines disagree. An account-wide failure outranks a per-entity
 # one, and an unrecognized error outranks the per-entity refusals a best-effort sweep prints beside it,
@@ -173,7 +180,8 @@ def _error_lines(stderr: str) -> List[Tuple[GAMErrorKind, str]]:
     classifying the whole text by its first match let one "not found" mask the rest."""
     lines = (raw.strip() for raw in (stderr or "").splitlines())
     return [(_classify_line(line), line) for line in lines
-            if line and not _PROGRESS_LINE.match(line) and not _INSTRUCTION_LINE.fullmatch(line)]
+            if line and not _PROGRESS_LINE.match(line) and not _INSTRUCTION_LINE.fullmatch(line)
+            and not _FRAMING_LINE.match(line)]
 
 
 def _worst(kinds: Iterable[GAMErrorKind]) -> GAMErrorKind:
