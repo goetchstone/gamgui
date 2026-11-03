@@ -58,8 +58,11 @@
   is refused), and merging one past a red or stuck check is an explicit, logged bypass. **`ci-ok`** is `ci.yml`'s last job: `needs` every blocking job, runs
   `if: always()`, and fails on any failed, cancelled *or skipped* one — a required check passes on
   "skipped", and one that never reports never passes, so requiring the matrix legs by name would wedge
-  every PR the day one is renamed. `test_ci_ok_needs_every_blocking_job` (a new job must join
-  `needs`, or carry `continue-on-error` like the latest-GAM preview) and
+  every PR the day one is renamed. Its one step's `if:` starts with `always() &&` as well: a step
+  condition with no status function is ANDed with `success()`, which was false once needed jobs ended
+  cancelled (2026-11-02, macOS jobs that no runner picked up), so the step skipped and `ci-ok` passed
+  with the `.app` build never run (failure-log 2026-11-03). `test_ci_ok_needs_every_blocking_job` (a new job must join
+  `needs`, or carry `continue-on-error` like the latest-GAM preview; the step starts with `always()`) and
   `test_the_required_checks_always_report_on_a_pull_request` (no job-level `if:`, `continue-on-error`
   or paths filter on a required job). Rename a required job, or add a required workflow, and update
   the ruleset in the same change. Scorecard runs only on push and schedule — never require it. A

@@ -178,6 +178,10 @@ def test_ci_ok_needs_every_blocking_job():
     assert "\n    if: always()\n" in ci_ok   # without it, a failed need skips ci-ok, and a skip passes
     fail_if = re.search(r"^        if: (.*)\n        run: \|\n\s+echo .*\n\s+exit 1$", ci_ok, re.M)
     assert fail_if and all(f"contains(needs.*.result, '{r}')" in fail_if[1] for r in ("failure", "cancelled", "skipped"))
+    # Naming 'cancelled' is not enough: without a status function the step's if: is ANDed with success(),
+    # which was false once needed jobs ended cancelled, so the step skipped and ci-ok passed (failure log
+    # 2026-11-03).
+    assert fail_if[1].startswith("always() && (") and fail_if[1].endswith(")")
 
 
 def test_the_required_checks_always_report_on_a_pull_request():
