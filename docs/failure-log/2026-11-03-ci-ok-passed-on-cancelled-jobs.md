@@ -15,4 +15,6 @@
   expression rules, and every red run until this one had failed, not been cancelled.
 - **Fix:** branch `fix/ci-ok-cancelled-needs`. The step's `if:` is `always() && (…)`.
 - **Prevention:** `test_ci_ok_needs_every_blocking_job` requires the step's `if:` to start with
-  `always() &&` (it fails on the old workflow). The build-packaging runbook says why.
+  `always() &&` (it fails on the old workflow). The build-packaging runbook says why. Checked on
+  GitHub, where the text scan can't reach: the fix PR's first CI run (41652222524) was cancelled
+  mid-flight on purpose, ten blocking jobs ended `cancelled`, and `ci-ok` ran its step and failed.
