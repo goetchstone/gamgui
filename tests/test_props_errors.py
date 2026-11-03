@@ -292,8 +292,10 @@ _SECRET_CHAR = st.characters(blacklist_categories=("Cs",)).filter(lambda c: not 
 
 @st.composite
 def _usage_error(draw, n):
-    """A GAM usage error on a command carrying ``n`` password values, rendered twice: with one set of
-    random values and with another. Returns (argv, stderr, argv2, stderr2, the first set of values)."""
+    """A GAM usage error on a command carrying ``n`` password values, rendered three times: with one set
+    of random values, with another, and with every value one character long, so that no password (six or
+    more) fits in it: the text around the values. Returns (argv, stderr, argv2, stderr2, the first set of
+    values, that third rendering)."""
     values = st.text(_SECRET_CHAR, min_size=6, max_size=24)
     argv, keyword_at = ["gam"], []
     for _ in range(n):
@@ -301,29 +303,33 @@ def _usage_error(draw, n):
         keyword_at.append(len(argv))
         argv += [draw(_KEYWORD), draw(values)]
     argv += draw(st.lists(_FILLER, max_size=4))
-    argv2 = list(argv)
+    argv2, around = list(argv), list(argv)
     for k in keyword_at:
         argv2[k + 1] = draw(st.text(_SECRET_CHAR, min_size=1, max_size=24))
+        around[k + 1] = "-"
     form = draw(st.sampled_from(["bad", "extraneous", "missing"]))
     at = draw(st.integers(1, len(argv) - 1))
     if form == "bad" and at in keyword_at:
         at += 1                     # GAM marks a keyword only when it rejects it; ours take a password
     return (argv, _gam_usage_error(argv, at, form), argv2, _gam_usage_error(argv2, at, form),
-            [argv[k + 1] for k in keyword_at])
+            [argv[k + 1] for k in keyword_at], _gam_usage_error(around, at, form))
 
 
 @given(case=_usage_error(1) | _usage_error(2), exit_code=st.sampled_from([2, 1, 50]))
 def test_an_echoed_password_never_reaches_the_operator(case, exit_code):
-    argv, stderr, argv2, stderr2, secrets = case
+    argv, stderr, argv2, stderr2, secrets, around = case
     # The same command with different password values: once scrubbed, the two must be identical —
     # nothing of the value, not even a fragment, survives.
     assert _scrub_stderr(stderr) == _scrub_stderr(stderr2)
     err = GAMError.from_run(exit_code, stderr, argv, stdout=stderr)
     err2 = GAMError.from_run(exit_code, stderr2, argv2, stdout=stderr2)
     assert (err.stderr, err.stdout, err.argv) == (err2.stderr, err2.stdout, err2.argv)
-    # And no value is in anything shown or logged (unless the surrounding text happens to say it).
-    blank = GAMError.from_run(exit_code, _scrub_stderr(stderr), [])
-    assume(not any(s in blank.message or s in repr(blank) for s in secrets))
+    # And no value is in anything shown or logged, unless the text around it says it anyway: the error
+    # with one-character values, scrubbed, and the message read from that. A filler token is drawn freely,
+    # so it can hold a password: ten of one character held a password of nine (failure log 2026-11-03).
+    around = _scrub_stderr(around)
+    blank = GAMError.from_run(exit_code, around, [])
+    assume(not any(s in around or s in blank.message or s in repr(blank) for s in secrets))
     for secret in secrets:
         for shown in (_scrub_stderr(stderr), err.stderr, err.message, str(err), repr(err)):
             assert secret not in shown
