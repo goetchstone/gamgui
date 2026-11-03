@@ -100,7 +100,10 @@
   ones locally. CI's `fuzz` job (in `ci-ok`) drives the same properties with Atheris
   (`fuzz/fuzz_props.py`; targets found by `fuzz/targets.py`), coverage-guided over `gamgui`, with a
   fixed `-seed`, `-runs` and `PYTHONHASHSEED` so a crash is real and re-runs the same; its input is
-  uploaded as the `fuzz-crash` artifact. Atheris installs only on Linux x86_64 CPython 3.12+ (the
+  uploaded as the `fuzz-crash` artifact and printed as the log's `Base64:` line. That line, with the
+  property it failed, goes in `CRASHES` in `tests/test_fuzz_targets.py`, so the case stays tested. The
+  path follows coverage of `gamgui`, so a change anywhere there moves it: an unrelated PR (a GAM bump's
+  version string) can be the one that finds a latent case (failure-log 2026-11-03). Atheris installs only on Linux x86_64 CPython 3.12+ (the
   marker in `requirements/dev.in`), so `tests/test_fuzz_targets.py` proves the plumbing everywhere:
   every property is fuzzable (module-level `@given`, no fixtures, no `parametrize`) and takes raw bytes.
   OpenSSF Scorecard's Fuzzing check looks for exactly this (`import atheris`); Hypothesis alone
