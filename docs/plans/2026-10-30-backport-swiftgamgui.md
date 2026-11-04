@@ -128,6 +128,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   is held. Offline only here; the read is live-confirmed in SwiftGamGui.
 - **A7. The usage report's "as of" date** names the day asked for, not the day GAM's rows are from (Swift
   `audit-reports.md`, "Deviations from GamGUI").
+
+  **Applied:** GamGUI failure log 2026-11-04. The label is the rows' own `date`. Offline only.
 - **A8. Audit export ignores the screen's search and filter.** The route takes both, but the page's link
   drops them (same section).
 - **A9. A token write-back can undo a re-import.** Swift's `directory-home.md`, "Fixed in PR #8's review": a
