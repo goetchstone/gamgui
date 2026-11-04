@@ -1,5 +1,9 @@
 # 2026-11-03 — ci-ok passed with four of its jobs cancelled
 
+**Corrected 2026-11-04: the cause, the fix and the check below are wrong, and kept as the record.** The next
+run with jobs no runner picked up passed `ci-ok` again, with this fix in place. See the entry of
+2026-11-04, "ci-ok still passed on jobs no runner picked up".
+
 - **Symptom:** on the Dependabot PR #70 (run 41491513163, 2026-11-02) four blocking jobs, the `.app`
   build, pinned-binary gam-compat, macOS 3.12 and a11y, were never picked up by a runner ("The job was
   not acquired by Runner of type hosted even after multiple attempts", a macOS arm64 capacity notice)

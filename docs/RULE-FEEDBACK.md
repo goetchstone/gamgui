@@ -207,4 +207,15 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   (`{_run_write, create_onboarding_runbook}`) and fails on any new bypass. The #2 wording-sharpening
   remains for the observer pass.
 
+## 2026-11-04 — A real-system check can be a stand-in too
+- **What happened:** #73 "fixed" `ci-ok` passing on jobs no runner picked up, and was reported proven by
+  a run cancelled by hand on real GitHub. That is a different path; the next starved run passed `ci-ok`
+  again (failure-log 2026-11-04).
+- **Invariant in force:** none numbered; CLAUDE.md's "the mock lies" section, on stand-ins.
+- **Why it didn't hold:** weak wording. The section speaks of fakes in the suite. This stand-in was the real
+  system driven down a look-alike path, which reads as stronger proof than a mock and was trusted more.
+- **Would a rule have caught it?** Only if enforced differently: run a fix on the failing input itself, a
+  captured one when it can't be reproduced on demand, and when neither is possible, report it as unproven.
+- **Enforcement home if changed:** skill (`post-failure` step 2, on what counts as a reproduction).
+
 <!-- Add new entries ABOVE this line, newest first. -->
