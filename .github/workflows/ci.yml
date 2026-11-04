@@ -224,19 +224,30 @@ jobs:
     # Dependency review). Required checks are matched by name, so requiring the matrix legs one by one
     # would wedge every PR the day a leg is renamed or a Python version changes — a required name that
     # never reports never passes. `needs` is every job above except the non-blocking preview
-    # (tests/test_workflow_safety.py holds that), and a skipped or cancelled job fails this as surely
-    # as a failed one: a required check passes on "skipped".
+    # (tests/test_workflow_safety.py holds that). Every step runs always(): a step `if:` without a
+    # status function is ANDed with success(), and a skipped gate passes.
+    #
+    # The gate requires "success" from `needs` and from the run's own job list, rather than looking for
+    # bad results in `needs` alone: a job no runner picked up shows `cancelled` in the job list, yet
+    # matched neither failure, cancelled nor skipped there, and ci-ok passed (failure log 2026-11-04).
     name: ci-ok
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [lint, test, a11y, gam-compat, app, fuzz]
     if: always()
+    permissions:
+      contents: read
+      actions: read   # the gate reads this run's job list
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: always()
+        with:
+          persist-credentials: false
       - name: Every blocking job passed
-        # always() here too: a step `if:` without a status function is ANDed with success(), which was
-        # false once needed jobs ended cancelled (macOS jobs no runner picked up), so this step skipped
-        # and ci-ok passed (failure log 2026-11-03).
-        if: always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped'))
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "A blocking CI job did not pass; its own check says which."
-          exit 1
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          python3 -I scripts/ci_gate.py "$RUNNER_TEMP/jobs.json"

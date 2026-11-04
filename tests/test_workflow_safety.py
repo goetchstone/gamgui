@@ -17,6 +17,7 @@ CI builds the .app from the pinned GAM and smoke-checks the bundle (`scripts/che
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -176,12 +177,23 @@ def test_ci_ok_needs_every_blocking_job():
     needs = set(re.search(r"^    needs: \[(.*)\]$", ci_ok, re.M)[1].replace(" ", "").split(","))
     assert needs == blocking, f"ci-ok must need exactly the blocking jobs: missing {blocking - needs}, extra {needs - blocking}"
     assert "\n    if: always()\n" in ci_ok   # without it, a failed need skips ci-ok, and a skip passes
-    fail_if = re.search(r"^        if: (.*)\n        run: \|\n\s+echo .*\n\s+exit 1$", ci_ok, re.M)
-    assert fail_if and all(f"contains(needs.*.result, '{r}')" in fail_if[1] for r in ("failure", "cancelled", "skipped"))
-    # Naming 'cancelled' is not enough: without a status function the step's if: is ANDed with success(),
-    # which was false once needed jobs ended cancelled, so the step skipped and ci-ok passed (failure log
-    # 2026-11-03).
-    assert fail_if[1].startswith("always() && (") and fail_if[1].endswith(")")
+    # Every step runs too: a step's if: without a status function is ANDed with success(), and a gate that
+    # is skipped passes. Nothing may decide whether the gate runs at all, so its if: is exactly always().
+    steps = ci_ok.split("\n    steps:\n", 1)[1].split("\n      - ")
+    assert len(steps) == 2 and all("\n        if: always()\n" in f"\n{step}" for step in steps)
+    # It reads both sources, and the job list of this attempt: a re-run's jobs are in that attempt's list.
+    assert "\n          NEEDS: ${{ toJSON(needs) }}\n" in ci_ok
+    assert "/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" in ci_ok
+    assert "\n      actions: read" in ci_ok and "\n      contents: read\n" in ci_ok
+    assert re.search(r'^          python3 -I scripts/ci_gate\.py "\$RUNNER_TEMP/jobs\.json"$', ci_ok, re.M)
+    # The names the gate goes by, held to the jobs they come from (it matches a need to its job by name).
+    spec = importlib.util.spec_from_file_location("ci_gate", ROOT / "scripts" / "ci_gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    names = {job_id: re.search(r"^    name: (.*)$", body, re.M)[1] for job_id, body in jobs.items()}
+    assert names["ci-ok"] == gate.SELF
+    assert {names[job_id] for job_id in jobs if job_id != "ci-ok" and job_id not in blocking} == gate.NON_BLOCKING
+    assert all(names[job_id].startswith(f"{job_id} (") for job_id in blocking), names
 
 
 def test_the_required_checks_always_report_on_a_pull_request():

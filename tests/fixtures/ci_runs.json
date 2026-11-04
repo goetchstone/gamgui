@@ -1,0 +1,440 @@
+{
+ "starved_on_pr": {
+  "run": 41491513163,
+  "attempt": 1,
+  "note": "Four macOS jobs no runner picked up; ci-ok passed (before #73).",
+  "total_count": 13,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   }
+  ]
+ },
+ "starved_on_main": {
+  "run": 41658754078,
+  "attempt": 1,
+  "note": "Two macOS jobs no runner picked up; ci-ok passed with #73's gate.",
+  "total_count": 13,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   }
+  ]
+ },
+ "cancelled_by_hand": {
+  "run": 41652222524,
+  "attempt": 1,
+  "note": "The run cancelled on purpose; #73's gate failed it.",
+  "total_count": 13,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "failure"
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "cancelled"
+   }
+  ]
+ },
+ "failed": {
+  "run": 41625825527,
+  "attempt": 1,
+  "note": "The fuzz job failed; ci-ok failed.",
+  "total_count": 13,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "failure"
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "failure"
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   }
+  ]
+ },
+ "all_passed": {
+  "run": 41655860251,
+  "attempt": 1,
+  "note": "Every job ran and passed.",
+  "total_count": 13,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   }
+  ]
+ },
+ "rerun_passed": {
+  "run": 41658754078,
+  "attempt": 2,
+  "note": "starved_on_main after re-running its failed jobs; the rest carried over.",
+  "total_count": 13,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success"
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success"
+   }
+  ]
+ }
+}
