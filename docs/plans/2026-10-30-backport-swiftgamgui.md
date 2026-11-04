@@ -140,6 +140,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   materialized, never with what the vault holds now, then sets the vault. Fix it with a compare-and-swap:
   write back only while the vault still holds the materialized token. Reproduce it first.
 
+  **Applied:** GamGUI failure log 2026-11-04. `SecretsVault.replace_if_current`. Offline only.
+
 ### Phase B — Reads and small additions
 
 - **B1. Reports: connected apps and AI agents.** Every account's OAuth tokens, as a summary and a list.
