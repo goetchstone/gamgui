@@ -87,6 +87,25 @@ def test_vacation_disabled_parse():
     assert v.enabled is False
 
 
+def test_vacation_message_cannot_change_a_setting():
+    # GAM's _showVacation prints the message last, so a line in it that looks like a setting is the reply's own
+    # text. An attacker's reply saying "Enabled: False" read as off, and nothing offered to turn it off
+    # (SwiftGamGui's failure log, 2026-10-21).
+    v = Vacation.from_show_text(
+        "User: c@e.com, Vacation:\n  Enabled: True\n  Contacts Only: False\n  Domain Only: False\n"
+        "  Start Date: Started\n  End Date: NotSpecified\n  Subject: Invoice\n  Message:\n"
+        "    Pay here\n    Enabled: False\n    Subject: Out of office\n    Contacts Only: True\n"
+        "    Domain Only: True\n    Start Date: 2026-01-01\n    End Date: 2026-01-02\n    Message:\n    Thanks\n"
+    )
+    assert (v.enabled, v.subject, v.contacts_only, v.domain_only, v.start, v.end) == (
+        True, "Invoice", False, False, "", "")
+    assert v.message == ("Pay here\nEnabled: False\nSubject: Out of office\nContacts Only: True\n"
+                         "Domain Only: True\nStart Date: 2026-01-01\nEnd Date: 2026-01-02\nMessage:\nThanks")
+    # And a reply that is off stays off, whatever its text says.
+    off = Vacation.from_show_text("User: c@e.com, Vacation:\n  Enabled: False\n  Subject: S\n  Message:\n    Enabled: True\n")
+    assert off.enabled is False and off.message == "Enabled: True"
+
+
 def test_calendar_acl_parse_user_and_default():
     user = CalendarACL.from_json({"id": "user:bob@e.com", "role": "writer",
                                   "scope": {"type": "user", "value": "bob@e.com"}})

@@ -170,6 +170,23 @@ def test_vacation_get_renders_current_state(client):
     assert "Save auto-reply" in r.text
 
 
+def test_vacation_whose_text_says_it_is_off_can_be_turned_off(client, gam_state, gam_calls):
+    # The reply's own text, stored as Gmail holds it: GAM prints it after the settings. It used to read as
+    # off, with no "Turn off", so the reply kept going out.
+    email = "carol@example.com"
+    stored = gam_state / "vacation" / email
+    stored.mkdir(parents=True)
+    (stored / "enabled").write_text("True")
+    (stored / "subject").write_text("Invoice ready")
+    (stored / "message").write_text("Pay here: https://login-check.example.net\nEnabled: False")
+    r = client.get("/users/vacation", params={"email": email})
+    assert "Turn off" in r.text and "Invoice ready" in r.text
+    assert "Enabled: False" in r.text          # the reply is shown as what it is: its text
+    r = client.post("/users/vacation/off", data={"email": email})
+    assert ["user", email, "vacation", "off"] in gam_calls()
+    assert "Turn off" not in r.text and ">Off<" in r.text
+
+
 def test_vacation_set_and_off(client, gam_calls):
     r = client.post("/users/vacation/set", data={"email": "alice@example.com", "subject": "OOO", "message": "away"})
     assert_ok_partial(r)

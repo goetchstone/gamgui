@@ -73,7 +73,9 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
 - **`strip_cfgdir_noise`.** Because each call gets a brand-new `GAMCFGDIR`, GAM prints `Created:`/
   `Config File: ..., Initialized` banners on *stdout* every time. Left in, they leaked into text
   parsers (the vacation message). `models.Vacation.from_show_text` also stops capture on those
-  banner prefixes as defense-in-depth.
+  banner prefixes as defense-in-depth. Those are the only lines that end the message: GAM prints it
+  last, so a line in it that looks like a setting is the reply's own text and sets nothing (failure
+  log 2026-11-04).
 - **Error ordering.** Within a line, `_PATTERNS` is first-match-wins, specific→generic. The
   `cannot change your own access level | cannotChangeOwnAcl` pattern sits *before* the generic 403
   because GAM's own-ACL-deletion refusal carries no 403/forbidden token; it maps to its own kind,
