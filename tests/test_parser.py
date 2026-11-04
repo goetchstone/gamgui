@@ -26,8 +26,8 @@ def test_ndjson_multiple_objects(fixtures_dir):
     }
 
 
-def test_json_array(fixtures_dir):
-    text = (fixtures_dir / "group_members.json").read_text()
+def test_json_array():
+    text = '[{"email": "a@e.com", "role": "MEMBER"}, {"email": "b@e.com", "role": "MANAGER"}]'
     recs = parse_records(text)
     assert len(recs) == 2
     assert recs[1]["role"] == "MANAGER"

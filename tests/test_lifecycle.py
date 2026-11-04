@@ -27,27 +27,27 @@ def test_offboard_steps_order_and_due_date():
 def test_the_default_offboarding_is_pinned_byte_for_byte():
     # Configurable offboarding (plan 2026-10-02) must leave the default exactly as it was: every
     # option at its default sends these eight commands, with these dependencies, in this order.
-    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "{employee} has left",
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "{employee} has left",
                                  "Line one.\nAsk {manager}", 30, date(2026, 6, 23), notify="it@example.com",
-                                 employee_name="Lee Ver", manager_contact="Mo Gr (mgr@example.com)")
+                                 employee_name="Lee Ver", manager_contact="Mo Gr (alice@example.com)")
     assert [(s.key, s.requires, s.commands) for s in steps] == [
-        ("password", (), [["update", "user", "leaver@example.com", "password", "random", "changepassword", "off"]]),
-        ("revoke", ("password",), [["user", "leaver@example.com", "deprovision", "signout"]]),
-        ("forward", ("password",), [["user", "leaver@example.com", "forward", "off"]]),
-        ("delegate", ("password",), [["user", "leaver@example.com", "add", "delegate", "mgr@example.com"]]),
+        ("password", (), [["update", "user", "carol@example.com", "password", "random", "changepassword", "off"]]),
+        ("revoke", ("password",), [["user", "carol@example.com", "deprovision", "signout"]]),
+        ("forward", ("password",), [["user", "carol@example.com", "forward", "off"]]),
+        ("delegate", ("password",), [["user", "carol@example.com", "add", "delegate", "alice@example.com"]]),
         ("vacation", ("password", "delegate"), [[
-            "user", "leaver@example.com", "vacation", "on", "subject", "Lee Ver has left",
-            "message", "Line one.<br/>Ask Mo Gr (mgr@example.com)", "html", "contactsonly", "false",
+            "user", "carol@example.com", "vacation", "on", "subject", "Lee Ver has left",
+            "message", "Line one.<br/>Ask Mo Gr (alice@example.com)", "html", "contactsonly", "false",
             "domainonly", "false", "start", "Started", "end", "NotSpecified"]]),
         ("transfer", ("password", "delegate"), [
-            ["create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com", "all"]]),
-        ("calacls", ("password",), [["all", "users", "delete", "calendaracls", "primary", "leaver@example.com"]]),
+            ["create", "datatransfer", "carol@example.com", "drive,calendar", "alice@example.com", "all"]]),
+        ("calacls", ("password",), [["all", "users", "delete", "calendaracls", "primary", "carol@example.com"]]),
         ("reminder", ("password", "delegate", "transfer"), [[
-            "user", "mgr@example.com", "add", "event", "primary",
-            "summary", "Offboarding leaver@example.com: confirm with IT whether to delete the account",
+            "user", "alice@example.com", "add", "event", "primary",
+            "summary", "Offboarding carol@example.com: confirm with IT whether to delete the account",
             "start", "allday", "2026-07-23", "end", "allday", "2026-07-24",
-            "description", "leaver@example.com was offboarded on 2026-06-23 (password reset; data + calendars "
-                           "transferred to mgr@example.com). When you're sure it's safe, tell IT to delete the account.",
+            "description", "carol@example.com was offboarded on 2026-06-23 (password reset; data + calendars "
+                           "transferred to alice@example.com). When you're sure it's safe, tell IT to delete the account.",
             "attendee", "it@example.com", "sendupdates", "all"]]),
     ]
 
@@ -82,7 +82,7 @@ async def test_a_run_without_the_steps_left_out_is_complete(connector, gam_calls
     from gamgui.web.jobs import start_job
 
     na = frozenset({"delegate", "reminder"})
-    steps = [s for s in build_offboard_steps("leaver@example.com", "mgr@example.com", "S", "M", 30,
+    steps = [s for s in build_offboard_steps("carol@example.com", "alice@example.com", "S", "M", 30,
                                              date(2026, 6, 23), not_applicable=na) if s.key not in na]
     job = start_job({}, len(steps))
     await run_offboard(job, connector, steps, not_applicable=na)
@@ -90,8 +90,8 @@ async def test_a_run_without_the_steps_left_out_is_complete(connector, gam_calls
     assert job.not_applicable == ["delegate", "reminder"]
     assert job.log[0] == "· Doesn't apply, left out: Set delegate, Manager reminder"
     written = [argv[:4] for argv in gam_writes(gam_calls())]
-    assert ["user", "leaver@example.com", "add", "delegate"] not in written
-    assert ["user", "leaver@example.com", "vacation", "on"] in written            # ran without the delegate
+    assert ["user", "carol@example.com", "add", "delegate"] not in written
+    assert ["user", "carol@example.com", "vacation", "on"] in written            # ran without the delegate
 
 
 async def test_offboard_steps_call_the_right_connector_methods():
@@ -221,11 +221,11 @@ async def test_offboard_autoreply_does_not_inherit_the_leavers_old_vacation_sett
     # no auto-reply, or nobody did — and the step showed ✓. The auto-reply now names every setting.
     from gamgui.core.gam.models import Vacation
 
-    leaver = "leaver@example.com"
+    leaver = "carol@example.com"
     await connector.runner.run_authenticated("example.com", [   # the leaver's own earlier holiday reply
         "user", leaver, "vacation", "off", "contactsonly", "true", "domainonly", "true",
         "start", "2025-08-08", "end", "2025-08-15"], serialize=True)
-    steps = build_offboard_steps(leaver, "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps(leaver, "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     assert (await next(s for s in steps if s.key == "vacation").action(connector)).ok
     shown = await connector.runner.run_authenticated("example.com", GAMCommands.show_vacation(leaver))
     vac = Vacation.from_show_text(shown)
@@ -240,13 +240,13 @@ async def test_offboard_transfer_step_invokes_combined_service_list(connector):
     # transfers (the second of which 409'd in production). It names the Drive privacy level `all`
     # (private AND shared files): without one, the Data Transfer API's own default decides whether the
     # files the leaver had shared move — and whatever stays is lost when the account is deleted.
-    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     transfer = next(s for s in steps if s.key == "transfer")
     res = await transfer.action(connector)
     assert res.ok
     rec = next(e for e in connector.audit.tail() if e["action"] == "transfer_data")
     assert rec["ok"] and rec["argv"] == [
-        "create", "datatransfer", "leaver@example.com", "drive,calendar", "mgr@example.com", "all",
+        "create", "datatransfer", "carol@example.com", "drive,calendar", "alice@example.com", "all",
     ]
     assert transfer.commands == [rec["argv"]]
 
@@ -257,12 +257,12 @@ async def test_second_same_user_transfer_still_409s(connector):
     # NOT to swallow this — it's to never issue two (Bug 1 merges to one), so this stays a hard failure.
     from gamgui.core.gam.errors import GAMError
 
-    res = await connector.transfer_data("CONFLICT409@example.com", "calendar", "mgr@example.com")
+    res = await connector.transfer_data("CONFLICT409@example.com", "calendar", "alice@example.com")
     assert not res.ok
     with pytest.raises(GAMError) as ei:
         await connector.runner.run_authenticated(
             "example.com",
-            ["create", "datatransfer", "CONFLICT409@example.com", "calendar", "mgr@example.com"],
+            ["create", "datatransfer", "CONFLICT409@example.com", "calendar", "alice@example.com"],
             serialize=True,
         )
     assert ei.value.exit_code == 9 and "already in progress" in ei.value.stderr
@@ -273,7 +273,7 @@ async def test_offboard_calendar_sweep_tolerates_own_acl(connector):
     # Bug 2 regression: the all-users sweep hits the departing user's OWN primary calendar; GAM exits
     # 50 with "Cannot change your own access level." Now classified OWN_ACL and tolerated,
     # so the step still counts as success (audited ok, tolerated). OWNACL makes the mock refuse it.
-    steps = build_offboard_steps("OWNACL-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps("OWNACL-leaver@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     calacls = next(s for s in steps if s.key == "calacls")
     res = await calacls.action(connector)
     assert res.ok and "best-effort" in (res.detail or "")
@@ -285,10 +285,10 @@ async def test_offboard_calendar_sweep_tolerates_own_acl(connector):
 async def test_offboard_calendar_sweep_clean_success_and_real_failure(connector):
     # The live run (2026-10-07): an active leaver is among `all users`, so the sweep always ends on their
     # own calendar, exit 50 "Cannot change your own access level" — tolerated, and audited as such.
-    live = await connector.remove_from_all_calendars("leaver@example.com")
+    live = await connector.remove_from_all_calendars("carol@example.com")
     assert live.ok and "best-effort" in (live.detail or "")
     rec = connector.audit.tail()[-1]
-    assert rec["ok"] is True and rec["argv"] == ["all", "users", "delete", "calendaracls", "primary", "leaver@example.com"]
+    assert rec["ok"] is True and rec["argv"] == ["all", "users", "delete", "calendaracls", "primary", "carol@example.com"]
     assert rec["extra"]["tolerated"] is True and "own access level" in rec["extra"]["error"]
     # The exit-0 path (a leaver suspended first, so never visited), and a failure the connector must NOT
     # tolerate (a missing scope is not a per-entity notice).
@@ -331,7 +331,7 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     from gamgui.web.jobs import start_job
 
     monkeypatch.setattr(gam_connector, "DOMAIN_WIDE_TIMEOUT", 0.5)
-    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
     await run_offboard(job, connector, steps)
     assert (job.applied, job.failed_items) == (len(steps) - 1, ["Remove from everyone's calendars"])
@@ -359,7 +359,7 @@ def test_quitting_mid_offboard_stops_the_sweep_and_audits_it(connector, gam_call
 
     state = AppState(vault=connector.runner.vault, runner=connector.runner, audit_domain="example.com",
                      connector=connector, token="t")
-    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     with TestClient(create_app(state, allowed_hosts=TEST_HOSTS)) as client:
         job = start_job(state.jobs, len(steps))
 
@@ -387,10 +387,10 @@ async def test_offboard_preview_commands_are_what_runs(connector, gam_calls):
     # mock received, in order, must be exactly the previewed list — any drift between the two fails here.
     from gamgui.web.jobs import start_job
 
-    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "{employee} has left",
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "{employee} has left",
                                  "Line one.\nAsk {manager} — it's fine", 30, date(2026, 6, 23),
                                  notify="it@example.com", employee_name="Lee Ver",
-                                 manager_contact="Mo Gr (mgr@example.com)")
+                                 manager_contact="Mo Gr (alice@example.com)")
     job = start_job({}, len(steps))
     await run_offboard(job, connector, steps)
     assert (job.applied, job.failed_items) == (len(steps), [])
@@ -409,7 +409,7 @@ def test_offboard_step_dependencies_are_the_documented_ones():
     }
 
 
-async def _offboard(connector, user, manager="mgr@example.com"):
+async def _offboard(connector, user, manager="alice@example.com"):
     from gamgui.web.jobs import start_job
 
     steps = build_offboard_steps(user, manager, "s", "m", 30, date(2026, 6, 23))
@@ -426,7 +426,7 @@ async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
     assert (job.applied, job.failed_items) == (0, ["Reset password"])
     assert job.skipped == ["Revoke access & sign out", "Turn off forwarding", "Set delegate", "Set auto-responder",
                            "Transfer Drive & Calendar ownership",
-                           "Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
+                           "Remove from everyone's calendars", "30-day reminder for alice@example.com"]
     assert [w[:3] for w in gam_writes(gam_calls())] == [["update", "user", "missing-leaver@example.com"]]
     assert job.log[1] == "– Revoke access & sign out — not run: “Reset password” didn't succeed"
 
@@ -436,13 +436,13 @@ async def test_offboard_failed_delegate_stops_the_hand_over_but_not_the_sweep(co
     # The first write to the manager failed; the auto-reply names them and the transfer and the
     # reminder go to the same account, so those stop. The calendar sweep never touches the manager —
     # it still takes the leaver off colleagues' calendars.
-    job = await _offboard(connector, "leaver@example.com", manager="missing-mgr@example.com")
+    job = await _offboard(connector, "carol@example.com", manager="missing-mgr@example.com")
     assert (job.applied, job.failed_items) == (4, ["Set delegate"])
     assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
                            "30-day reminder for missing-mgr@example.com"]
     assert [w[:4] for w in gam_writes(gam_calls())] == [
-        ["update", "user", "leaver@example.com", "password"], ["user", "leaver@example.com", "deprovision", "signout"],
-        ["user", "leaver@example.com", "forward", "off"], ["user", "leaver@example.com", "add", "delegate"],
+        ["update", "user", "carol@example.com", "password"], ["user", "carol@example.com", "deprovision", "signout"],
+        ["user", "carol@example.com", "forward", "off"], ["user", "carol@example.com", "add", "delegate"],
         ["all", "users", "delete", "calendaracls"]]
 
 
@@ -456,7 +456,7 @@ async def test_an_interrupted_offboard_marks_what_it_never_reached(connector, mo
     from gamgui.web.jobs import start_job
 
     monkeypatch.setattr(gam_connector, "DOMAIN_WIDE_TIMEOUT", 30)
-    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps("SWEEPSLOW-leaver@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps))
     task = asyncio.create_task(run_offboard(job, connector, steps))
     while job.current != "Remove from everyone's calendars":  # noqa: ASYNC110 — polls the job as the UI does
@@ -466,9 +466,9 @@ async def test_an_interrupted_offboard_marks_what_it_never_reached(connector, mo
     with pytest.raises(asyncio.CancelledError):
         await task
     assert job.finished and job.applied == len(steps) - 2
-    assert job.skipped == ["Remove from everyone's calendars", "30-day reminder for mgr@example.com"]
+    assert job.skipped == ["Remove from everyone's calendars", "30-day reminder for alice@example.com"]
     assert job.log[-2:] == ["– Remove from everyone's calendars — interrupted before it finished",
-                            "– 30-day reminder for mgr@example.com — not run: interrupted"]
+                            "– 30-day reminder for alice@example.com — not run: interrupted"]
 
 
 def test_the_connected_admin_cannot_be_offboarded():
@@ -477,10 +477,10 @@ def test_the_connected_admin_cannot_be_offboarded():
     from gamgui.core.lifecycle import check_addresses
 
     directory = [GAMUser(primary_email="admin@example.com", is_admin=True),
-                 GAMUser(primary_email="mgr@example.com")]
-    check = check_addresses(directory, "Admin@example.com", "mgr@example.com", connected_admin="admin@example.com")
+                 GAMUser(primary_email="alice@example.com")]
+    check = check_addresses(directory, "Admin@example.com", "alice@example.com", connected_admin="admin@example.com")
     assert check.errors and "GamGUI is connected as admin@example.com" in check.errors[0]
-    assert not check_addresses(directory, "admin@example.com", "mgr@example.com").errors
+    assert not check_addresses(directory, "admin@example.com", "alice@example.com").errors
 
 
 @pytest.mark.asyncio
@@ -503,9 +503,9 @@ async def test_offboard_turns_off_forwarding_and_a_failure_stops_nothing(connect
     # The mailbox stays live for the delegate, so a leaver's auto-forward to a personal address kept
     # company mail flowing out until the account was deleted, 30+ days later. It is turned off after the
     # sign-out (the leaver could switch it on until then), on or not; a failure is a ✗ that stops nothing.
-    await _offboard(connector, "leaver@example.com")
+    await _offboard(connector, "carol@example.com")
     writes = gam_writes(gam_calls())
-    assert writes.index(["user", "leaver@example.com", "forward", "off"]) == 2       # after the revoke
+    assert writes.index(["user", "carol@example.com", "forward", "off"]) == 2       # after the revoke
     job = await _offboard(connector, "FWDFAIL-leaver@example.com")
     assert job.failed_items == ["Turn off forwarding"] and job.skipped == []
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
@@ -517,7 +517,7 @@ async def test_offboard_failed_transfer_skips_only_the_reminder(connector, gam_c
     # The reminder asks the manager to approve deletion — which, without the transfer, loses the files.
     job = await _offboard(connector, "CONFLICT409-leaver@example.com")
     assert (job.applied, job.failed_items) == (6, ["Transfer Drive & Calendar ownership"])
-    assert job.skipped == ["30-day reminder for mgr@example.com"]
+    assert job.skipped == ["30-day reminder for alice@example.com"]
     assert not [w for w in gam_writes(gam_calls()) if "event" in w]
     assert job.log[-1].startswith("– 30-day reminder") and "Transfer Drive" in job.log[-1]
 

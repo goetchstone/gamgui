@@ -235,6 +235,9 @@ parser was read statically (its bytecode, never run). No mismatch found.
   kind, `OWN_ACL`, and the sweep no longer tolerates PERMISSION_DENIED.
 
 ## Gotchas / mock-lies traps
+- **The mock resolves a transfer's owners as GAM does:** a non-user ends the command (exit 56), the same account twice
+  (an alias too) is a usage error, and a second transfer is Google's 409 under `gam_state`. Deprovisioning a suspended
+  user with backup codes exits 51 after its other parts. `tests/test_mock_gam_shapes.py`, failure log 2026-11-04.
 - **`set_vacation` rejects `formatjson`** (see MEMORY / the formatjson gotcha) — the mock can't catch
   that; verify against the vendored grammar `gamgui/resources/gam7/GamCommands.txt`.
 - **GAM's `vacation` merges, it does not replace.** `setVacation` (read statically from the vendored

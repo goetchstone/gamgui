@@ -95,7 +95,7 @@ def _state(users_fetch) -> AppState:
 
 async def test_offboarding_address_check_rereads_a_stale_list(t):
     lists = [[_u("old@example.com"), _u("boss@example.com")],
-             [_u("leaver@example.com"), _u("boss@example.com")]]
+             [_u("carol@example.com"), _u("boss@example.com")]]
 
     async def fetch(fields=None):
         return lists.pop(0)
@@ -103,7 +103,7 @@ async def test_offboarding_address_check_rereads_a_stale_list(t):
     st = _state(fetch)
     await st.users()
     t["now"] += 301
-    check = await lifecycle._check(st, "leaver@example.com", "boss@example.com")
+    check = await lifecycle._check(st, "carol@example.com", "boss@example.com")
     assert not check.errors and not lists                 # checked against the re-read, not the old list
 
 
@@ -114,12 +114,12 @@ async def test_offboarding_address_check_fails_closed_when_the_reread_fails(t):
         calls["n"] += 1
         if calls["n"] > 1:
             raise RuntimeError("network down")
-        return [_u("leaver@example.com"), _u("boss@example.com")]
+        return [_u("carol@example.com"), _u("boss@example.com")]
 
     st = _state(fetch)
     await st.users()
     t["now"] += 301
-    check = await lifecycle._check(st, "leaver@example.com", "boss@example.com")
+    check = await lifecycle._check(st, "carol@example.com", "boss@example.com")
     assert check.errors and "Couldn't read the directory" in check.errors[0]   # the stale list isn't used
 
 

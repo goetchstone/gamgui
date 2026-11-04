@@ -19,7 +19,8 @@
 #     does a usage error (echo the command, "ERROR: ...", exit 2);
 #   - anything unhandled FAILS. Add a handler for a new command; never make the catch-all succeed.
 # Failure triggers, by argument substring: *missing*/*nonexistent* -> "Does not exist" for the user,
-# group, calendar, event or delegate; *exists* -> 409 on create, and "already exists" on a delegate add;
+# group, calendar, event or delegate; *exists* -> "Create Failed: Duplicate" on create, and "already exists" on a
+# delegate add;
 # plus USERLIMIT (no license left for a new account), SENDFAIL, SUBFAIL, CONFLICT409,
 # FAILME, OWNACL, SWEEPFAIL, SWEEPBENIGN, SWEEPMIXED, SWEEPSLOW, SIGNOUTFAIL, FWDFAIL (see each handler). The stderr wording
 # and exit codes are GAM7's shape (2 usage error, 50 action failed, 51 action not performed, 56 does
@@ -87,14 +88,35 @@ json_text() {  # <key> <json line>: a top-level string value holding no quote or
   [ -n "$found" ] || { echo "ERROR: mock: no $1 in a data line" 1>&2; exit 2; }
   printf '%s' "$found"
 }
-# `print … formatjson` (GAM's SetJSONTitles): a header of the key column and `JSON`, then per record its key
-# value and the record. The data file holds one JSON record per line.
-print_formatjson() {  # <key column> <data file>
-  echo "$1,JSON"
-  while IFS= read -r record || [ -n "$record" ]; do   # a last line with no newline still counts
-    [ -n "$record" ] && gam_row "$(json_text "$1" "$record")" "$record"
-  done < "$GAM_MOCK_FIXTURES/$2"
+# `print … formatjson` (GAM's SetJSONTitles): a header of the key columns and `JSON`, then per record its key
+# values and the record. A data file holds one JSON record per line.
+print_formatjson() {  # <key columns, space-separated> <data file>
+  pf_keys=$1; pf_file=$2
+  printf '%s,JSON\n' "$(printf '%s' "$pf_keys" | tr ' ' ',')"
+  while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    set --
+    for key in $pf_keys; do set -- "$@" "$(json_text "$key" "$record")"; done
+    gam_row "$@" "$record"
+  done < "$GAM_MOCK_FIXTURES/$pf_file"
 }
+rows_with() {  # <data file> <value>...: each record in the file with those key values before it
+  rw_file=$1; shift
+  while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    gam_row "$@" "$record"
+  done < "$GAM_MOCK_FIXTURES/$rw_file"
+}
+# A read shape no handler models is refused, never answered in a guessed one (NDJSON once passed every test here,
+# and GAM never prints it).
+not_modelled() { echo "ERROR: mock: $1 isn't modelled" 1>&2; exit 2; }
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+# Under GAM_MOCK_STATE, an account `create user` made is a user from then on. So is anyone a group fixture lists as
+# a member: the directory fixture holds three users, but those members are accounts GAM can act as too.
+was_created() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/created/$1" ]; }
+group_member() { cat "$GAM_MOCK_FIXTURES/group_members.json" "$GAM_MOCK_FIXTURES/group_members_allhands.json" | grep -qF "\"email\": \"$1\""; }
+known_user() { in_directory "$1" || was_created "$1" || group_member "$1"; }
+is_group() { grep -qF "\"email\": \"$1\"" "$GAM_MOCK_FIXTURES/groups.json"; }   # <address, lowercased>
 # A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
 # one that isn't a user the token request fails, and GAM reports the token endpoint's words against it
 # (handleOAuthTokenError -> entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build).
@@ -103,7 +125,7 @@ not_a_user() {  # <address> <Show|Print>
   exit 50
 }
 need_user() {  # <address> <Show|Print>: a fixture-directory user, or one the mock keeps state for
-  in_directory "$1" && return 0
+  known_user "$(lower "$1")" && return 0
   if [ -n "${GAM_MOCK_STATE:-}" ] && { [ -e "$GAM_MOCK_STATE/vacation/$1" ] || [ -e "$GAM_MOCK_STATE/delegates/$1" ]; }; then
     return 0
   fi
@@ -254,8 +276,8 @@ fi
 
 # Read commands -> echo the matching fixture.
 # `gam print users … formatjson` -> GAM's CSV, a `primaryEmail` and a `JSON` column per user, escaped as GAM
-# escapes it (carol's title and department need it). The other formatjson reads below still print NDJSON,
-# which GAM never does (docs/plans/2026-10-30-backport-swiftgamgui.md A5).
+# escapes it (carol's title and department need it). Every formatjson read below prints GAM's own key columns,
+# read from its source at 7.50.00 (failure log 2026-11-04, the mock's reads and writes).
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
   print_formatjson primaryEmail print_users.json
   exit 0
@@ -275,19 +297,27 @@ if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   esac
   exit 0
 fi
-# `gam print group-members group <addr>` -> members, but ONLY for an address that is really a group.
-# Real GAM fails for a user's address, and code that has to tell a person from a group (calendar
-# sharing fans a group grant out to its members) would otherwise pass here and break live.
+# `gam print group-members group <addr> formatjson` -> GAM's CSV, a `group` and a `JSON` column per member
+# (doPrintGroupMembers): only that shape, the one the app sends. The address matches a group's whole address,
+# case-insensitively, as the Directory API's groupKey does: a substring once answered for `xsales@`. Anything
+# else, a user's address included, isn't a group: code that has to tell a person from a group (calendar sharing
+# fans a group grant out to its members) would otherwise pass here and break live. GAM's groupNotFound ->
+# entityUnknownWarning, ENTITY_DOES_NOT_EXIST_RC (wording approximate).
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
-  case "$*" in
-    *sales@example.com*|*staff@example.com*|*it@example.com*|*team@example.com*)
-      cat "$GAM_MOCK_FIXTURES/group_members.json" ;;
-    *allhands@example.com*)
-      cat "$GAM_MOCK_FIXTURES/group_members_allhands.json" ;;   # 12 members: past the bulk threshold
-    *empty-group@example.com*)
-      printf 'email\n' ;;          # a real, but memberless, group
-    *)
-      echo "ERROR: 400: Bad Request - notFound: Resource Not Found: groupKey" 1>&2; exit 1 ;;
+  [ $# -ge 3 ] || not_modelled "print group-members without a group"
+  [ "$3" = "group" ] || invalid_arg "$3"
+  [ $# -ge 4 ] || missing_arg "GroupItem"
+  [ -n "$4" ] || empty_arg "GroupItem"
+  [ $# -ge 5 ] || not_modelled "print group-members without formatjson"
+  [ "$5" = "formatjson" ] || invalid_arg "$5"
+  [ $# -eq 5 ] || invalid_arg "$6"
+  addr=$(lower "$4")
+  is_group "$addr" || does_not_exist "Group" "$4"
+  echo "group,JSON"
+  case "$addr" in
+    allhands@example.com) rows_with group_members_allhands.json "$addr" ;;   # 12 members: past the bulk threshold
+    empty-group@example.com) ;;                                               # a real, but memberless, group
+    *) rows_with group_members.json "$addr" ;;
   esac
   exit 0
 fi
@@ -394,17 +424,42 @@ EOF
   exit 0
 fi
 
-# `gam print groups [fields ...]` -> NDJSON list of groups.
+# `gam print groups fields <GroupFieldNameList> formatjson` -> GAM's CSV, an `email` and a `JSON` column per group
+# (doPrintGroups). Each field must be one the app asks for.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
-  printf '%s\n' \
-    '{"email":"sales@example.com","name":"Sales","directMembersCount":3}' \
-    '{"email":"staff@example.com","name":"Staff","directMembersCount":10}' \
-    '{"email":"it@example.com","name":"IT","directMembersCount":2}'
+  shift 2; fj=""; had_fields=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      fields)
+        had_fields=1
+        need_value $# "GroupFieldNameList"
+        [ -n "$2" ] || empty_arg "GroupFieldNameList"
+        set -f
+        for field in $(printf '%s' "$2" | tr ',' ' '); do
+          case "$(lower "$field" | tr -d '_')" in
+            email|name|description|directmemberscount) ;;
+            *) not_modelled "print groups field $field" ;;
+          esac
+        done
+        set +f
+        shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  if [ -z "$fj" ]; then   # bare, GAM's default column is the address; asked-for fields it flattens, which isn't modelled
+    [ "$had_fields" = "" ] || not_modelled "print groups fields without formatjson"
+    echo "email"
+    while IFS= read -r record || [ -n "$record" ]; do
+      [ -n "$record" ] || continue
+      json_text email "$record"; echo
+    done < "$GAM_MOCK_FIXTURES/groups.json"
+    exit 0
+  fi
+  print_formatjson email groups.json
   exit 0
 fi
 
-# `gam user <email> print messages ...` -> formatjson NDJSON; one row carries an Amazon SES
-# Return-Path header so the mailbox-search flow has an envelope-sender to surface.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ]; then
   case "$*" in
     *FAILME*) echo "ERROR: 400: Bad Request - precondptionFailed: a representative GAM failure detail" 1>&2; exit 1 ;;
@@ -420,19 +475,49 @@ EOF
   exit 0
 fi
 
-# `gam print cros ...` -> formatjson NDJSON of ChromeOS devices (Builder: Find Chromebooks).
+# `gam print cros [query <QueryCrOS>] [fields <CrOSFieldNameList>] formatjson` -> GAM's CSV, a `deviceId` and a `JSON`
+# column per device (doPrintCrOSDevices; Builder: Find Chromebooks). Every device, whatever the query or fields.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "cros" ]; then
-  printf '%s\n' \
-    '{"deviceId":"cros_1","serialNumber":"5CD123","status":"ACTIVE","orgUnitPath":"/Students","annotatedAssetId":"AST-1","annotatedUser":"sam@example.com","model":"HP Chromebook 11"}' \
-    '{"deviceId":"cros_2","serialNumber":"5CD999","status":"DEPROVISIONED","orgUnitPath":"/Staff","annotatedAssetId":"AST-2","annotatedUser":"","model":"Acer Chromebook 314"}'
+  shift 2; fj=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      query) need_value $# "QueryCrOS"; shift 2 ;;
+      fields) need_value $# "CrOSFieldNameList"; [ -n "$2" ] || empty_arg "CrOSFieldNameList"; shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print cros with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print cros without formatjson"
+  print_formatjson deviceId cros.json
   exit 0
 fi
 
-# `gam user <email> print filelist ...` -> formatjson NDJSON of Drive files (Builder: Find Drive files).
+# `gam user <email> print filelist [query <String>] fields <DriveFieldNameList> formatjson` -> GAM's CSV, `Owner`, `id`,
+# `name`, the flattened owners, and a `JSON` column per file (printFileList; Builder: Find Drive files). `owners` in the
+# JSON is Drive's list of objects. printFileList exits 60 when it printed no row; a refused token is its warning first.
+# Every file for any user, whatever the query (the owners columns' exact set is approximate).
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ]; then
-  printf '%s\n' \
-    '{"id":"file_1","name":"Q4 Budget","mimeType":"application/vnd.google-apps.spreadsheet","owners":"alice@example.com","modifiedTime":"2026-06-20T10:00:00Z"}' \
-    '{"id":"file_2","name":"Team Folder","mimeType":"application/vnd.google-apps.folder","owners":"alice@example.com","modifiedTime":"2026-05-01T09:00:00Z"}'
+  user=$2; shift 4; fj=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      query) need_value $# "QueryDriveFile"; shift 2 ;;
+      fields) need_value $# "DriveFieldNameList"; [ -n "$2" ] || empty_arg "DriveFieldNameList"; shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print filelist with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print filelist without formatjson"
+  if ! known_user "$(lower "$user")"; then
+    printf 'User: %s, User Print Failed: invalid_grant: Invalid email or User ID\n' "$user" 1>&2
+    echo "Owner,id,name,owners.emailAddress,JSON"
+    exit 60
+  fi
+  echo "Owner,id,name,owners,owners.0.displayName,owners.0.emailAddress,JSON"
+  while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    gam_row "$user" "$(json_text id "$record")" "$(json_text name "$record")" 1 \
+      "$(json_text displayName "$record")" "$(json_text emailAddress "$record")" "$record"
+  done < "$GAM_MOCK_FIXTURES/drive_files.json"
   exit 0
 fi
 
@@ -445,9 +530,24 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && { [ "${4:-}" = "backupcodes
   exit 0
 fi
 
-# `gam user <email> print forwardingaddresses` -> plain CSV (forwardingEmail + verification).
+# `gam user <u> print forwardingaddresses` (printShowForwardingAddresses): GAM acts as the person, so an address that
+# isn't a user fails at the token, and Gmail off ($GAM_MOCK_STATE/nogmail/<u>) is exit 73 after its "Getting" line, with
+# the titles alone. One row per address Gmail has, none for none: only alice@ has one.
+gmail_off() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$1" ]; }
+gmail_read() {  # <user> <items> <titles>: the token, the "Getting" line, and Gmail off
+  need_user "$1" Print
+  printf 'Getting %s for %s\n' "$2" "$1" 1>&2
+  if gmail_off "$1"; then printf 'User: %s, Gmail Service/App not enabled\n' "$1" 1>&2; printf '%s\n' "$3"; exit 73; fi
+}
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forwardingaddresses" ]; then
-  printf 'User,forwardingEmail,verificationStatus\n%s,fwd@example.com,accepted\n' "${2:-}"
+  user=$(lower "$2")
+  [ $# -eq 4 ] || not_modelled "print forwardingaddresses with $5"
+  titles='User,forwardingEmail,verificationStatus'
+  gmail_read "$user" "Forwarding Addresses" "$titles"
+  printf '%s\n' "$titles"
+  case "$user" in
+    alice@example.com) printf '%s,fwd@example.com,accepted\n' "$user" ;;
+  esac
   exit 0
 fi
 
@@ -462,29 +562,43 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]
   exit 0
 fi
 
-# `gam user <email> print calendaracls primary formatjson` -> NDJSON of THAT user's calendar access rules.
+# `gam user <u> print calendaracls primary formatjson` (printShowCalendarACLs) -> primaryEmail,calendarId,JSON: THAT
+# user's rules, each rule's id, role and scope only (the JSON holds neither key column). Without formatjson GAM
+# flattens each rule into columns this mock doesn't model.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls" ]; then
   [ -n "${5:-}" ] || missing_arg "UserCalendarEntity"
-  case "${6:-}" in ""|formatjson) ;; *) invalid_arg "$6" ;; esac
-  [ $# -le 6 ] || invalid_arg "$7"
+  [ $# -ge 6 ] || not_modelled "print calendaracls without formatjson"
+  [ "$6" = "formatjson" ] || invalid_arg "$6"
+  [ $# -eq 6 ] || invalid_arg "$7"
   in_directory "$2" || not_a_user "$2" Print
   [ "$5" = "primary" ] || [ "$5" = "$2" ] || does_not_exist "Calendar" "$5"
-  acl() {  # <scope value> <role>: one user-scoped rule on this user's primary calendar
-    printf '{"primaryEmail": "%s", "calendarId": "%s", "id": "user:%s", "role": "%s", "scope": {"type": "user", "value": "%s"}}\n' \
-      "$user" "$user" "$1" "$2" "$1"
-  }
   user="$2"
+  acl() {  # <scope value> <role>: one user-scoped rule on this user's primary calendar
+    gam_row "$user" "$user" "{\"id\": \"user:$1\", \"role\": \"$2\", \"scope\": {\"type\": \"user\", \"value\": \"$1\"}}"
+  }
+  echo "primaryEmail,calendarId,JSON"
   case "$user" in
-    alice@example.com) cat "$GAM_MOCK_FIXTURES/calendar_acls.json" ;;
+    alice@example.com) rows_with calendar_acls.json "$user" "$user" ;;
     carol@example.com) acl "$user" owner; acl helpdesk@example.com reader ;;
     *) acl "$user" owner ;;
   esac
   exit 0
 fi
 
-# `gam print resources ...` -> NDJSON of resource (room) calendars.
+# `gam print resources fields id,name,email,resourcetype,buildingid formatjson` (doPrintShowResourceCalendars) ->
+# resourceId,resourceName,JSON; GAM writes buildingId as `id:<id>` beside a looked-up buildingName.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "resources" ]; then
-  cat "$GAM_MOCK_FIXTURES/resources.json"
+  shift 2; fj=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      fields) need_value $# "ResourceFieldNameList"; [ -n "$2" ] || empty_arg "ResourceFieldNameList"; shift 2 ;;
+      query) need_value $# "String"; shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print resources with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print resources without formatjson"
+  print_formatjson "resourceId resourceName" resources.json
   exit 0
 fi
 
@@ -495,22 +609,72 @@ if [ "${1:-}" = "all" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ];
   exit 0
 fi
 
-# `gam user <email> print calendars ...` -> NDJSON of a user's calendars.
+# `gam user <u> print calendars fields <CalendarListFieldList> formatjson` (printShowCalendars) ->
+# primaryEmail,calendarId,JSON. An address that isn't a user fails at the token. alice@ has her two; anyone else their
+# primary calendar alone.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]; then
-  cat "$GAM_MOCK_FIXTURES/user_calendars.json"
+  user=$2; shift 4; fj=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      fields) need_value $# "CalendarListFieldList"; [ -n "$2" ] || empty_arg "CalendarListFieldList"; shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print calendars with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print calendars without formatjson"
+  known_user "$(lower "$user")" || not_a_user "$user" Print
+  echo "primaryEmail,calendarId,JSON"
+  if [ "$user" = "alice@example.com" ]; then
+    while IFS= read -r record || [ -n "$record" ]; do
+      [ -n "$record" ] || continue
+      gam_row "$user" "$(json_text id "$record")" "$record"
+    done < "$GAM_MOCK_FIXTURES/user_calendars.json"
+  else
+    gam_row "$user" "$user" "{\"accessRole\": \"owner\", \"id\": \"$user\", \"primary\": true, \"summary\": \"$user\"}"
+  fi
   exit 0
 fi
 
-# `gam calendars <id> print calendaracls|events ...` -> NDJSON (standalone calendar form).
+# `gam calendars <id> print calendaracls formatjson` (doCalendarsPrintShowACLs) -> calendarId,JSON.
 if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendaracls" ]; then
-  case "${2:-}" in
-    *orphan*) cat "$GAM_MOCK_FIXTURES/calendar_acls_orphan.json" ;;  # sole owner is a suspended user
-    *)        cat "$GAM_MOCK_FIXTURES/calendar_acls.json" ;;
+  [ $# -ge 5 ] || not_modelled "print calendaracls without formatjson"
+  [ "$5" = "formatjson" ] || invalid_arg "$5"
+  [ $# -eq 5 ] || invalid_arg "$6"
+  echo "calendarId,JSON"
+  case "$2" in
+    *orphan*) rows_with calendar_acls_orphan.json "$2" ;;  # sole owner is a suspended user
+    *)        rows_with calendar_acls.json "$2" ;;
   esac
   exit 0
 fi
+# `gam calendars <id> print events [query <S>] [after <T>] [before <T>] [eventid <id>] fields <…> formatjson`
+# (_validateCalendarGetEvents, _printCalendarEvent) -> calendarId,id,JSON. `eventid` answers that one event, not every
+# event; one that doesn't exist is entityActionFailedWarning, ACTION_FAILED_RC, with the titles alone (Google's words
+# approximate). A list that finds nothing is NO_ENTITIES_FOUND_RC (a NOMATCH query here). The query and dates otherwise
+# select nothing.
 if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events" ]; then
-  cat "$GAM_MOCK_FIXTURES/events.json"
+  cal=$2; shift 4; fj=""; only=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      query|after|before) need_value $# "String"; shift 2 ;;
+      eventid) need_value $# "EventId"; only=$2; shift 2 ;;
+      fields) need_value $# "EventFieldNameList"; [ -n "$2" ] || empty_arg "EventFieldNameList"; shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print events with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print events without formatjson"
+  echo "calendarId,id,JSON"
+  if [ -n "$only" ] && ! grep -qF "\"id\": \"$only\"" "$GAM_MOCK_FIXTURES/events.json"; then
+    printf 'Calendar: %s, Event: %s, Print Failed: Not Found\n' "$cal" "$only" 1>&2
+    exit 50
+  fi
+  case "$ARGS" in *NOMATCH*) exit 60 ;; esac
+  while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    id=$(json_text id "$record")
+    if [ -z "$only" ] || [ "$only" = "$id" ]; then gam_row "$cal" "$id" "$record"; fi
+  done < "$GAM_MOCK_FIXTURES/events.json"
   exit 0
 fi
 
@@ -615,7 +779,13 @@ check_user_attrs() {
           random|uniquerandom) shift 2; case "${1:-}" in [0-9]*) shift ;; esac ;;
           *) shift 2 ;;
         esac ;;
-      firstname|givenname|lastname|familyname|displayname|recoveryemail|recoveryphone|ou|org|orgunitpath)
+      firstname|givenname|lastname|familyname)
+        # getUserAttributes reads a name with getString(maxLen=60): longer is a usage error, which echoes the
+        # whole command line, password and all.
+        need_value $# "String"
+        [ "$(printf '%s' "$2" | LC_ALL=C tr -d '\200-\277' | wc -c)" -le 60 ] || invalid_arg "Expected <string length 0<=x<=60 for String>"
+        shift 2 ;;
+      displayname|recoveryemail|recoveryphone|ou|org|orgunitpath)
         need_value $# "String"; shift 2 ;;
       notify|subject|notifypassword|from|mailbox|replyto|message|textmessage|htmlmessage)
         need_value $# "String"; shift 2 ;;
@@ -638,18 +808,44 @@ check_user_attrs() {
   done
 }
 
-# `gam create user <email> <UserAttribute>* [notify ...]` -> new account. Real GAM fails with 409 if the
-# account already exists; an *exists* email mirrors that so onboarding can't silently "succeed" on a
-# duplicate.
+# `gam create user <email> <UserAttribute>* [notify ...]` -> new account. An address already taken fails as
+# doCreateUser's `except GAPI.duplicate` does: duplicateAliasGroupUserWarning names what holds it (a user, a user's
+# alias, a group), ENTITY_DUPLICATE_RC. Taken: a directory user, one of their aliases, a group, an account made earlier
+# in this state, or an *exists* address. An org unit that doesn't exist fails the command (entityActionFailedExit,
+# ACTION_FAILED_RC). Read from GAM's source, not captured from a tenant.
+duplicate_of() {  # <address, lowercased>: what GAM names as holding it, or nothing
+  if in_directory "$1" || was_created "$1" || case "$1" in *exists*) true ;; *) false ;; esac; then
+    printf 'User: %s' "$1"; return
+  fi
+  while IFS= read -r record || [ -n "$record" ]; do
+    case "$(printf '%s' "$record" | sed -n 's/.*"aliases": \[\([^]]*\)\].*/\1/p')" in
+      *"\"$1\""*) printf 'User Alias: %s, User: %s' "$1" "$(json_text primaryEmail "$record")"; return ;;
+    esac
+  done < "$GAM_MOCK_FIXTURES/print_users.json"
+  if is_group "$1"; then printf 'Group: %s' "$1"; fi
+}
 if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && [ "${2:-}" = "user" ]; then
   [ -n "${3:-}" ] || missing_arg "EmailAddress"
   user="$3"; shift 3
   check_user_attrs "$@"
+  org=""
+  while [ $# -gt 0 ]; do case "$1" in ou|org|orgunitpath) org="$2"; shift 2 ;; *) shift ;; esac; done
+  held=$(duplicate_of "$(lower "$user")")
+  if [ -n "$held" ]; then
+    printf 'User: %s, Create Failed: Duplicate, %s\n' "$user" "$held" 1>&2
+    exit 57
+  fi
+  case "$(lower "$org")" in
+    *missing*|*nonexistent*) printf '\nERROR: User: %s, Create Failed: Invalid Organizational Unit\n' "$user" 1>&2; exit 50 ;;
+  esac
   case "$user" in
-    *exists*) echo "ERROR: 409: Entity already exists - duplicate: $user" 1>&2; exit 1 ;;
     # Seen live 2026-09-30, when the subscription had no free license.
     *USERLIMIT*) echo "ERROR: User: $user, Create Failed: Domain user limit reached. Contact Support." 1>&2; exit 50 ;;
   esac
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    mkdir -p "$GAM_MOCK_STATE/created"
+    : > "$GAM_MOCK_STATE/created/$(lower "$user")"
+  fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/new_account_lag" ]; then
     mkdir -p "$GAM_MOCK_STATE/provisioning"
     cp "$GAM_MOCK_STATE/new_account_lag" "$GAM_MOCK_STATE/provisioning/$user"
@@ -708,6 +904,9 @@ fi
 # reported against the user and stops that user's remaining parts (deprovisionUser, read statically).
 # The stdout wording is GAM's shape from its source conventions, not captured from a tenant. Before each
 # part GAM says on stderr what it is getting (printGettingEntityItemForWhom; one user, so no counter).
+# A suspended user's backup codes aren't touched (checkUserSuspended): when they have codes, "Not Deprovisioned" with
+# GAM's reason (IS_SUSPENDED_NO_BACKUPCODES) and ACTION_NOT_PERFORMED_RC once the other parts have run; without codes
+# nothing is said and it exits 0. Everyone has codes here, except an account in $GAM_MOCK_STATE/nobackupcodes/<user>.
 if [ "${1:-}" = "user" ] && { [ "${3:-}" = "deprovision" ] || [ "${3:-}" = "deprov" ]; }; then
   user="$2"; signout=""; shift 3
   while [ $# -gt 0 ]; do
@@ -722,7 +921,14 @@ if [ "${1:-}" = "user" ] && { [ "${3:-}" = "deprovision" ] || [ "${3:-}" = "depr
   printf 'Getting Application Specific Password IDs for %s\n' "$user" 1>&2
   echo "User: $user, Application Specific Passwords: 0"
   printf 'Getting Backup Verification Codes for %s\n' "$user" 1>&2
-  echo "User: $user, Backup Verification Codes, Invalidated"
+  rc=0
+  if grep -F "\"primaryEmail\": \"$(lower "$user")\"" "$GAM_MOCK_FIXTURES/print_users.json" | grep -qF '"suspended": true' \
+     && ! { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nobackupcodes/$(lower "$user")" ]; }; then
+    printf 'User: %s, Backup Verification Codes Not Deprovisioned: User is suspended. You must unsuspend to process backupcodes\n' "$user" 1>&2
+    rc=51
+  else
+    echo "User: $user, Backup Verification Codes, Invalidated"
+  fi
   printf 'Getting Access Tokens for %s\n' "$user" 1>&2
   echo "User: $user, Access Tokens: 0"
   if [ -n "$signout" ]; then
@@ -730,7 +936,7 @@ if [ "${1:-}" = "user" ] && { [ "${3:-}" = "deprovision" ] || [ "${3:-}" = "depr
     echo "User: $user, Signed Out"
   fi
   echo "User: $user, Deprovisioned"
-  exit 0
+  exit $rc
 fi
 
 # `gam user <email> signature <String> [html [<Boolean>]] [replyto <addr>] [default] [treatasalias <B>]
@@ -769,6 +975,11 @@ if [ "${1:-}" = "user" ] && { [ "${4:-}" = "delegate" ] || [ "${4:-}" = "delegat
     *missing*|*nonexistent*)
       printf 'User: %s, Delegate: %s, %s Failed: Does not exist\n' "$2" "$delegate" "$verb" 1>&2; exit 50 ;;
   esac
+  # A delegate the user doesn't have: Gmail's delete is notFound, reported against the pair (processDelegates,
+  # entityActionFailedWarning, ACTION_FAILED_RC; the API's words approximate).
+  if [ "$verb" = "Delete" ] && ! has_delegate "$2" "$delegate"; then
+    printf 'User: %s, Delegate: %s, Delete Failed: Not Found\n' "$2" "$delegate" 1>&2; exit 50
+  fi
   # A delegate the user already has: GAM's processDelegates catches Gmail's alreadyExists and reports it
   # against the pair (entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build; Google's
   # wording approximate). *exists* is the trigger; a delegate the user has (delegates_of) fails the same way.
@@ -1026,8 +1237,12 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "remove" ] && [ "${4:-}" = "calendars" 
   exit 0
 fi
 
-# `gam user <email> add calendars <id> <CalendarAttribute>*` -> subscribe so the calendar appears in the
-# sidebar. A SUBFAIL target simulates GAM refusing to act as that recipient (partial-success path).
+# `gam user <email> add calendars <id> <CalendarAttribute>*` (addCalendars, _processCalendarList) -> subscribe, GAM
+# acting as them. One who isn't a user fails at the token. Calendar off, or an account Google is still setting up, exits
+# 73 from validateCalendar, before GAM steps in a level, so unindented. Each calendar's line is one level in (two
+# spaces): `  User: <u>, Calendar: <c>, Added`; a calendar GAM can't get, or one already in their list,
+# `  User: <u>, Calendar: <c>, Add Failed: <why>`, exit 50 (Google's words approximate). With GAM_MOCK_STATE the
+# calendars added are kept. A SUBFAIL target simulates GAM refusing to act as that recipient (partial-success path).
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "add" ] && [ "${4:-}" = "calendars" ]; then
   [ -n "${5:-}" ] || missing_arg "UserCalendarAddEntity"
   case "$*" in
@@ -1041,11 +1256,26 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "add" ] && [ "${4:-}" = "calendars" ]; 
       *) invalid_arg "$1" ;;
     esac
   done
+  known_user "$(lower "$user")" || not_a_user "$user" Add
   if still_provisioning "$user"; then
     printf 'User: %s, Calendar Service/App not enabled\n' "$user" 1>&2
     exit 73
   fi
-  echo "User $user subscribed to calendar $cal"
+  case "$cal" in
+    *missing*|*nonexistent*) printf '  User: %s, Calendar: %s, Add Failed: Not Found\n' "$user" "$cal" 1>&2; exit 50 ;;
+  esac
+  listed=""
+  if [ "$cal" = "$user" ]; then listed=1; fi
+  if [ "$user" = "alice@example.com" ] && grep -qF "\"id\": \"$cal\"" "$GAM_MOCK_FIXTURES/user_calendars.json"; then listed=1; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/subscribed/$user" ] && grep -qxF "$cal" "$GAM_MOCK_STATE/subscribed/$user"; then listed=1; fi
+  if [ -n "$listed" ]; then
+    printf '  User: %s, Calendar: %s, Add Failed: Duplicate\n' "$user" "$cal" 1>&2; exit 50
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    mkdir -p "$GAM_MOCK_STATE/subscribed"
+    printf '%s\n' "$cal" >> "$GAM_MOCK_STATE/subscribed/$user"
+  fi
+  printf '  User: %s, Calendar: %s, Added\n' "$user" "$cal"
   exit 0
 fi
 
@@ -1174,26 +1404,44 @@ if [ "${1:-}" = "sendemail" ]; then
   exit 0
 fi
 
-# `gam create|add datatransfer|transfer <old> <DataTransferServiceList> <new> [private|shared|all]
-#  [release_resources]` -> succeeds. An <old> containing CONFLICT409 (a second transfer for the same
-# user still in flight) returns the exact "already in progress" error Google emits.
-# GAM resolves each owner to a user ID as it reads it (convertEmailAddressToUID): one that isn't a user ends
-# the command there, before any transfer (entityDoesNotExistExit; here a *missing*/*nonexistent* address).
+# `gam create|add datatransfer|transfer <old> <DataTransferServiceList> <new> [private|shared|all] [release_resources]`
+# (doCreateDataTransfer). GAM resolves each owner to a user ID as it reads it (convertEmailAddressToUID): an address that
+# isn't a user ends the command there, before any transfer (entityDoesNotExistExit). The same account twice, an alias of
+# the old owner included, is a usage error. On success GAM prints "Transfer Request Performed", then the transfer's ID,
+# services, From and To (the Data Transfer API's app names). With GAM_MOCK_STATE a transfer stays in progress for the old
+# owner, and a second one is Google's 409, which GAM's callGAPI doesn't expect: systemErrorExit(HTTP_ERROR_RC, 9). An <old>
+# containing CONFLICT409 does the same without state.
+transfer_owner() {  # <address>: the primary it resolves to, or the command ends as GAM's lookup does
+  owner=$(lower "$1")
+  # A failure trigger is not an account's absence: a pseudo-user, as *pending* is for print datatransfers.
+  case "$owner" in *conflict409*|*pending*|*sweep*|*signoutfail*|*fwdfail*) printf '%s' "$owner"; return ;; esac
+  if known_user "$owner"; then printf '%s' "$owner"; return; fi
+  held=$(duplicate_of "$owner")
+  case "$held" in
+    "User Alias: "*) printf '%s' "${held##*, User: }"; return ;;
+  esac
+  does_not_exist_exit "User" "$1"
+}
 if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datatransfer" ] || [ "${2:-}" = "transfer" ]; }; then
   [ -n "${3:-}" ] || missing_arg "OldOwnerID"
-  case "$3" in *missing*|*nonexistent*) does_not_exist_exit "User" "$3" ;; esac
+  old_owner=$(transfer_owner "$3")
   [ -n "${4:-}" ] || missing_arg "DataTransferServiceList"
   services="calendar|datastudio|lookerstudio|data studio|googledrive|gdrive|drive|drive and docs"
+  apps=""
   old_ifs=$IFS; IFS=,
   for svc in $4; do
     case "$svc" in
-      calendar|datastudio|lookerstudio|"data studio"|googledrive|gdrive|drive|"drive and docs") ;;
+      calendar) app="Calendar" ;;
+      datastudio|lookerstudio|"data studio") app="Looker Studio" ;;
+      googledrive|gdrive|drive|"drive and docs") app="Drive and Docs" ;;
       *) IFS=$old_ifs; invalid_choice "$svc" "$services" ;;
     esac
+    apps="${apps:+$apps,}$app"
   done
   IFS=$old_ifs
   [ -n "${5:-}" ] || missing_arg "NewOwnerID"
-  case "$5" in *missing*|*nonexistent*) does_not_exist_exit "User" "$5" ;; esac
+  new_owner=$(transfer_owner "$5")
+  [ "$old_owner" != "$new_owner" ] || usage_error "New owner must differ from old owner"
   old="$3"; svcs="$4"; new="$5"; shift 5
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1209,10 +1457,18 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
       *) invalid_arg "$1" ;;
     esac
   done
-  case "$old" in
-    *CONFLICT409*) echo "ERROR: 409: conflict - Data transfer already in progress for the user." 1>&2; exit 9 ;;
-  esac
-  echo "Requested transfer of $svcs from $old to $new"
+  conflict() { echo "ERROR: 409: conflict - Data transfer already in progress for the user." 1>&2; exit 9; }
+  case "$old" in *CONFLICT409*) conflict ;; esac
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    [ ! -e "$GAM_MOCK_STATE/transfers/$old_owner" ] || conflict
+    mkdir -p "$GAM_MOCK_STATE/transfers"
+    printf '%s\n' "$new_owner" > "$GAM_MOCK_STATE/transfers/$old_owner"
+  fi
+  echo "Transfer Request Performed"
+  echo "  Transfer ID: MockTransfer_$(printf '%s' "$old_owner" | cksum | cut -d' ' -f1)"
+  echo "  Service: $apps"
+  echo "  From: $old"
+  echo "  To: $new"
   exit 0
 fi
 

@@ -1043,7 +1043,7 @@ def test_calendars_delete_refuses_when_owner_suspended(client):
 
 def test_calendars_share_adds_acl_and_subscribes(client):
     r = client.post("/calendars/share",
-                    data={"cal": SEC_CAL, "target": "assistant@example.com", "role": "reader", "label": "Training Calendar"})
+                    data={"cal": SEC_CAL, "target": "carol@example.com", "role": "reader", "label": "Training Calendar"})
     assert r.status_code == 200
     assert "assistant@example.com" in r.text               # ACL list re-rendered
     assert "appear in their Google Calendar" in r.text      # subscribed -> emerald notice
@@ -1505,12 +1505,12 @@ def test_lifecycle_page_has_live_autoreply_preview(client):
 def test_lifecycle_autoreply_live_fills_in_names(client):
     # As soon as user + manager are entered, the generated message is shown — no raw tokens.
     r = client.post("/lifecycle/offboard/autoreply",
-                    data={"user": "alice@example.com", "manager": "mgr@example.com",
+                    data={"user": "alice@example.com", "manager": "alice@example.com",
                           "subject": "", "message": ""})
     assert r.status_code == 200
     assert "Auto-reply senders will receive" in r.text
     assert "Alice Anders is no longer with the company" in r.text   # default subject, name resolved
-    assert "mgr@example.com" in r.text                              # contact filled in
+    assert "alice@example.com" in r.text                              # contact filled in
     assert "{employee}" not in r.text and "{manager}" not in r.text
 
 
@@ -1554,7 +1554,7 @@ def _offboard_writes(calls):
     return [c[:5] for c in gam_writes(calls)]
 
 
-def offboard_writes(user="leaver@example.com", mgr="mgr@example.com"):
+def offboard_writes(user="carol@example.com", mgr="alice@example.com"):
     return [
         ["update", "user", user, "password", "random"],
         ["user", user, "deprovision", "signout"],        # revoke access: tokens, app passwords, sessions
@@ -1660,8 +1660,8 @@ def test_offboard_interrupted_panel_is_not_complete(client):
 
     job = start_job(client.app.state.gamgui.jobs, 3)
     job.applied, job.done, job.finished = 2, 2, True
-    job.skipped, job.interrupted = ["30-day reminder for mgr@example.com"], True
-    job.log = ["✓ Reset password", "✓ Set delegate", "– 30-day reminder for mgr@example.com — not run: interrupted"]
+    job.skipped, job.interrupted = ["30-day reminder for alice@example.com"], True
+    job.log = ["✓ Reset password", "✓ Set delegate", "– 30-day reminder for alice@example.com — not run: interrupted"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
     assert "Offboarding interrupted — 2 of 3 steps succeeded" in text
     assert "now has a calendar reminder" not in text and "Don't delete the account" in text
@@ -1967,7 +1967,7 @@ async def test_offboard_executor_runs_every_step(connector, gam_calls):
     from gamgui.core import lifecycle
     from gamgui.web.jobs import start_job
 
-    steps = lifecycle.build_offboard_steps("leaver@example.com", "mgr@example.com", "Away", "Bye", 30, date.today())
+    steps = lifecycle.build_offboard_steps("carol@example.com", "alice@example.com", "Away", "Bye", 30, date.today())
     job = start_job({}, len(steps))
     await lifecycle.run_offboard(job, connector, steps)
     assert job.finished and job.done == len(steps)

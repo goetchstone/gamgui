@@ -1,0 +1,2 @@
+{"annotatedAssetId": "AST-1", "annotatedUser": "sam@example.com", "deviceId": "cros_1", "model": "HP Chromebook 11", "orgUnitPath": "/Students", "serialNumber": "5CD123", "status": "ACTIVE"}
+{"annotatedAssetId": "AST-2", "annotatedUser": "", "deviceId": "cros_2", "model": "Acer Chromebook 314", "orgUnitPath": "/Staff", "serialNumber": "5CD999", "status": "DEPROVISIONED"}

@@ -20,7 +20,7 @@ DWD = [scope for scope, _ in DWD_SCOPES]
 # Every write builder the app calls, with the options it can emit.
 WRITES = {
     "create_user": [C.create_user("new@example.com", "New", "Hire", "Temp-Pa55w0rd", org_unit="/Staff",
-                                  notify="mgr@example.com"),
+                                  notify="alice@example.com"),
                     C.create_user("new@example.com", "New", "Hire", "Temp-Pa55w0rd", change_password=False)],
     "update_organization": [C.update_organization("alice@example.com", "Lead", "Sales"),
                             C.update_organization("alice@example.com", "", "Sales")],
@@ -45,19 +45,19 @@ WRITES = {
     "delete_event": [C.delete_event(CAL, "evt-1")],
     # A leaver suspended first (SWEEPCLEAN): an active one ends exit 50 on their own calendar (a test below).
     "remove_all_calendar_acls": [C.remove_all_calendar_acls("SWEEPCLEAN-leaver@example.com")],
-    "add_calendar_event": [C.add_calendar_event("mgr@example.com", "Confirm", "2026-07-23", "2026-07-24"),
-                           C.add_calendar_event("mgr@example.com", "Confirm", "2026-07-23", "2026-07-24",
+    "add_calendar_event": [C.add_calendar_event("alice@example.com", "Confirm", "2026-07-23", "2026-07-24"),
+                           C.add_calendar_event("alice@example.com", "Confirm", "2026-07-23", "2026-07-24",
                                                 description="d", attendee="it@example.com")],
-    "create_datatransfer": [C.create_datatransfer("leaver@example.com", "drive,calendar", "mgr@example.com")]
-                           + [C.create_datatransfer("leaver@example.com", "drive,calendar", "mgr@example.com", privacy=p)
+    "create_datatransfer": [C.create_datatransfer("carol@example.com", "drive,calendar", "alice@example.com")]
+                           + [C.create_datatransfer("carol@example.com", "drive,calendar", "alice@example.com", privacy=p)
                               for p in C.TRANSFER_PRIVACY],
-    "create_tasklist": [C.create_tasklist("mgr@example.com", "Onboard Ada")],
-    "create_task": [C.create_task("mgr@example.com", "MockTasklist_abc123", "Order a laptop", notes="n")],
+    "create_tasklist": [C.create_tasklist("alice@example.com", "Onboard Ada")],
+    "create_task": [C.create_task("alice@example.com", "MockTasklist_abc123", "Order a laptop", notes="n")],
     "send_email": [C.send_email("new@example.com", "Welcome", "<p>Hi</p>"),
                    C.send_email("new@example.com", "Welcome", "Hi", html=False)],
     "set_signature": [C.set_signature("alice@example.com", "Best,\nAlice"),
                       C.set_signature("alice@example.com", "", html=False)],
-    "add_delegate": [C.add_delegate("leaver@example.com", "mgr@example.com")],
+    "add_delegate": [C.add_delegate("carol@example.com", "alice@example.com")],
     "remove_delegate": [C.remove_delegate("alice@example.com", "assistant@example.com")],
     "set_vacation": [C.set_vacation("alice@example.com", "Away", "Back soon"),
                      C.set_vacation("alice@example.com", "Away", "Back", html=False, start="2026-07-01",
@@ -91,8 +91,8 @@ READS = {
     "print_all_calendars": [C.print_all_calendars()],
     "print_calendar_acls_cal": [C.print_calendar_acls_cal(CAL)],
     "print_events": [C.print_events(CAL, query="standup")],
-    "get_event": [C.get_event(CAL, "evt-1")],
-    "print_datatransfers": [C.print_datatransfers("leaver@example.com")],
+    "get_event": [C.get_event(CAL, "evt-allhands")],
+    "print_datatransfers": [C.print_datatransfers("carol@example.com")],
     "show_signature": [C.show_signature("alice@example.com")],
     "print_delegates": [C.print_delegates("alice@example.com")],
     "print_forwarding_addresses": [C.print_forwarding_addresses("alice@example.com")],
@@ -136,9 +136,9 @@ async def test_mock_sweep_of_an_active_leaver_ends_on_their_own_calendar_as_live
     # Live, 2026-10-07 (GAM 7.48.14): `all users` includes the still-active leaver, so the sweep's last
     # word is GAM refusing to change their own primary calendar — exit 50, tolerated by the connector.
     with pytest.raises(GAMError) as err:
-        await runner.run_authenticated(domain, C.remove_all_calendar_acls("leaver@example.com"), serialize=True)
+        await runner.run_authenticated(domain, C.remove_all_calendar_acls("carol@example.com"), serialize=True)
     assert err.value.exit_code == 50 and err.value.kind == GAMErrorKind.OWN_ACL
-    assert ("Calendar: leaver@example.com, Calendar ACL: (Scope: user:leaver@example.com), "
+    assert ("Calendar: carol@example.com, Calendar ACL: (Scope: user:carol@example.com), "
             "Delete Failed: Cannot change your own access level.") in err.value.stderr
 
 
@@ -170,9 +170,9 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     (C.set_vacation("alice@example.com", "Away", "Back", start="July 1"), "Invalid date"),
     (["update", "user", "alice@example.com", "organization", "title", "T"], "Missing argument"),
     (["update", "group", "sales@example.com", "add", "admin", "carol@example.com"], "Invalid argument"),
-    (["create", "datatransfer", "leaver@example.com", "drive,mail", "mgr@example.com"], "Invalid choice (mail)"),
+    (["create", "datatransfer", "carol@example.com", "drive,mail", "alice@example.com"], "Invalid choice (mail)"),
     # A privacy level is a Drive parameter: GAM (_assignAppParameter) refuses it when no listed app takes it.
-    (["create", "datatransfer", "leaver@example.com", "calendar", "mgr@example.com", "all"],
+    (["create", "datatransfer", "carol@example.com", "calendar", "alice@example.com", "all"],
      "No data transfer application for key PRIVACY_LEVEL"),
     (["user", "alice@example.com", "forward", "on", "bounce", "fwd@example.com"], "Invalid choice (bounce)"),
     (["user", "alice@example.com", "signout", "now"], "Invalid argument"),
