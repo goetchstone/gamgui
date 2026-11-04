@@ -9,7 +9,7 @@
   - The diagnosis of 2026-11-03 (a step `if:` is ANDed with `success()`, which went false) was an inference
     from one run. With `always()` in front the step skipped anyway, so the condition itself was false:
     such a job matches none of failure, cancelled and skipped through `needs`. Its Checks conclusion is not
-    its `needs` result. The value it does report has still not been seen.
+    its `needs` result. The value it reports is `abandoned`, first seen on run 41860860097 (below).
   - The gate listed bad values instead of requiring the good one, so any other value passed.
 - **Why not caught:** the proof used a stand-in. #73 was checked on GitHub by cancelling a run by hand. Those
   jobs do report `cancelled`, a different path, and it says nothing about a job no runner picked up. The
@@ -26,5 +26,6 @@
   was mutated to confirm a test fails without it (a job list check naming only failure and cancelled
   survived at first, so a test now holds that). `test_ci_ok_needs_every_blocking_job` holds the workflow.
   RULE-FEEDBACK has the stand-in lesson.
-  **Not yet proven:** the gate has not run on a real job no runner picked up. By construction it can pass
-  only if the job list says "success", and that list showed `cancelled` on both runs here.
+  **Seen on GitHub:** run 41860860097 (#81, 2026-11-04), one run so far. No runner picked up seven jobs. They
+  show `cancelled` in the job list and report `needs.<job>.result = 'abandoned'`. The gate printed each result
+  and exited 1, and `ci-ok` concluded `failure`.
