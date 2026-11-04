@@ -36,14 +36,14 @@ def test_the_builds_framing_is_skipped():
 
 
 async def test_a_transfer_to_an_owner_who_is_not_a_user_says_who(connector):
-    res = await connector.transfer_data("leaver@example.com", "drive", "nonexistent-mgr@example.com")
+    res = await connector.transfer_data("carol@example.com", "drive", "nonexistent-mgr@example.com")
     assert not res.ok and res.kind is GAMErrorKind.NOT_FOUND
     assert res.remediation == "The requested user, group, or resource was not found."
     assert res.detail.endswith("ERROR: User: nonexistent-mgr@example.com, Does not exist")
 
 
 async def test_a_usage_error_is_its_error_line_not_the_help(connector):
-    res = await connector.transfer_data("leaver@example.com", "nosuchservice", "mgr@example.com")
+    res = await connector.transfer_data("carol@example.com", "nosuchservice", "alice@example.com")
     assert not res.ok and res.kind is GAMErrorKind.UNKNOWN
     assert res.detail.endswith("ERROR: Invalid choice (nosuchservice): Expected <calendar|datastudio|lookerstudio|"
                                "data studio|googledrive|gdrive|drive|drive and docs>")

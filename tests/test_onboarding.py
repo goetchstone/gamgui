@@ -127,7 +127,7 @@ def test_welcome_template_saves(client):
 
 def test_preview_renders_steps_and_email(client):
     r = client.post("/onboard/preview", data={"role": "Salesperson", "name": "Jordan",
-                                              "email": "jordan@example.com", "manager": "mgr@example.com",
+                                              "email": "jordan@example.com", "manager": "alice@example.com",
                                               "send_welcome": "1"})
     assert r.status_code == 200 and "Set up the CRM login" in r.text
     assert "Jordan" in r.text   # welcome email rendered with the name
@@ -434,7 +434,7 @@ def test_run_account_duplicate_fails_gracefully(client):
     r = _preview_and_run(client, **{"role": "Sales", "name": "Al Ready",
                                     "email": "exists@example.com", "assignee": "it@example.com",
                                     "create_account": "1"})
-    assert "create the account" in r.text and "409" in r.text   # the 409 is surfaced, not swallowed
+    assert "create the account" in r.text and "Create Failed: Duplicate" in r.text   # GAM's words, not swallowed
 
 
 def test_run_account_failure_error_partial_never_shows_password(tmp_path, echoing_gam, monkeypatch):
@@ -479,8 +479,8 @@ def test_run_adds_groups_and_subscribes_calendars(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS",
                                         "groups": "sales@example.com\nstaff@example.com",
                                         "calendars": "team@group.calendar.google.com"})
-    r = _preview_and_run(client, **{"role": "Sales", "name": "Ada",
-                                    "email": "ada@example.com", "assignee": "it@example.com"})
+    r = _preview_and_run(client, **{"role": "Sales", "name": "Carol",
+                                    "email": "carol@example.com", "assignee": "it@example.com"})
     assert r.status_code == 200
     assert "2 of 2 groups" in r.text and "1 of 1 shared calendar" in r.text
     assert "Created" in r.text   # the tasklist still ran
@@ -525,7 +525,7 @@ def test_parse_hire_csv():
 
 
 @pytest.mark.asyncio
-async def test_provision_hire_notify_vs_sheet(connector, tmp_path):
+async def test_provision_hire_notify_vs_sheet(connector, tmp_path, gam_state):
     store = RunbookStore(tmp_path / "ob.json")
     store.set_role("Sales", ["Set up POS"], signature="Classic", org_unit="/Sales",
                    groups=["sales@example.com"], calendars=["team@x"])
@@ -859,7 +859,7 @@ def test_run_welcome_email_sent_and_failed(client):
     assert "failed to send" in bad.text
 
 
-def test_run_create_account_with_groups_calendars_and_signature(client):
+def test_run_create_account_with_groups_calendars_and_signature(client, gam_state):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "signature": "Classic",
                                         "org_unit": "/Sales", "groups": "sales@example.com\nstaff@example.com",
                                         "calendars": "team@group.calendar.google.com"})

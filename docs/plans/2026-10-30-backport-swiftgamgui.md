@@ -1,6 +1,6 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (branch `fix/auto-reply-text-hid-the-auto-reply`); A5–A9 open. The operator
+**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (#75, `d1bee56`); A5 applied (branch `test/mock-lies`); A6–A9 open. The operator
 lifted the freeze for Phase A only (G1 (a), 2026-10-30). Phases B–F stay PROPOSED, and G2–G5 only matter
 if one of them is approved.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
@@ -109,6 +109,9 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
     calendars, calendar ACLs, events, Drive files) print NDJSON, which GAM never does. Port SwiftGamGui's
     approach: GAM's `key,JSON` CSV through `print_formatjson`, with each read's key column checked against
     GAM's source rather than guessed. A read whose shape isn't modelled is refused, not answered as NDJSON.
+
+  **Applied:** GamGUI failure log 2026-11-04, "The mock's reads and writes". 26 tests went red, all fixture
+  addresses or the mock's own words; no product bug. Offline only. `tests/test_mock_gam_shapes.py` holds it.
 - **A6. The connected admin, at the chokepoint.** Today only offboarding checks it
   (`core/lifecycle.py:236`). That check compares by email and is skipped when the admin is unknown, the shape
   Swift's `2026-10-13-offboarding-could-offboard-its-own-admin` exploited. Users' suspend, delete and sign-out
@@ -260,6 +263,8 @@ README's Status, including what is only in which app; a "Live verification statu
   mock's progress on stderr).
 - **A3** — applied (#69, `8d14022`: the command echo and usage help lines skipped, the
   build's framing words held, the mock's usage error and transfer framed as GAM frames them).
-- **A4** — applied (branch `fix/auto-reply-text-hid-the-auto-reply`: nothing after `Message:` sets a field).
-- A5–A9 — approved, open.
+- **A4** — applied (#75, `d1bee56`: nothing after `Message:` sets a field).
+- **A5** — applied (branch `test/mock-lies`: every `formatjson` read prints GAM's key columns; the listed writes fail
+  as GAM does).
+- A6–A9 — approved, open.
 - B1–B4, C1–C5, D1–D3, E1–E8, F — proposed, not approved (G1 (a)).

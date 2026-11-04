@@ -125,7 +125,7 @@ async def test_stop_ends_bulk_onboarding_between_hires_never_mid_hire(connector,
 async def test_stop_ends_offboarding_between_steps_and_says_what_did_not_run(connector, gam_calls):
     from gamgui.core.lifecycle import build_offboard_steps, run_offboard
 
-    steps = build_offboard_steps("leaver@example.com", "mgr@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
     job = start_job({}, len(steps), kind="offboard")
     await run_offboard(job, _StopDuring(connector, job, "revoke_access"), steps)   # pressed during step 2
     assert job.finished and not job.interrupted
@@ -138,7 +138,7 @@ async def test_stop_ends_offboarding_between_steps_and_says_what_did_not_run(con
 
 
 def test_an_offboarding_stopped_part_way_says_so_and_never_complete(client):  # noqa: F811
-    job = start_job(client.app.state.gamgui.jobs, 3, kind="offboard", title="Offboarding leaver@example.com")
+    job = start_job(client.app.state.gamgui.jobs, 3, kind="offboard", title="Offboarding carol@example.com")
     job.record("Reset password", True)
     job.log += ["✓ Reset password", "– Set delegate — not run: stopped", "– Transfer — not run: stopped"]
     job.skipped += ["Set delegate", "Transfer"]
