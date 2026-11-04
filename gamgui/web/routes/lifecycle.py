@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard, lifecycle
 from ...core.connectors.base import RiskLevel
+from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
 from ..jobs import start_job
 from ..server import TEMPLATES
@@ -87,7 +88,12 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why
         return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {friendly(exc)}"])
     admin = st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None and st.connector else ""
-    return lifecycle.check_addresses(directory, user, manager, connected_admin=admin)
+    check = lifecycle.check_addresses(directory, user, manager, connected_admin=admin)
+    if not check.errors and st.connector is not None:
+        refusal = await st.connector.cut_off_refusal([GAMCommands.deprovision_user(user)], previewing=True)
+        if refusal:
+            check.errors.append(refusal)
+    return check
 
 
 async def _delegate_warning(conn, user: str, manager: str) -> str:

@@ -52,6 +52,32 @@ CACHE_FIELDS = (
 )
 
 
+def cut_off_account(argv: Sequence[str]) -> Optional[str]:
+    """The account ``argv`` cuts off from Google, as sent, or None for any other command: deleted,
+    suspended, its OAuth tokens deleted (``deprovision``, which took GamGUI's own token, failure log
+    2026-09-24), its password changed or its sessions ended. Whether GAM's token outlives the last two
+    isn't proven, so they count. By shape rather than by builder, and in any case, as GAM reads its words, so
+    a variant fails closed; ``all users`` comes back as that, which no account reads as. Run on the admin
+    GamGUI signs in as, any of them signs the app out: ``GAMConnector.cut_off_refusal`` refuses it."""
+    original = list(argv)
+    words = [w.lower().replace("_", "") for w in original]
+    entity = ("user", "users")
+    if len(words) >= 3 and words[0] == "delete" and words[1] in entity:
+        return original[2]
+    if len(words) >= 3 and words[0] in entity and words[2] in ("signout", "deprovision", "deprov"):
+        return original[1]
+    if len(words) >= 3 and words[:2] == ["all", "users"] and words[2] in ("signout", "deprovision", "deprov"):
+        return "all users"
+    if len(words) >= 4 and words[0] == "update" and words[1] in entity:
+        attributes = words[3:]
+        for i, word in enumerate(attributes):
+            if word == "password":
+                return original[2]
+            if word in ("suspended", "suspend") and attributes[i + 1:i + 2] not in (["off"], ["false"]):
+                return original[2]
+    return None
+
+
 class GAMCommands:
     # --- diagnostics / setup ----------------------------------------------------------
     @staticmethod

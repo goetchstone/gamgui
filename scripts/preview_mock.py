@@ -20,6 +20,7 @@ A write that "works" here only proves the mock accepted it (CLAUDE.md, "the mock
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import sys
@@ -56,7 +57,9 @@ def build_app(state_dir: Path):
     vault = SecretsVault(backend=InMemoryBackend())
     fake = {
         "client_secrets": '{"installed": {"client_id": "fake"}}',
-        "oauth2": "fake-oauth2-token",
+        # The claims GAM keeps beside the token: the mock's admin, whose ID its `info user` agrees with.
+        "oauth2": json.dumps({"decoded_id_token": {"email": "admin@example.com", "sub": "100000000000000000009"},
+                              "refresh_token": "fake-oauth2-token"}),
         "oauth2service": '{"type": "service_account", "private_key": "fake"}',
     }
     vault.set_all(DOMAIN, fake)

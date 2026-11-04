@@ -427,7 +427,7 @@ async def test_offboard_failed_reset_stops_the_routine(connector, gam_calls):
     assert job.skipped == ["Revoke access & sign out", "Turn off forwarding", "Set delegate", "Set auto-responder",
                            "Transfer Drive & Calendar ownership",
                            "Remove from everyone's calendars", "30-day reminder for alice@example.com"]
-    assert [w[:3] for w in gam_writes(gam_calls())] == [["update", "user", "missing-leaver@example.com"]]
+    assert gam_writes(gam_calls()) == []     # GAM reads no such account, so the reset isn't even sent
     assert job.log[1] == "– Revoke access & sign out — not run: “Reset password” didn't succeed"
 
 

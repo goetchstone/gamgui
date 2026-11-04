@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from hypothesis import settings
 
+from .helpers import OAUTH2_FAKE
 from gamgui.core.audit import AuditLog
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
@@ -147,7 +148,7 @@ def vault() -> SecretsVault:
         DOMAIN,
         {
             "client_secrets": '{"installed": {"client_id": "fake"}}',
-            "oauth2": "fake-oauth2-token",
+            "oauth2": OAUTH2_FAKE,
             "oauth2service": '{"type": "service_account", "private_key": "fake"}',
         },
     )
