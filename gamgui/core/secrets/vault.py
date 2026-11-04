@@ -191,28 +191,42 @@ class SecretsVault:
     def has_credentials(self, domain: str) -> bool:
         return all(self.get(domain, name) for name in _REQUIRED)
 
-    def oauth_admin_email(self, domain: str) -> str:
-        """The connected admin's address — the ``email`` claim GAM keeps beside the token in
-        ``oauth2.txt`` (``decoded_id_token``; ``id_token`` when an older build stored the claims
-        there) — lowercased, or "" when it can't be read. Returns that one claim only, parsed in
-        memory: the token itself never leaves the vault. An undecoded JWT is not decoded here."""
+    def _oauth_claims(self, domain: str) -> Dict[str, object]:
+        """The claims GAM keeps beside the token in ``oauth2.txt`` (``decoded_id_token``; ``id_token``
+        when an older build stored them there) that hold a usable ``email``, or {}. Parsed in memory; an
+        undecoded JWT is not decoded here."""
         try:
             data = json.loads(self.get(domain, "oauth2") or "")
-        except ValueError:
-            return ""
+        except (ValueError, RecursionError):
+            return {}
         if not isinstance(data, dict):
-            return ""
+            return {}
         for key in ("decoded_id_token", "id_token"):
             claims = data.get(key)
             if isinstance(claims, str):
                 try:
                     claims = json.loads(claims)
-                except ValueError:
+                except (ValueError, RecursionError):
                     continue
-            email = claims.get("email") if isinstance(claims, dict) else None
+            if not isinstance(claims, dict):
+                continue
+            email = claims.get("email")
             if isinstance(email, str) and "@" in email and not any(c.isspace() for c in email):
-                return email.strip().lower()
-        return ""
+                return claims
+        return {}
+
+    def oauth_admin_email(self, domain: str) -> str:
+        """The connected admin's address, the ``email`` claim, lowercased, or "" when it can't be read.
+        Returns that one claim only: the token itself never leaves the vault."""
+        email = self._oauth_claims(domain).get("email")
+        return email.strip().lower() if isinstance(email, str) else ""
+
+    def oauth_admin_id(self, domain: str) -> str:
+        """The connected admin's Google account ID, the ``sub`` claim beside that ``email``, when it is
+        digits as Google's are, else "". Not proof until GAM reads the same ``id`` for the admin
+        (``GAMConnector.cut_off_refusal``). Returns that one claim only."""
+        sub = self._oauth_claims(domain).get("sub")
+        return sub if isinstance(sub, str) and 0 < len(sub) <= 64 and sub.isascii() and sub.isdigit() else ""
 
     def clear_domain(self, domain: str, deleted: Optional[list] = None) -> None:
         # A delete that fails raises before the domain leaves the index: its secrets are still there.

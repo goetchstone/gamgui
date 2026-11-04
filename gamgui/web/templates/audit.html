@@ -9,9 +9,8 @@
       <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">Audit log</h1>
       <p class="text-brand-blueink mt-1 text-sm">{{ total }} action{{ "s" if total != 1 else "" }} logged · {{ failures }} failure{{ "s" if failures != 1 else "" }}</p>
     </div>
-    <a href="/audit/export.csv" download class="text-sm font-medium text-brand-blueink hover:text-brand-black">Export CSV ↓</a>
   </div>
-  <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads the full log (filters aren't applied to the download in v1).</p>
+  <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads what the search and filter show, every page of it.</p>
 
   <form class="flex flex-wrap items-center gap-3" hx-get="/audit/rows" hx-target="#audit-rows" hx-trigger="keyup changed delay:300ms from:input[name='q'], change from:input[name='failed']">
     <input type="search" name="q" aria-label="Filter the audit log" placeholder="Filter by action, target, or error…"

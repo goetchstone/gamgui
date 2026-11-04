@@ -89,7 +89,10 @@ async def test_a_refresh_that_raced_an_invalidate_is_not_kept(t):
 
 
 def _state(users_fetch) -> AppState:
-    conn = SimpleNamespace(domain="example.com", list_users=users_fetch)
+    async def no_refusal(commands, previewing=False):
+        return ""
+
+    conn = SimpleNamespace(domain="example.com", list_users=users_fetch, cut_off_refusal=no_refusal)
     return AppState(vault=None, runner=None, connector=conn)   # type: ignore[arg-type]
 
 

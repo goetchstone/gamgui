@@ -35,6 +35,7 @@ A mutation is: connector method (e.g. `set_signature`, `add_group_member`, `dele
 
 ## Gotchas / mock-lies traps
 - `RiskLevel` on each `_run_write` call must match the real GAM verb's blast radius, and the catalog's declared risk must match it (see `core/catalog/catalog.py`). `delete_calendar` uses GAM's `remove calendars` (= Calendars.delete, permanent) not `delete calendars` (unsubscribe) — verified against GAM7 source, comment in `delete_calendar`.
+- A cut-off write costs one `info user` read per address before `_run_write` sends it (`cut_off_refusal`, guard-audit runbook): a test that counts calls should use `gam_writes`.
 - `formatjson` traps (MEMORY: gamgui-gam-formatjson): `show signature`/`show vacation` are parsed as *text* here (`_parse_signature`, `Vacation.from_show_text`), not JSON — do not "modernize" them to formatjson. The mock cannot catch a formatjson rejection; check `gamgui/resources/gam7/GamCommands.txt`.
 - `mock_gam.sh` returned members for any address once, making a user look like a group — a permissive mock converts a live break into a green test. Anything mutating (create/delete/transfer/ACL) is only *proven* against a real throwaway tenant; passing tests do not prove a write works.
 

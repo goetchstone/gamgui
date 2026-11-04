@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
-from ..gam.commands import GAMCommands, build_user_query
+from ..gam.commands import GAMCommands, build_user_query, cut_off_account
 from ..gam.errors import GAMError, GAMErrorKind
 from ..gam.models import (
     CalendarACL,
@@ -83,9 +83,20 @@ def _parse_signature(text: str) -> str:
     return "" if sig in ("", "None") else sig
 
 
+def _usage_day(rows: List[Dict[str, Any]], asked: str) -> str:
+    """The day a usage report's rows are from. GAM walks back to the newest day with data on its own
+    (doReport, _checkDataRequiredServices, _adjustTryDate), so the day asked for can name a day the data
+    isn't from; the rows' ``date`` column says. The day asked for only when no row has one."""
+    return max((str(r.get("date") or "").strip() for r in rows), default="") or asked
+
+
 def _require_read(cmd) -> None:
     if cmd.risk != RiskLevel.READ_ONLY:
         raise ValueError(f"{cmd.id} is not a read-only command")
+
+
+# What `cut_off_refusal` reads of an account.
+ACCOUNT_ID_FIELDS = ("primaryEmail", "id")
 
 
 class GAMConnector(Connector):
@@ -96,6 +107,7 @@ class GAMConnector(Connector):
         self.runner = runner
         self.domain = domain
         self.audit = audit or AuditLog()
+        self._confirmed_admin: Optional[Tuple[str, str]] = None   # (address, ID) GAM has agreed with
 
     # --- connection --------------------------------------------------------------------
     async def test(self) -> ConnectionStatus:
@@ -216,7 +228,7 @@ class GAMConnector(Connector):
             out = await self.runner.run_authenticated(self.domain, GAMCommands.report_users(date, params))
             rows = parse_records(_csv_from(out))
             if rows:
-                return {"date": date, "rows": rows}
+                return {"date": _usage_day(rows, date), "rows": rows}
         return {"date": "", "rows": []}
 
     async def add_delegate(self, email: str, delegate: str) -> ChangeResult:
@@ -558,6 +570,69 @@ class GAMConnector(Connector):
                                                  about={"command": command}))
         return results
 
+    # --- the connected admin ------------------------------------------------------------
+    async def _admin_identity(self) -> Tuple[str, str, str]:
+        """The admin GamGUI signs in as, asked now: (address, account ID, ""), or ("", "", why not). The ID
+        is the token's ``sub``, kept only once GAM reads the same ``id`` for that address. A re-import
+        changes the claims, and so asks again."""
+        try:
+            address = self.runner.vault.oauth_admin_email(self.domain)
+            account_id = self.runner.vault.oauth_admin_id(self.domain)
+        except Exception:  # noqa: BLE001 - a Keychain refusal: unconfirmed, and never its message
+            return "", "", "its sign-in token couldn't be read"
+        if not address or not account_id:
+            return "", "", "its sign-in token doesn't say"
+        if self._confirmed_admin == (address, account_id):
+            return address, account_id, ""
+        try:
+            record = parse_one(await self.runner.run_authenticated(
+                self.domain, GAMCommands.info_user(address, fields=ACCOUNT_ID_FIELDS)))
+        except Exception as exc:  # noqa: BLE001 - any failed read leaves the admin unconfirmed
+            return "", "", f"GAM couldn't read {address}: {exc}"
+        if record.get("id") != account_id:
+            return "", "", f"GAM reads {address} as another account than the sign-in token's"
+        self._confirmed_admin = (address, account_id)
+        return address, account_id, ""
+
+    async def cut_off_refusal(self, commands: Iterable[Sequence[str]], *, previewing: bool = False) -> str:
+        """Why ``commands`` must not run, or "": any that would cut off the admin GamGUI signs in as signs the
+        app out with no way back from here. Compared by Google account ID: GAM reads each address as it will
+        be sent, and an alias or a renamed address reads as the account behind it. Only an account GAM reads
+        now, with an ID, can be cut off; anything else refuses, at the cost of a write GAM would refuse anyway.
+        ``_run_write`` asks before every such write, whoever called it. A preview asks too, to say so early
+        (``previewing``); there an address no one holds passes, since an earlier step of a sequence may restore
+        it, and the run reads it again when that step has run."""
+        addresses = list(dict.fromkeys(a for a in map(cut_off_account, commands) if a is not None))
+        if not addresses:
+            return ""
+        admin, admin_id, why_not = await self._admin_identity()
+        if not admin:
+            return (f"GamGUI can't confirm which account it signs in as ({why_not}), so a change that could sign it "
+                    "out isn't made here. Import the credentials again on Setup, or make the change in the Admin console.")
+        own = ": this would sign GamGUI out, with no way back from here. Make the change in the Admin console, or from another admin's setup."
+        for address in addresses:
+            shown = address.strip()
+            if shown.lower() == admin:
+                return f"{shown} is the admin GamGUI is connected as{own}"
+            try:
+                records = parse_records(await self.runner.run_authenticated(
+                    self.domain, GAMCommands.info_user(address, fields=ACCOUNT_ID_FIELDS)))
+            except GAMError as exc:
+                if exc.kind == GAMErrorKind.NOT_FOUND:
+                    if previewing:
+                        continue
+                    return f"GAM has no account {shown}, so nothing ran. Check the address and preview again."
+                return f"Couldn't check whose account {shown} is ({exc}), so nothing ran. Preview again."
+            except Exception as exc:  # noqa: BLE001 - fail closed: an account it can't read can't be ruled out
+                return f"Couldn't check whose account {shown} is ({exc}), so nothing ran. Preview again."
+            # One record with Google's digits for an ID, or it says nothing about whose account this is.
+            account_id = records[0].get("id") if len(records) == 1 else None
+            if not (isinstance(account_id, str) and account_id.isascii() and account_id.isdigit()):
+                return f"GAM didn't say whose account {shown} is, so nothing ran. Preview again."
+            if account_id == admin_id or str(records[0].get("primaryEmail") or "").strip().lower() == admin:
+                return f"{shown} is the account GamGUI is connected as ({admin}){own}"
+        return ""
+
     # --- internals ---------------------------------------------------------------------
     async def _run_write(
         self,
@@ -586,6 +661,15 @@ class GAMConnector(Connector):
         named = {k: v for k, v in (about or {}).items() if v}
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
+        try:
+            refusal = await self.cut_off_refusal([argv])
+        except Exception as exc:  # noqa: BLE001 - fail closed, and on the record: the check itself broke
+            refusal = f"Couldn't check whose account this is ({exc}), so nothing ran."
+        if refusal:
+            self.audit.record(action, target=target, argv=shown, ok=False,
+                              extra={**named, "error": refusal, "tolerated": False}, secrets=secrets)
+            refusal = redact_secrets(refusal, secrets)
+            return ChangeResult(preview=preview, ok=False, detail=refusal, remediation=refusal)
         try:
             out = await self.runner.run_authenticated(self.domain, argv, timeout=timeout, serialize=True)
         except asyncio.CancelledError:

@@ -139,6 +139,14 @@ async def test_usage_report(connector):
     data = await connector.usage_report(USAGE_PARAMS)
     assert data["rows"]  # mock returns rows for the first date tried
     assert "bob@example.com" in {r.get("email") for r in data["rows"]}
+    assert data["date"] == "2026-06-16"    # the day GAM's rows are from, which GAM picked: not the day asked for
+
+
+def test_usage_day_is_the_rows_own_or_failing_that_the_day_asked():
+    from gamgui.core.connectors.gam_connector import _usage_day
+
+    assert _usage_day([{"date": "2026-06-14"}, {"date": "2026-06-16"}], "2026-11-02") == "2026-06-16"
+    assert _usage_day([{"email": "a@e.com"}, {"date": " "}], "2026-11-02") == "2026-11-02"
 
 
 async def test_list_user_groups(connector):

@@ -81,6 +81,14 @@ def _preview_of(cmd, argv, target) -> ChangePreview:
                          summary=cmd.name, risk=cmd.risk, argv=argv, meta={"cid": cmd.id})
 
 
+async def _blocked(st, decision, commands) -> list:
+    """What stops a preview: an account delete typed as an alias, or a change that would cut off the admin
+    GamGUI signs in as (the run refuses that too; this says so before a confirm step is drawn)."""
+    blocked = await _alias_deletes(st, decision)
+    refusal = await st.connector.cut_off_refusal(commands, previewing=True) if st.connector is not None else ""
+    return blocked + [refusal] if refusal else blocked
+
+
 def _gam_str(argv) -> str:
     return "gam " + " ".join(argv)
 
@@ -131,7 +139,7 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     st = app_state(request)
     tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
     decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
-    blocked = await _alias_deletes(st, decision)
+    blocked = await _blocked(st, decision, [argv])
     token = "" if cmd.risk == RiskLevel.READ_ONLY or blocked else st.previews.hold(
         _FLOW, _form_key(cmd, slots), (list(argv), target), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
@@ -512,8 +520,9 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
     """The sequence's confirm step, holding the steps it shows under the token its Run form posts."""
     st = app_state(request)
     tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
-    decision = guard_mod.evaluate(_seq_previews(seq))
-    blocked = await _alias_deletes(st, decision)
+    previews = _seq_previews(seq)
+    decision = guard_mod.evaluate(previews)
+    blocked = await _blocked(st, decision, [p.argv for p in previews])
     token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
         "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),

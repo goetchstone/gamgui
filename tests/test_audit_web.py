@@ -16,7 +16,7 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
-from .helpers import TEST_HOSTS
+from .helpers import OAUTH2_FAKE, TEST_HOSTS
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
@@ -29,7 +29,7 @@ def client(tmp_path, monkeypatch):
     ``connector.audit.path``, same object this fixture constructs)."""
     monkeypatch.setenv("GAM_MOCK_FIXTURES", str(FIXTURES))
     vault = SecretsVault(InMemoryBackend())
-    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
+    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": OAUTH2_FAKE, "oauth2service": '{"client_id": "x"}'})
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     audit_path = tmp_path / "audit.jsonl"
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(audit_path))
@@ -449,3 +449,27 @@ def test_audit_export_without_connector(unconnected_client):
     r = unconnected_client.get("/audit/export.csv")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
+
+
+def test_the_export_link_takes_the_screens_search_and_filter(client):
+    # The route took both, but the page's link dropped them: what a filtered screen handed over was the whole log.
+    _seed(client.audit_path, [
+        {"ts": "2026-06-23T15:02:51+00:00", "action": "set_vacation", "target": "alice@example.com", "ok": True},
+        {"ts": "2026-06-23T15:03:00+00:00", "action": "suspend", "target": "bob@example.com", "ok": False},
+    ])
+    plain = client.get("/audit/rows").text
+    assert 'href="/audit/export.csv?q="' in plain and "Export CSV" in plain
+    r = client.get("/audit/rows", params={"q": "a&b c", "failed": "1"})
+    assert 'href="/audit/export.csv?q=a%26b%20c&amp;failed=1"' in r.text and "Export matches" in r.text
+    assert " download " in r.text    # the app window's download path (tests/test_app_window_downloads.py)
+
+
+def test_the_export_is_what_the_filter_shows(client):
+    _seed(client.audit_path, [
+        {"ts": "2026-06-23T15:02:51+00:00", "action": "set_vacation", "target": "alice@example.com", "ok": True},
+        {"ts": "2026-06-23T15:03:00+00:00", "action": "suspend", "target": "bob@example.com", "ok": False},
+    ])
+    shown = client.get("/audit/export.csv", params={"failed": "1"}).text.splitlines()
+    whole = client.get("/audit/export.csv").text.splitlines()
+    assert 1 < len(shown) < len(whole)
+

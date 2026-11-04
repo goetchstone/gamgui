@@ -22,6 +22,8 @@
 - **Bounded output (inv. 9 / scale memory):** usage is truncated to 25 rows in the route; the whole page rides the in-memory user cache (added in `f7ab17b` to scale the Users list to tens of thousands) rather than re-querying.
 - History: screen introduced in `8ad3047`; storage/mail usage in `b241913`; directory-completeness buckets in `b30eeb6`; `no_location` in `4a2c274`. `convertmbtogb` is intentionally **not** passed — GB is computed in `parse_usage` (`round(mb/1024,1)`), so the builder stays MB.
 
+- **The usage date is the rows' own (failure log 2026-11-04).** GAM walks back to the newest day with data by itself, so `usage_report` reads the day from the rows' `date` column rather than naming the day it asked for.
+
 ## Gotchas / mock-lies traps
 `tests/fixtures/mock_gam.sh` matches only `report users` and dumps a **fixed 3-row CSV, ignoring `date` and `parameters`**. So live-untested here:
 - The **lookback loop** in `usage_report` — the mock returns data on the first date, so the "recent dates lag, walk back" logic and the empty `{"date":"","rows":[]}` fallback never run in tests.

@@ -16,7 +16,7 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
-from .helpers import TEST_HOSTS, assert_ok_partial, gam_writes, wait_for_job
+from .helpers import OAUTH2_FAKE, TEST_HOSTS, assert_ok_partial, gam_writes, wait_for_job
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
@@ -26,7 +26,7 @@ DOMAIN = "example.com"
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("GAM_MOCK_FIXTURES", str(FIXTURES))
     vault = SecretsVault(InMemoryBackend())
-    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
+    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": OAUTH2_FAKE, "oauth2service": '{"client_id": "x"}'})
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
     state = AppState(vault=vault, runner=runner, audit_domain=DOMAIN, connector=conn, token="t")
@@ -963,7 +963,7 @@ async def test_run_sequence_executor_applies_each(connector):
 
 def test_destructive_single_step_sequence_needs_confirm(client):
     # A lone destructive step must still be confirmed — running it via a 1-step sequence is no bypass.
-    client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "victim@example.com"})
+    client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "carol@example.com"})
     _, token = _seq_preview(client)
     unconfirmed = client.post("/builder/sequence/run", data={"preview": token})
     assert "status?job=" not in unconfirmed.text and "Confirm" in unconfirmed.text   # the interstitial again
@@ -1004,24 +1004,24 @@ def test_sequence_run_is_single_use(client, gam_calls):
 
 
 def test_a_sequence_that_deletes_an_account_needs_the_email_typed(client, gam_calls):
-    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "victim@example.com"})
+    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"})
     shown, token = _seq_preview(client)
-    assert 'name="confirm_email"' in shown and "victim@example.com" in shown
+    assert 'name="confirm_email"' in shown and "carol@example.com" in shown
     r = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
     assert "status?job=" not in r.text and "exact email" in r.text
     assert gam_writes(gam_calls()) == []
     _, token = _seq_preview(client)
-    ok = client.post("/builder/sequence/run", data={"confirmed": "1", "confirm_email": "victim@example.com",
+    ok = client.post("/builder/sequence/run", data={"confirmed": "1", "confirm_email": "carol@example.com",
                                                     "preview": token})
     assert "status?job=" in ok.text
 
 
 def test_destructive_bulk_sequence_needs_typed_confirm(client):
     for _ in range(10):  # ten destructive deletes => bulk + destructive => typed confirm
-        client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "victim@example.com"})
+        client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"})
     prev, token = _seq_preview(client)
     assert 'name="confirm"' in prev               # typed confirmation required
     assert prev.count('name="confirm_email"') == 1               # and the one deleted address, once
-    blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "confirm_email": "victim@example.com",
+    blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "confirm_email": "carol@example.com",
                                                          "preview": token})
     assert "Type confirm" in blocked.text and "status?job=" not in blocked.text
