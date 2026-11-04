@@ -73,6 +73,68 @@ def test_missing_required_credentials_raises(tmp_path):
             pass
 
 
+def test_a_refresh_does_not_undo_a_re_import(vault, domain, tmp_path):
+    # A call's refreshed token used to replace whatever was stored, pairing the old admin's token with the new key.
+    with EphemeralConfig(vault, domain, base_dir=tmp_path) as cfgdir:
+        vault.set(domain, "oauth2", "re-imported")
+        (cfgdir / FILENAMES["oauth2"]).write_text("refreshed-value", encoding="utf-8")
+    assert vault.get(domain, "oauth2") == "re-imported"
+
+
+def test_a_refresh_does_not_bring_back_a_removed_token(vault, domain, tmp_path):
+    with EphemeralConfig(vault, domain, base_dir=tmp_path) as cfgdir:
+        vault.delete(domain, "oauth2")
+        (cfgdir / FILENAMES["oauth2"]).write_text("refreshed-value", encoding="utf-8")
+    assert vault.get(domain, "oauth2") is None
+
+
+def test_the_second_of_two_refreshes_leaves_the_first(vault, domain, tmp_path):
+    # Reads run side by side, each with the same token. The first to finish is written back; the other leaves it.
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    with EphemeralConfig(vault, domain, base_dir=tmp_path / "a") as first, \
+         EphemeralConfig(vault, domain, base_dir=tmp_path / "b") as second:
+        (first / FILENAMES["oauth2"]).write_text("refreshed-1", encoding="utf-8")
+        (second / FILENAMES["oauth2"]).write_text("refreshed-2", encoding="utf-8")
+    assert vault.get(domain, "oauth2") == "refreshed-2"      # the inner block ends first
+
+
+def test_the_write_back_compares_the_store_not_a_stale_cache(domain, tmp_path):
+    # The vault's cache can hold the old value while the Keychain has moved on (another process, a lock and re-read).
+    from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
+
+    backend = InMemoryBackend()
+    v = SecretsVault(backend=backend, cache_ttl=3600)
+    v.set_all(domain, {"oauth2": "old", "oauth2service": "{}"})
+    with EphemeralConfig(v, domain, base_dir=tmp_path) as cfgdir:
+        backend.set_password(f"gamgui:{domain}", "oauth2", "re-imported")
+        (cfgdir / FILENAMES["oauth2"]).write_text("refreshed-value", encoding="utf-8")
+    assert backend.get_password(f"gamgui:{domain}", "oauth2") == "re-imported"
+
+
+def test_replace_if_current_is_one_step_under_writes(vault, domain):
+    import threading
+
+    vault.set(domain, "oauth2", "a")
+    entered, release = threading.Event(), threading.Event()
+
+    def slow(held):   # another write mid-look must wait for the lock
+        entered.set()
+        release.wait(1)
+        return held == "a"
+
+    worker = threading.Thread(target=lambda: vault.replace_if_current(domain, "oauth2", slow, "swapped"))
+    worker.start()
+    entered.wait(1)
+    other = threading.Thread(target=lambda: vault.set(domain, "oauth2", "re-imported"))
+    other.start()
+    other.join(0.05)
+    assert other.is_alive()            # the plain set waits
+    release.set()
+    worker.join(); other.join()
+    assert vault.get(domain, "oauth2") == "re-imported"
+
+
 def test_oauth2_token_write_back(vault, domain, tmp_path):
     # Simulate GAM refreshing the token by rewriting oauth2.txt inside the block.
     with EphemeralConfig(vault, domain, base_dir=tmp_path) as cfgdir:

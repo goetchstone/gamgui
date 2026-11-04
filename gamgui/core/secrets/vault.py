@@ -14,8 +14,9 @@ the real Keychain. The default backend uses ``keyring``, which maps to the macOS
 from __future__ import annotations
 
 import json
+import threading
 import os
-from typing import Dict, Optional, Protocol, Tuple
+from typing import Callable, Dict, Optional, Protocol, Tuple
 
 from .. import clock
 
@@ -128,6 +129,7 @@ class SecretsVault:
                 cache_ttl = self.DEFAULT_CACHE_TTL
         self._cache_ttl = max(0.0, cache_ttl)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
+        self._write_lock = threading.RLock()   # a write and replace_if_current's look-then-set
 
     @staticmethod
     def _service(domain: str) -> str:
@@ -154,15 +156,28 @@ class SecretsVault:
 
     def set(self, domain: str, name: str, value: str) -> None:
         _check_name(name)
-        self.backend.set_password(self._service(domain), name, value)
-        if self._cache_ttl:
-            self._cache[(domain, name)] = (value, clock.now() + self._cache_ttl)
-        self._register_domain(domain)
+        with self._write_lock:
+            self.backend.set_password(self._service(domain), name, value)
+            if self._cache_ttl:
+                self._cache[(domain, name)] = (value, clock.now() + self._cache_ttl)
+            self._register_domain(domain)
+
+    def replace_if_current(self, domain: str, name: str, is_current: Callable[[Optional[str]], bool], value: str) -> bool:
+        """Set ``value`` only while the store still holds what ``is_current`` accepts, read from the store (not the
+        cache) under the lock every write takes, so nothing lands between the look and the set. False leaves it as
+        it is: a token re-imported or removed during a GAM call stays so (failure log 2026-11-04)."""
+        _check_name(name)
+        with self._write_lock:
+            if not is_current(self.backend.get_password(self._service(domain), name)):
+                return False
+            self.set(domain, name, value)
+            return True
 
     def delete(self, domain: str, name: str) -> None:
         _check_name(name)
-        self.backend.delete_password(self._service(domain), name)
-        self._cache.pop((domain, name), None)
+        with self._write_lock:
+            self.backend.delete_password(self._service(domain), name)
+            self._cache.pop((domain, name), None)
 
     # --- whole credential set ----------------------------------------------------------
     def get_all(self, domain: str) -> Dict[str, Optional[str]]:

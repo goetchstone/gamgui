@@ -311,7 +311,9 @@ class EphemeralConfig:
         os.chmod(target, 0o600)
 
     def _write_back_refreshed_token(self) -> None:
-        """GAM rewrites oauth2.txt when it refreshes the access token; persist the change."""
+        """GAM rewrites oauth2.txt when it refreshes the access token; persist the change, only while the
+        vault still holds the token this call materialized. A re-import or a removal during the call stays:
+        writing back would pair the old admin's token with the new key, or bring a removed one back."""
         if not self.path:
             return
         token_file = self.path / FILENAMES["oauth2"]
@@ -322,8 +324,10 @@ class EphemeralConfig:
         except OSError:
             return
         if new_value and _sha(new_value) != self._oauth2_hash:
-            self.vault.set(self.domain, "oauth2", new_value)
-            self._oauth2_hash = _sha(new_value)
+            materialized = self._oauth2_hash
+            if self.vault.replace_if_current(self.domain, "oauth2",
+                                             lambda held: held is not None and _sha(held) == materialized, new_value):
+                self._oauth2_hash = _sha(new_value)
 
     def _wipe(self) -> None:
         if not self.path:
