@@ -83,6 +83,13 @@ def _parse_signature(text: str) -> str:
     return "" if sig in ("", "None") else sig
 
 
+def _usage_day(rows: List[Dict[str, Any]], asked: str) -> str:
+    """The day a usage report's rows are from. GAM walks back to the newest day with data on its own
+    (doReport, _checkDataRequiredServices, _adjustTryDate), so the day asked for can name a day the data
+    isn't from; the rows' ``date`` column says. The day asked for only when no row has one."""
+    return max((str(r.get("date") or "").strip() for r in rows), default="") or asked
+
+
 def _require_read(cmd) -> None:
     if cmd.risk != RiskLevel.READ_ONLY:
         raise ValueError(f"{cmd.id} is not a read-only command")
@@ -216,7 +223,7 @@ class GAMConnector(Connector):
             out = await self.runner.run_authenticated(self.domain, GAMCommands.report_users(date, params))
             rows = parse_records(_csv_from(out))
             if rows:
-                return {"date": date, "rows": rows}
+                return {"date": _usage_day(rows, date), "rows": rows}
         return {"date": "", "rows": []}
 
     async def add_delegate(self, email: str, delegate: str) -> ChangeResult:
