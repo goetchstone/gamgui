@@ -293,7 +293,14 @@ if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   case "$addr" in
     alice@example.com|a.anders@example.com|alice@alias.example.net) cat "$GAM_MOCK_FIXTURES/info_user.json" ;;
     bob@example.com)   cat "$GAM_MOCK_FIXTURES/info_user_suspended.json" ;;
-    *) grep -F "\"primaryEmail\": \"$addr\"" "$GAM_MOCK_FIXTURES/print_users.json" || does_not_exist "User" "$3" ;;
+    admin@example.com) printf '{"id": "100000000000000000009", "primaryEmail": "admin@example.com", "suspended": false}\n' ;;
+    # A failure trigger, an account `create user` made, or a group's member is an account too, with an ID of its own.
+    *signoutfail*|*sweep*|*fwdfail*|*conflict409*|*pending*)
+      printf '{"id": "1000%s", "primaryEmail": "%s", "suspended": false}\n' "$(printf '%s' "$addr" | cksum | cut -d' ' -f1)" "$addr" ;;
+    *) grep -F "\"primaryEmail\": \"$addr\"" "$GAM_MOCK_FIXTURES/print_users.json" || {
+         { was_created "$addr" || group_member "$addr"; } || does_not_exist "User" "$3"
+         printf '{"id": "1000%s", "primaryEmail": "%s", "suspended": false}\n' "$(printf '%s' "$addr" | cksum | cut -d' ' -f1)" "$addr"
+       } ;;
   esac
   exit 0
 fi

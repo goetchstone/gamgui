@@ -7,6 +7,7 @@ what the mock `gam` really received, and what the audit log recorded.
 
 from __future__ import annotations
 
+import json
 import asyncio
 import re
 from pathlib import Path
@@ -74,3 +75,10 @@ async def wait_until(cond, timeout: float = 10.0) -> None:
         if loop.time() > deadline:
             raise AssertionError(f"condition not met within {timeout}s")
         await asyncio.sleep(0.02)
+
+
+# The token a test's vault holds: GAM keeps the claims beside it, as oauth2.txt has them. admin@example.com is
+# in the mock's `info user`, with this ID, as a real tenant has its admin, so a cut-off write takes the real path.
+ADMIN = "admin@example.com"
+ADMIN_ID = "100000000000000000009"
+OAUTH2_FAKE = json.dumps({"decoded_id_token": {"email": ADMIN, "sub": ADMIN_ID}, "refresh_token": "fake-oauth2-token"})

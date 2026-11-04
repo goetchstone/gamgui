@@ -16,7 +16,7 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
-from .helpers import TEST_HOSTS
+from .helpers import OAUTH2_FAKE, TEST_HOSTS
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
@@ -29,7 +29,7 @@ def client(tmp_path, monkeypatch):
     ``connector.audit.path``, same object this fixture constructs)."""
     monkeypatch.setenv("GAM_MOCK_FIXTURES", str(FIXTURES))
     vault = SecretsVault(InMemoryBackend())
-    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
+    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": OAUTH2_FAKE, "oauth2service": '{"client_id": "x"}'})
     runner = GAMRunner(vault=vault, gam_binary=FIXTURES / "mock_gam.sh", base_dir=tmp_path)
     audit_path = tmp_path / "audit.jsonl"
     conn = GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(audit_path))

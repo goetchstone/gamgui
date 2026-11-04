@@ -20,7 +20,7 @@ from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.core.signatures import SignatureStore
 from gamgui.web.server import AppState, create_app
 
-from .helpers import TEST_HOSTS, gam_writes, wait_for_job
+from .helpers import OAUTH2_FAKE, TEST_HOSTS, gam_writes, wait_for_job
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOMAIN = "example.com"
@@ -28,7 +28,7 @@ DOMAIN = "example.com"
 
 def _connector(tmp_path, gam_binary):
     vault = SecretsVault(InMemoryBackend())
-    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": "tok", "oauth2service": '{"client_id": "x"}'})
+    vault.set_all(DOMAIN, {"client_secrets": "{}", "oauth2": OAUTH2_FAKE, "oauth2service": '{"client_id": "x"}'})
     runner = GAMRunner(vault=vault, gam_binary=gam_binary, base_dir=tmp_path)
     return GAMConnector(runner=runner, domain=DOMAIN, audit=AuditLog(tmp_path / "audit.jsonl"))
 

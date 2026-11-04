@@ -614,7 +614,12 @@ async def delete_zone(request: Request, email: str) -> HTMLResponse:
 async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
     # Warn (loudly) if a Drive/calendar transfer is still running — deleting now loses that data.
     conn = connector(request)
-    pending = await conn.incomplete_transfers_for(email.strip()) if conn else []
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    refusal = await conn.cut_off_refusal([GAMCommands.delete_user(email)], previewing=True)
+    if refusal:
+        return error_partial(request, refusal)
+    pending = await conn.incomplete_transfers_for(email.strip())
     return TEMPLATES.TemplateResponse(
         request, _DELETE_ZONE,
         {"email": email, "confirming": True, "pending_transfers": pending},
@@ -712,6 +717,9 @@ async def suspend_preview(request: Request, email: Annotated[str, Form()]) -> HT
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
+    refusal = await conn.cut_off_refusal([GAMCommands.set_suspended(email, True)], previewing=True)
+    if refusal:
+        return error_partial(request, refusal)
     # plan_suspend + guard.evaluate are pure (no GAM call) — they just resolve the target set.
     decision = guard.evaluate(conn.plan_suspend([email], suspend=True))
     return TEMPLATES.TemplateResponse(

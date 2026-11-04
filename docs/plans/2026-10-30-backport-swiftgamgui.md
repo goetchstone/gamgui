@@ -1,6 +1,6 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (#75, `d1bee56`); A5 applied (branch `test/mock-lies`); A6–A9 open. The operator
+**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (#75, `d1bee56`); A5 applied (#76, `7f8cf18`); A6 applied (branch `fix/connected-admin-at-the-chokepoint`); A7–A9 open. The operator
 lifted the freeze for Phase A only (G1 (a), 2026-10-30). Phases B–F stay PROPOSED, and G2–G5 only matter
 if one of them is approved.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
@@ -123,6 +123,9 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   - Check at preview, then again just before the run, by reading each target as GAM will be sent it. An
     unconfirmed admin refuses.
   - Adversarially verified, since this is credentials.
+
+  **Applied:** GamGUI failure log 2026-11-04, "A write could cut off the admin". Asked in `_run_write`, so every caller
+  is held. Offline only here; the read is live-confirmed in SwiftGamGui.
 - **A7. The usage report's "as of" date** names the day asked for, not the day GAM's rows are from (Swift
   `audit-reports.md`, "Deviations from GamGUI").
 - **A8. Audit export ignores the screen's search and filter.** The route takes both, but the page's link
@@ -264,7 +267,9 @@ README's Status, including what is only in which app; a "Live verification statu
 - **A3** — applied (#69, `8d14022`: the command echo and usage help lines skipped, the
   build's framing words held, the mock's usage error and transfer framed as GAM frames them).
 - **A4** — applied (#75, `d1bee56`: nothing after `Message:` sets a field).
-- **A5** — applied (branch `test/mock-lies`: every `formatjson` read prints GAM's key columns; the listed writes fail
+- **A5** — applied (#76, `7f8cf18`: every `formatjson` read prints GAM's key columns; the listed writes fail
   as GAM does).
-- A6–A9 — approved, open.
+- **A6** — applied (branch `fix/connected-admin-at-the-chokepoint`: `cut_off_refusal` in `_run_write`, by account ID, an
+  unconfirmed admin refusing).
+- A7–A9 — approved, open.
 - B1–B4, C1–C5, D1–D3, E1–E8, F — proposed, not approved (G1 (a)).
