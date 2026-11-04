@@ -1,6 +1,6 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (#75, `d1bee56`); A5 applied (#76, `7f8cf18`); A6 applied (branch `fix/connected-admin-at-the-chokepoint`); A7–A9 open. The operator
+**Status: PHASE A APPLIED — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (#75, `d1bee56`); A5 applied (#76, `7f8cf18`); A6 applied (#77, `a85f435`); A7 applied (#78, `3525a63`); A8 applied (#79, `ec6ea27`); A9 applied (#80, `ae5e050`). Swift's fixtures are still to re-run. The operator
 lifted the freeze for Phase A only (G1 (a), 2026-10-30). Phases B–F stay PROPOSED, and G2–G5 only matter
 if one of them is approved.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
@@ -275,7 +275,10 @@ README's Status, including what is only in which app; a "Live verification statu
 - **A4** — applied (#75, `d1bee56`: nothing after `Message:` sets a field).
 - **A5** — applied (#76, `7f8cf18`: every `formatjson` read prints GAM's key columns; the listed writes fail
   as GAM does).
-- **A6** — applied (branch `fix/connected-admin-at-the-chokepoint`: `cut_off_refusal` in `_run_write`, by account ID, an
-  unconfirmed admin refusing).
-- A7–A9 — approved, open.
+- **A6** — applied (#77, `a85f435`: `cut_off_refusal` in `_run_write`, by account ID, an unconfirmed admin
+  refusing).
+- **A7** — applied (#78, `3525a63`: the label is the rows' own `date`).
+- **A8** — applied (#79, `ec6ea27`: the export link carries the screen's search and filter).
+- **A9** — applied (#80, `ae5e050`: `replace_if_current`, under a lock that covers one process).
+- Swift's fixtures — not done: one Swift PR (see "Keep Swift's fixtures honest").
 - B1–B4, C1–C5, D1–D3, E1–E8, F — proposed, not approved (G1 (a)).

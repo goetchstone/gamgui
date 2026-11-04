@@ -11,5 +11,6 @@
   first's, and either token is good. Secrets stay in the Keychain: nothing new is persisted.
 - **Prevention:** `test_a_refresh_does_not_undo_a_re_import`, `test_a_refresh_does_not_bring_back_a_removed_token`,
   `test_the_write_back_compares_the_store_not_a_stale_cache`, `test_replace_if_current_is_one_step_under_writes`.
-  Offline only, against the in-memory Keychain. The lock covers this process; another process writing the Keychain
-  between the look and the set isn't covered, and GamGUI is one process.
+  Offline only, against the in-memory Keychain. The lock covers one process. A second one writing the Keychain between
+  the look and the set isn't covered, and nothing rules one out: there is no single-instance guard, the orphan sweep in
+  `ephemeral.py` allows for a second instance, and `scripts/acceptance.py` builds its own vault.
