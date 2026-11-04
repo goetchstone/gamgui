@@ -298,9 +298,9 @@ def _screens(p: Page, st):
     yield "calendars"
 
     p.goto("/builder", "document.querySelector('#catalog button')")
-    p.fill("#cat-controls input[name=q]", "print groups")
-    p.settle("/List groups\\./.test(document.querySelector('#catalog').innerText)")
-    p.click("#catalog button", "Build")                        # the first hit: gam print groups
+    p.fill("#cat-controls input[name=q]", "print users")
+    p.settle("/Print users/.test(document.querySelector('#catalog').innerText)")
+    p.click("#catalog button", "Build")                        # the first hit: gam print users, whose CSV has columns (bare print groups has one)
     p.settle("document.querySelector('#cmd-form form')")
     p.click("#cmd-form button", "Preview")
     p.settle("document.querySelector('#builder-result button')")
@@ -529,8 +529,8 @@ def test_the_keyboard_alone_works_the_tabs_and_each_confirm_panel(page):
 
     # A Builder preview lands on its panel; Run replaces it, and focus stays on the result's zone.
     p.goto("/builder", "document.querySelector('#catalog button')")
-    p.fill("#cat-controls input[name=q]", "print groups")
-    p.settle("/List groups\\./.test(document.querySelector('#catalog').innerText)")
+    p.fill("#cat-controls input[name=q]", "print users")
+    p.settle("/Print users/.test(document.querySelector('#catalog').innerText)")
     p.click("#catalog button", "Build")
     p.settle("document.querySelector('#cmd-form form')")
     p.click("#cmd-form button", "Preview", action="focus")
@@ -725,8 +725,8 @@ def test_the_header_draws_over_no_popup_opened_in_main(page):
                      mobile=False)
             where, only = f"{width}x{height} scrolled {scroll}", None if (width, height) == (W, H) else "header"
             p.goto("/builder", "document.querySelector('#catalog button')")
-            p.fill("#cat-controls input[name=q]", "print groups")
-            p.settle("/List groups\\./.test(document.querySelector('#catalog').innerText)")
+            p.fill("#cat-controls input[name=q]", "print users")
+            p.settle("/Print users/.test(document.querySelector('#catalog').innerText)")
             p.click("#catalog button", "Build")
             p.settle("document.querySelector('#cmd-form form')")
             p.click("#cmd-form button", "Preview")

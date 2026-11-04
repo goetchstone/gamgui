@@ -29,6 +29,9 @@
   - The parser's sibling columns already read the new shape.
   - The offboarding preview already refuses a manager who is the leaver's alias, and warns about a suspended leaver.
   - A duplicate create's message is GAM's words under the "unknown" kind. It is said plainly, so it is left as it is.
+  - The a11y job, which the offline suite deselects, went red too: its Builder step ran bare `print groups` for a
+    table. GAM's default there is the `email` column alone, which the Builder shows as text, so the step now runs
+    `print users`.
 - **Prevention:** `tests/test_mock_gam_shapes.py` holds each column set, refusal, word and exit code above.
   `test_every_formatjson_read_has_its_gam_header` makes a new `formatjson` read state its columns.
   - Only a greener mock: nothing here ran on a tenant. Google's own texts ("Not Found", "Duplicate" on a subscribe) and
