@@ -63,7 +63,8 @@
   </table>
 </div>
 <div class="mt-2 flex items-center justify-between text-xs text-brand-grayink">
-  <span>{{ total }} total{% if q or failed %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</span>
+  <span>{{ total }} total{% if q or failed %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}
+    · <a href="/audit/export.csv?q={{ q | urlencode }}{% if failed %}&amp;failed=1{% endif %}" download class="font-medium text-brand-blueink hover:text-brand-black">{% if q or failed %}Export matches{% else %}Export CSV{% endif %} ↓</a></span>
   {% if pages > 1 %}
   <div class="flex items-center gap-2">
     {% if page > 1 %}

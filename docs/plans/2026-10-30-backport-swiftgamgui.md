@@ -127,6 +127,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   `audit-reports.md`, "Deviations from GamGUI").
 - **A8. Audit export ignores the screen's search and filter.** The route takes both, but the page's link
   drops them (same section).
+
+  **Applied:** GamGUI failure log 2026-11-04. The link is in the rows partial, with both.
 - **A9. A token write-back can undo a re-import.** Swift's `directory-home.md`, "Fixed in PR #8's review": a
   load's refreshed `oauth2.txt` replaced a token re-imported mid-call. GamGUI has the same shape.
   `_write_back_refreshed_token` (`core/secrets/ephemeral.py:313`) compares GAM's file with what it
