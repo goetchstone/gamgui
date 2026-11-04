@@ -107,13 +107,13 @@ class Vacation:
         for line in (text or "").splitlines():
             s = line.strip()
             if in_message:
-                # Stop the message at the next field — or at GAM's config-init banner, in case any
+                # GAM's _showVacation prints the message last, so a line here that looks like a setting is
+                # the reply's own text and sets nothing. Only GAM's config-init banner ends it, in case any
                 # slipped past the runner's filter (defense in depth so it never lands in the reply).
-                if s.startswith(("Enabled:", _SUBJECT_PREFIX, "Contacts Only:", "Domain Only:", "Created:", "Config File:")):
-                    in_message = False
-                else:
-                    msg_lines.append(s)
-                    continue
+                if s.startswith(("Created:", "Config File:")):
+                    break
+                msg_lines.append(s)
+                continue
             if s.startswith("Enabled:"):
                 enabled = "true" in s.lower()
             elif s.startswith("Contacts Only:"):

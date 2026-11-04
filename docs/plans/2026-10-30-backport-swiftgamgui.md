@@ -1,6 +1,6 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (branch `fix/gam-command-echo`); A4–A9 open. The operator
+**Status: PHASE A IN PROGRESS — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (branch `fix/auto-reply-text-hid-the-auto-reply`); A5–A9 open. The operator
 lifted the freeze for Phase A only (G1 (a), 2026-10-30). Phases B–F stay PROPOSED, and G2–G5 only matter
 if one of them is approved.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
@@ -94,6 +94,9 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   and nothing offers to turn it off. GAM prints `Message:` last. Swift entry:
   `2026-10-21-auto-reply-text-hid-the-auto-reply`. Swift's `Tests/Fixtures/vacation.json` pins the old
   reading; regenerate it.
+  **Applied:** GamGUI failure log 2026-11-04. Nothing after `Message:` sets a field; only GAM's config banner
+  ends the message. Offline only. Regenerating Swift's fixture belongs to its one PR, under "Keep Swift's
+  fixtures honest".
 - **A5. Mock lies (`tests/fixtures/mock_gam.sh`).** Make each one fail as GAM does, then see what goes red here.
   A red test is a real bug the mock was hiding.
   - `create user` for a taken address (`2026-10-12-duplicate-create-mock-lie`)
@@ -255,7 +258,8 @@ README's Status, including what is only in which app; a "Live verification statu
   build's dialect check).
 - **A2** — applied (#68, `9c1bb72`: every progress printer skipped, the build's progress words held, the
   mock's progress on stderr).
-- **A3** — applied (branch `fix/gam-command-echo`: the command echo and usage help lines skipped, the
+- **A3** — applied (#69, `8d14022`: the command echo and usage help lines skipped, the
   build's framing words held, the mock's usage error and transfer framed as GAM frames them).
-- A4–A9 — approved, open.
+- **A4** — applied (branch `fix/auto-reply-text-hid-the-auto-reply`: nothing after `Message:` sets a field).
+- A5–A9 — approved, open.
 - B1–B4, C1–C5, D1–D3, E1–E8, F — proposed, not approved (G1 (a)).
