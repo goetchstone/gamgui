@@ -49,12 +49,13 @@ def strip_cfgdir_noise(stdout: str, cfgdir: Path) -> str:
     Because we hand GAM a brand-new ``GAMCFGDIR`` per call, it prints lines like
     ``Created: <dir>/gamcache`` and ``Config File: <dir>/gam.cfg, Initialized`` on stdout every time.
     Those reference our ephemeral dir and never appear in real data, so any line mentioning the dir
-    is safe to remove — otherwise they leak into text parsers (e.g. the vacation message).
+    is safe to remove — otherwise they leak into text parsers (e.g. the vacation message). Split on "\\n" only:
+    str.splitlines() also breaks on U+2028, a form feed and more, which GAM leaves raw in a CSV cell.
     """
     needle = str(cfgdir)
     if not needle or needle not in stdout:
         return stdout
-    return "\n".join(line for line in stdout.splitlines() if needle not in line)
+    return "\n".join(line for line in stdout.split("\n") if needle not in line)
 
 
 async def _stop(proc: asyncio.subprocess.Process) -> None:
@@ -195,4 +196,4 @@ class GAMRunner:
 
         cfgdir = self.base_dir or app_runtime_dir()
         res = await self._exec(GAMCommands.version(), Path(cfgdir), self.timeout)
-        return res.stdout.strip()
+        return strip_cfgdir_noise(res.stdout, Path(cfgdir)).strip()

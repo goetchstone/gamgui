@@ -76,6 +76,9 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   banner prefixes as defense-in-depth. Those are the only lines that end the message: GAM prints it
   last, so a line in it that looks like a setting is the reply's own text and sets nothing (failure
   log 2026-11-04).
+  It splits on `\n` only, because `splitlines()` also breaks on U+2028, a form feed and more, which GAM leaves raw in a
+  CSV cell (failure log 2026-11-05). The mock prints the banner on every call, so every test's read comes through here.
+  `version()` strips too: its folder is persistent, so the banner shows only on the first call there.
 - **Error ordering.** Within a line, `_PATTERNS` is first-match-wins, specific→generic. The
   `cannot change your own access level | cannotChangeOwnAcl` pattern sits *before* the generic 403
   because GAM's own-ACL-deletion refusal carries no 403/forbidden token; it maps to its own kind,

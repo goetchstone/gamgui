@@ -41,6 +41,12 @@ fi
 
 ARGS="$*"
 
+# GAM finds no gam.cfg in the private GAMCFGDIR the runner hands it per call, so it initializes one and says so on
+# stdout, before any command (_writeGamCfgFile, Act.INITIALIZE). Every read comes through the runner's strip of this.
+if [ -n "${GAMCFGDIR:-}" ]; then
+  printf 'Created: %s/gamcache\nConfig File: %s/gam.cfg, Initialized\n' "$GAMCFGDIR" "$GAMCFGDIR"
+fi
+
 usage_error() {  # GAM's usage error (usageErrorExit): the command line, the reason, where help is; USAGE_ERROR_RC
   printf 'Command: gam %s\n\nERROR: %s\n' "$ARGS" "$1" 1>&2
   printf 'Help: Syntax in file %s/GamCommands.txt\nHelp: Documentation is at https://github.com/GAM-team/GAM/wiki\n' \
