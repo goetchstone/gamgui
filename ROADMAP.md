@@ -9,6 +9,12 @@ The organizing constraint: every mutation must keep going through the same choke
 `_run_write()` (`guard.evaluate()` only draws the Confirm button). A feature that needs a way
 around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## First — feature parity with SwiftGamGui
+
+The operator's goal since 2026-11-05: everything SwiftGamGui has beyond GamGUI, in the order of
+[the plan](docs/plans/2026-10-30-backport-swiftgamgui.md). The items below come after it, unless the plan already
+covers them (the compromised-account playbook is its Phase E; offboarding's added steps its C3).
+
 ## Next — small, and each closes a real daily gap
 
 - **Make the report buckets actionable.** `/reports` already computes the worklists that matter

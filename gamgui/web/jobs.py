@@ -30,11 +30,12 @@ PANELS = {
     "offboard": "/lifecycle/offboard/status",
     "subscribe": "/calendars/share/status",
     "index": "/calendars/index/status",
+    "connected_apps": "/reports/connected-apps",
     "sequence": "/builder/sequence/status",
     "onboard": "/onboard/bulk/status",
     "finish": "/onboard/finish/status",   # steps retried until Google has set a new account up
 }
-UNSTOPPABLE = {"index"}          # one domain-wide read, not a loop: there is no "between targets"
+UNSTOPPABLE = {"index", "connected_apps"}   # one domain-wide read, not a loop: there is no "between targets"
 CONFIRM_STOP = {"offboard"}      # a stop leaves the leaver half offboarded: ask first
 
 

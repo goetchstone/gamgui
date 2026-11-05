@@ -1,10 +1,12 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: PHASE A APPLIED — A1 applied (#67, `add6308`); A2 applied (#68, `9c1bb72`); A3 applied (#69, `8d14022`); A4 applied (#75, `d1bee56`); A5 applied (#76, `7f8cf18`); A6 applied (#77, `a85f435`); A7 applied (#78, `3525a63`); A8 applied (#79, `ec6ea27`); A9 applied (#80, `ae5e050`). Swift's fixtures are still to re-run. The operator
-lifted the freeze for Phase A only (G1 (a), 2026-10-30). Phases B–F stay PROPOSED, and G2–G5 only matter
-if one of them is approved.**
+**Status: IN PROGRESS. The operator's goal since 2026-11-05: GamGUI reaches feature parity with SwiftGamGui, so
+Phases B–F are approved (G1) and are being done in order. Phase A applied: A1 (#67, `add6308`); A2 (#68, `9c1bb72`);
+A3 (#69, `8d14022`); A4 (#75, `d1bee56`); A5 (#76, `7f8cf18`); A6 (#77, `a85f435`); A7 (#78, `3525a63`); A8 (#79,
+`ec6ea27`); A9 (#80, `ae5e050`). Swift's fixtures are still to re-run. "Status by item" at the end is current.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
-`CLAUDE.md` is auto-loaded. Before any item, read the SwiftGamGui runbook and failure-log entries it names
+Re-baselined 2026-11-05 at SwiftGamGui `fef14cc`: its five PRs since are fixes, a small jobs tray change and the GAM
+bump, so no item changed. `CLAUDE.md` is auto-loaded. Before any item, read the SwiftGamGui runbook and failure-log entries it names
 (`../SwiftGamGui/docs/domains/`, `../SwiftGamGui/docs/failure-log/`), as well as GamGUI's own runbook for that area.
 When a PR closes an item, mark it here in the same PR.
 
@@ -32,15 +34,22 @@ That reason is a thought experiment, not a plan. See `ROADMAP.md`, "Deliberate t
   first PR, since they say new work happens in Swift.
   **Decided 2026-10-30: (a), Phase A only.** The README keeps "new work happens in SwiftGamGui". Its
   "GAM updates and dependency fixes" line gains "and fixes for bugs SwiftGamGui found in shared logic".
+  **Changed 2026-11-05: (c), everything.** The operator: "lets get gamgui feature pairity with swiftgamgui". The
+  README's banner and Status say so.
 - **G2. A snapshot, not a sync.** Recommended: this plan ports Swift as of `3394130`. A later Swift feature is
   a new plan, not an obligation. Keeping both apps in step doubles the cost of every incident-rule change.
+  **Still a snapshot, moved to `fef14cc` (2026-11-05).** A later Swift feature is a new item here.
 - **G3. Offboarding templates (C5).** Swift's saved routines conflict with this repo's KISS decision
   (`2026-10-02-configurable-offboarding.md`, "Not planned: playbooks"). Default: don't port them.
+  **Yes, port them (2026-11-05),** read from the operator's "I just want gamgui to have the same features we built into
+  swiftgamgui that includes the incident shit". They didn't name G3, G4, G5 or B3, and asked not to be asked further.
 - **G4. PDF export (E8).** Swift prints a PDF natively. Here, a download in the app window is a known trap
   (`tests/test_app_window_downloads.py`). Default: Markdown, text and CSV only.
+  **Yes, a PDF too (2026-11-05),** made in a way that works in the app window. E8 settles how.
 - **G5. The Cloud Identity devices scope (B4, E7).** Reading "computers signed in" needs
   `https://www.googleapis.com/auth/cloud-identity.devices`. Adding it to Setup's DWD list (`core/setup.py`,
   ~l. 362) means every existing install must re-authorize. Default: leave those reads out until asked.
+  **Yes, add it (2026-11-05),** in the PR that first needs it, whose description says to re-authorize.
 
 ## Rules every item keeps
 
@@ -147,12 +156,17 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
 - **B1. Reports: connected apps and AI agents.** Every account's OAuth tokens, as a summary and a list.
   Domain-wide, so cached and bounded. Swift: `GamEngine/ConnectedApps.swift`, `App/ConnectedAppsView.swift`,
   `audit-reports.md`. The on-device model's wording is not ported.
+
+  **Applied:** `core/connected_apps.py`, Reports' panel, the read as a background job kept in memory. Not yet live in
+  either app; `scripts/acceptance.py` runs it. The CSV's shape and the default entity were read in GAM's source at 7.50.00.
 - **B2. Reports: drill-downs.** Each directory count opens the people behind it (`DirectoryReport.swift`), and
   storage and mail usage get their list (`UsageReport.swift`, compared against `/reports/usage`).
+  **Nothing to port (corrected 2026-11-05):** GamGUI already has both, with the same nine reports and the top 25. Swift's
+  came from here (`reports.json`, `usage_report.json` and its runbook say so), and it adds only native table UI.
 - **B3. Jobs tray: mostly here already.** GamGUI's tray (plan U5, `web/routes/jobs.py`) already lists every
   background job from any page, with Stop, and Swift's bounds came from it. Swift's only addition is listing
   one-step changes too. Low value: drop it unless asked. (Corrected 2026-10-30. The first draft called the
-  tray Swift-only.)
+  tray Swift-only.) **Yes (2026-11-05):** a one-step change lists there too.
 - **B4. Users: Security reads.** A person's Chrome profiles, mobile devices and, after G5, computers. Swift
   `compromised-account.md` slices 5 and 8. Reads only.
 
@@ -281,4 +295,6 @@ README's Status, including what is only in which app; a "Live verification statu
 - **A8** — applied (#79, `ec6ea27`: the export link carries the screen's search and filter).
 - **A9** — applied (#80, `ae5e050`: `replace_if_current`, under a lock that covers one process).
 - Swift's fixtures — not done: one Swift PR (see "Keep Swift's fixtures honest").
-- B1–B4, C1–C5, D1–D3, E1–E8, F — proposed, not approved (G1 (a)).
+- **B1** — applied (`feat/connected-apps-report`: Reports' connected apps and agents, offline only).
+- **B2** — nothing to port: GamGUI already has it.
+- B3, B4, C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.

@@ -132,6 +132,12 @@ class GAMCommands:
         return ["report", "users", "date", date, "parameters", ",".join(params)]
 
     @staticmethod
+    def print_tokens() -> List[str]:
+        # Every account's OAuth grants, suspended accounts aside (GAM's default entity): one Directory API call
+        # per account. CSV `user,clientId,displayText,anonymous,nativeApp,userKey,scopes`. SwiftGamGui's printTokens.
+        return ["print", "tokens"]
+
+    @staticmethod
     def info_user(email: str, fields: Optional[Sequence[str]] = None) -> List[str]:
         argv = ["info", "user", email, "fields", ",".join(fields or USER_DETAIL_FIELDS)]
         argv.append("formatjson")

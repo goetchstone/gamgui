@@ -6,12 +6,12 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!IMPORTANT]
-> **GamGUI is being replaced by [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**, a
-> native SwiftUI rewrite that runs the same `gam` commands, held to them by tests. New work happens
-> there; GamGUI now takes only GAM updates, dependency fixes, and fixes for bugs SwiftGamGui found in the
-> logic the two share ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md), Phase A). A few things are still only here —
+> **GamGUI is being brought to feature parity with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**,
+> its native SwiftUI rewrite, which runs the same `gam` commands, held to them by tests
+> ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). Until then each has things the other lacks. Only
+> in SwiftGamGui for now: incident response, phishing clean-up, and some smaller reads and writes. Only here:
 > sharing a calendar with a group, deleting a calendar or an event, a signature for many people at
-> once, and deleting a leaver's account — so keep GamGUI for those until SwiftGamGui covers them.
+> once, and deleting a leaver's account.
 
 A free, local, open-source **macOS app for [GAM7](https://github.com/GAM-team/GAM)**, the Google
 Workspace admin command line. The recurring admin chores get a screen, the big changes show a
@@ -72,8 +72,8 @@ Details in [Build from source](#build-from-source).
 
 ## Status
 
-In maintenance: still used against live Google Workspace tenants and kept current with GAM, while
-new features go to [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
+In use against live Google Workspace tenants, kept current with GAM, and being brought to feature parity
+with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
 
 - **Setup wizard** — either **import an existing GAM install** (it auto-detects `$GAMCFGDIR`,
   `~/.gam`, and its own setup dir, shows which credential files each one holds, and moves them into
@@ -123,7 +123,8 @@ new features go to [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Wo
 - **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, suspended accounts, and
   directory completeness (missing title/department/phone/location), plus a **storage & mail usage**
   panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
-  (which lags a few days).
+  (which lags a few days). **Connected apps and AI agents**: every account's grants, read when you ask,
+  as a summary counted by code and each app with what it may do in words and who granted it.
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
 - **Jobs tray** — every background run (signatures, bulk department, onboarding CSV, offboarding,
   calendar fan-out, Builder sequence, calendar index) is listed in the header from any page, with
@@ -157,11 +158,12 @@ Every write is audited, so this table comes from real audit logs rather than mem
 means the operation has succeeded at least once against a production Google Workspace domain. **Not
 yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
 it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
-reads are confirmed (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
-2026-10-08 on GAM 7.48.22, all eight checks passing). Three reads it doesn't run were last confirmed
-separately: setup's scoped `check serviceaccount scopes …` (2026-10-02, GAM 7.48.14), and `print
-domains` for the Builder's External-only filter and reading the connected admin and its granted
-scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
+reads are confirmed but one (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
+2026-10-08 on GAM 7.48.22, all eight checks passing). The exception is Reports' connected apps (`print
+tokens`): new to both apps, not yet run live, and added to that pass since. Three reads the pass doesn't
+run were last confirmed separately: setup's scoped `check serviceaccount scopes …` (2026-10-02, GAM
+7.48.14), and `print domains` for the Builder's External-only filter and reading the connected admin and
+its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 
 | Write | Where | Live |
 |---|---|---|

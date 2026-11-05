@@ -1485,6 +1485,41 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
   exit 0
 fi
 
+# `gam print tokens` -> GAM's CSV (_printShowTokens, gam/__init__.py:74077 at 7.50.00): tokens.csv's grants for every
+# account but the suspended ones (the default entity, ENTITY_ALL_USERS_NS), a row per grant, the scopes space-joined
+# (csv_output_field_delimiter's default). Each account gets its "Getting Access Tokens for" line on stderr, grants or
+# not (printGettingEntityItemForWhom). GAM_MOCK_STATE/denied/tokens is ClientAPIAccessDeniedExit, API_ACCESS_DENIED_RC
+# 12, on the first account. GAM_MOCK_STATE/tokens_gone/<address> names an account it can't read: entityUnknownWarning,
+# then the CSV as usual, and 56 at the end. No option or entity is modelled.
+if [ "${1:-}" = "print" ] && { [ "${2:-}" = "tokens" ] || [ "${2:-}" = "token" ]; }; then
+  [ $# -eq 2 ] || not_modelled "print tokens with $3"
+  active=$(grep -vF '"suspended": true' "$GAM_MOCK_FIXTURES/print_users.json" | sed -n 's/.*"primaryEmail": "\([^"]*\)".*/\1/p' | tr '\n' ' ')
+  count=$(printf '%s' "$active" | wc -w | tr -d ' ')
+  i=0
+  rc=0
+  gone=""
+  for user in $active; do
+    i=$((i + 1))
+    printf 'Getting Access Tokens for %s (%s/%s)\n' "$user" "$i" "$count" 1>&2
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/tokens" ]; then
+      printf '\nERROR: Not Authorized to access this resource/api\n\nERROR: Reauthentication is needed, please run\n\ngam oauth create\n' 1>&2
+      exit 12
+    fi
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/tokens_gone/$user" ]; then
+      printf 'User: %s, Does not exist (%s/%s)\n' "$user" "$i" "$count" 1>&2
+      gone="$gone $user"
+      rc=56
+    fi
+  done
+  head -n 1 "$GAM_MOCK_FIXTURES/tokens.csv"
+  tail -n +2 "$GAM_MOCK_FIXTURES/tokens.csv" | while IFS= read -r line; do
+    user=${line%%,*}
+    case "$gone " in *" $user "*) continue ;; esac
+    case " $active " in *" $user "*) printf '%s\n' "$line" ;; esac
+  done
+  exit $rc
+fi
+
 # Anything else is unhandled. Fail loudly: a catch-all that succeeded is how the mock used to lie — a
 # `delete events` without doit, an invalid calendar role and 23 writes with no handler all "passed".
 echo "ERROR: mock: unhandled argv: $*" 1>&2

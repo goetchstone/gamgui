@@ -25,6 +25,7 @@ from ..gam.models import (
     Vacation,
 )
 from ..calendar_index import IndexedCalendar
+from ..connected_apps import AppsRead, read_from
 from ..gam.parser import parse_one, parse_records
 from ..gam.runner import DOMAIN_WIDE_TIMEOUT, GAMRunner
 from .base import (
@@ -52,6 +53,10 @@ INTERRUPTED = ("interrupted (the app quit or the job was cancelled) before GAM r
 # The per-user lines the offboarding calendar sweep expects (remove_from_all_calendars): a user who
 # never shared with the leaver, a user without Calendar, the leaver's own calendar. Nothing else.
 SWEEP_TOLERATED = (GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAMErrorKind.OWN_ACL)
+
+
+# ENTITY_DOES_NOT_EXIST_RC and SERVICE_NOT_APPLICABLE_RC: entityUnknownWarning, a warning in a per-account loop.
+_ONE_ACCOUNT_WARNING_RCS = (56, 73)
 
 
 def _csv_from(out: str) -> str:
@@ -219,6 +224,24 @@ class GAMConnector(Connector):
         """Group emails that ``email`` is a member of."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_groups_member(email))
         return [str(r.get("email")) for r in parse_records(out) if r.get("email") and "@" in str(r.get("email"))]
+
+    async def connected_apps(self) -> AppsRead:
+        """Every account's connected apps and AI agents, suspended accounts aside. One Directory API call per
+        account, so it runs only when the operator asks, as a background job. GAM warns about an account it can't
+        read (one deleted mid-run, say), carries on, writes its CSV and exits with that warning's code: every other
+        account is there, so the read is kept and marked incomplete. Worked out off the event loop: on a large
+        tenant this is hundreds of thousands of rows, and every page and poll waits on the loop."""
+        complete = True
+        try:
+            out = await self.runner.run_authenticated(self.domain, GAMCommands.print_tokens(),
+                                                      timeout=DOMAIN_WIDE_TIMEOUT)
+        except GAMError as exc:
+            rows = exc.stdout.strip().split("\n")
+            # No row at all isn't a list missing one account: "no apps" would be a false all-clear.
+            if exc.exit_code not in _ONE_ACCOUNT_WARNING_RCS or len(rows) < 2 or "clientId" not in rows[0]:
+                raise
+            out, complete = exc.stdout, False
+        return await asyncio.to_thread(lambda: read_from(parse_records(out), complete))
 
     async def usage_report(self, params: Sequence[str], max_lookback: int = 6) -> dict:
         """Per-user usage (storage/mail/drive). Usage lags ~2-3 days, so walk back to a date with data."""

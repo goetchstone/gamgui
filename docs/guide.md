@@ -186,10 +186,27 @@ A wide result? **Hide list** (top right) gives the result the whole width; the B
 your choice until you click it again ("Show list"). Each value stays on one line: a long one is cut short —
 click it to read all of it, or hover. The CSV download always has every value whole.
 
+## Check connected apps and AI agents
+
+Which apps have people given access to their accounts, and how much can those apps do?
+
+1. Open **Reports** and go to **Connected apps & AI agents**. Nothing has been read yet.
+2. Click **Read connected apps**. GAM reads one account at a time, suspended accounts aside, at about a second an
+   account and up to an hour, so several thousand accounts is the most it can finish. It runs in the background, and
+   you can keep working.
+3. Read the summary, then the list: apps that look like AI assistants or agents, then apps with broad access (all of
+   Gmail or Drive, forwarding, admin, Google Cloud), then the rest. Each shows what it may do and who granted it.
+
+An app is called AI by its name alone, so check an app you don't recognise. If GAM couldn't read an account, the
+panel says the list may be missing that account's apps. The list stays until you quit or connect
+again, and **Read again** refreshes it. Reading changes nothing. To take an app away from everyone, block it in the
+Admin console, under Security → API controls → App access control. It's not yet verified live, so compare the list with
+the Admin console's Accessed apps the first time you use it.
+
 ## Jobs and Stop
 
 Longer runs — a signature rollout, a bulk department change, a CSV of hires, an offboarding, a group
-calendar share, a Builder sequence, the calendar index — run in the background. The **Jobs** button
+calendar share, a Builder sequence, the calendar index, a connected-apps read — run in the background. The **Jobs** button
 in the header lists them from any page, with progress, the result and a link back to each one.
 
 **Stop** finishes the person or step in hand, then ends and says how many it didn't attempt. An

@@ -52,6 +52,7 @@ SCREENS = {
     "Roll out a signature": ["signatures.html", "_sig_*.html", "_job_*.html"],
     "Share a calendar": ["calendars.html", "_calendar*.html", "user_detail.html"],
     "Audit external sharing": ["builder.html", "_builder_*.html", "_read_output.html", "_records_*.html"],
+    "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "Jobs and Stop": ["job.html", "_job*.html"],
     "Read the audit log": ["audit.html", "_audit_rows.html"],
 }

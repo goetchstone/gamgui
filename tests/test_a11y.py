@@ -332,8 +332,12 @@ def _screens(p: Page, st):
            "document.querySelector('#job-panel [data-announce]')")
     yield "jobs/page"                              # the run's own panel, on a page of its own
 
-    p.goto("/reports", "!/Loading/.test(document.querySelector('#usage')?.innerText ?? 'Loading')")
+    p.goto("/reports", "!/Loading/.test(document.querySelector('#usage')?.innerText ?? 'Loading') "
+                       "&& document.querySelector('#connected-apps-panel')")
     yield "reports"
+    p.click("#connected-apps-panel button", "Read connected apps")
+    p.settle("/Read again/.test(document.querySelector('#connected-apps-panel')?.innerText ?? '')")
+    yield "reports/connected-apps"                 # the read: its summary and the list of apps
 
     p.goto("/audit", "!/Loading/.test(document.querySelector('#audit-rows')?.innerText ?? 'Loading')")
     yield "audit"
