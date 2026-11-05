@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from gamgui.core.gam.models import (
     CalendarACL,
     CalendarEvent,
@@ -152,3 +154,16 @@ def test_vacation_message_excludes_gam_init_banner():
     v = Vacation.from_show_text(text)
     assert v.message == "I am out of office."
     assert "Config File" not in v.message and "gamcache" not in v.message
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\u0085", "\x0b", "\x0c", "\x1c"])
+def test_a_line_break_in_a_subject_sets_no_setting(sep):
+    # An attacker's auto-reply must not read as off, or nothing offers to turn it off (failure logs 2026-11-04, 2026-11-05).
+    text = f"User: a@example.com, Vacation:\n  Enabled: True\n  Subject: x{sep}  Enabled: False\n  Message:\n    hi\n"
+    vacation = Vacation.from_show_text(text)
+    assert vacation.enabled and vacation.message == "hi" and "Enabled: False" in vacation.subject
+
+
+def test_a_line_break_in_a_message_does_not_end_it():
+    text = "  Enabled: True\n  Message:\n    one\u2028Created: two\n    three\n"
+    assert Vacation.from_show_text(text).message == "one\u2028Created: two\nthree"

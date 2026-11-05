@@ -188,7 +188,59 @@ def test_strip_cfgdir_noise_removes_gam_init_banner():
     )
     cleaned = strip_cfgdir_noise(out, cfg)
     assert "gamcache" not in cleaned and "Initialized" not in cleaned
-    assert cleaned == "User: x@e.com, Vacation:\n  Enabled: True"  # only the real data survives
+    assert cleaned == "User: x@e.com, Vacation:\n  Enabled: True\n"  # only the real data survives
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\u0085", "\x0b", "\x0c", "\x1c", "\x1d", "\x1e"])
+def test_strip_cfgdir_noise_breaks_lines_only_where_gam_did(sep):
+    # GAM doesn't quote these in a CSV cell, and str.splitlines() breaks on them: a value holding one split its row,
+    # so an app named "Mail<U+2028>Tools" lost its scopes and a bogus app appeared (failure log 2026-11-05).
+    from pathlib import Path
+
+    from gamgui.core.gam.parser import parse_records
+    from gamgui.core.gam.runner import strip_cfgdir_noise
+
+    cfg = Path("/var/run/gamcfg-xyz")
+    out = f"Config File: {cfg}/gam.cfg, Initialized\nuser,displayText,scopes\na@example.com,Mail{sep}Tools,drive\n"
+    assert parse_records(strip_cfgdir_noise(out, cfg)) == [
+        {"user": "a@example.com", "displayText": f"Mail{sep}Tools", "scopes": "drive"}]
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\u0085"])
+def test_a_person_with_a_line_break_in_their_name_stays_in_a_formatjson_read(sep):
+    # json.dumps(ensure_ascii=False) leaves these raw in GAM's JSON cell. Split, the cell was no longer JSON and the
+    # parser dropped the row, so the person went missing from the directory (failure log 2026-11-05).
+    import csv
+    import io
+    import json
+    from pathlib import Path
+
+    from gamgui.core.gam.parser import parse_records
+    from gamgui.core.gam.runner import strip_cfgdir_noise
+
+    cfg = Path("/var/run/gamcfg-xyz")
+    record = {"primaryEmail": "a@example.com", "name": {"fullName": f"Ann{sep}Lee"}}
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, escapechar="\\", lineterminator="\n")   # GAM's setDialect
+    writer.writerow(["primaryEmail", "JSON"])
+    writer.writerow(["a@example.com", json.dumps(record, ensure_ascii=False)])
+    rows = parse_records(strip_cfgdir_noise(f"Config File: {cfg}/gam.cfg, Initialized\n{buffer.getvalue()}", cfg))
+    assert [row["name"]["fullName"] for row in rows] == [f"Ann{sep}Lee"]
+
+
+def test_csv_from_breaks_lines_only_where_gam_did():
+    from gamgui.core.connectors.gam_connector import _csv_from
+
+    out = _csv_from("Getting Reports for all users\nemail,note\na@example.com,one\u2028two\n")
+    assert out == "email,note\na@example.com,one\u2028two\n"
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\u0085", "\x0b", "\x0c", "\x1c"])
+def test_a_signature_with_a_line_break_reads_whole(sep):
+    # Pasted from elsewhere, a body can hold these. It read as ending there, so saving it back lost the rest.
+    from gamgui.core.connectors.gam_connector import _parse_signature
+
+    assert _parse_signature(f"Signature:\n  <p>one{sep}two</p>\n  <p>three</p>\n") == f"<p>one{sep}two</p>\n<p>three</p>"
 
 
 def test_strip_cfgdir_noise_keeps_unrelated_output():

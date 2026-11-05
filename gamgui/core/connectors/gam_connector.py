@@ -61,7 +61,7 @@ _ONE_ACCOUNT_WARNING_RCS = (56, 73)
 
 def _csv_from(out: str) -> str:
     """Drop GAM progress lines before the CSV header (`gam report` prints status text first)."""
-    lines = (out or "").splitlines()
+    lines = (out or "").split("\n")   # not splitlines(): see strip_cfgdir_noise
     for i, ln in enumerate(lines):
         if ln.lstrip().lower().startswith("email,"):
             return "\n".join(lines[i:])
@@ -73,7 +73,7 @@ def _parse_signature(text: str) -> str:
 
     Format is ``Signature:`` followed by indented lines (or ``None`` when empty).
     """
-    lines = (text or "").splitlines()
+    lines = (text or "").split("\n")   # not splitlines(): a body holding U+2028 or a form feed read as ending there
     body: List[str] = []
     capturing = False
     for ln in lines:
