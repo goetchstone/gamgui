@@ -1,0 +1,17 @@
+{#- A run's panel: bounded (#9), its feed the job's rolling window and its failures the capped sample. -#}
+{% from "_job_failures.html" import failures %}
+{% import "_job_live.html" as live %}
+{% if not job.finished %}
+<div hx-get="/phishing/trash/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s" hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2"><span class="spinner"></span>{{ live.progress(job, "Trashing copies") }}
+    <span>Trashing… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>{{ live.stop(job) }}</div>
+  <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20"><div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div></div>
+</div>
+{% else %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>{% endif %}Trashed in {{ job.applied }} of {{ job.total }} steps.</p>
+  {% if job.failed_total %}<div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>{{ failures(job) }}{% endif %}
+  <p class="mt-1 text-xs">Its counts were from before the run: find again to see what's left. <a download href="/phishing/copies.csv" class="underline">Export what Find showed</a></p>
+</div>
+{% endif %}

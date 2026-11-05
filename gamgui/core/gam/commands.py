@@ -106,9 +106,81 @@ class Phone:
     primary: bool = False
 
 
+# RFC 5322's atext, less Gmail's { and }, and *.
+_MESSAGE_ID_ATEXT = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'+-/=?^_`|~")
+
+
+@dataclass(frozen=True)
+class MessageId:
+    """An email's Message-ID, without its angle brackets: Gmail's `rfc822msgid:` takes it bare. RFC 5322 `id-left@id-right`,
+    each side `dot-atom-text`, so it holds no space, quote, parenthesis, colon, comma or backslash, and can't end the Gmail term
+    or start another operator. Checked however it's made, so a builder never sends what ``parse`` would refuse. SwiftGamGui's
+    MessageID."""
+
+    id: str
+
+    def __post_init__(self) -> None:
+        value = self.id
+        if not value:
+            raise ValueError("Paste the email's Message-ID, from its headers (in Gmail, More › Show original).")
+        if len(value) > 998:
+            raise ValueError("That's longer than any Message-ID can be (998 characters).")
+        if any(c.isspace() for c in value):
+            raise ValueError("A Message-ID has no spaces: paste only its value, like <…@mail.example.com>.")
+        if any(c in value for c in "{}|"):
+            raise ValueError("This Message-ID has {, } or |, which Gmail's search may read as its own syntax, so it can't be searched for.")
+        for c in value:
+            if c not in "@." and c not in _MESSAGE_ID_ATEXT:
+                shown = f"“{c}”" if 0x21 <= ord(c) <= 0x7E else f"U+{ord(c):04X}"
+                raise ValueError(f"A Message-ID can't contain {shown}: paste it exactly as the header has it.")
+        sides = value.split("@")
+        if len(sides) != 2:
+            raise ValueError("A Message-ID has exactly one @, like <…@mail.example.com>.")
+        if not all(word for side in sides for word in side.split(".")):
+            raise ValueError("Each side of a Message-ID's @ is words joined by single dots, with none at either end.")
+
+    @classmethod
+    def parse(cls, text: str) -> "MessageId":
+        """What an operator copies: the bare ID, `<id>`, the whole header line, or `rfc822msgid:id`. Anything else is refused
+        with what's wrong, never repaired."""
+        value = (text or "").strip()
+        for label in ("message-id:", "rfc822msgid:"):
+            if value[:len(label)].lower() == label:
+                value = value[len(label):].strip()
+        if len(value) > 1 and value[0] == "<" and value[-1] == ">":
+            value = value[1:-1]
+        return cls(value)
+
+    @property
+    def query(self) -> str:
+        """Every copy but the sender's own: `-in:sent` keeps the Sent copy in the account that sent it, as evidence."""
+        return f"rfc822msgid:{self.id} -in:sent"
+
+    @property
+    def any_copy_query(self) -> str:
+        """Every copy in one mailbox, Sent included: the sender's own is the only one that keeps the Bcc header."""
+        return f"rfc822msgid:{self.id}"
+
+    @property
+    def spam_query(self) -> str:
+        """The copies Gmail filed to Spam, which `query` can't reach through `trash messages`: it lists without Spam."""
+        return f"rfc822msgid:{self.id} in:spam"
+
+
 _CALENDAR_ID = re.compile(r"[A-Za-z0-9._+\-]+@[A-Za-z0-9._+\-]*\.calendar\.google\.com", re.I)
 _FILTER_ID = re.compile(r"[A-Za-z0-9_\-]+")
 _LIST_SELECTORS = frozenset({"csvkmd", "csvsubkey", "csv", "csvfile", "file", "csvdata"})   # GAM's ENTITY_LIST_SELECTORS
+
+
+def id_list(ids: Sequence[str]) -> Optional[str]:
+    """``ids`` as one entity-list element GAM splits on commas, or None: each ID ASCII letters, digits, `-` and `_`, and the
+    element never a list selector GAM reads a file from instead."""
+    joined = ",".join(ids)
+    if not ids or not all(_FILTER_ID.fullmatch(i) for i in ids) or joined.lower().replace("_", "").replace("-", "") in _LIST_SELECTORS:
+        return None
+    return joined
+
+
 _FILTER_LOCAL = re.compile(r"[a-z0-9._'-]+")
 _FILTER_LABEL = re.compile(r"[a-z0-9-]+")
 
@@ -223,11 +295,41 @@ class GAMCommands:
     def delete_filters(email: str, filter_ids: Sequence[str]) -> List[str]:
         # The filters deleted in one command: GAM goes through the list, a failure leaving the rest done. The list is one
         # element split on commas, and must not be a list selector GAM reads a file from instead.
-        joined = ",".join(filter_ids)
-        if (not filter_ids or not all(_FILTER_ID.fullmatch(f) for f in filter_ids)
-                or joined.lower().replace("_", "").replace("-", "") in _LIST_SELECTORS):
+        joined = id_list(filter_ids)
+        if joined is None:
             raise ValueError("each filter to delete is one filter ID")
         return ["user", email, "delete", "filters", joined]
+
+    @staticmethod
+    def find_message_copies(message: MessageId) -> List[str]:
+        # Who has a copy of one email: GAM's own dry run of the trash below, over every active user. Without `doit` it lists
+        # each user's matches and prints a count per user on stderr, returning before any trash call. The exit code is the
+        # last user's, so never 0 across a domain: read its lines. `notquick`, so a count is every match. The one reviewed read
+        # with a destructive verb (tests/test_phishing.py): only the absent `doit` makes it a read. SwiftGamGui's findMessageCopies.
+        return ["all", "users", "trash", "messages", "query", message.query, "notquick", "max_to_trash", "1"]
+
+    @staticmethod
+    def trash_message(email: str, message: MessageId, copies: int) -> List[str]:
+        # One mailbox's copies to its Trash (Gmail empties it after 30 days). At most `copies`, the count the dry run showed, so
+        # a run never trashes more than its preview did. GAM reads `max_to_trash 0` as no limit, so below 1 is refused.
+        if copies < 1:
+            raise ValueError("a mailbox to trash from holds at least one copy")
+        return ["user", email, "trash", "messages", "query", message.query, "notquick", "max_to_trash", str(copies), "doit"]
+
+    @staticmethod
+    def find_spam_copies(message: MessageId) -> List[str]:
+        # Who has a copy in Spam, by Gmail's ID, which the dry run never lists. Only the Message-ID header (GAM's default set has
+        # To, hundreds of addresses a mailbox for a mass phish) and the labels. SwiftGamGui's findSpamCopies.
+        return ["all", "users", "print", "messages", "query", message.spam_query, "includespamtrash", "headers", "message-id", "showlabels"]
+
+    @staticmethod
+    def trash_messages(email: str, ids: Sequence[str]) -> List[str]:
+        # One mailbox's copies in Spam to its Trash, by the IDs the read found: nothing is listed, so Spam is no bar, and no `doit`
+        # is needed. Never more than the preview showed; one gone since is GAM's "Does not exist", the rest trashed.
+        joined = id_list(ids)
+        if joined is None:
+            raise ValueError("each message to trash is one message ID")
+        return ["user", email, "trash", "messages", "ids", joined]
 
     @staticmethod
     def print_vault_holds(email: str) -> List[str]:

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
-from ..gam.commands import GAMCommands, Phone, build_user_query, cut_off_account
+from ..gam.commands import GAMCommands, MessageId, Phone, build_user_query, cut_off_account
 from ..gam.errors import GAMError, GAMErrorKind
 from ..gam.models import (
     CalendarACL,
@@ -29,6 +29,7 @@ from ..gam.models import (
 from ..calendar_index import IndexedCalendar
 from ..connected_apps import AppsRead, read_from
 from ..gam.parser import parse_one, parse_records
+from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
 from ..phones import phones_from
 from ..person_reads import (
     ChromeProfile,
@@ -68,6 +69,7 @@ SWEEP_TOLERATED = (GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAM
 
 # ENTITY_DOES_NOT_EXIST_RC and SERVICE_NOT_APPLICABLE_RC: entityUnknownWarning, a warning in a per-account loop.
 _ONE_ACCOUNT_WARNING_RCS = (56, 73)
+PER_USER_RCS = (0, 50, 51, 60, 73)   # phishing.PER_USER_EXIT_CODES: read the lines; any other, the read says so
 
 
 def _csv_from(out: str) -> str:
@@ -494,6 +496,41 @@ class GAMConnector(Connector):
         # Only the reset: ending sessions is offboarding's own step (revoke_access), so its failure is
         # shown and can be re-run — as a follow-up here it was swallowed (failure-log 2026-09-23).
         return await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
+
+    async def find_message_copies(self, message: MessageId) -> MessageCopies:
+        argv = GAMCommands.find_message_copies(message)
+        res = await self.runner.run_any_exit(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
+        return await asyncio.to_thread(read_copies, res.returncode, res.stderr, argv)
+
+    async def find_spam_copies(self, message: MessageId) -> SpamCopies:
+        argv = GAMCommands.find_spam_copies(message)
+        res = await self.runner.run_any_exit(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
+
+        def read() -> SpamCopies:
+            records = parse_records(res.stdout) if res.returncode in PER_USER_RCS else []
+            return read_spam_copies(res.returncode, res.stderr, records, argv, message)
+        return await asyncio.to_thread(read)
+
+    async def mailbox_copy(self, email: str, message: MessageId) -> Optional[MessageRecipients]:
+        """One mailbox's copy of an email, Spam and Sent included, or None when it has none: the sender's for its To, Cc and Bcc,
+        anyone's for what the ID matched. Only GAM's "none found" (60) means no copy: a refused token GAM skips without a word
+        leaves 0 and no row."""
+        argv = GAMCommands.search_messages(email, message.any_copy_query)
+        res = await self.runner.run_any_exit(self.domain, argv)
+        if res.returncode not in (0, 60):
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        records = parse_records(res.stdout)
+        if not records and res.returncode == 0:
+            raise Incomplete("GAM returned nothing for this mailbox, so it may not have been read.")
+        return read_recipients(records)
+
+    async def trash_message(self, email: str, message: MessageId, copies: int, about: Dict[str, str]) -> ChangeResult:
+        return await self._run_write("trash_message", email, GAMCommands.trash_message(email, message, copies),
+                                     RiskLevel.DESTRUCTIVE, about=about)
+
+    async def trash_messages(self, email: str, ids: Sequence[str], about: Dict[str, str]) -> ChangeResult:
+        return await self._run_write("trash_spam_messages", email, GAMCommands.trash_messages(email, ids),
+                                     RiskLevel.DESTRUCTIVE, about=about)
 
     async def clear_recovery(self, email: str) -> ChangeResult:
         return await self._run_write("clear_recovery", email, GAMCommands.clear_recovery(email), RiskLevel.DESTRUCTIVE)

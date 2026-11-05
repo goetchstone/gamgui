@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C, Phone
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C, MessageId, Phone
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
 from gamgui.core.setup import DWD_SCOPES, SCOPES_NOT_AUTHORIZED_RC
 
@@ -28,6 +28,8 @@ WRITES = {
     "reset_password": [C.reset_password("alice@example.com")],
     "set_password": [C.set_password("alice@example.com", "Xk7m-Qp9r-2Tzv")],
     "clear_recovery": [C.clear_recovery("alice@example.com")],
+    "trash_message": [C.trash_message("alice@example.com", MessageId("CAPh1sh+Notice=0001@mail.example.com"), 1)],
+    "trash_messages": [C.trash_messages("alice@example.com", ["19a0c0ffee000002"])],
     "hide_from_directory": [C.hide_from_directory("alice@example.com")],
     "imap_off": [C.imap_off("alice@example.com")],
     "pop_off": [C.pop_off("alice@example.com")],
@@ -124,10 +126,23 @@ READS = {
 NOT_A_COMMAND = {"todrive_args"}
 
 
+# Reads whose exit code isn't their answer: an `all users` run's is the last user's (`GAMRunner.run_any_exit`).
+ANY_EXIT_READS = {
+    "find_message_copies": [C.find_message_copies(MessageId("CAPh1sh+Notice=0001@mail.example.com"))],
+    "find_spam_copies": [C.find_spam_copies(MessageId("CAPh1sh+Notice=0001@mail.example.com"))],
+}
+
+
 def test_every_builder_is_classified():
     # A new builder must land in WRITES (and get a strict mock handler) or READS before it ships.
     builders = {name for name, v in vars(C).items() if isinstance(v, staticmethod)}
-    assert builders - set(WRITES) - set(READS) - NOT_A_COMMAND == set()
+    assert builders - set(WRITES) - set(READS) - set(ANY_EXIT_READS) - NOT_A_COMMAND == set()
+
+
+@pytest.mark.parametrize("argv", [a for cases in ANY_EXIT_READS.values() for a in cases], ids=lambda a: " ".join(a)[:60])
+async def test_mock_answers_each_any_exit_read_on_stderr_or_stdout(runner, domain, argv):
+    res = await runner.run_any_exit(domain, argv)
+    assert res.returncode in (0, 50, 51, 60, 73) and "alice@example.com" in res.stderr + res.stdout
 
 
 def test_every_builder_has_a_caller_in_the_app():

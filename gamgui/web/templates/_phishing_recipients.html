@@ -1,0 +1,19 @@
+{#- Who it was sent to. It never claims to be everyone: no check mark for "nobody outside", and Google's record is always named. -#}
+{% if not copy %}
+<p class="text-sm text-amber-800">{{ sender }}'s mailbox has no copy of this email left: deleted, then purged from Trash, or never there. Google's own record is Admin console › Reporting › Email Log Search.</p>
+{% else %}
+<div class="space-y-3 text-sm">
+  {% if copy.headings | length > 1 %}<p class="text-amber-800">This Message-ID matched different emails, so look before you trust this list.</p>{% endif %}
+  <p class="text-brand-black">“{{ copy.subject }}” from {{ copy.sender }}{% if copy.date %}, {{ copy.date }}{% endif %}</p>
+  {% if not copy.sent_by_them %}<p class="text-amber-800">{{ sender }} received this copy rather than sent it, so it has no Bcc.</p>
+  {% elif not copy.has_bcc %}<p class="text-xs text-brand-blueink">This sent copy has no Bcc header. A mail client or a script leaves Bcc off what it submits, so people may be missing.</p>{% endif %}
+  <div><h3 class="eyebrow text-brand-grayink">Outside ({{ outside | length }})</h3>
+    <ul class="mt-1 space-y-0.5">{% for address, where, header in outside %}<li>{{ address }} <span class="text-xs text-brand-grayink">{{ header }}</span></li>{% endfor %}</ul></div>
+  <div><h3 class="eyebrow text-brand-grayink">Inside ({{ inside | length }})</h3>
+    <ul class="mt-1 space-y-0.5">{% for address, where, header in inside %}<li>{{ address }} <span class="text-xs text-brand-grayink">{{ header }}</span></li>{% endfor %}</ul></div>
+  {% if check %}<div><h3 class="eyebrow text-amber-800">Check by hand ({{ check | length }})</h3>
+    <ul class="mt-1 space-y-0.5">{% for piece, where, header in check %}<li class="break-all">{{ piece }} <span class="text-xs text-brand-grayink">{{ header }}</span></li>{% endfor %}</ul></div>{% endif %}
+  {% if unnamed %}<p class="text-amber-800">Find saw copies in {{ unnamed | length }} mailbox{{ "" if unnamed | length == 1 else "es" }} these headers don't name ({{ unnamed[:5] | join(", ") }}{% if unnamed | length > 5 %}…{% endif %}): a Bcc not kept, or a group, so outside recipients may be missing too.</p>{% endif %}
+  <p class="text-xs text-brand-blueink">This may not be everyone. Google's own record is Admin console › Reporting › Email Log Search. <a download href="/phishing/recipients.csv" class="underline">Export CSV</a></p>
+</div>
+{% endif %}

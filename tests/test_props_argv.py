@@ -94,6 +94,10 @@ _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Exampl
 IDENTIFIERS = (
     Spec("set_password", ("email", "password")),
     Spec("clear_recovery", ("email",)),
+    Spec("find_message_copies", (), (), {"message": st.just(commands.MessageId("a@b.example"))}),
+    Spec("find_spam_copies", (), (), {"message": st.just(commands.MessageId("a@b.example"))}),
+    Spec("trash_message", ("email",), (), {"message": st.just(commands.MessageId("a@b.example")), "copies": st.integers(1, 9)}),
+    Spec("trash_messages", ("email",), (), {"ids": st.just(["F1"])}),
     Spec("hide_from_directory", ("email",)),
     Spec("imap_off", ("email",)),
     Spec("pop_off", ("email",)),

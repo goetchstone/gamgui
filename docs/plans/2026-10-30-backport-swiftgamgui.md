@@ -221,6 +221,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   runs (2026-10-19, 2026-10-23). Swift `phishing.md` D4–D6.
 - **D3. Spam copies.** Not yet live in either app. Swift: `SpamCopies.swift`.
 
+  **Applied, D1-D3 together:** `core/phishing.py`, the Phishing screen, `docs/domains/phishing.md`. Offline only here.
+
 ### Phase E — Incident response (one PR per slice, in this order)
 
 Read `../SwiftGamGui/docs/domains/compromised-account.md` (988 lines) and
@@ -318,4 +320,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **C3** — applied (`feat/offboarding-added-steps`: offline only, four steps argv-identical to Swift's live runs).
 - **C4** — the typed address on the incident lock lands with E1; a long offboarding's typed word landed with C3.
 - **C5** — applied (`feat/offboarding-templates`: local files only).
-- D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **D1–D3** — applied (`feat/phishing`: offline only; trash by query argv-identical to Swift's live runs, Spam not live in either app).
+- E1–E8, F — approved 2026-11-05 (G1), not started.

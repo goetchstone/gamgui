@@ -1,0 +1,11 @@
+{#- What this Message-ID matched, from one mailbox's copy. The sender wrote all of it, so it's only ever text. -#}
+{% if search.sample %}
+{% set mailbox, copy = search.sample %}
+<div class="mt-1 text-sm">
+  <p class="break-words {{ strong or 'text-brand-black' }}">“{{ copy.subject or "(no subject)" }}” from {{ copy.sender }}{% if copy.date %}, {{ copy.date }}{% endif %}</p>
+  <p class="text-xs {{ soft or 'text-brand-grayink' }}">As {{ mailbox }}'s copy has it: check this is the email to remove before trashing it.</p>
+  {% if copy.headings | length > 1 %}<p class="{{ strong or 'text-amber-800' }}">{{ mailbox }}'s copies aren't all the same email: {% for sender, subject in copy.headings %}“{{ subject }}” from {{ sender }}{{ "; " if not loop.last }}{% endfor %}. Look before you trash them.</p>{% endif %}
+</div>
+{% elif search.sample_problem %}
+<p class="mt-1 text-sm {{ strong or 'text-amber-800' }}">Couldn't read a copy to show what this ID matched: {{ search.sample_problem }}</p>
+{% endif %}

@@ -34,6 +34,8 @@ PANELS = {
     "subscribe": "/calendars/share/status",
     "index": "/calendars/index/status",
     "connected_apps": "/reports/connected-apps",
+    "phishing_find": "/phishing/find/status",
+    "phishing": "/phishing/trash/status",
     "sequence": "/builder/sequence/status",
     "onboard": "/onboard/bulk/status",
     "finish": "/onboard/finish/status",   # steps retried until Google has set a new account up
@@ -83,6 +85,8 @@ CHANGE_WORDS = {
     "pop_off": "Turn off POP",
     "transfer_calendar_ownership": "Hand over secondary calendars",
     "transfer_data": "Transfer data",
+    "trash_message": "Trash an email's copies",
+    "trash_spam_messages": "Trash an email's copies in Spam",
     "update_phones": "Change the phone a signature shows",
 }
 

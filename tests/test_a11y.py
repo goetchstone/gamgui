@@ -121,6 +121,9 @@ class Chrome:
         try:
             target = self.cmd("Target.createTarget", url="about:blank")["targetId"]
             self._session = self.cmd("Target.attachToTarget", targetId=target, flatten=True)["sessionId"]
+            # Chrome drops the page's focus partway through a long run, and then a focus event never fires: a picker that
+            # opens on focus stayed shut. The app window has focus when someone uses it, so hold this page to that.
+            self.cmd("Emulation.setFocusEmulationEnabled", enabled=True)
             self.cmd("Emulation.setDeviceMetricsOverride", width=W, height=H, deviceScaleFactor=1, mobile=False)
         except BaseException:
             self.close()
@@ -332,6 +335,15 @@ def _screens(p: Page, st):
            "document.querySelector('#job-panel [data-announce]')")
     yield "jobs/page"                              # the run's own panel, on a page of its own
 
+    p.goto("/phishing")
+    p.fill("textarea[name=messages]", "CAPh1sh+Notice=0001@mail.example.com")
+    p.click("button", "Find copies")
+    p.settle("/Trash the copies/.test(document.querySelector('#phishing-find')?.innerText ?? '')")
+    yield "phishing/found"
+    p.click("#phishing-find button", "Trash the copies")
+    p.settle("document.querySelector('#phishing-typed')")
+    yield "phishing/confirm"
+
     p.goto("/reports", "!/Loading/.test(document.querySelector('#usage')?.innerText ?? 'Loading') "
                        "&& document.querySelector('#connected-apps-panel')")
     yield "reports"
@@ -454,7 +466,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
 RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/signatures", "/calendars",
-             "/builder", "/onboard", "/lifecycle", "/reports", "/audit", "/setup")
+             "/builder", "/onboard", "/lifecycle", "/phishing", "/reports", "/audit", "/setup")
 
 
 @pytest.mark.a11y

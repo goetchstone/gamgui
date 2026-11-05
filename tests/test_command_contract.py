@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands, Phone
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands, MessageId, Phone
 
 ROOT = Path(__file__).resolve().parents[1]
 GAM_COMMANDS_REF = ROOT / "gamgui" / "resources" / "gam7" / "GamCommands.txt"
@@ -37,7 +37,7 @@ needs_grammar = pytest.mark.skipif(
 )
 
 SEARCH_ADDRESS = "person@example.com"
-VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1"}
+VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1", "987654"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -49,6 +49,11 @@ ENUM_ARGS = {
     ("search_messages", "detail"): GAMCommands.MESSAGE_DETAIL,
     ("create_datatransfer", "privacy"): ("", *GAMCommands.TRANSFER_PRIVACY),
     # filter_address refuses a placeholder: these go inside a search value, so they take a real address.
+    ("find_message_copies", "message"): (MessageId(SEARCH_ADDRESS),),
+    ("find_spam_copies", "message"): (MessageId(SEARCH_ADDRESS),),
+    ("trash_message", "message"): (MessageId(SEARCH_ADDRESS),),
+    ("trash_message", "copies"): (987654,),
+    ("trash_messages", "ids"): (["F1"],),
     ("transfer_calendar_ownership", "calendar_ids"): (["c_x@group.calendar.google.com"],),
     ("delete_filters", "filter_ids"): (["F1"],),
     ("update_phones", "phones"): ([], [Phone("work", "", "<value>", True)], [Phone("custom", "<name>", "<value>", False)],
@@ -546,7 +551,8 @@ def test_every_run_authenticated_call_is_the_chokepoint_or_a_read():
 
 # The only functions that may spawn gam (`GAMRunner._exec`): `run_authenticated`'s body, which wraps
 # the call in EphemeralConfig and is policed above, and `version`, which needs no credentials.
-SPAWNS_GAM = {("gamgui/core/gam/runner.py", "_do"), ("gamgui/core/gam/runner.py", "version")}
+SPAWNS_GAM = {("gamgui/core/gam/runner.py", "_do"), ("gamgui/core/gam/runner.py", "version"),
+              ("gamgui/core/gam/runner.py", "run_any_exit")}   # reads only: tests/test_phishing.py holds its callers
 
 
 def test_gam_is_spawned_only_through_run_authenticated_or_version():

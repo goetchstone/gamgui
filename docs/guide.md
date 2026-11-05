@@ -232,6 +232,17 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Take a phishing email out of every mailbox
+
+1. Open **Phishing** and paste the email's Message-ID (in Gmail, More › Show original), or several, one a line. Click
+   **Find copies**. It searches every active mailbox and its Spam in the background, and changes nothing. Suspended accounts aren't searched. It shows one copy's sender and subject, so you can check the ID matched the email you meant.
+2. Read who has a copy. A mailbox it couldn't search is listed as that, never counted as clear.
+3. Click **Trash the copies**, check the list, and type the number of steps. Each copy goes to that person's Trash, where it
+   stays for 30 days, and the sender's Sent copy is kept as evidence. Find again to see what's left.
+
+**List recipients** reads who it was sent to from the sender's own copy, outside your domains first. It may not be everyone, so
+it always names Google's own record (Admin console › Reporting › Email Log Search). Both lists export as CSV.
+
 ## Jobs and Stop
 
 Longer runs — a signature rollout, a bulk department change, a CSV of hires, an offboarding, a group

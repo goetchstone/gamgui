@@ -133,6 +133,11 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
 # "WARNING:" or an entity's name. It once skipped only "Getting all ", so a per-entity "Getting …" line read
 # as an unknown failure that outranked the real one and became its message (failure log 2026-10-30).
 _PROGRESS_LINE: Pattern[str] = re.compile(r"(Getting |Got \d+ )")
+
+
+def is_progress_line(line: str) -> bool:
+    """One of GAM's "Getting …" or "Got N …" lines: never an answer or a failure."""
+    return bool(_PROGRESS_LINE.match(line))
 # The instructions GAM prints after invalidOauth2serviceJsonExit's error (Msg.INSTRUCTIONS_OAUTH2SERVICE_JSON,
 # read from the vendored build) say what to run, not what failed. Read as error lines, the last one —
 # "to create and authorize a Service account." matches the service-account pattern — became the message.

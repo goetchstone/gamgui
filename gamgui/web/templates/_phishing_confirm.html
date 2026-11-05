@@ -1,0 +1,27 @@
+{#- The confirm step: exactly what its token holds, one step per mailbox. The number of steps is always typed. -#}
+<div class="rounded-xl border border-red-300 bg-red-50 p-4">
+  <p tabindex="-1" data-focus class="text-sm font-medium text-red-800">Move copies to Trash in {{ count }} step{{ "" if count == 1 else "s" }}?</p>
+  <p class="mt-1 text-xs text-red-700">Each copy stays in that person's Trash for 30 days. The sender's Sent copy is kept.</p>
+  {% for w in decision.warnings %}<p class="mt-1 text-xs text-red-700">{{ w }}</p>{% endfor %}
+  {% with strong = "text-red-800", soft = "text-red-700" %}
+  {% for search in searches %}{% include "_phishing_sample.html" %}{% endfor %}
+  {% endwith %}
+  <ul class="mt-2 max-h-56 space-y-1 overflow-y-auto text-xs text-red-800">
+    {% for line in summaries %}<li>{{ line }}</li>{% endfor %}
+    {% if more %}<li>And {{ more }} more: <a download href="/phishing/copies.csv" class="underline">every mailbox is in the CSV</a>.</li>{% endif %}
+  </ul>
+  <div id="phishing-typed" class="mt-3 flex flex-wrap items-end gap-3">
+    <label class="block text-sm text-red-800">Type {{ count }} to run {{ "them" if count != 1 else "it" }}
+      <input name="confirm_count" autocomplete="off" class="mt-1 block w-24 rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm text-ink" /></label>
+    {% if decision.requires_typed_confirmation %}
+    <label class="block text-sm text-red-800">and type <code>confirm</code>
+      <input name="confirm" autocomplete="off" class="mt-1 block w-28 rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm text-ink" /></label>
+    {% endif %}
+  </div>
+  <div class="mt-3 flex gap-2">
+    <button class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors"
+            hx-post="/phishing/trash/apply" hx-include="#phishing-typed input" hx-target="#phishing-find" hx-swap="innerHTML" hx-disabled-elt="this"
+            hx-vals='{"confirmed": "1", "preview": {{ token | tojson }} }'>Trash</button>
+    <a data-cancel class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-black hover:bg-paper transition-colors" href="/phishing">Cancel</a>
+  </div>
+</div>
