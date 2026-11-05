@@ -5,6 +5,16 @@ passwords, backup codes, OAuth tokens), turn off mail forwarding, delegate + aut
 sweep the user off every active user's primary calendar, and drop a dated reminder on the manager — plus the
 separate, gated account **delete** that IT runs later.
 
+**Handing over a secondary calendar can fail for a calendar not shared with the admin.** GAM's `validateCalendar` reads a
+`.calendar.google.com` ID with the admin's own sign-in, before the transfer that uses admin access. So one nobody shared with
+the admin is Not Found, exit 50, and the rest still go (source read, not yet seen live). The mock fails it by default:
+`tests/fixtures/calendars_shared_with_admin.txt` lists the only ones it finds.
+
+**The filter step is checked again at the run, even when the preview found none.** The leaver is signed in until the sign-out,
+and a forwarding filter made since would keep sending their mail out after the run says it's done.
+
+**Added steps (back-port plan C3).** Off by default, each one GAM command needing only the reset: clear recovery, remove filters that forward, IMAP off, POP off, hand over secondary calendars, hide from the directory (`ADDABLE_STEPS`). With none added the routine is the eight, byte for byte. Two reads run whatever the steps, and a refused one is said, never taken as "none": the secondary calendars the leaver owns (Google deletes them with the account, and the transfer doesn't move them) and Vault holds (held data isn't transferred, and a held account can't be deleted). A step over a list isn't planned when it finds nothing or is ticked done. The filters are read again at the run, and a change refuses it: the leaver is signed in until the sign-out. Ten steps with a destructive one needs `confirm` typed, because the steps count as the guard's targets. `calendars <ids> transfer ownership` is from GAM's source: the grammar lacks `ownership`.
+
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on
 data-transfer completion** (advisory) and **the all-users calendar-ACL sweep is best-effort**
 (tolerates own-calendar / not-shared / no-Calendar, nothing else). Both flow through the write chokepoint (CLAUDE.md #2) and the

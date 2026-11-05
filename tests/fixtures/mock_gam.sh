@@ -122,6 +122,13 @@ json_quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # a member: the directory fixture holds three users, but those members are accounts GAM can act as too.
 was_created() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/created/$1" ]; }
 group_member() { cat "$GAM_MOCK_FIXTURES/group_members.json" "$GAM_MOCK_FIXTURES/group_members_allhands.json" | grep -qF "\"email\": \"$1\""; }
+calendar_owner() {  # <calendar id>
+  key=$(lower "$1")
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/calendar_owner/$key" ]; then cat "$GAM_MOCK_STATE/calendar_owner/$key"; return 0; fi
+  file=$(grep -ilF "\"id\": \"$key\"" "$GAM_MOCK_FIXTURES"/user_owned_calendars/*.json 2>/dev/null | head -n 1)
+  [ -n "$file" ] || return 0
+  file=${file##*/}; file=${file%.json}; printf '%s' "${file%.hidden}"
+}
 known_user() { in_directory "$1" || was_created "$1" || group_member "$1"; }
 is_group() { grep -qF "\"email\": \"$1\"" "$GAM_MOCK_FIXTURES/groups.json"; }   # <address, lowercased>
 # A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
@@ -635,16 +642,38 @@ fi
 # primaryEmail,calendarId,JSON. An address that isn't a user fails at the token. alice@ has her two; anyone else their
 # primary calendar alone.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]; then
-  user=$2; shift 4; fj=""
+  user=$2; shift 4; fj=""; owned=""; hidden=""
   while [ $# -gt 0 ]; do
     case "$1" in
       fields) need_value $# "CalendarListFieldList"; [ -n "$2" ] || empty_arg "CalendarListFieldList"; shift 2 ;;
       formatjson) fj=1; shift ;;
+      ownedsecondary) owned=1; shift ;;
+      showhidden) hidden=1; shift ;;
       *) not_modelled "print calendars with $1" ;;
     esac
   done
   [ -n "$fj" ] || not_modelled "print calendars without formatjson"
   known_user "$(lower "$user")" || not_a_user "$user" Print
+  # `ownedsecondary`: the calendars on that list the person is dataOwner of. calendarList.list leaves hidden entries out
+  # unless showHidden: `user_owned_calendars/<u>.json` are the visible ones, `<u>.hidden.json` the hidden ones. Calendar
+  # off (GAM_MOCK_STATE/nocalendar/<u>) fails after the "Getting" line, exit 73.
+  if [ -n "$owned" ]; then
+    printf 'Getting Calendars for %s\n' "$user" 1>&2
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nocalendar/$(lower "$user")" ]; then
+      printf 'User: %s, Calendar Service/App not enabled\n' "$user" 1>&2; exit 73
+    fi
+    echo "primaryEmail,calendarId,JSON"
+    for file in "$GAM_MOCK_FIXTURES/user_owned_calendars/$(lower "$user").json" ${hidden:+"$GAM_MOCK_FIXTURES/user_owned_calendars/$(lower "$user").hidden.json"}; do
+      [ -f "$file" ] || continue
+      while IFS= read -r record; do
+        [ -n "$record" ] || continue
+        # GAM keeps those whose dataOwner is the person: one handed over has left this read.
+        [ "$(calendar_owner "$(json_text id "$record")")" = "$(lower "$user")" ] || continue
+        gam_row "$user" "$(json_text id "$record")" "$record"
+      done < "$file"
+    done
+    exit 0
+  fi
   echo "primaryEmail,calendarId,JSON"
   if [ "$user" = "alice@example.com" ]; then
     while IFS= read -r record || [ -n "$record" ]; do
@@ -843,6 +872,8 @@ check_user_attrs() {
         need_value $# "String"
         [ "$(printf '%s' "$2" | LC_ALL=C tr -d '\200-\277' | wc -c)" -le 60 ] || invalid_arg "Expected <string length 0<=x<=60 for String>"
         shift 2 ;;
+      gal|includeinglobaladdresslist)
+        need_value $# "Boolean"; need_bool "$2"; shift 2 ;;
       displayname|recoveryemail|recoveryphone|ou|org|orgunitpath)
         need_value $# "String"; shift 2 ;;
       notify|subject|notifypassword|from|mailbox|replyto|message|textmessage|htmlmessage)
@@ -1751,6 +1782,187 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "devices" ]; then
     done
     [ -n "$record" ] && gam_row "$(json_text name "$record")" "$record"
   done < "$GAM_MOCK_FIXTURES/ci_devices.json"
+  exit 0
+fi
+
+# `gam calendars <list> transfer ownership <user>` (doCalendarsTransferOwnership, :55992-56014; GamUpdate 7.46.04;
+# the grammar's 1690 lacks `ownership`, which getChoice requires: anything else is an invalid choice). Each calendar
+# in the comma list in turn, "(i/n)" after each line when there's more than one: validateCalendar gets it with the
+# admin's own access first, so one the admin can't see (here: one the fixtures don't hold) fails "Not Found" before
+# any transfer; then transferOwnership as the admin: "Calendar: <id>, Ownership Transferred to: <user>" on stdout.
+# A failure leaves the rest done, ACTION_FAILED_RC (50) at the end. (The new owner's refusal wording is
+# approximate: the API's reason.)
+if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "transfer" ]; then
+  [ $# -ge 4 ] || missing_arg "ownership"
+  [ "$4" = "ownership" ] || invalid_choice "$4" "ownership"
+  [ $# -ge 5 ] || missing_arg "EmailAddress"
+  [ $# -eq 5 ] || invalid_arg "$6"
+  to=$(lower "$5"); failed=""
+  set -f; ids=$(printf '%s' "$2" | tr ',' ' '); set +f
+  n=$(printf '%s\n' $ids | grep -c . || true); i=0
+  for id in $ids; do
+    i=$((i + 1)); of=""; [ "$n" -gt 1 ] && of=" ($i/$n)"
+    owner=$(calendar_owner "$id")
+    # validateCalendar reads a `.calendar.google.com` ID as the admin, so one not shared with them isn't found, whoever owns it.
+    grep -qixF "$id" "$GAM_MOCK_FIXTURES/calendars_shared_with_admin.txt" || owner=""
+    if [ -z "$owner" ]; then
+      printf 'Calendar: %s, Transfer Ownership Failed: Not Found%s\n' "$id" "$of" 1>&2; failed=1; continue
+    fi
+    if ! known_user "$to"; then
+      printf 'Calendar: %s, Transfer Ownership to: %s, Transfer Ownership Failed: Invalid Value%s\n' "$id" "$to" "$of" 1>&2
+      failed=1; continue
+    fi
+    if [ -n "${GAM_MOCK_STATE:-}" ]; then
+      mkdir -p "$GAM_MOCK_STATE/calendar_owner"; printf '%s' "$to" > "$GAM_MOCK_STATE/calendar_owner/$(lower "$id")"
+    fi
+    printf 'Calendar: %s, Ownership Transferred to: %s%s\n' "$id" "$to" "$of"
+  done
+  [ -z "$failed" ] || exit 50
+  exit 0
+fi
+
+# `gam user <u> print filters labelidsonly formatjson` (printShowFilters, :77655-77712) -> CSV, each filter's
+# flattened columns (in GAM's sort order) then its JSON. `user_filters/<u>.csv` is that output as GAM would print it;
+# with GAM_MOCK_STATE, a filter `delete filters` removed is left out (the header stays the fixture's, where GAM keeps
+# only the columns of rows written: the app reads the JSON). None: GAM's titles alone, `User,id`. As the person:
+# "Getting Filters for <u>" first; Gmail off is userGmailServiceNotEnabledWarning, exit 73, then the titles.
+deleted_filter() { [ -n "${GAM_MOCK_STATE:-}" ] && grep -qxF "$2" "$GAM_MOCK_STATE/filters_deleted/$1" 2>/dev/null; }
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filters" ]; then
+  user=$(lower "$2"); shift 4
+  [ "$*" = "labelidsonly formatjson" ] || not_modelled "print filters with $*"
+  need_user "$user" Print
+  printf 'Getting Filters for %s\n' "$user" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; printf 'User,id\n'; exit 73
+  fi
+  file="$GAM_MOCK_FIXTURES/user_filters/$user.csv"; rows=""
+  if [ -f "$file" ]; then
+    while IFS= read -r row; do
+      id=$(printf '%s' "$row" | cut -d, -f2)
+      deleted_filter "$user" "$id" || rows="$rows$row
+"
+    done <<EOF_ROWS
+$(tail -n +2 "$file")
+EOF_ROWS
+  fi
+  if [ -n "$rows" ]; then head -n 1 "$file"; printf '%s' "$rows"; else printf 'User,id\n'; fi
+  exit 0
+fi
+
+# `gam user <u> delete filters <FilterIDEntity>` (deleteFilters, :77581-77604): "User: <u>, Delete <n> Filter(s)",
+# then each in turn, indented, "User: <u>, Filter: <id>, Deleted (j/n)"; one Gmail doesn't have fails "Delete Failed:
+# Not Found" (the API's words, approximate) and the rest are still deleted, exit 50 at the end. An empty list is
+# NO_ENTITIES_FOUND_RC (60) after the count line; Gmail off, the count line, then the indented warning, exit 73.
+# Not modelled, so never answered more kindly than GAM: whitespace (Python's split takes more than sh's, and getChoice
+# strips it first) or anything but ASCII letters, digits, `_`, `-` and commas; and a list selector word (file, csv,
+# csvfile, csvkmd, csvsubkey, csvdata, ignoring case, `_` and `-`), which GAM reads a file from (getEntityList).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "delete" ] && [ "${4:-}" = "filters" ]; then
+  user=$(lower "$2")
+  [ $# -ge 5 ] || missing_arg "FilterIDEntity"
+  [ $# -eq 5 ] || invalid_arg "$6"
+  case "$5" in *[!A-Za-z0-9_,-]*) not_modelled "a filter ID list like $5" ;; esac
+  case "$(lower "$5" | tr -d '_-')" in csvkmd|csvsubkey|csv|csvfile|file|csvdata) not_modelled "delete filters from $5" ;; esac
+  need_user "$user" Delete
+  set -f; ids=$(printf '%s' "$5" | tr ',' ' '); set +f
+  n=$(printf '%s\n' $ids | grep -c . || true); i=0; failed=""
+  if [ "$n" -eq 1 ]; then noun=Filter; else noun=Filters; fi
+  printf 'User: %s, Delete %s %s\n' "$user" "$n" "$noun"
+  [ "$n" -gt 0 ] || exit 60
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf '  User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
+  fi
+  for id in $ids; do
+    i=$((i + 1)); of=""; [ "$n" -gt 1 ] && of=" ($i/$n)"
+    if deleted_filter "$user" "$id" || ! grep -q "^[^,]*,$id," "$GAM_MOCK_FIXTURES/user_filters/$user.csv" 2>/dev/null; then
+      printf '  User: %s, Filter: %s, Delete Failed: Not Found%s\n' "$user" "$id" "$of" 1>&2; failed=1; continue
+    fi
+    if [ -n "${GAM_MOCK_STATE:-}" ]; then mkdir -p "$GAM_MOCK_STATE/filters_deleted"; printf '%s\n' "$id" >> "$GAM_MOCK_STATE/filters_deleted/$user"; fi
+    printf '  User: %s, Filter: %s, Deleted%s\n' "$user" "$id" "$of"
+  done
+  [ -z "$failed" ] || exit 50
+  exit 0
+fi
+
+# `gam user <u> print vaultholds|holds` (printShowUserVaultHolds, :45612-45690) -> CSV, no formatjson: every
+# open matter's holds that name the person or an org unit above them, `User,matterId,matterName,holdId,name,
+# orgUnitId,orgUnitPath` (its titles in their given order: `sortall` re-inserts each as given), the header alone
+# for none. `vault_holds.csv` holds the rows. GAM acts as the admin throughout: it lists the open matters and their
+# holds first, so a Vault refusal fails before anything prints, entityActionFailedWarning "Vault Hold Print Failed:
+# <reason>", ACTION_FAILED_RC (50), modelled by `$GAM_MOCK_STATE/novault` (the reason is the API's; a token
+# whose file names no Vault scope exits 15 earlier); then it reads each person's org units with the Directory, and
+# one who isn't a user ends it: the command echo, "ERROR: User: <u>, Does not exist", ENTITY_DOES_NOT_EXIST_RC
+# (getAllParentOrgUnitsForUser -> entityDoesNotExistExit, :1762-1768, :800-805).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && { [ "${4:-}" = "vaultholds" ] || [ "${4:-}" = "holds" ]; }; then
+  user=$(lower "$2"); shift 4
+  if [ $# -gt 0 ]; then
+    case "$1" in todrive) not_modelled "print vaultholds todrive" ;; *) invalid_arg "$1" ;; esac
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/novault" ]; then
+    echo "Vault Hold Print Failed: Request had insufficient authentication scopes." 1>&2; exit 50
+  fi
+  if ! known_user "$user"; then
+    printf 'Command: gam %s\n\nERROR: User: %s, Does not exist\n' "$ARGS" "$user" 1>&2; exit 56
+  fi
+  echo "User,matterId,matterName,holdId,name,orgUnitId,orgUnitPath"
+  grep -i "^$user," "$GAM_MOCK_FIXTURES/vault_holds.csv" || true
+  exit 0
+fi
+
+# `gam user <email> imap|imap4 <Boolean> [noautoexpunge] [expungebehavior archive|deleteforever|trash]
+#  [maxfoldersize 0|1000|2000|5000|10000]` (8385) / `pop|pop3 <Boolean> [for allmail|newmail|mailfromnowon|fromnowon]
+#  [action keep|leaveininbox|archive|delete|trash|markread]` (8391). GAM's setImap and setPop (7.48.26): the options
+# first, then per user a token (not_a_user, "Set Failed") and one Gmail settings call, Gmail off its
+# userGmailServiceNotEnabledWarning (exit 73); printed as _showImap and _showPop print the settings Gmail returns.
+if [ "${1:-}" = "user" ] && case "${3:-}" in imap|imap4|pop|pop3) true ;; *) false ;; esac; then
+  user=$2; setting=$3
+  [ $# -ge 4 ] || missing_arg "true|false"
+  boolean=$(printf '%s' "$4" | tr '[:upper:]' '[:lower:]')
+  case "$boolean" in
+    true|on|yes|enabled|1) enabled=True ;;
+    false|off|no|disabled|0) enabled=False ;;
+    *) invalid_choice "$boolean" "true|false" ;;
+  esac
+  # _popDefaults: `disabled` when off; `for` overwrites it, so `pop off for allmail` turns POP on, as in GAM.
+  expunge=True; behavior=archive; size=0; disposition=leaveInInbox
+  if [ "$enabled" = True ]; then window=allMail; else window=disabled; fi
+  case "$setting" in imap*) kind=imap ;; *) kind=pop ;; esac
+  shift 4
+  while [ $# -gt 0 ]; do
+    # Exact patterns: a glob here would let `x:noautoexpunge` through.
+    case "$kind:$1" in
+      imap:noautoexpunge) expunge=False; shift ;;
+      imap:expungebehavior)
+        [ $# -ge 2 ] || missing_arg "archive|deleteforever|trash"
+        case "$2" in archive|trash) behavior=$2 ;; deleteforever) behavior=deleteForever ;;
+          *) invalid_choice "$2" "archive|deleteforever|trash" ;; esac
+        shift 2 ;;
+      imap:maxfoldersize)
+        [ $# -ge 2 ] || missing_arg "0|1000|2000|5000|10000"
+        case "$2" in 0|1000|2000|5000|10000) size=$2 ;; *) invalid_choice "$2" "0|1000|2000|5000|10000" ;; esac
+        shift 2 ;;
+      pop:for)
+        [ $# -ge 2 ] || missing_arg "allmail|fromnowon|mailfromnowon|newmail"
+        case "$2" in allmail) window=allMail ;; fromnowon|mailfromnowon|newmail) window=fromNowOn ;;
+          *) invalid_choice "$2" "allmail|fromnowon|mailfromnowon|newmail" ;; esac
+        shift 2 ;;
+      pop:action)
+        [ $# -ge 2 ] || missing_arg "archive|delete|keep|leaveininbox|markread|trash"
+        case "$2" in archive) disposition=archive ;; delete|trash) disposition=trash ;; keep|leaveininbox) disposition=leaveInInbox ;;
+          markread) disposition=markRead ;; *) invalid_choice "$2" "archive|delete|keep|leaveininbox|markread|trash" ;; esac
+        shift 2 ;;
+      pop:confirm) shift ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  known_user "$user" || not_a_user "$user" Set
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
+  fi
+  case "$kind" in
+    imap) echo "User: $user, IMAP Enabled: $enabled, autoExpunge: $expunge, expungeBehavior: $behavior, maxFolderSize: $size" ;;
+    *) if [ "$window" != disabled ]; then echo "User: $user, POP Enabled: True, For: $window, Action: $disposition"
+       else echo "User: $user, POP Enabled: False"; fi ;;
+  esac
   exit 0
 fi
 

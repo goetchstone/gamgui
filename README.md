@@ -185,6 +185,8 @@ its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Sign out everywhere | Users, Builder | not yet |
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14) |
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
+| Offboarding's added steps: clear recovery, hide from the directory, IMAP off, POP off | Lifecycle | argv-identical to SwiftGamGui's confirmed runs (2026-10-16) |
+| Offboarding's added steps: hand over secondary calendars, remove filters that forward | Lifecycle | not yet — not live in either app |
 | Set a temporary password | Users | not yet — new to both apps |
 | Set the phone a signature shows | Users | argv-identical to SwiftGamGui's confirmed run (2026-10-24); changing or removing one is not yet, in either app |
 | Delete an account | Users, Builder | **confirmed** (2026-10-08, GAM 7.48.22, from the user page: the offboarded leaver, after the transfer completed) |

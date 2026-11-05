@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import date
-from typing import Annotated, FrozenSet, List
+from typing import Annotated, FrozenSet, List, Tuple
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -45,7 +45,9 @@ class _Preview:
     manager: str
     steps: List[lifecycle.OffboardStep]   # the steps to run — the previewed ones not ticked or left out
     done: FrozenSet[str]                  # keys ticked "already done": not run, and count as succeeded
+    filters: Tuple[lifecycle.ForwardingFilter, ...] = ()   # what an added filter step will delete: read again at the run
     not_applicable: FrozenSet[str] = frozenset()   # keys left out ("doesn't apply"): not run, never succeeded
+    filters_read: bool = False   # the filter step was asked for and read: checked again at the run, none found included
 
 
 def _done(form) -> FrozenSet[str]:
@@ -58,10 +60,16 @@ def _not_applicable(form) -> FrozenSet[str]:
     return frozenset(form.getlist("na")).intersection(lifecycle.OPTIONAL_STEPS)
 
 
+def _added(form) -> FrozenSet[str]:
+    """The steps the operator added to this offboarding; only the addable ones."""
+    return frozenset(form.getlist("add")).intersection(lifecycle.ADDABLE_STEPS)
+
+
 def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str,
-              done: FrozenSet[str], not_applicable: FrozenSet[str] = frozenset()) -> tuple:
+              done: FrozenSet[str], not_applicable: FrozenSet[str] = frozenset(),
+              added: FrozenSet[str] = frozenset()) -> tuple:
     return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
-            tuple(sorted(done)), tuple(sorted(not_applicable)))
+            tuple(sorted(done)), tuple(sorted(not_applicable)), tuple(sorted(added)))
 
 
 def _running(st, user: str):
@@ -96,6 +104,11 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     return check
 
 
+def _why(exc: Exception) -> str:
+    """A failed read, in words, whatever it was: the Keychain refuses without a GAMError."""
+    return exc.message if isinstance(exc, GAMError) else friendly(exc)
+
+
 async def _delegate_warning(conn, user: str, manager: str) -> str:
     """The preview's warning about the delegate step, or "". Re-adding an existing delegate fails in
     GAM; and a failed read of ``user``'s delegates means the same Gmail access is broken for the
@@ -105,8 +118,7 @@ async def _delegate_warning(conn, user: str, manager: str) -> str:
     try:
         delegates = {d.lower() for d in await conn.list_delegates(user)}
     except Exception as exc:  # noqa: BLE001 - any failure is reported, whatever it was
-        reason = exc.message if isinstance(exc, GAMError) else friendly(exc)
-        return (f"Couldn't read {user}'s mail delegates ({reason}). The delegate step uses the same Gmail "
+        return (f"Couldn't read {user}'s mail delegates ({_why(exc)}). The delegate step uses the same Gmail "
                 f"access, so it will likely fail too — after the password has been reset, and a failed "
                 f"delegate stops the routine. Fix the cause and preview again.")
     if manager.lower() in delegates:
@@ -162,7 +174,8 @@ async def page(request: Request) -> HTMLResponse:
         request, "lifecycle.html",
         {"connected": connector(request) is not None, "subject": lifecycle.DEFAULT_SUBJECT,
          "message": lifecycle.DEFAULT_MESSAGE, "days": 30, "step_names": lifecycle.STEP_NAMES,
-         "optional_steps": lifecycle.OPTIONAL_STEPS},
+         "optional_steps": lifecycle.OPTIONAL_STEPS, "addable_steps": lifecycle.ADDABLE_STEPS,
+         "added_notes": lifecycle.ADDED_NOTES, "routine": lifecycle.ROUTINE},
     )
 
 
@@ -178,14 +191,14 @@ async def offboard_preview(
     if st.connector is None:
         return error_partial(request, NOT_CONNECTED)
     posted = await request.form()
-    done, na = _done(posted), _not_applicable(posted)
-    form = _form_key(user, manager, subject, message, days, notify, done, na)
+    done, na, added = _done(posted), _not_applicable(posted), _added(posted)
+    form = _form_key(user, manager, subject, message, days, notify, done, na, added)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return error_partial(request, "Enter both the departing user and the manager email.")
-    if both := [lifecycle.STEP_NAMES[k] for k in lifecycle.REQUIRES if k in done & na]:
+    if both := [lifecycle.STEP_NAMES[k] for k in lifecycle.ROUTINE if k in done & na]:
         return error_partial(request, f"“{both[0]}” is ticked both as already done and as doesn't apply — pick one.")
-    if not frozenset(lifecycle.REQUIRES) - done - na:
+    if not (frozenset(lifecycle.ROUTINE) | added) - done - na:
         return error_partial(request, "Every step is ticked as already done or left out — there is nothing to run.")
     check = await _check(st, user, manager)
     if check.errors:
@@ -196,22 +209,65 @@ async def offboard_preview(
         return _already_running(request, running, user)
     if "delegate" not in done | na and (warning := await _delegate_warning(st.connector, user, manager)):
         check.warnings.append(warning)
+    conn = st.connector
+    transfer_runs = "transfer" not in done | na
+    # Read whatever the steps: the delete is what loses these, and a refused read is said, never taken as "none".
+    hand_over = "secondary_calendars" in added and "secondary_calendars" not in done
+    calendars: List[lifecycle.OwnedCalendar] = []
+    calendars_read = False
+    try:
+        calendars = lifecycle.owned_calendars_from(await conn.owned_calendars(user))
+        calendars_read = True
+    except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
+        check.warnings.append(lifecycle.secondary_calendars_unread(user, _why(exc), hand_over))
+    try:
+        if warning := lifecycle.vault_holds_warning(user, lifecycle.vault_holds_from(await conn.vault_holds(user)), transfer_runs):
+            check.warnings.append(warning)
+    except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
+        check.warnings.append(lifecycle.vault_holds_unread(user, _why(exc), transfer_runs))
+    filters: List[lifecycle.ForwardingFilter] = []
+    filters_read = False
+    if "forwarding_filters" in added and "forwarding_filters" not in done:
+        try:
+            filters = lifecycle.forwarding_filters_from(await conn.user_filters(user))
+            filters_read = True
+        except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
+            check.warnings.append(f"Couldn't read {user}'s Gmail filters ({_why(exc)}), so none will be removed: check them in Gmail.")
+    # A step over a list isn't planned when it's ticked as done or finds nothing to do. One that was asked for says why it's gone.
+    if hand_over and calendars_read and not calendars:
+        check.warnings.append(f"“{lifecycle.STEP_NAMES['secondary_calendars']}” has nothing to do: {user} owns no secondary calendars.")
+    if filters_read and not filters:
+        check.warnings.append(f"“{lifecycle.STEP_NAMES['forwarding_filters']}” has nothing to do: none of {user}'s filters forward. "
+                              f"The run checks again.")
+    if not hand_over or not calendars:
+        added = added - {"secondary_calendars"}
+    if not filters:
+        added = added - {"forwarding_filters"}
+    if "secondary_calendars" not in added and (warning := lifecycle.secondary_calendars_warning(user, calendars)):
+        check.warnings.append(warning)
     # An emptied field runs the default text — the auto-reply block below shows the default too.
     subject, message = subject or lifecycle.DEFAULT_SUBJECT, message or lifecycle.DEFAULT_MESSAGE
     days_i = _days(days)
-    steps = lifecycle.build_offboard_steps(
-        user, manager, subject, message, days_i, date.today(),
-        notify=notify.strip(), employee_name=await _employee_name(st, user),
-        manager_contact=await _manager_contact(st, manager), not_applicable=na)
+    try:
+        steps = lifecycle.build_offboard_steps(
+            user, manager, subject, message, days_i, date.today(),
+            notify=notify.strip(), employee_name=await _employee_name(st, user),
+            manager_contact=await _manager_contact(st, manager), not_applicable=na, added=added,
+            calendars=calendars, filters=filters)
+    except ValueError as exc:    # an ID GAM couldn't take as one: the builders refuse it
+        return error_partial(request, f"Couldn't plan the added steps: {exc}.")
     to_run = [s for s in steps if s.key not in done | na]
-    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done, na), tenant=tenant)
+    if not to_run:     # the steps asked for found nothing to do: a run would report "complete" having done nothing
+        return error_partial(request, " ".join([*check.warnings, "Every step is ticked as already done, left out, or has nothing to do — there is nothing to run."]))
+    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done, tuple(filters), na, filters_read), tenant=tenant)
+    typed = guard.evaluate(guard.changes([s.label for s in to_run], RiskLevel.DESTRUCTIVE, "Offboard")).requires_typed_confirmation
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
         request, "_offboard_preview.html",
         {"steps": steps, "done": done, "na": na, "costs": lifecycle.NOT_APPLICABLE_COST,
          "run_count": len(to_run), "user": user, "manager": manager,
          "days": days_i, "warnings": check.warnings, "token": token,
-         "ar_subject": ar_subject, "ar_message": ar_message},
+         "ar_subject": ar_subject, "ar_message": ar_message, "typed": typed},
     )
 
 
@@ -251,26 +307,39 @@ async def offboard_run(
         return error_partial(request, refusal)
     # Single use: a second Run, or a Run after the form was edited, needs a new preview.
     held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
-                                                               _done(form), _not_applicable(form)),
+                                                               _done(form), _not_applicable(form), _added(form)),
                                      again="click Preview steps again")
+    if refusal:
+        return error_partial(request, refusal)
+    # Ten steps with a destructive one is a destructive bulk change: the steps count as targets, so it needs the word typed.
+    refusal = guard.enforce(guard.changes([s.label for s in held.steps], RiskLevel.DESTRUCTIVE, "Offboard"), form)
     if refusal:
         return error_partial(request, refusal)
     check = await _check(st, held.user, held.manager)   # the directory may have changed since
     if check.errors:
         return error_partial(request, " ".join(check.errors))
     user, steps = held.user, held.steps
+    if held.filters_read:   # the leaver is signed in until the sign-out, and could have made one: found none or some
+        try:
+            now = lifecycle.forwarding_filters_from(await conn.user_filters(user))
+        except Exception as exc:  # noqa: BLE001 - unread: nothing runs, whatever it was
+            return error_partial(request, f"Couldn't read {user}'s Gmail filters again ({_why(exc)}), so nothing ran.")
+        if set(now) != set(held.filters):
+            return error_partial(request, f"{user}'s filters that forward changed after the preview — click Preview steps again.")
     # No await from here to the registration, so two Runs can't both pass the check.
     if running := _running(st, user):
         return _already_running(request, running, user)
     job = start_job(st.jobs, len(steps), kind="offboard", title=f"Offboarding {user}")
     st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
     st.offboard_jobs[user.lower()] = job.id
-    if held.not_applicable:
+    step_keys = [s.key for s in steps]
+    if held.not_applicable or set(step_keys) & set(lifecycle.ADDABLE_STEPS):
         # Every write is audited as it runs; this says a missing step was left out on purpose (a
-        # transfer nobody wanted), not forgotten.
+        # transfer nobody wanted), not forgotten, and what was added.
         conn.audit.record("offboard_plan", target=user, ok=True,
                           extra={"not_applicable": sorted(held.not_applicable),
-                                 "detail": lifecycle.left_out_line(held.not_applicable)})
+                                 "added": [k for k in step_keys if k in lifecycle.ADDABLE_STEPS],
+                                 "detail": lifecycle.left_out_line(held.not_applicable) if held.not_applicable else ""})
     job.task = asyncio.create_task(_run_offboard(st, job, conn, steps, held.done, held.not_applicable))
     st.invalidate_users()  # password/org/etc. are about to change
     return _panel(request, job, user)

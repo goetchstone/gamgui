@@ -495,6 +495,35 @@ class GAMConnector(Connector):
         # shown and can be re-run — as a follow-up here it was swallowed (failure-log 2026-09-23).
         return await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
 
+    async def clear_recovery(self, email: str) -> ChangeResult:
+        return await self._run_write("clear_recovery", email, GAMCommands.clear_recovery(email), RiskLevel.DESTRUCTIVE)
+
+    async def hide_from_directory(self, email: str) -> ChangeResult:
+        return await self._run_write("hide_from_directory", email, GAMCommands.hide_from_directory(email), RiskLevel.LOW)
+
+    async def imap_off(self, email: str) -> ChangeResult:
+        return await self._run_write("imap_off", email, GAMCommands.imap_off(email), RiskLevel.LOW)
+
+    async def pop_off(self, email: str) -> ChangeResult:
+        return await self._run_write("pop_off", email, GAMCommands.pop_off(email), RiskLevel.LOW)
+
+    async def transfer_calendar_ownership(self, email: str, calendar_ids: Sequence[str], new_owner: str) -> ChangeResult:
+        return await self._run_write("transfer_calendar_ownership", email,
+                                     GAMCommands.transfer_calendar_ownership(calendar_ids, new_owner), RiskLevel.DESTRUCTIVE,
+                                     about={"new_owner": new_owner})
+
+    async def delete_filters(self, email: str, filter_ids: Sequence[str]) -> ChangeResult:
+        return await self._run_write("delete_filters", email, GAMCommands.delete_filters(email, filter_ids), RiskLevel.DESTRUCTIVE)
+
+    async def owned_calendars(self, email: str) -> List[Dict[str, Any]]:
+        return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_owned_calendars(email)))
+
+    async def user_filters(self, email: str) -> List[Dict[str, Any]]:
+        return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_filters(email)))
+
+    async def vault_holds(self, email: str) -> List[Dict[str, Any]]:
+        return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_vault_holds(email)))
+
     async def user_phones(self, email: str) -> List[Phone]:
         """The person's phones as Google has them now: a change sends them all back."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.info_user(email, fields=["primaryEmail", "phones"]))
