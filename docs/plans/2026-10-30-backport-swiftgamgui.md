@@ -41,14 +41,15 @@ That reason is a thought experiment, not a plan. See `ROADMAP.md`, "Deliberate t
   **Still a snapshot, moved to `fef14cc` (2026-11-05).** A later Swift feature is a new item here.
 - **G3. Offboarding templates (C5).** Swift's saved routines conflict with this repo's KISS decision
   (`2026-10-02-configurable-offboarding.md`, "Not planned: playbooks"). Default: don't port them.
-  **Open (2026-11-05):** parity may change this default. It stands until the operator answers.
+  **Yes, port them (2026-11-05),** read from the operator's "I just want gamgui to have the same features we built into
+  swiftgamgui that includes the incident shit". They didn't name G3, G4, G5 or B3, and asked not to be asked further.
 - **G4. PDF export (E8).** Swift prints a PDF natively. Here, a download in the app window is a known trap
   (`tests/test_app_window_downloads.py`). Default: Markdown, text and CSV only.
-  **Open (2026-11-05):** parity may change this default. It stands until the operator answers.
+  **Yes, a PDF too (2026-11-05),** made in a way that works in the app window. E8 settles how.
 - **G5. The Cloud Identity devices scope (B4, E7).** Reading "computers signed in" needs
   `https://www.googleapis.com/auth/cloud-identity.devices`. Adding it to Setup's DWD list (`core/setup.py`,
   ~l. 362) means every existing install must re-authorize. Default: leave those reads out until asked.
-  **Open (2026-11-05):** parity may change this default. It stands until the operator answers.
+  **Yes, add it (2026-11-05),** in the PR that first needs it, whose description says to re-authorize.
 
 ## Rules every item keeps
 
@@ -165,7 +166,7 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
 - **B3. Jobs tray: mostly here already.** GamGUI's tray (plan U5, `web/routes/jobs.py`) already lists every
   background job from any page, with Stop, and Swift's bounds came from it. Swift's only addition is listing
   one-step changes too. Low value: drop it unless asked. (Corrected 2026-10-30. The first draft called the
-  tray Swift-only.) **Open (2026-11-05):** parity may change this. It stays dropped until the operator answers.
+  tray Swift-only.) **Yes (2026-11-05):** a one-step change lists there too.
 - **B4. Users: Security reads.** A person's Chrome profiles, mobile devices and, after G5, computers. Swift
   `compromised-account.md` slices 5 and 8. Reads only.
 
@@ -296,5 +297,4 @@ README's Status, including what is only in which app; a "Live verification statu
 - Swift's fixtures — not done: one Swift PR (see "Keep Swift's fixtures honest").
 - **B1** — applied (`feat/connected-apps-report`: Reports' connected apps and agents, offline only).
 - **B2** — nothing to port: GamGUI already has it.
-- B4, C1–C4, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
-- B3, C5 and the parts of B4, E7 and E8 that hang on G3–G5 — open, the operator's call.
+- B3, B4, C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
