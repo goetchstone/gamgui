@@ -433,4 +433,4 @@ def test_small_changes_don_t_push_a_bulk_result_off_the_tray():
 
     asyncio.run(main())
     rows, _, more = tray(jobs)
-    assert rows[0] is bulk and len(rows) == TRAY_ROWS and more == 2
+    assert rows[0] is bulk and len(rows) == TRAY_ROWS and more == len(jobs) - TRAY_ROWS
