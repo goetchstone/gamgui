@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -110,7 +111,17 @@ def _require_read(cmd) -> None:
 
 
 # What `cut_off_refusal` reads of an account.
+logger = logging.getLogger(__name__)
+
 ACCOUNT_ID_FIELDS = ("primaryEmail", "id")
+
+
+def _password_forms(password: str) -> List[str]:
+    """Every way an echo might hold a generated password: whole, in another case, with its dashes as spaces, or any one of
+    its groups, so a message quoting part of it can't reach the page or the audit log."""
+    forms = {password, password.replace("-", " ")}
+    forms |= {group for group in password.split("-") if group}
+    return sorted(forms | {f.lower() for f in forms} | {f.upper() for f in forms}, key=len, reverse=True)
 
 
 async def _told(connector: "GAMConnector", action: str, target: str, run, outcome):
@@ -483,6 +494,12 @@ class GAMConnector(Connector):
         # shown and can be re-run — as a follow-up here it was swallowed (failure-log 2026-09-23).
         return await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
 
+    async def set_temporary_password(self, email: str, password: str) -> ChangeResult:
+        """Set a password to hand over, changed at their next sign-in. ``password`` is masked by value in what's shown,
+        audited and in any error GAM echoes; only the argv GAM runs holds it. The admin's own is refused in _run_write."""
+        return await self._run_write("set_password", email, GAMCommands.set_password(email, password), RiskLevel.DESTRUCTIVE,
+                                     audit_argv=GAMCommands.set_password(email, "********"), secrets=_password_forms(password))
+
     async def revoke_access(self, email: str) -> ChangeResult:
         """Sign ``email`` out everywhere and revoke what outlives a password reset: app passwords,
         backup codes and every connected app's OAuth token (``deprovision signout``)."""
@@ -789,9 +806,15 @@ class GAMConnector(Connector):
             remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
             return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation,
                                 kind=exc.kind if isinstance(exc, GAMError) else None)
-        self.audit.record(
-            action, target=target, argv=shown, ok=True,
-            extra=named or None,
-            secrets=secrets,
-        )
-        return ChangeResult(preview=preview, ok=True, output=redact_secrets(out, secrets))
+        unrecorded = ""
+        try:
+            self.audit.record(
+                action, target=target, argv=shown, ok=True,
+                extra=named or None,
+                secrets=secrets,
+            )
+        except OSError as exc:
+            # The write happened, so it must not read as failed: a temporary password would be lost with nobody told.
+            logger.error("audit record failed after %s succeeded: %s", action, type(exc).__name__)
+            unrecorded = f"It worked, but the audit log couldn't record it ({exc.strerror or type(exc).__name__})."
+        return ChangeResult(preview=preview, ok=True, detail=unrecorded, output=redact_secrets(out, secrets))

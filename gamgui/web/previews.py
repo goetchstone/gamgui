@@ -89,5 +89,11 @@ class Previews:
             return None, f"The {what} changed after the preview — {again}, so what runs is what you checked."
         return held.value, None
 
+    def drop(self, flow: str, form: Hashable) -> None:
+        """Forget every preview of this ``form``: for a flow where running an older one would undo a newer one."""
+        held = self._flows.get(flow, {})
+        for token in [t for t, h in held.items() if h.form == form]:
+            del held[token]
+
     def count(self, flow: str) -> int:
         return len(self._flows.get(flow, {}))

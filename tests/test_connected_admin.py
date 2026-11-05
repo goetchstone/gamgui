@@ -21,7 +21,7 @@ from .test_mock_gam import WRITES
 from .test_users_web import client  # noqa: F401 - the app with the mock behind it
 
 ALICE_ID = "100000000000000000001"
-CUTS_OFF = {"delete_user", "reset_password", "signout_user", "deprovision_user"}   # and suspend, below
+CUTS_OFF = {"delete_user", "reset_password", "set_password", "signout_user", "deprovision_user"}   # and suspend, below
 
 
 def _token(email=ADMIN, sub=ADMIN_ID) -> str:

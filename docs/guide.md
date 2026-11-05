@@ -214,6 +214,9 @@ Open a person and choose **Security**. It reads three lists when you open the ta
 - **Computers**: Windows, Mac, Linux and ChromeOS machines, with a mark on one that looks like a virtual machine. A new one
   nobody recognises, often a virtual machine, is how an attacker's sign-in can show up.
 
+**Set temporary password** gives you one to hand over. Their current password stops working, and Google asks for a new one
+when they next sign in. It shows once, after it's set, so copy it then: it isn't in the audit log. Not yet verified live.
+
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 

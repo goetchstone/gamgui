@@ -181,6 +181,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
 - **C1. Temporary password.** Changed at next sign-in, masked in the preview and the audit, and shown once.
   New to both apps, so verify live on a throwaway user. It is in A6's set. Swift: `GamCommands.setPassword`,
   `onboarding.md` D4. Adversarially verified.
+
+  **Applied:** the Security tab. Offline only: the live check on a throwaway user is still owed.
 - **C2. The phone a signature shows.** GAM replaces the whole list, so write back every other phone unchanged
   and re-read the phones just before the run; one added since means "preview again". Setting is confirmed live
   in Swift (2026-10-24); changing or removing is not yet. Swift: `GamCommands.updatePhones`,
@@ -305,4 +307,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **B2** — nothing to port: GamGUI already has it.
 - **B3** — applied (`feat/jobs-tray-one-step-changes`: one-step changes in the tray, offline only).
 - **B4** — applied (`feat/person-security-reads`: Chrome profiles, phones and computers, offline only).
-- C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **C1** — applied (`feat/temporary-password`: offline only, the live check on a throwaway user owed).
+- C2–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.

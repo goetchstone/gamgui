@@ -156,6 +156,13 @@ class GAMCommands:
         return ["report", "users", "date", date, "parameters", ",".join(params)]
 
     @staticmethod
+    def set_password(email: str, password: str) -> List[str]:
+        # A password the operator hands over, which Google makes the person change at their next sign-in. reset_password is
+        # `random` with `changepassword off`, which nobody sees. `password` comes from onboarding.generate_temp_password,
+        # so it's never one of GAM's words there (random, uniquerandom, blocklogin, prompt). SwiftGamGui's setPassword.
+        return ["update", "user", email, "password", password, "changepassword", "on"]
+
+    @staticmethod
     def print_chrome_profiles(user: str) -> List[str]:
         # The Chrome profiles signed in with `user`'s account, by the Chrome Management API's own field name, the address
         # quoted and lowercased as Google keeps it. CSV `name,profileId,JSON`. Exit 15 with no Chrome Management scope, 50

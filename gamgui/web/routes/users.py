@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import shlex
 from typing import Annotated
 from urllib.parse import parse_qs, urlencode
 
@@ -22,9 +23,9 @@ from fastapi.responses import HTMLResponse
 from ...core import bulk, guard, person_reads
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
-from ...core.gam.errors import GAMError
+from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.lifecycle import autoreply_html, autoreply_text
-from ...core.onboarding import looks_like_email
+from ...core.onboarding import generate_temp_password, looks_like_email
 from ...core.signatures import smart_quote_warning
 from ..jobs import retry_key, retry_of, start_job
 from ..previews import TOKEN_FIELD
@@ -537,6 +538,60 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     if j is None:
         return error_partial(request, "That bulk job is no longer available — re-run it.")
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": j})
+
+
+_PASSWORD_FLOW = "temporary_password"   # noqa: S105 — a flow's name
+_PASSWORD_SUMMARY = "Set a temporary password"   # noqa: S105 — words for a confirm step
+_MASKED = "********"
+
+
+@router.post("/password/preview", response_class=HTMLResponse)
+async def password_preview(request: Request, email: Annotated[str, Form()]) -> HTMLResponse:
+    """The confirm step. The password is made here and held server-side, never in the page: it shows once, after it's set."""
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the admin read: what the preview is bound to (web/previews.py)
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    email = email.strip()
+    masked = GAMCommands.set_password(email, _MASKED)
+    refusal = await conn.cut_off_refusal([masked], previewing=True)
+    if refusal:
+        return error_partial(request, refusal)
+    # One live preview a person: running an older one after a newer would silently replace the password just handed over.
+    st.previews.drop(_PASSWORD_FLOW, email.lower())
+    token = st.previews.hold(_PASSWORD_FLOW, email.lower(), (email, generate_temp_password()), tenant=tenant)
+    return TEMPLATES.TemplateResponse(request, "_password_confirm.html",
+                                      {"email": email, "command": shlex.join(["gam", *masked]), "token": token})
+
+
+@router.post("/password/apply", response_class=HTMLResponse)
+async def password_apply(request: Request, email: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    held, refusal = st.previews.take(_PASSWORD_FLOW, str(form.get(TOKEN_FIELD) or ""), email.strip().lower(),
+                                     again="click Set temporary password again")
+    if refusal:
+        return error_partial(request, refusal)
+    target, password = held
+    refusal = guard.enforce(guard.changes([target], RiskLevel.DESTRUCTIVE, _PASSWORD_SUMMARY), form, confirm_step=True)
+    if refusal:
+        return error_partial(request, refusal)
+    st.previews.drop(_PASSWORD_FLOW, email.strip().lower())
+    result = await conn.set_temporary_password(target, password)
+    if not result.ok:
+        # GAM answering, or a refusal before it ran, means nothing changed. A timeout or a failure around the call doesn't:
+        # Google may have taken it, and the password just made is gone.
+        refused = result.detail == result.remediation
+        unknown = not refused and result.kind in (None, GAMErrorKind.TIMEOUT)
+        what = (f"Couldn't confirm the temporary password for {target}: it may have been set, and it can't be shown. Set a new "
+                "one when you can." if unknown else f"Couldn't set a temporary password for {target}. Their password is unchanged.")
+        return write_failed(request, what, result)
+    return TEMPLATES.TemplateResponse(request, "_password_card.html",
+                                      {"email": target, "password": password, "warning": result.detail})
 
 
 async def _security_read(request: Request, kind: str, read, email: str, note=lambda error: "") -> HTMLResponse:

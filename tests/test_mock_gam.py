@@ -26,6 +26,7 @@ WRITES = {
                             C.update_organization("alice@example.com", "", "Sales")],
     "set_suspended": [C.set_suspended("alice@example.com", True), C.set_suspended("alice@example.com", False)],
     "reset_password": [C.reset_password("alice@example.com")],
+    "set_password": [C.set_password("alice@example.com", "Xk7m-Qp9r-2Tzv")],
     "signout_user": [C.signout_user("alice@example.com")],
     "deprovision_user": [C.deprovision_user("alice@example.com")],
     "delete_user": [C.delete_user("alice@example.com")],
