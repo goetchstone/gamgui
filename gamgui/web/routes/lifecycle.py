@@ -19,6 +19,7 @@ from ...core import guard, lifecycle
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
+from ...core.offboard_templates import OffboardTemplate, OffboardTemplateStore
 from ..jobs import start_job
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, connector, error_partial, friendly
@@ -168,15 +169,68 @@ async def _compose_autoreply(st, user: str, manager: str, subject: str, message:
     return subject, message
 
 
+def _template_store(request: Request) -> OffboardTemplateStore:
+    st = request.app.state.gamgui
+    if st.offboard_templates is None:
+        st.offboard_templates = OffboardTemplateStore()
+    return st.offboard_templates
+
+
+def _fields(template: OffboardTemplate, user: str = "", manager: str = "") -> dict:
+    return {"values": {"user": user, "manager": manager, "subject": template.subject, "message": template.message,
+                       "days": template.days, "invitee": template.invitee, "leave_out": template.leave_out, "add": template.add},
+            "step_names": lifecycle.STEP_NAMES, "optional_steps": lifecycle.OPTIONAL_STEPS, "addable_steps": lifecycle.ADDABLE_STEPS,
+            "added_notes": lifecycle.ADDED_NOTES, "routine": lifecycle.ROUTINE}
+
+
+def _templates_panel(request: Request, **extra) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, "_offboard_templates.html", {"store": _template_store(request), **extra})
+
+
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(
-        request, "lifecycle.html",
-        {"connected": connector(request) is not None, "subject": lifecycle.DEFAULT_SUBJECT,
-         "message": lifecycle.DEFAULT_MESSAGE, "days": 30, "step_names": lifecycle.STEP_NAMES,
-         "optional_steps": lifecycle.OPTIONAL_STEPS, "addable_steps": lifecycle.ADDABLE_STEPS,
-         "added_notes": lifecycle.ADDED_NOTES, "routine": lifecycle.ROUTINE},
-    )
+    store = _template_store(request)
+    return TEMPLATES.TemplateResponse(request, "lifecycle.html",
+                                      {"connected": connector(request) is not None, "store": store, **_fields(store.opening)})
+
+
+@router.get("/template", response_class=HTMLResponse)
+async def template_fields(request: Request, name: str = "", user: str = "", manager: str = "") -> HTMLResponse:
+    """A template fills the form and nothing else: the addresses stay as typed, and the plan is still the form's."""
+    store = _template_store(request)
+    return TEMPLATES.TemplateResponse(request, "_offboard_fields.html", _fields(store.get(name) or store.opening, user, manager))
+
+
+@router.post("/templates/save", response_class=HTMLResponse)
+async def template_save(request: Request) -> HTMLResponse:
+    form = await request.form()
+    store = _template_store(request)
+    name = str(form.get("template_name") or "").strip()
+    template = OffboardTemplate(leave_out=_not_applicable(form), add=_added(form), subject=str(form.get("subject") or ""),
+                                message=str(form.get("message") or ""), days=_days(str(form.get("days") or "30")),
+                                invitee=str(form.get("notify") or "").strip())
+    if store.get(name) is not None and form.get("replace") != "1":
+        return _templates_panel(request, error=f"There's already a template called “{name}”.", replacing=name, typed_name=name)
+    try:
+        store.save(name, template)
+    except ValueError as exc:
+        return _templates_panel(request, error=str(exc), typed_name=name)
+    return _templates_panel(request, saved=name)
+
+
+@router.post("/templates/delete", response_class=HTMLResponse)
+async def template_delete(request: Request, name: Annotated[str, Form()] = "") -> HTMLResponse:
+    try:
+        _template_store(request).delete(name)
+    except ValueError as exc:
+        return _templates_panel(request, error=str(exc))
+    return _templates_panel(request)
+
+
+@router.post("/templates/default", response_class=HTMLResponse)
+async def template_default(request: Request, name: Annotated[str, Form()] = "") -> HTMLResponse:
+    _template_store(request).set_default(name)
+    return _templates_panel(request)
 
 
 @router.post("/offboard/preview", response_class=HTMLResponse)

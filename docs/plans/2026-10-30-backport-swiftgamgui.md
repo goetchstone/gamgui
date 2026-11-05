@@ -205,6 +205,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   lands. Suspend stays a Confirm click unless the operator asks for more.
 - **C5. Offboarding templates.** Only if G3 says yes.
 
+  **Applied:** `core/offboard_templates.py`. The form still opens as all eight steps until the operator picks a default.
+
 ### Phase D — Phishing
 
 - **D1. Find by Message-ID.**
@@ -315,4 +317,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **C2** — applied (`feat/signature-phone`: offline only, setting argv-identical to Swift's live run).
 - **C3** — applied (`feat/offboarding-added-steps`: offline only, four steps argv-identical to Swift's live runs).
 - **C4** — the typed address on the incident lock lands with E1; a long offboarding's typed word landed with C3.
-- C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **C5** — applied (`feat/offboarding-templates`: local files only).
+- D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.

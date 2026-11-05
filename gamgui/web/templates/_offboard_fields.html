@@ -1,0 +1,50 @@
+{#- The offboarding form's fields: the page opens on the default template, and picking another re-renders them. -#}
+{% set fld = "mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block"><span class="text-sm text-brand-blueink">Departing user</span>
+        <input class="{{ fld }}" type="email" name="user" value="{{ values.user }}" placeholder="leaver@example.com" required /></label>
+      <label class="block"><span class="text-sm text-brand-blueink">Manager (delegate / data + reminder)</span>
+        <input class="{{ fld }}" type="email" name="manager" value="{{ values.manager }}" placeholder="manager@example.com" required /></label>
+    </div>
+    <label class="block"><span class="text-sm text-brand-blueink">Auto-reply subject</span>
+      <input class="{{ fld }}" type="text" name="subject" value="{{ values.subject }}" /></label>
+    <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
+      <textarea class="{{ fld }}" name="message" rows="3">{{ values.message }}</textarea>
+      <span class="text-xs text-brand-grayink"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically — see below.</span></label>
+
+    <!-- Live preview: fills in as soon as the departing user + manager are entered. -->
+    <div id="autoreply-preview" class="mt-1"
+         hx-post="/lifecycle/offboard/autoreply" hx-include="#offboard-form" hx-target="this" hx-swap="innerHTML"
+         hx-trigger="load, keyup changed delay:400ms from:#offboard-form, change from:#offboard-form"></div>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
+        <input class="{{ fld }}" type="number" name="days" value="{{ values.days }}" min="1" /></label>
+      <label class="block"><span class="text-sm text-brand-blueink">Also invite to the reminder (IT/HR) — optional</span>
+        <input class="{{ fld }}" type="email" name="notify" value="{{ values.invitee }}" placeholder="it@example.com" /></label>
+    </div>
+    <fieldset>
+      <legend class="text-sm text-brand-blueink">Doesn't apply to this leaver? Leave a step out</legend>
+      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {% for key in optional_steps %}
+        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="na" value="{{ key }}"{% if key in values.leave_out %} checked{% endif %} /> {{ step_names[key] }}</label>
+        {% endfor %}
+      </div>
+      <span class="text-xs text-brand-grayink">A step left out is not run and never counts as done; the preview says what leaving it out means. The password reset, the sign-out and turning off forwarding always run.</span>
+    </fieldset>
+    <fieldset>
+      <legend class="text-sm text-brand-blueink">Add steps to this offboarding</legend>
+      <div class="mt-1 space-y-1">
+        {% for key in addable_steps %}
+        <label class="flex items-start gap-1.5 text-sm text-brand-blueink"><input class="mt-1" type="checkbox" name="add" value="{{ key }}"{% if key in values.add %} checked{% endif %} /> <span>{{ step_names[key] }} <span class="text-xs text-brand-grayink">{{ added_notes[key] }}</span></span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend class="text-sm text-brand-blueink">Re-running after a failure? Tick the steps that already succeeded</legend>
+      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {% for key in routine %}
+        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="done" value="{{ key }}" /> {{ step_names[key] }}</label>
+        {% endfor %}
+      </div>
+      <span class="text-xs text-brand-grayink">A ticked step is not run and counts as done. Don't re-run one that succeeded: GAM refuses a delegate that already exists and a second transfer while the first is running, and the reminder would be added twice.</span>
+    </fieldset>

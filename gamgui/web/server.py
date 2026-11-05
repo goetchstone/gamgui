@@ -116,6 +116,7 @@ class AppState:
     builder_last_result: Optional[dict] = None  # last read-command result set, for the CSV download
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
+    offboard_templates: object = None  # saved offboarding routines (lazy-loaded by the lifecycle route)
     domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
     gam_version_held: Optional[tuple] = None  # (the binary's stat key, `gam version`'s first line) — see gam_version
     switches: int = 0   # tenant switches so far — see tenant_key
