@@ -104,7 +104,9 @@ class Vacation:
         dates = {"Start Date:": "", "End Date:": ""}
         msg_lines: List[str] = []
         in_message = False
-        for line in (text or "").splitlines():
+        # "\n" only: splitlines() also breaks on U+2028, a form feed and more, so a subject holding one could set a
+        # field, and an attacker's auto-reply could read as off (failure log 2026-11-05).
+        for line in (text or "").split("\n"):
             s = line.strip()
             if in_message:
                 # GAM's _showVacation prints the message last, so a line here that looks like a setting is
