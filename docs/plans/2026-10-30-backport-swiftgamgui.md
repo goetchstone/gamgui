@@ -187,6 +187,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   and re-read the phones just before the run; one added since means "preview again". Setting is confirmed live
   in Swift (2026-10-24); changing or removing is not yet. Swift: `GamCommands.updatePhones`,
   `directory-home.md`, "Users writes".
+
+  **Applied:** the person's Overview, `core/phones.py`. Offline only here. Setting is argv-identical to Swift's live run.
 - **C3. Offboarding's added steps, off by default:**
   - clear recovery email and phone, hide from the directory, IMAP off, POP off: confirmed live in Swift
     (2026-10-16), so argv-identical here
@@ -308,4 +310,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **B3** — applied (`feat/jobs-tray-one-step-changes`: one-step changes in the tray, offline only).
 - **B4** — applied (`feat/person-security-reads`: Chrome profiles, phones and computers, offline only).
 - **C1** — applied (`feat/temporary-password`: offline only, the live check on a throwaway user owed).
-- C2–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **C2** — applied (`feat/signature-phone`: offline only, setting argv-identical to Swift's live run).
+- C3–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.

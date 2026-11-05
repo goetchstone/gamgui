@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C, Phone
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
 from gamgui.core.setup import DWD_SCOPES, SCOPES_NOT_AUTHORIZED_RC
 
@@ -27,6 +27,8 @@ WRITES = {
     "set_suspended": [C.set_suspended("alice@example.com", True), C.set_suspended("alice@example.com", False)],
     "reset_password": [C.reset_password("alice@example.com")],
     "set_password": [C.set_password("alice@example.com", "Xk7m-Qp9r-2Tzv")],
+    "update_phones": [C.update_phones("alice@example.com", [Phone("work", "", "+1 555 0100", True)]),
+                      C.update_phones("alice@example.com", [])],
     "signout_user": [C.signout_user("alice@example.com")],
     "deprovision_user": [C.deprovision_user("alice@example.com")],
     "delete_user": [C.delete_user("alice@example.com")],

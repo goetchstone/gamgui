@@ -26,6 +26,7 @@ from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.lifecycle import autoreply_html, autoreply_text
 from ...core.onboarding import generate_temp_password, looks_like_email
+from ...core.phones import plan_phone_change, shown_phone
 from ...core.signatures import smart_quote_warning
 from ..jobs import retry_key, retry_of, start_job
 from ..previews import TOKEN_FIELD
@@ -538,6 +539,79 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     if j is None:
         return error_partial(request, "That bulk job is no longer available — re-run it.")
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": j})
+
+
+_PHONE_FLOW = "signature_phone"
+
+
+def _phone_risk(removes: bool) -> RiskLevel:
+    return RiskLevel.DESTRUCTIVE if removes else RiskLevel.LOW
+
+
+def _above_phone_form(request: Request, answer: HTMLResponse, email: str, phone: str) -> HTMLResponse:
+    """A refusal above the form, not in its place: nothing ran, and the field is still needed to try again."""
+    form = TEMPLATES.TemplateResponse(request, "_phone_form.html", {"email": email, "phone": phone})
+    return HTMLResponse(bytes(answer.body) + bytes(form.body))
+
+
+@router.post("/phone/preview", response_class=HTMLResponse)
+async def phone_preview(request: Request, email: Annotated[str, Form()], phone: Annotated[str, Form()] = "") -> HTMLResponse:
+    """The confirm step: the whole list as Google has it now, the one change in it."""
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the read: what the preview is bound to (web/previews.py)
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    email = email.strip()
+    try:
+        read = await conn.user_phones(email)
+        change = plan_phone_change(read, phone, email)
+        argv = GAMCommands.update_phones(email, change.phones)
+    except ValueError as exc:   # nothing to change, an answer that names nobody, or a phone GAM can't send back as it is
+        return _above_phone_form(request, error_partial(request, f"Couldn't change the phone: {exc}" if "Nothing" not in str(exc) else str(exc)),
+                                 email, phone.strip())
+    except Exception as exc:  # noqa: BLE001 — a failed read changes nothing
+        return _above_phone_form(request, error_partial(request, friendly(exc, _TRY_AGAIN)), email, phone.strip())
+    token = st.previews.hold(_PHONE_FLOW, (email.lower(), phone.strip()), (email, change, read), tenant=tenant)
+    return TEMPLATES.TemplateResponse(request, "_phone_confirm.html", {
+        "email": email, "phone": phone.strip(), "summary": change.summary, "removes": change.removes,
+        "command": shlex.join(["gam", *argv]), "token": token})
+
+
+@router.post("/phone/apply", response_class=HTMLResponse)
+async def phone_apply(request: Request, email: Annotated[str, Form()] = "", phone: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    email, phone = email.strip(), phone.strip()
+
+    def refused(answer: HTMLResponse) -> HTMLResponse:
+        return _above_phone_form(request, answer, email, phone)
+
+    held, refusal = st.previews.take(_PHONE_FLOW, str(form.get(TOKEN_FIELD) or ""), (email.lower(), phone))
+    if refusal:
+        return refused(error_partial(request, refusal))
+    target, change, read = held
+    risk = _phone_risk(change.removes)
+    refusal = guard.enforce(guard.changes([target], risk, change.summary), form, confirm_step=True)
+    if refusal:
+        return refused(error_partial(request, refusal))
+    # The list goes back whole: a phone added since the preview would be deleted by the one it read.
+    try:
+        if await conn.user_phones(target) != read:
+            return refused(error_partial(request, f"{target}'s phones changed after the preview — preview again, so none is lost."))
+    except ValueError as exc:  # an answer that names nobody
+        return refused(error_partial(request, f"Couldn't change the phone: {exc}"))
+    except Exception as exc:  # noqa: BLE001 — unread is unsafe to overwrite
+        return refused(error_partial(request, friendly(exc, _TRY_AGAIN)))
+    result = await conn.update_phones(target, change.phones, risk)
+    if not result.ok:
+        return refused(write_failed(request, f"Couldn't change {target}'s phone.", result))
+    shown = shown_phone(change.phones)
+    st.patch_user(target, phone=shown)
+    return TEMPLATES.TemplateResponse(request, "_phone_form.html", {"email": target, "phone": shown, "saved": True})
 
 
 _PASSWORD_FLOW = "temporary_password"   # noqa: S105 — a flow's name

@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands, Phone
 
 ROOT = Path(__file__).resolve().parents[1]
 GAM_COMMANDS_REF = ROOT / "gamgui" / "resources" / "gam7" / "GamCommands.txt"
@@ -48,6 +48,8 @@ ENUM_ARGS = {
     ("search_messages", "detail"): GAMCommands.MESSAGE_DETAIL,
     ("create_datatransfer", "privacy"): ("", *GAMCommands.TRANSFER_PRIVACY),
     # filter_address refuses a placeholder: these go inside a search value, so they take a real address.
+    ("update_phones", "phones"): ([], [Phone("work", "", "<value>", True)], [Phone("custom", "<name>", "<value>", False)],
+                                  [Phone("", "", "<value>", False)]),
     ("print_chrome_profiles", "user"): (SEARCH_ADDRESS,),
     ("print_mobile_devices", "user"): (SEARCH_ADDRESS,),
     ("print_devices", "user"): (SEARCH_ADDRESS,),
