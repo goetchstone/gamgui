@@ -264,7 +264,7 @@ def _screens(p: Page, st):
     yield "users"
 
     p.goto("/users/detail?email=alice%40example.com")
-    for tab in ("overview", "mail", "sharing", "danger"):
+    for tab in ("overview", "mail", "sharing", "security", "danger"):
         p.click(f"#tab-{tab}")
         p.settle()
         yield f"user-detail/{tab}"

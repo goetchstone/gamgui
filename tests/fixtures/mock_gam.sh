@@ -1520,6 +1520,192 @@ if [ "${1:-}" = "print" ] && { [ "${2:-}" = "tokens" ] || [ "${2:-}" = "token" ]
   exit $rc
 fi
 
+# `gam print chromeprofiles filter user_email="<address>" fields <ChromeProfileFieldNameList> formatjson` -> GAM's CSV,
+# `name`, `profileId` and a `JSON` column per profile (doPrintShowChromeProfiles, gam/__init__.py:26525-26592 at 7.48.30;
+# a person's page, Security tab): the profiles in mock_gam/chrome_profiles.json signed in with that address, none the
+# titles alone (exit 0). Only that filter is modelled (the Chrome Management API's own field name, the address quoted);
+# any other filter or option, or no formatjson, is refused; a field outside the grammar's <ChromeProfileFieldName> is
+# getFieldsList's invalid choice. GAM_MOCK_STATE/noscope/chromemanagement is an authorization with no Chrome Management
+# scope (buildGAPIObject: NO_SCOPES_FOR_API_RC, 15, before any request); GAM_MOCK_STATE/denied/chromeprofiles the API's
+# refusal, without the Profiles scope (entityActionFailedExit, ACTION_FAILED_RC, 50; Google's words approximate).
+# Not modelled: whether the API matches the address in another case, and what an unreported profile lacks.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "chromeprofiles" ]; then
+  shift 2; fj=""; owner=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      filter|filters) need_value $# "String"
+        case "$2" in user_email=\"?*\") owner=${2#user_email=\"}; owner=${owner%\"} ;; *) not_modelled "print chromeprofiles filter $2" ;; esac
+        case "$owner" in *\"*|*\\*|*\**|*[[:space:]]*) not_modelled "print chromeprofiles filter $2" ;; esac
+        shift 2 ;;
+      fields) need_value $# "ChromeProfileFieldNameList"; [ -n "$2" ] || empty_arg "ChromeProfileFieldNameList"
+        for field in $(printf '%s' "$2" | tr ',' ' '); do
+          case "$field" in
+            affiliationstate|annotatedlocation|annotateduser|attestationcredential|browserchannel|browserversion|deviceinfo|\
+            displayname|extensioncount|firstenrollmenttime|identityprovider|lastactivitytime|lastpolicyfetchtime|\
+            lastpolicysynctime|laststatusreporttime|name|osplatformtype|osplatformversion|osversion|policycount|profileid|\
+            profilepermanentid|reportingdata|useremail|userid) ;;
+            *) invalid_choice "$field" "affiliationstate|annotatedlocation|annotateduser|attestationcredential|browserchannel|browserversion|deviceinfo|displayname|extensioncount|firstenrollmenttime|identityprovider|lastactivitytime|lastpolicyfetchtime|lastpolicysynctime|laststatusreporttime|name|osplatformtype|osplatformversion|osversion|policycount|profileid|profilepermanentid|reportingdata|useremail|userid" ;;
+          esac
+        done
+        shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print chromeprofiles with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print chromeprofiles without formatjson"
+  [ -n "$owner" ] || not_modelled "print chromeprofiles without a user_email filter"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/noscope/chromemanagement" ]; then
+    printf '\nERROR: There are no scopes authorized for the API(s): Chrome Management API\n' 1>&2; exit 15
+  fi
+  printf 'Getting all Chrome Profiles that match query (user_email="%s")\n' "$owner" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/chromeprofiles" ]; then
+    printf '\nERROR: Chrome Profile: user_email="%s", Print Failed: Request had insufficient authentication scopes.\n' "$owner" 1>&2
+    exit 50
+  fi
+  echo "name,profileId,JSON"
+  while IFS= read -r record; do
+    [ "$(json_text userEmail "$record")" = "$owner" ] || continue
+    gam_row "$(json_text name "$record")" "$(json_text profileId "$record")" "$record"
+  done < "$GAM_MOCK_FIXTURES/chrome_profiles.json"
+  exit 0
+fi
+
+# `gam print mobile query email:<address> fields <MobileFieldNameList> formatjson` -> GAM's CSV, `resourceId` and a `JSON`
+# column per device (doPrintMobileDevices, gam/__init__.py:34750-34891 at 7.48.30; the compromised-account check): the
+# devices in mock_gam/mobile_devices.json with an owner the address starts, as the API's `email:` search matches a
+# prefix (carol@example.com.au's phone answers carol@example.com), none the titles alone (exit 0). Only that
+# query (_validateDeviceQuery: a field, a colon, a value, no `?`, else a usage error) and the grammar's field names;
+# formatjson needs `resourceid` among them (its row is written from it). GAM_MOCK_STATE/denied/mobile is the API's
+# refusal: ClientAPIAccessDeniedExit, the error then "Reauthentication is needed", API_ACCESS_DENIED_RC 12. Not modelled:
+# Google's search beyond an owner's prefix.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "mobile" ]; then
+  shift 2; fj=""; owner=""; fields=""; limit=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      listlimit) need_value $# "Number"; limit=$2; shift 2 ;;
+      query) need_value $# "QueryMobile"
+        case "$2" in *\?*|:*|*:) usage_error "Invalid Mobile Device query: $2" ;; email:?*) owner=${2#email:} ;;
+          *:*) not_modelled "print mobile query $2" ;; *) usage_error "Invalid Mobile Device query: $2" ;; esac
+        shift 2 ;;
+      fields) need_value $# "MobileFieldNameList"; [ -n "$2" ] || empty_arg "MobileFieldNameList"; fields="$2"
+        for field in $(printf '%s' "$2" | tr ',' ' '); do
+          case "$field" in
+            adbstatus|applications|basebandversion|bootloaderversion|brand|buildnumber|defaultlanguage|developeroptionsstatus|\
+            devicecompromisedstatus|deviceid|devicepasswordstatus|email|encryptionstatus|firstsync|hardware|hardwareid|imei|\
+            kernelversion|lastsync|managedaccountisonownerprofile|manufacturer|meid|model|name|networkoperator|os|\
+            otheraccountsinfo|privilege|releaseversion|resourceid|securitypatchlevel|serialnumber|status|supportsworkprofile|\
+            type|unknownsourcesstatus|useragent|wifimacaddress) ;;
+            *) invalid_choice "$field" "MobileFieldName" ;;
+          esac
+        done
+        shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print mobile with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print mobile without formatjson"
+  [ -n "$owner" ] || not_modelled "print mobile without an email: query"
+  case ",$fields," in *,resourceid,*) ;; *) not_modelled "print mobile formatjson without resourceid (GAM's row needs it)" ;; esac
+  printf 'Getting all Mobile Devices that match query (email:%s)\n' "$owner" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/mobile" ]; then
+    printf '\nERROR: Not Authorized to access this resource/api\n\nERROR: Reauthentication is needed, please run\n\ngam oauth create\n' 1>&2
+    exit 12
+  fi
+  echo "resourceId,JSON"
+  while IFS= read -r record; do
+    # GAM's listLimit defaults to 1 and cleanJSON cuts every list to it, so a shared device shows only its first owner.
+    shown=$record
+    [ "$limit" = 0 ] || shown=$(printf '%s' "$record" | sed -E 's/("email": \["[^"]*")(, "[^"]*")*\]/\1]/')
+    case "$record" in *"\"$owner"*) gam_row "$(json_text resourceId "$record")" "$shown" ;; esac   # a prefix, as the API's
+  done < "$GAM_MOCK_FIXTURES/mobile_devices.json"
+  exit 0
+fi
+
+# `gam print devices query email:<address> fields <DeviceFieldNameList> userfields <DeviceUserFieldNameList> formatjson` ->
+# GAM's CSV, `name` and a `JSON` column per device (doPrintCIDevices, gam/__init__.py:32609-32780 at 7.48.30; the compromised-
+# account check's computers): the devices in mock_gam/ci_devices.json with a user the address starts, as Google's `email:`
+# device search matches a prefix (carol@example.com.au's PC answers carol@example.com), each with its users (GAM's default
+# lists them and attaches each to its device); none is the titles alone (exit 0). The service account impersonates the
+# admin, and GAM builds that before it reads an argument, checking its own scope list before it asks Google:
+# GAM_MOCK_STATE/denied/devices is a service account scope list without the API (getSvcAcctCredentials:
+# SvcAcctAPIAccessDeniedExit, API_ACCESS_DENIED_RC 12), which wins over GAM_MOCK_STATE/noscope/devices, the scope not
+# delegated (handleOAuthTokenError with softErrors: userServiceNotEnabledWarning for the admin, SERVICE_NOT_APPLICABLE_RC
+# 73); GAM_MOCK_STATE/badkey/devices a dead key (an invalid_grant handleOAuthTokenError doesn't know: "Authentication Token
+# Error", then APIAccessDeniedExit, 12). Then only that query (_validateDeviceQuery: a field, a colon, a value, no `?`,
+# else GAM's usage error) and the grammar's field names (getFieldsList: an invalid choice, GAM's list sorted); the app's
+# own fields only, as the fixture holds them (GAM fetches only the fields named). Not modelled: Google's search beyond a
+# user's prefix, the views (company, personal), and the other options.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "devices" ]; then
+  denied='ERROR: API access Denied\nPlease make sure the Service Account Client ID: 1 is authorized for the appropriate API or scopes: Cloud Identity API - Devices\n\nRun: gam user admin@example.com update serviceaccount\n'
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/devices" ]; then printf "\n$denied" 1>&2; exit 12; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/badkey/devices" ]; then
+    printf "\nERROR: Authentication Token Error - invalid_grant: Invalid JWT Signature\n\n$denied" 1>&2; exit 12
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/noscope/devices" ]; then
+    printf 'User: admin@example.com, Cloud Identity API - Devices Service/App not enabled\n' 1>&2; exit 73
+  fi
+  shift 2; fj=""; owner=""; dwant=" "; uwant=" "
+  while [ $# -gt 0 ]; do
+    word=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '_')
+    case "$word" in
+      query) need_value $# "QueryDevice"
+        bad="Invalid Device query \"$2\"; it must be if the form \"field:value\" and must not contain a \"?\""
+        case "$2" in *\?*|:*|*:) usage_error "$bad" ;; email:?*) owner=${2#email:} ;;
+          *:*) not_modelled "print devices query $2" ;; *) usage_error "$bad" ;; esac
+        shift 2 ;;
+      fields) need_value $# "DeviceFieldNameList"; [ -n "$2" ] || empty_arg "DeviceFieldNameList"
+        for field in $(printf '%s' "$2" | tr ',' ' '); do
+          case "$field" in
+            androidspecificattributes|assettag|basebandversion|bootloaderversion|brand|buildnumber|compromisedstate|createtime|\
+            deviceid|devicetype|enableddeveloperoptions|enabledusbdebugging|encryptionstate|endpointverificationspecificattributes|\
+            hostname|imei|kernelversion|lastsynctime|managementstate|manufacturer|meid|model|name|networkoperator|osversion|\
+            otheraccounts|ownertype|releaseversion|securitypatchtime|serialnumber|unifieddeviceid|wifimacaddresses) dwant="$dwant$field " ;;
+            *) invalid_choice "$field" "androidspecificattributes|assettag|basebandversion|bootloaderversion|brand|buildnumber|compromisedstate|createtime|deviceid|devicetype|enableddeveloperoptions|enabledusbdebugging|encryptionstate|endpointverificationspecificattributes|hostname|imei|kernelversion|lastsynctime|managementstate|manufacturer|meid|model|name|networkoperator|osversion|otheraccounts|ownertype|releaseversion|securitypatchtime|serialnumber|unifieddeviceid|wifimacaddresses" ;;
+          esac
+        done
+        shift 2 ;;
+      userfields) need_value $# "DeviceUserFieldNameList"; [ -n "$2" ] || empty_arg "DeviceUserFieldNameList"
+        for field in $(printf '%s' "$2" | tr ',' ' '); do
+          case "$field" in
+            compromisedstate|createtime|firstsynctime|languagecode|lastsynctime|managementstate|name|passwordstate|useragent|useremail) uwant="$uwant$field " ;;
+            *) invalid_choice "$field" "compromisedstate|createtime|firstsynctime|languagecode|lastsynctime|managementstate|name|passwordstate|useragent|useremail" ;;
+          esac
+        done
+        shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print devices with $1" ;;
+    esac
+  done
+  [ -n "$fj" ] || not_modelled "print devices without formatjson"
+  [ -n "$owner" ] || not_modelled "print devices without an email: query"
+  for f in devicetype model manufacturer osversion hostname serialnumber ownertype managementstate compromisedstate createtime lastsynctime; do
+    case "$dwant" in *" $f "*) ;; *) not_modelled "print devices without field $f (the fixture holds it; GAM fetches only the fields named)" ;; esac
+  done
+  for f in name useremail createtime firstsynctime lastsynctime managementstate; do
+    case "$uwant" in *" $f "*) ;; *) not_modelled "print devices without user field $f (the fixture holds it; GAM fetches only the fields named)" ;; esac
+  done
+  printf 'Getting all Devices that match query (email:%s), may take some time on a large Google Workspace Account...\n' "$owner" 1>&2
+  n=$(grep -c "\"userEmail\": \"$owner" "$GAM_MOCK_FIXTURES/ci_devices.json" || true)
+  printf 'Got %s Devices...\n' "$n" 1>&2
+  printf 'Getting all Device Users that match query (email:%s), may take some time on a large Google Workspace Account...\n' "$owner" 1>&2
+  printf 'Got %s Device Users...\n' "$n" 1>&2
+  echo "name,JSON"
+  while IFS= read -r record; do
+    case "$record" in *"\"userEmail\": \"$owner"*) ;; *) continue ;; esac   # a prefix, as the API's
+    # A device user `block deviceuser` blocked shows BLOCKED; one `delete deviceuser` deleted is gone (GAM_MOCK_STATE/deviceusers).
+    for user in $(printf '%s' "$record" | grep -o '"name": "devices/[^"]*/deviceUsers/[^"]*"' | sed 's/^"name": "//; s/"$//'); do
+      sfile="${GAM_MOCK_STATE:-/nonexistent}/deviceusers/$(printf '%s' "$user" | tr '/' '_')"
+      [ -f "$sfile" ] || continue
+      case "$(cat "$sfile")" in
+        BLOCKED) record=$(printf '%s' "$record" | sed "s#\"managementState\": \"[A-Z_]*\", \"name\": \"$user\"#\"managementState\": \"BLOCKED\", \"name\": \"$user\"#") ;;
+        DELETED) case "$record" in *"\"name\": \"$user\", \"userEmail\": \"$owner"*) record="" ;; esac ;;   # the person gone from it
+      esac
+    done
+    [ -n "$record" ] && gam_row "$(json_text name "$record")" "$record"
+  done < "$GAM_MOCK_FIXTURES/ci_devices.json"
+  exit 0
+fi
+
 # Anything else is unhandled. Fail loudly: a catch-all that succeeded is how the mock used to lie — a
 # `delete events` without doit, an invalid calendar role and 23 writes with no handler all "passed".
 echo "ERROR: mock: unhandled argv: $*" 1>&2

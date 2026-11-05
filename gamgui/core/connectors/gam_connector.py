@@ -28,6 +28,14 @@ from ..gam.models import (
 from ..calendar_index import IndexedCalendar
 from ..connected_apps import AppsRead, read_from
 from ..gam.parser import parse_one, parse_records
+from ..person_reads import (
+    ChromeProfile,
+    Computer,
+    MobileDevice,
+    chrome_profiles_from,
+    computers_from,
+    mobile_devices_from,
+)
 from ..gam.runner import DOMAIN_WIDE_TIMEOUT, GAMRunner
 from .base import (
     Capability,
@@ -267,6 +275,18 @@ class GAMConnector(Connector):
         """Group emails that ``email`` is a member of."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_groups_member(email))
         return [str(r.get("email")) for r in parse_records(out) if r.get("email") and "@" in str(r.get("email"))]
+
+    async def chrome_profiles(self, email: str) -> List[ChromeProfile]:
+        return chrome_profiles_from(parse_records(
+            await self.runner.run_authenticated(self.domain, GAMCommands.print_chrome_profiles(email))), email)
+
+    async def mobile_devices(self, email: str) -> List[MobileDevice]:
+        return mobile_devices_from(parse_records(
+            await self.runner.run_authenticated(self.domain, GAMCommands.print_mobile_devices(email))), email)
+
+    async def computers(self, email: str) -> List[Computer]:
+        return computers_from(parse_records(
+            await self.runner.run_authenticated(self.domain, GAMCommands.print_devices(email))), email)
 
     async def connected_apps(self) -> AppsRead:
         """Every account's connected apps and AI agents, suspended accounts aside. One Directory API call per

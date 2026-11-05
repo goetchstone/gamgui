@@ -14,6 +14,7 @@ from gamgui.core.gam.runner import GAMRunner
 from gamgui.core.secrets.vault import FILENAMES, InMemoryBackend, SecretsVault
 from gamgui.core.setup import (
     ADMIN_CONSOLE_DWD_URL,
+    DEVICES_SCOPE,
     DWD_SCOPES,
     USER_SECURITY_SCOPE,
     SetupService,
@@ -380,7 +381,7 @@ def test_dwd_details_lists_the_scopes_and_a_prefilled_link(tmp_path, bounded_hom
     svc = _svc(vault, tmp_path)
     svc.import_dir(tmp_path, "ex.com")
     dwd = svc.dwd_details("ex.com")
-    scopes = [s for s, _ in DWD_SCOPES]
+    scopes = [s for s, _ in (*DWD_SCOPES, DEVICES_SCOPE)]
     assert dwd["scopes_csv"] == ",".join(scopes)
     url = urlsplit(dwd["auth_url"])
     assert f"{url.scheme}://{url.netloc}{url.path}" == ADMIN_CONSOLE_DWD_URL

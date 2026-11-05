@@ -15,6 +15,7 @@ unit tests pin today's intended form so drift is caught early.
 
 from __future__ import annotations
 
+import re
 from typing import List, Optional, Sequence
 
 # The GAM7 version GamGUI is pinned to and tested against — the SINGLE SOURCE OF TRUTH.
@@ -78,6 +79,29 @@ def cut_off_account(argv: Sequence[str]) -> Optional[str]:
     return None
 
 
+# What a person's Chrome profile, phone and computer say. SwiftGamGui's chromeProfileFields, mobileFields, deviceFields.
+CHROME_PROFILE_FIELDS = ("displayname,useremail,lastactivitytime,firstenrollmenttime,osplatformtype,osversion,"
+                         "browserversion,browserchannel,deviceinfo,affiliationstate")
+MOBILE_FIELDS = "resourceid,email,model,os,type,status,firstsync,lastsync,devicecompromisedstatus"
+DEVICE_FIELDS = ("devicetype,model,manufacturer,osversion,hostname,serialnumber,ownertype,managementstate,"
+                 "compromisedstate,createtime,lastsynctime")
+DEVICE_USER_FIELDS = "name,useremail,createtime,firstsynctime,lastsynctime,managementstate"
+
+_FILTER_LOCAL = re.compile(r"[a-z0-9._'-]+")
+_FILTER_LABEL = re.compile(r"[a-z0-9-]+")
+
+
+def filter_address(address: str) -> str:
+    """``address`` lowercased, for a Google search or filter value, or ValueError for one outside Google's address
+    characters: it goes inside a query, so it must stay one ``field:value``. SwiftGamGui's filterAddress."""
+    lowered = address.lower()
+    local, at, domain = lowered.partition("@")
+    labels = domain.split(".")
+    if not at or not _FILTER_LOCAL.fullmatch(local) or len(labels) < 2 or not all(_FILTER_LABEL.fullmatch(p) for p in labels):
+        raise ValueError(f"“{address}” isn't one email address")
+    return lowered
+
+
 class GAMCommands:
     # --- diagnostics / setup ----------------------------------------------------------
     @staticmethod
@@ -130,6 +154,30 @@ class GAMCommands:
     def report_users(date: str, params: Sequence[str]) -> List[str]:
         # Admin SDK usage report (storage, mail, drive). Data lags ~2-3 days.
         return ["report", "users", "date", date, "parameters", ",".join(params)]
+
+    @staticmethod
+    def print_chrome_profiles(user: str) -> List[str]:
+        # The Chrome profiles signed in with `user`'s account, by the Chrome Management API's own field name, the address
+        # quoted and lowercased as Google keeps it. CSV `name,profileId,JSON`. Exit 15 with no Chrome Management scope, 50
+        # with the API's refusal. SwiftGamGui's printChromeProfiles.
+        return ["print", "chromeprofiles", "filter", f'user_email="{filter_address(user)}"', "fields", CHROME_PROFILE_FIELDS,
+                "formatjson"]
+
+    @staticmethod
+    def print_mobile_devices(user: str) -> List[str]:
+        # The phones and tablets syncing `user`'s account. `email:` matches a prefix, so the reader keeps exact owners.
+        # `listlimit 0`: GAM cuts every list in the JSON to one by default, so a shared device listed only its first owner,
+        # and the reader then said the second had no phone. CSV `resourceId,JSON`. A refusal is exit 12.
+        return ["print", "mobile", "query", f"email:{filter_address(user)}", "fields", MOBILE_FIELDS, "listlimit", "0",
+                "formatjson"]
+
+    @staticmethod
+    def print_devices(user: str) -> List[str]:
+        # Every device signed in with `user`'s account that Google's endpoint management knows, computers among them, each
+        # with its users. Reads as the admin through the service account, so delegation needs the devices scope: without
+        # it exit 73, and a scope list without the API exit 12. CSV `name,JSON`. SwiftGamGui's printDevices.
+        return ["print", "devices", "query", f"email:{filter_address(user)}", "fields", DEVICE_FIELDS,
+                "userfields", DEVICE_USER_FIELDS, "formatjson"]
 
     @staticmethod
     def print_tokens() -> List[str]:

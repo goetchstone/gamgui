@@ -41,6 +41,7 @@ Open **Setup** (every screen points you there until a domain is connected).
    | `https://www.googleapis.com/auth/gmail.settings.sharing` | Mail delegates and forwarding |
    | `https://www.googleapis.com/auth/drive` | A user's Drive file list |
    | `https://www.googleapis.com/auth/tasks` | Onboarding task lists |
+   | `https://www.googleapis.com/auth/cloud-identity.devices` | The computers signed in with an account. Setup's check doesn't ask for this one: without it, only that list is missing |
 
    Offboarding's sign-out needs one more permission that delegation can't give: the admin token's
    "Directory API - User Security" scope, ticked when `gam oauth create` runs. Setup says whether
@@ -202,6 +203,19 @@ panel says the list may be missing that account's apps. The list stays until you
 again, and **Read again** refreshes it. Reading changes nothing. To take an app away from everyone, block it in the
 Admin console, under Security → API controls → App access control. It's not yet verified live, so compare the list with
 the Admin console's Accessed apps the first time you use it.
+
+## See where an account is signed in
+
+Open a person and choose **Security**. It reads three lists when you open the tab, and changes nothing.
+
+- **Chrome**: the Chrome profiles signed in with their work account, the most recently used first. Saved passwords are never
+  shown: Google gives no one those. None can also mean managed profile reporting is off in the Admin console's Chrome settings.
+- **Phones and tablets**: what syncs the account, and when it first and last did.
+- **Computers**: Windows, Mac, Linux and ChromeOS machines, with a mark on one that looks like a virtual machine. A new one
+  nobody recognises, often a virtual machine, is how an attacker's sign-in can show up.
+
+Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
+that list says which and how to add it, and the others still read. Not yet verified live.
 
 ## Jobs and Stop
 

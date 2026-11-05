@@ -86,6 +86,8 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   tool, mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
   (grant/revoke access to that person's own calendar), **sign out everywhere**, and a guarded
   **suspend**.
+- **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
+  a virtual machine marked. Reads only.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.
@@ -158,9 +160,10 @@ Every write is audited, so this table comes from real audit logs rather than mem
 means the operation has succeeded at least once against a production Google Workspace domain. **Not
 yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
 it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
-reads are confirmed but one (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
-2026-10-08 on GAM 7.48.22, all eight checks passing). The exception is Reports' connected apps (`print
-tokens`): new to both apps, not yet run live, and added to that pass since. Three reads the pass doesn't
+reads are confirmed but those new since (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
+2026-10-08 on GAM 7.48.22, all eight checks passing). Reports' connected apps (`print
+tokens`) and a person's Security tab (Chrome profiles, phones, computers) are new to both apps, not yet run live, and added to
+that pass since. Three reads the pass doesn't
 run were last confirmed separately: setup's scoped `check serviceaccount scopes …` (2026-10-02, GAM
 7.48.14), and `print domains` for the Builder's External-only filter and reading the connected admin and
 its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).

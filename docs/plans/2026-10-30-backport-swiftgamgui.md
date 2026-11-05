@@ -172,6 +172,10 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
 - **B4. Users: Security reads.** A person's Chrome profiles, mobile devices and, after G5, computers. Swift
   `compromised-account.md` slices 5 and 8. Reads only.
 
+  **Applied:** a Security tab on a person's page, `core/person_reads.py`. The devices scope is offered in Setup's delegation
+  step but not required by its verify, so no install has to re-authorize unless it wants that list. Not yet live in either app.
+  The phones read adds `listlimit 0`: Swift's `printMobileDevices` lacks it, so its list can miss a shared device's second owner.
+
 ### Phase C — Small writes
 
 - **C1. Temporary password.** Changed at next sign-in, masked in the preview and the audit, and shown once.
@@ -300,4 +304,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **B1** — applied (`feat/connected-apps-report`: Reports' connected apps and agents, offline only).
 - **B2** — nothing to port: GamGUI already has it.
 - **B3** — applied (`feat/jobs-tray-one-step-changes`: one-step changes in the tray, offline only).
-- B4, C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **B4** — applied (`feat/person-security-reads`: Chrome profiles, phones and computers, offline only).
+- C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
