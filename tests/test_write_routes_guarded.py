@@ -48,6 +48,7 @@ DOMAIN = "example.com"
 # --- exempt POST routes, by reason -----------------------------------------------------------------
 # Previews: they resolve and render the confirm step (a GAM read at most), never write.
 PREVIEWS = {
+    "/users/password/preview",
     "/users/bulk/preview", "/users/suspend/preview", "/users/delete/confirm",
     "/calendars/delete/preview", "/calendars/event/preview",
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
@@ -112,6 +113,8 @@ GATED = {
                                  {"email": "alice@example.com"}),
     "/users/bulk/apply": Case({"store": "Downtown", "group": "", "emails": "alice@example.com"}, "/users/bulk/preview",
                               edit={"store": "Finance", "emails": "alice@example.com\ncarol@example.com"}),
+    "/users/password/apply": Case({"email": "alice@example.com"}, "/users/password/preview",
+                                  edit={"email": "carol@example.com"}),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
                                 typed={"confirm_email": "alice@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},

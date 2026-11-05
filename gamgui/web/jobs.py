@@ -71,6 +71,7 @@ CHANGE_WORDS = {
     "revoke_access": "Revoke access",
     "send_welcome_email": "Send a welcome email",
     "set_organization": "Set title or department",
+    "set_password": "Set a temporary password",
     "set_signature": "Set a signature",
     "set_vacation": "Set an auto-reply",
     "signout_user": "Sign out everywhere",

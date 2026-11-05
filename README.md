@@ -87,7 +87,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   (grant/revoke access to that person's own calendar), **sign out everywhere**, and a guarded
   **suspend**.
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
-  a virtual machine marked. Reads only.
+  a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.
@@ -185,6 +185,7 @@ its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Sign out everywhere | Users, Builder | not yet |
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14) |
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
+| Set a temporary password | Users | not yet — new to both apps |
 | Delete an account | Users, Builder | **confirmed** (2026-10-08, GAM 7.48.22, from the user page: the offboarded leaver, after the transfer completed) |
 | Undelete an account | Builder | not yet |
 | Transfer Drive + calendar data | Offboarding, Builder | **confirmed**: as two calls, and the single call offboarding makes (`drive,calendar … all`) ran (the first live offboarding, 2026-10-07, GAM 7.48.14), and the operator checked the effects in Google afterwards: the transfer completed |
