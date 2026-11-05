@@ -167,6 +167,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   background job from any page, with Stop, and Swift's bounds came from it. Swift's only addition is listing
   one-step changes too. Low value: drop it unless asked. (Corrected 2026-10-30. The first draft called the
   tray Swift-only.) **Yes (2026-11-05):** a one-step change lists there too.
+
+  **Applied:** `GAMConnector.on_write` tells `web/jobs.py`'s `watch_writes`, which lists a write made outside any job.
 - **B4. Users: Security reads.** A person's Chrome profiles, mobile devices and, after G5, computers. Swift
   `compromised-account.md` slices 5 and 8. Reads only.
 
@@ -297,4 +299,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - Swift's fixtures — not done: one Swift PR (see "Keep Swift's fixtures honest").
 - **B1** — applied (`feat/connected-apps-report`: Reports' connected apps and agents, offline only).
 - **B2** — nothing to port: GamGUI already has it.
-- B3, B4, C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **B3** — applied (`feat/jobs-tray-one-step-changes`: one-step changes in the tray, offline only).
+- B4, C1–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.

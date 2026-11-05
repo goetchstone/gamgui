@@ -11,8 +11,10 @@ its account tallies and credentials sheet. When a per-user loop stops early is `
 from __future__ import annotations
 
 import secrets
+import asyncio
+from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, TypeVar
+from typing import Callable, List, Optional, Tuple, TypeVar
 
 from ..core import clock
 
@@ -22,6 +24,7 @@ RECENT_WINDOW = 12
 FAILED_SAMPLE_CAP = 200
 DETAIL_CAP = 300   # chars kept of a failure's reason and raw error: GAM echoes the argv (a whole body) on a usage error
 TRAY_ROWS = 8      # jobs the header tray lists (#9: it is polled on every page)
+KEEP_FINISHED = 10 # finished jobs kept, and as many finished one-step changes
 
 # kind -> the status route that renders the job's own panel (its page, /jobs/<id>, loads it from there).
 PANELS = {
@@ -37,6 +40,43 @@ PANELS = {
 }
 UNSTOPPABLE = {"index", "connected_apps"}   # one domain-wide read, not a loop: there is no "between targets"
 CONFIRM_STOP = {"offboard"}      # a stop leaves the leaver half offboarded: ask first
+ONE_STEP = "change"              # a change made from a screen's button, not a loop: no panel of its own, and no Stop
+
+# A write in one of these is already that job's row. A task copies the context it's made in, and a route makes a job's
+# task just after registering it, so this reaches the job's task and any it starts, and never another request.
+_in_job: ContextVar[bool] = ContextVar("gamgui_in_job", default=False)
+_request_change: ContextVar[Optional["Job"]] = ContextVar("gamgui_request_change", default=None)
+
+# What the tray calls each write. tests/test_jobs_tray.py holds every action the connector runs to this.
+CHANGE_WORDS = {
+    "add_calendar_acl": "Share their calendar",
+    "add_calendar_acl_cal": "Share a calendar",
+    "add_calendar_event": "Add a calendar event",
+    "add_delegate": "Add a mail delegate",
+    "add_group_member": "Add to a group",
+    "apply": "Builder change",
+    "clear_vacation": "Turn off an auto-reply",
+    "create_user": "Create an account",
+    "delete_calendar": "Delete a calendar",
+    "delete_event": "Delete an event",
+    "delete_user": "Delete an account",
+    "forward_off": "Turn off forwarding",
+    "remove_calendar_acl": "Unshare their calendar",
+    "remove_calendar_acl_cal": "Unshare a calendar",
+    "remove_delegate": "Remove a mail delegate",
+    "remove_from_all_calendars": "Remove from everyone's calendars",
+    "remove_group_member": "Remove from a group",
+    "onboard_runbook": "Create a task list",
+    "reset_password": "Reset a password",
+    "revoke_access": "Revoke access",
+    "send_welcome_email": "Send a welcome email",
+    "set_organization": "Set title or department",
+    "set_signature": "Set a signature",
+    "set_vacation": "Set an auto-reply",
+    "signout_user": "Sign out everywhere",
+    "subscribe_calendar": "Add a calendar to their list",
+    "transfer_data": "Transfer data",
+}
 
 
 @dataclass
@@ -127,19 +167,60 @@ class BatchJob(Job):
 J = TypeVar("J", bound=Job)
 
 
-def register_job(jobs: dict, job: J, keep: int = 10) -> J:
+def _prune(jobs: dict, keep: int) -> None:
+    """Keep the newest ``keep`` finished jobs, and as many one-step changes: ten small edits must not push out a bulk
+    run's result and its Retry."""
+    for changes in (True, False):
+        finished = [jid for jid, j in jobs.items() if j.finished and (j.kind == ONE_STEP) is changes]
+        for jid in finished[:-keep] if len(finished) > keep else []:
+            jobs.pop(jid, None)
+
+
+def register_job(jobs: dict, job: J, keep: int = KEEP_FINISHED) -> J:
     """Register ``job``, pruning the oldest finished jobs first so the registry can't grow forever."""
-    finished = [jid for jid, j in jobs.items() if j.finished]
-    for jid in finished[:-keep] if len(finished) > keep else []:
-        jobs.pop(jid, None)
+    _prune(jobs, keep)
     jobs[job.id] = job
+    try:
+        asyncio.current_task()
+    except RuntimeError:     # no event loop: nothing here to start a job's task, and no request's context to mark
+        return job
+    _in_job.set(True)
     return job
 
 
-def start_job(jobs: dict, total: int, keep: int = 10, window: int = RECENT_WINDOW,
+def start_job(jobs: dict, total: int, keep: int = KEEP_FINISHED, window: int = RECENT_WINDOW,
               title: str = "", kind: str = "") -> BatchJob:
     """Register a fresh ``BatchJob`` whose live feed keeps its newest ``window`` rows."""
     return register_job(jobs, BatchJob(total=total, window=window, title=title, kind=kind), keep=keep)
+
+
+def watch_writes(jobs: dict) -> Callable[[str, str], Optional[Callable[[bool, str], None]]]:
+    """``GAMConnector.on_write``: list a write made outside any job, so the tray is everything that ran since launch.
+    A request's writes share a row: sharing a calendar is an access rule and a subscribe, one change to the person
+    who clicked. Its title holds the first write's words and target, never its argv."""
+    def row_for(action: str, target: str) -> Job:
+        held = _request_change.get()
+        if held is not None and held.id in jobs:
+            return held
+        words = CHANGE_WORDS.get(action, action.replace("_", " ").capitalize())
+        row = Job(total=0, kind=ONE_STEP, title=f"{words}: {target}")
+        _prune(jobs, KEEP_FINISHED)
+        jobs[row.id] = row
+        _request_change.set(row)
+        return row
+
+    def on_write(action: str, target: str) -> Optional[Callable[[bool, str], None]]:
+        if _in_job.get():
+            return None
+        change = row_for(action, target)
+        change.total += 1
+        change.finished = False
+
+        def ended(ok: bool, what_to_do: str) -> None:
+            change.record(target, ok, what_to_do or "")
+            change.finish()
+        return ended
+    return on_write
 
 
 def retry_key(job_id: str) -> Tuple[str, str]:
@@ -161,9 +242,11 @@ def retry_of(jobs: dict, job_id: str, kind: str) -> Tuple[Optional[Job], Optiona
 
 
 def tray(jobs: dict) -> Tuple[List[Job], int, int]:
-    """The header tray (plan U5): at most ``TRAY_ROWS`` jobs — running first, then finished, newest
-    first in each — how many are running, and how many more there are than it lists."""
+    """The header tray (plan U5): at most ``TRAY_ROWS`` jobs — running first, then finished jobs, then finished one-step
+    changes, newest first in each, so small edits can't push a bulk run's result and Retry off it — how many are running,
+    and how many more there are than it lists."""
     newest = list(jobs.values())[::-1]
     running = [j for j in newest if not j.finished]
-    rows = (running + [j for j in newest if j.finished])[:TRAY_ROWS]
+    finished = [j for j in newest if j.finished]
+    rows = (running + [j for j in finished if j.kind != ONE_STEP] + [j for j in finished if j.kind == ONE_STEP])[:TRAY_ROWS]
     return rows, len(running), len(newest) - len(rows)

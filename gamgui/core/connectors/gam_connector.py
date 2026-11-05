@@ -8,8 +8,9 @@ The rest of the app talks to this object and never sees GAM syntax.
 from __future__ import annotations
 
 import asyncio
+import functools
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, build_user_query, cut_off_account
@@ -104,6 +105,46 @@ def _require_read(cmd) -> None:
 ACCOUNT_ID_FIELDS = ("primaryEmail", "id")
 
 
+async def _told(connector: "GAMConnector", action: str, target: str, run, outcome):
+    """Tell ``GAMConnector.on_write`` when a write starts and how it ended. It only listens: nothing it does can
+    change or refuse the write, and the audit record stays the write's own."""
+    ended = connector.on_write(action, target) if connector.on_write else None
+    try:
+        result = await run()
+    except asyncio.CancelledError:
+        if ended:
+            ended(False, INTERRUPTED)
+        raise
+    except Exception:
+        if ended:
+            ended(False, _WRITE_FAILED)
+        raise
+    if ended:
+        ended(*outcome(result))
+    return result
+
+
+def _watched(run_write):
+    @functools.wraps(run_write)
+    async def wrapper(self, action: str, target: str, *args, **kwargs) -> ChangeResult:
+        return await _told(self, action, target, lambda: run_write(self, action, target, *args, **kwargs),
+                           lambda result: (result.ok, result.remediation))
+    return wrapper
+
+
+def _runbook_outcome(result: dict) -> Tuple[bool, str]:
+    if not result["tasklist_id"]:
+        return False, _WRITE_FAILED
+    return (False, f"{len(result['failed'])} of its tasks weren't added.") if result["failed"] else (True, "")
+
+
+def _watched_runbook(build):
+    @functools.wraps(build)
+    async def wrapper(self, assignee: str, title: str, steps: List[str]) -> dict:
+        return await _told(self, "onboard_runbook", assignee, lambda: build(self, assignee, title, steps), _runbook_outcome)
+    return wrapper
+
+
 class GAMConnector(Connector):
     id = ConnectorID.GOOGLE_WORKSPACE
     capabilities = {Capability.DIRECTORY, Capability.GROUPS, Capability.MAIL}
@@ -113,6 +154,8 @@ class GAMConnector(Connector):
         self.domain = domain
         self.audit = audit or AuditLog()
         self._confirmed_admin: Optional[Tuple[str, str]] = None   # (address, ID) GAM has agreed with
+        # (action, target) as a write starts; what it returns is told (ok, what to do) as it ends. See _watched.
+        self.on_write: Optional[Callable[[str, str], Optional[Callable[[bool, str], None]]]] = None
 
     # --- connection --------------------------------------------------------------------
     async def test(self) -> ConnectionStatus:
@@ -433,6 +476,7 @@ class GAMConnector(Connector):
         argv = GAMCommands.create_datatransfer(old_owner, service, new_owner, privacy=privacy)
         return await self._run_write("transfer_data", old_owner, argv, RiskLevel.LOW, about={"new_owner": new_owner})
 
+    @_watched_runbook
     async def create_onboarding_runbook(self, assignee: str, title: str, steps: List[str]) -> dict:
         """Create a Google Tasks list on ``assignee`` with one task per step; return a summary.
 
@@ -657,6 +701,7 @@ class GAMConnector(Connector):
         return ""
 
     # --- internals ---------------------------------------------------------------------
+    @_watched
     async def _run_write(
         self,
         action: str,

@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 {% block title %}GamGUI — Job{% endblock %}
 {% block content %}
-<p class="eyebrow text-brand-blue">Background job</p>
+<p class="eyebrow text-brand-blue">{{ "Change" if job and job.kind == "change" else "Background job" }}</p>
 {% if job %}
 <h1 class="mt-2 font-serif text-3xl text-brand-black">{{ job.title or "Background job" }}</h1>
-<p class="mt-2 text-sm text-brand-grayink">Its progress and result, as the screen that started it shows them. It keeps running if you leave this page; the Jobs tray above lists it.</p>
 {% if job.status_url %}
+<p class="mt-2 text-sm text-brand-grayink">Its progress and result, as the screen that started it shows them. It keeps running if you leave this page; the Jobs tray above lists it.</p>
 {# The index job's panel re-renders #cal-index, as it does on the Calendars screen. #}
 <div id="{{ 'cal-index' if job.kind == 'index' else 'job-panel' }}" class="mt-6"
      hx-get="{{ job.status_url }}" hx-trigger="load" hx-swap="innerHTML">
   <span class="spinner"></span> <span class="text-sm text-brand-grayink">Loading…</span>
 </div>
+{% else %}
+{# A one-step change has no panel: what the screen said, and what to do about a failure. #}
+{% import "_job_live.html" as live %}
+<p class="mt-6 text-sm text-brand-black">{{ live.job_status(job) }}</p>
+{% for failure in job.failed %}<p class="mt-2 text-sm text-red-700">{{ failure.reason }}</p>{% endfor %}
 {% endif %}
 {% else %}
 <h1 class="mt-2 font-serif text-3xl text-brand-black">That job is no longer here</h1>

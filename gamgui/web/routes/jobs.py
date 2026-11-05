@@ -1,5 +1,5 @@
-"""The jobs tray (plan U5): every background job listed from any page, its panel on a page of its own,
-and Stop.
+"""The jobs tray (plan U5): every background job and one-step change listed from any page, a job's panel on a
+page of its own, and Stop.
 
 A job still lives only in memory on ``AppState.jobs``; the tray reads that registry, so a run survives
 navigating away — not a quit. Stop sets ``cancel_requested``, which each loop checks before its next

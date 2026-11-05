@@ -126,7 +126,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   (which lags a few days). **Connected apps and AI agents**: every account's grants, read when you ask,
   as a summary counted by code and each app with what it may do in words and who granted it.
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
-- **Jobs tray** — every background run (signatures, bulk department, onboarding CSV, offboarding,
+- **Jobs tray** — every one-step change since launch, and every background run (signatures, bulk department, onboarding CSV, offboarding,
   calendar fan-out, Builder sequence, calendar index) is listed in the header from any page, with
   its progress, its result and a link back to its panel. A running loop has a **Stop**: it finishes
   the one in hand, then ends, saying how many it didn't attempt (an offboarding asks first, and marks
