@@ -11,6 +11,8 @@ TestClient — docs/domains/web-screens-jobs.md), with Stop pressed while a writ
 
 from __future__ import annotations
 
+import asyncio
+import re
 from datetime import date
 from html import unescape
 
@@ -20,9 +22,9 @@ from gamgui.core.gam.commands import GAMCommands
 from gamgui.core.gam.models import GAMUser
 from gamgui.core.onboarding import RunbookStore
 from gamgui.core.signatures import SignatureStore
-from gamgui.web.jobs import TRAY_ROWS, BatchJob, Job, start_job, tray
+from gamgui.web.jobs import CHANGE_WORDS, ONE_STEP, TRAY_ROWS, BatchJob, Job, start_job, tray, watch_writes
 
-from .helpers import gam_writes
+from .helpers import ADMIN, gam_writes, wait_for_job
 from .test_users_web import client  # noqa: F401 — the mock-backed TestClient fixture
 
 USERS = [GAMUser(primary_email=f"{n}@example.com", given_name=n.title(), family_name="Doe")
@@ -225,7 +227,7 @@ def test_the_tray_lists_running_jobs_first_and_stays_bounded():
 def test_every_page_carries_the_tray_and_its_poll_updates_the_count(client):  # noqa: F811
     page = client.get("/users").text
     assert 'id="jobs-toggle"' in page and 'aria-expanded="false"' in page and 'aria-controls="jobs-panel"' in page
-    assert "Nothing has run in the background" in page
+    assert "Nothing has run since GamGUI started" in page
     job = _running(client, "signatures", "Signature for the whole company — 5 users")
     page = client.get("/audit").text
     assert '<span id="jobs-count" class="rounded-full' in page and "1 running" in page
@@ -262,3 +264,173 @@ def test_every_job_a_screen_starts_has_a_kind_and_a_title():
               for m in re.findall(r"(?:start_job|register_job)\((?:[^()]|\([^()]*\))*\)", p.read_text(), re.S)]
     assert len(starts) == 8, starts
     assert [s for s in starts if "kind=" not in s[1] or "title=" not in s[1]] == []
+
+
+# --- One-step changes (back-port plan B3): the tray lists everything that ran, as SwiftGamGui's does ---------------
+
+
+def _changes(client):  # noqa: F811
+    return [j for j in client.app.state.gamgui.jobs.values() if j.kind == ONE_STEP]
+
+
+def test_a_one_step_change_is_in_the_tray(client):  # noqa: F811
+    assert client.post("/users/signout", data={"email": "carol@example.com"}).status_code == 200
+    change, = _changes(client)
+    assert change.title == "Sign out everywhere: carol@example.com"
+    assert change.finished and (change.total, change.applied, change.failed_total) == (1, 1, 0)
+    tray_html = client.get("/jobs/status").text
+    assert change.title in unescape(tray_html) and "Done · 1 of 1 succeeded" in unescape(tray_html)
+    assert f'data-announce="tray-{change.id}"' not in tray_html   # its screen said so: a screen reader isn't told twice
+    assert not change.can_stop and "/jobs/stop" not in tray_html
+
+
+def test_a_change_that_failed_says_what_to_do_on_its_page(client):  # noqa: F811
+    client.post("/users/signout", data={"email": ADMIN})   # the connected admin: refused, and audited
+    change, = _changes(client)
+    assert (change.applied, change.failed_total) == (0, 1)
+    page = unescape(client.get(f"/jobs/{change.id}").text)
+    assert "Done · 0 of 1 succeeded · 1 failed" in page and change.failed[0].reason in page and change.failed[0].reason
+    assert "Background job" not in page and "keeps running" not in page
+
+
+def test_a_requests_writes_share_one_row(client):  # noqa: F811
+    client.post("/calendars/share", data={"cal": CAL, "target": "carol@example.com", "role": "reader"})
+    change, = _changes(client)
+    assert (change.total, change.applied) == (2, 2) and change.finished   # the access rule, then the subscribe
+    assert change.title == f"Share a calendar: {CAL}"
+
+
+def test_each_request_gets_its_own_row(client):  # noqa: F811
+    client.post("/users/signout", data={"email": "carol@example.com"})
+    client.post("/users/signout", data={"email": "bob@example.com"})
+    assert len(_changes(client)) == 2
+
+
+def test_a_job_s_own_writes_add_no_row_and_the_next_request_gets_one(client, gam_calls):  # noqa: F811
+    form = {"store": "Sales", "group": "", "emails": "alice@example.com\ncarol@example.com"}
+    token = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', client.post("/users/bulk/preview", data=form).text).group(1)
+    assert client.post("/users/bulk/apply", data={**form, "confirmed": "1", "preview": token}).status_code == 200
+    st = client.app.state.gamgui
+    job = next(j for j in st.jobs.values() if j.kind == "department")
+    wait_for_job(client, job)
+    assert job.applied == 2 and _changes(client) == []              # two writes, both the job's row
+    client.post("/users/signout", data={"email": "carol@example.com"})
+    assert len(_changes(client)) == 1                               # the job's mark stayed in its own request
+
+
+@pytest.mark.asyncio
+async def test_a_write_in_a_job_s_task_and_its_subtasks_is_that_job_s():
+    jobs: dict = {}
+    watch = watch_writes(jobs)
+
+    async def route():
+        start_job(jobs, 2, kind="department", title="Department")
+
+        async def subtask():
+            return watch("set_organization", "b@example.com")
+
+        async def job_task():
+            return watch("set_organization", "a@example.com"), await asyncio.create_task(subtask())
+
+        return await asyncio.create_task(job_task())
+
+    assert await asyncio.create_task(route()) == (None, None)
+    assert [j.kind for j in jobs.values()] == ["department"]
+
+
+@pytest.mark.asyncio
+async def test_an_interrupted_change_says_so(connector):
+    jobs: dict = {}
+    connector.on_write = watch_writes(jobs)
+
+    async def stopped(*args, **kwargs):
+        raise asyncio.CancelledError
+
+    connector.runner.run_authenticated = stopped
+    with pytest.raises(asyncio.CancelledError):
+        await connector.signout_user("carol@example.com")
+    change, = jobs.values()
+    assert change.finished and change.failed_total == 1 and "nterrupted" in change.failed[0].reason
+
+
+def test_small_changes_do_not_push_out_a_bulk_run():
+    jobs: dict = {}
+    bulk = start_job(jobs, 5, kind="department", title="Department")
+    bulk.finish()
+    watch = watch_writes(jobs)
+
+    async def request(i: int) -> None:
+        watch("set_signature", f"p{i}@example.com")(True, "")
+
+    async def main() -> None:
+        for i in range(30):
+            await asyncio.create_task(request(i))
+
+    asyncio.run(main())
+    assert bulk.id in jobs
+    assert sum(j.kind == ONE_STEP for j in jobs.values()) == 11   # ten finished, plus the newest
+    assert len(tray(jobs)[0]) <= TRAY_ROWS
+
+
+def test_every_write_the_connector_runs_has_words():
+    import re
+    from pathlib import Path
+
+    source = (Path(__file__).parent.parent / "gamgui" / "core" / "connectors" / "gam_connector.py").read_text()
+    actions = set(re.findall(r'_run_write\(\s*"(\w+)"', source))
+    actions.add("onboard_runbook")                      # audited outside _run_write, and told the same way
+    assert len(actions) >= 20 and actions - set(CHANGE_WORDS) == set()
+    assert set(CHANGE_WORDS) - actions == set()         # and none for a write that's gone
+
+
+def test_a_change_s_row_never_holds_its_argv(client):  # noqa: F811
+    client.post("/users/signout", data={"email": "carol@example.com"})
+    change, = _changes(client)
+    assert "deprovision" not in change.title and "gam" not in change.title
+
+
+def test_a_task_list_alone_has_a_row(client):  # noqa: F811
+    conn = client.app.state.gamgui.connector
+
+    async def build():
+        return await conn.create_onboarding_runbook("carol@example.com", "Setup", ["One", "Two"])
+
+    summary = client.portal.call(build)
+    change, = _changes(client)
+    assert summary["created"] == 2 and change.title == "Create a task list: carol@example.com"
+    assert (change.applied, change.failed_total) == (1, 0) and change.finished
+
+
+@pytest.mark.asyncio
+async def test_a_task_list_that_lost_tasks_is_a_failed_row(connector, monkeypatch):
+    jobs: dict = {}
+    connector.on_write = watch_writes(jobs)
+    real = connector.runner.run_authenticated
+
+    async def second_task_fails(domain, argv, **kwargs):
+        if "Two" in argv:
+            raise RuntimeError("no")
+        return await real(domain, argv, **kwargs)
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", second_task_fails)
+    await connector.create_onboarding_runbook("carol@example.com", "Setup", ["One", "Two"])
+    change, = jobs.values()
+    assert change.failed_total == 1 and "1 of its tasks" in change.failed[0].reason
+
+
+def test_small_changes_don_t_push_a_bulk_result_off_the_tray():
+    jobs: dict = {}
+    bulk = start_job(jobs, 5, kind="signatures", title="Signatures")
+    bulk.finish()
+    watch = watch_writes(jobs)
+
+    async def request(i: int) -> None:
+        watch("set_signature", f"p{i}@example.com")(True, "")
+
+    async def main() -> None:
+        for i in range(TRAY_ROWS + 2):
+            await asyncio.create_task(request(i))
+
+    asyncio.run(main())
+    rows, _, more = tray(jobs)
+    assert rows[0] is bulk and len(rows) == TRAY_ROWS and more == 2

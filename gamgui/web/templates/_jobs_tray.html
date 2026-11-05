@@ -16,7 +16,8 @@
       </div>
       <p class="mt-0.5 line-clamp-2 text-xs {{ 'text-brand-blueink' if not j.finished else ('text-emerald-800' if not (j.error or j.interrupted or j.failed_total) else 'text-amber-800') }}"
          {% if j.finished %}{{ live.ended(j, "tray") }}{% endif %}>{{ live.job_status(j) }}</p>
-      {% if j.finished %}
+      {% if j.finished and j.kind == "change" %}{# its screen just said how it went #}
+      {% elif j.finished %}
       <span hidden data-announce="tray-{{ j.id }}">Finished in the background: {{ j.title or "a job" }} — {{ live.job_status(j) | trim(". ") }}.</span>
       {% elif j.total %}
       <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-brand-gray/20">
@@ -28,7 +29,7 @@
   </ul>
   {% if more %}<p class="mt-1 text-xs text-brand-grayink">+{{ more }} older not listed.</p>{% endif %}
   {% else %}
-  <p class="mt-2 text-sm text-brand-grayink">Nothing has run in the background since GamGUI started.</p>
+  <p class="mt-2 text-sm text-brand-grayink">Nothing has run since GamGUI started.</p>
   {% endif %}
   {% if oob %}{{ live.jobs_count(running, oob=True) }}{% endif %}
 </div>

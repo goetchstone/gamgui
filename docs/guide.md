@@ -209,6 +209,9 @@ Longer runs — a signature rollout, a bulk department change, a CSV of hires, a
 calendar share, a Builder sequence, the calendar index, a connected-apps read — run in the background. The **Jobs** button
 in the header lists them from any page, with progress, the result and a link back to each one.
 
+The list has one-step changes too, a delegate or a sign-out, so it shows everything that ran since GamGUI started.
+The audit log stays the full record.
+
 **Stop** finishes the person or step in hand, then ends and says how many it didn't attempt. An
 offboarding asks first, and marks the steps after it "not run: stopped". Jobs live in memory:
 **quitting the app ends them**, so let a job finish or Stop it first.

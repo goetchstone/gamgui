@@ -31,7 +31,7 @@ from ..core.gam.runner import GAMRunner
 from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
 from ..core.usercache import UserCache
-from .jobs import tray
+from .jobs import tray, watch_writes
 from .previews import Previews
 
 _WEB_DIR = Path(__file__).resolve().parent
@@ -122,6 +122,8 @@ class AppState:
 
     def __post_init__(self) -> None:
         self.previews.bind(self.tenant_key)
+        if self.connector is not None:
+            self.connector.on_write = watch_writes(self.jobs)
 
     def _tenant(self) -> str:
         """The active domain, lowercased — what a held preview is bound to (``Previews.bind``)."""
@@ -141,6 +143,7 @@ class AppState:
         (review 2: R5, R11). The calendar index checks its own stored domain; ``tenant_domains`` and the
         caches' generation (``UserCache.get``) are keyed to the connector, so they follow on their own."""
         changed = self._tenant() != connector.domain.lower()
+        connector.on_write = watch_writes(self.jobs)
         self.connector = connector
         self.audit_domain = connector.domain
         self.invalidate_users()
