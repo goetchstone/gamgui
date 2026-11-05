@@ -148,7 +148,8 @@ def test_user_detail_reads_each_tab_only_when_it_first_opens(client, gam_calls):
         if m.group(2):
             lazy[m.group(2)] = panel
     assert lazy == {"/users/signature/current": "mail", "/users/delegates": "mail", "/users/vacation": "mail",
-                    "/users/groups": "sharing", "/users/calendar": "sharing"}
+                    "/users/groups": "sharing", "/users/calendar": "sharing", "/users/security/chrome": "security",
+                    "/users/security/mobile": "security", "/users/security/computers": "security"}
     assert 'role="tablist" aria-label="Account sections" data-hash' in page      # the open tab lives in the #hash
 
 

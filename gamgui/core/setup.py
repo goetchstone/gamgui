@@ -18,7 +18,7 @@ import json
 import os
 import re
 import stat
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlencode
@@ -366,6 +366,10 @@ DWD_SCOPES: Tuple[Tuple[str, str], ...] = (
     ("https://www.googleapis.com/auth/drive", "A user's Drive file list"),
     ("https://www.googleapis.com/auth/tasks", "Onboarding task lists"),
 )
+
+# Delegated with the others, but not asked of Setup's verify: a Security tab's computers need it, and nothing else does.
+# An install delegated before it stays connected, and that one read says how to add it (person_reads.computer_note).
+DEVICES_SCOPE = ("https://www.googleapis.com/auth/cloud-identity.devices", "The computers signed in with an account")
 
 # Offboarding's sign-out (`deprovision … signout`, `signout`) calls the Directory API with the
 # ADMIN token (oauth2.txt), not the service account: in GAM's tables this is a client-access scope
@@ -747,12 +751,13 @@ class SetupService:
         scopes to authorize, the Admin-console link with both filled in, and whether the admin
         token carries the sign-out scope (``None`` when its scopes can't be read)."""
         client_id = str(_json_field(self.vault.get(domain, "oauth2service"), "client_id") or "")
-        scopes = [s for s, _ in DWD_SCOPES]
+        offered = (*DWD_SCOPES, DEVICES_SCOPE)
+        scopes = [s for s, _ in offered]
         granted = _json_field(self.vault.get(domain, "oauth2"), "scopes")
         return {
             "client_id": client_id,
             "admin_console_url": ADMIN_CONSOLE_DWD_URL,
-            "scopes": DWD_SCOPES,
+            "scopes": offered,
             "scopes_csv": ",".join(scopes),
             "auth_url": dwd_auth_url(client_id, scopes, domain),
             "user_security": (USER_SECURITY_SCOPE in granted) if isinstance(granted, list) else None,
@@ -785,9 +790,15 @@ class SetupService:
             # A failing scope or a rejected key is an answer, not a crash: GAM exits with its PASS/FAIL
             # rows on stdout (and, for a scope, the Admin-console link). Read it — still refusing to connect.
             if exc.exit_code in CHECK_ANSWER_RCS and _parse_check(exc.stdout):
-                return _check_result(exc.stdout, exited_ok=False)
+                return self._with_every_scope(_check_result(exc.stdout, exited_ok=False), domain)
             return VerifyResult(ok=False, summary=exc.message, raw=exc.stderr)
-        return _check_result(out)
+        return self._with_every_scope(_check_result(out), domain)
+
+    def _with_every_scope(self, result: VerifyResult, domain: str) -> VerifyResult:
+        """GAM's link names only the scopes it was asked about, and overwrites the client's list, so following it would
+        take away the devices scope. Setup's own link has them all."""
+        full = self.dwd_details(domain)["auth_url"] if result.auth_url else ""
+        return replace(result, auth_url=str(full)) if full else result
 
 
 # `check serviceaccount`'s exits that still carry its PASS/FAIL rows on stdout, as the vendored build
@@ -812,7 +823,7 @@ def _check_result(out: str, exited_ok: bool = True) -> VerifyResult:
     # problem: GAM stops before the scope table and prints no link, so name the check that failed.
     checks_failed = [label for label, status in lines if status == "FAIL" and not label.startswith("https://")]
     if ok:
-        summary = "All scopes authorized."
+        summary = "All required scopes authorized. The devices scope, for a person's computers, isn't checked here."
     elif checks_failed:
         summary = (f"GAM's service-account check failed: {'; '.join(checks_failed)}. A rejected key means the "
                    "service account's key was deleted or rotated — import a current one; a failed clock check "

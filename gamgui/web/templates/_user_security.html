@@ -1,0 +1,42 @@
+{#- A person's Security tab: one read's rows (routes/users.py `_security_read`). Each row is in words, read whole. A device's
+    name and model are Google-supplied: they stay autoescaped. -#}
+{% if kind == "chrome" %}
+  <p class="text-sm text-brand-blueink">{% if rows %}{{ rows | length }} Chrome profile{{ "" if rows | length == 1 else "s" }} signed in with this account, the most recently used first.{% else %}Google knows of no Chrome profile signed in with this account.{% endif %}</p>
+  <ul class="mt-2 space-y-3">
+    {% for p in rows %}
+    <li class="text-sm">
+      <p class="font-medium text-brand-black">{{ p.where }}</p>
+      <p class="text-xs text-brand-blueink">Last used {{ p.last_used or "unknown" }}{% if p.first_seen %} · first seen {{ p.first_seen }}{% endif %}</p>
+      <p class="text-xs text-brand-grayink">{{ p.system }}{% if p.browser %}{% if p.system %} · {% endif %}Chrome {{ p.browser }}{% endif %}{% if p.on_managed_device is true %} · the organization's computer{% elif p.on_managed_device is false %} · a computer the organization doesn't manage{% endif %}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="mt-3 text-xs text-brand-grayink">As Chrome reports them to Google. None can also mean managed profile reporting is off in the Admin console's Chrome settings. Saved passwords are never shown: Google gives no one those.</p>
+{% elif kind == "mobile" %}
+  <p class="text-sm text-brand-blueink">{% if rows %}{{ rows | length }} phone{{ "" if rows | length == 1 else "s" }} or tablet{{ "" if rows | length == 1 else "s" }} syncing this account.{% else %}No phone or tablet syncs this account.{% endif %}</p>
+  <ul class="mt-2 space-y-3">
+    {% for d in rows %}
+    <li class="text-sm">
+      <p class="font-medium text-brand-black">{{ d.words }}
+        {% if d.reports_compromise %}<span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Says it's rooted or jailbroken</span>{% endif %}
+      </p>
+      <p class="text-xs text-brand-blueink">Last synced {{ d.last_synced or "unknown" }}{% if d.first_synced %} · first synced {{ d.first_synced }}{% endif %}</p>
+      {% if d.status %}<p class="text-xs text-brand-grayink">{{ d.status }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-sm text-brand-blueink">{% if rows %}{{ rows | length }} computer{{ "" if rows | length == 1 else "s" }} signed in with this account.{% else %}Google's endpoint management knows of no computer signed in with this account.{% endif %}</p>
+  <ul class="mt-2 space-y-3">
+    {% for c in rows %}
+    <li class="text-sm">
+      <p class="font-medium text-brand-black">{{ c.words }}
+        {% if c.looks_virtual %}<span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Virtual machine</span>{% endif %}
+        {% if c.reports_compromise %}<span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Reports compromised</span>{% endif %}
+      </p>
+      <p class="text-xs text-brand-blueink">First signed in {{ c.first_signed_in or "unknown" }}{% if c.last_synced %} · last synced {{ c.last_synced }}{% endif %}</p>
+      <p class="text-xs text-brand-grayink">{{ [c.ownership, c.serial_number and "serial " ~ c.serial_number, c.state] | select | join(" · ") }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+{% endif %}

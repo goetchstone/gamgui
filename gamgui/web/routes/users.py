@@ -19,9 +19,10 @@ from urllib.parse import parse_qs, urlencode
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import bulk, guard
+from ...core import bulk, guard, person_reads
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
+from ...core.gam.errors import GAMError
 from ...core.lifecycle import autoreply_html, autoreply_text
 from ...core.onboarding import looks_like_email
 from ...core.signatures import smart_quote_warning
@@ -536,6 +537,37 @@ async def bulk_status(request: Request, job: str = "") -> HTMLResponse:
     if j is None:
         return error_partial(request, "That bulk job is no longer available — re-run it.")
     return TEMPLATES.TemplateResponse(request, "_bulk_apply.html", {"job": j})
+
+
+async def _security_read(request: Request, kind: str, read, email: str, note=lambda error: "") -> HTMLResponse:
+    """One read of a person's Security tab, its failure with what to do about it, a scope's by its cause."""
+    conn = connector(request)
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    try:
+        rows = await read(conn, email)
+    except ValueError as exc:   # filter_address: it would not stay one search value
+        return error_partial(request, str(exc))
+    except GAMError as exc:
+        return error_partial(request, " ".join(part for part in (exc.remediation, note(exc)) if part))
+    except Exception as exc:  # noqa: BLE001 — a read's failure is this region's, not the page's
+        return error_partial(request, friendly(exc))
+    return TEMPLATES.TemplateResponse(request, "_user_security.html", {"kind": kind, "rows": rows})
+
+
+@router.get("/security/chrome", response_class=HTMLResponse)
+async def security_chrome(request: Request, email: str) -> HTMLResponse:
+    return await _security_read(request, "chrome", lambda conn, who: conn.chrome_profiles(who), email, person_reads.chrome_note)
+
+
+@router.get("/security/mobile", response_class=HTMLResponse)
+async def security_mobile(request: Request, email: str) -> HTMLResponse:
+    return await _security_read(request, "mobile", lambda conn, who: conn.mobile_devices(who), email)
+
+
+@router.get("/security/computers", response_class=HTMLResponse)
+async def security_computers(request: Request, email: str) -> HTMLResponse:
+    return await _security_read(request, "computers", lambda conn, who: conn.computers(who), email, person_reads.computer_note)
 
 
 @router.get("/delegates", response_class=HTMLResponse)

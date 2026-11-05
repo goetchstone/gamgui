@@ -36,6 +36,8 @@ needs_grammar = pytest.mark.skipif(
     reason="vendored GAM command reference not present (clean-room; runs in the gam-compat CI job)",
 )
 
+SEARCH_ADDRESS = "person@example.com"
+
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
 ENUM_ARGS = {
@@ -45,6 +47,10 @@ ENUM_ARGS = {
     ("set_forward", "action"): GAMCommands.FORWARD_ACTIONS,
     ("search_messages", "detail"): GAMCommands.MESSAGE_DETAIL,
     ("create_datatransfer", "privacy"): ("", *GAMCommands.TRANSFER_PRIVACY),
+    # filter_address refuses a placeholder: these go inside a search value, so they take a real address.
+    ("print_chrome_profiles", "user"): (SEARCH_ADDRESS,),
+    ("print_mobile_devices", "user"): (SEARCH_ADDRESS,),
+    ("print_devices", "user"): (SEARCH_ADDRESS,),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
@@ -53,7 +59,8 @@ ENTITY_PREFIXES = (("user", None), ("all", "users"), ("calendars", None), ("upda
 
 
 def _value(tok: str) -> bool:
-    return "<" in tok   # a `<param>` placeholder this test passed in, alone or joined into a list
+    # A `<param>` placeholder this test passed in, alone or joined into a list, or the address joined into a search.
+    return "<" in tok or SEARCH_ADDRESS in tok
 
 
 def builder_argvs():
@@ -223,7 +230,7 @@ def _shapes():
     slot given and omitted (curated catalog commands call the builders). {length: [(name, shape, pattern)]}"""
     from gamgui.core.catalog import load_catalog
 
-    shapes = list(builder_argvs())
+    shapes = [(name, [t.replace(SEARCH_ADDRESS, "<user>") for t in argv]) for name, argv in builder_argvs()]
     for c in load_catalog().commands:
         if c.buildable and c.id.startswith("raw."):
             optional = [s.key for s in c.slots if not s.required]

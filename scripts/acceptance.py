@@ -52,6 +52,10 @@ async def main() -> int:
         await check("list_delegates", conn.list_delegates(sample), lambda d: f"{len(d)} delegates")
         await check("get_vacation", conn.get_vacation(sample), lambda v: f"enabled={v.enabled}")
         await check("list_user_groups", conn.list_user_groups(sample), lambda g: f"{len(g)} memberships")
+    if sample:
+        await check("chrome_profiles", conn.chrome_profiles(sample), lambda r: f"{len(r)} profiles")
+        await check("mobile_devices", conn.mobile_devices(sample), lambda r: f"{len(r)} devices")
+        await check("computers", conn.computers(sample), lambda r: f"{len(r)} computers")
     await check("connected_apps", conn.connected_apps(), lambda r: f"{r.app_count} apps, complete={r.complete}")
     await check("usage_report", conn.usage_report(USAGE_PARAMS), lambda r: f"{len(r['rows'])} rows ({r['date']})")
 

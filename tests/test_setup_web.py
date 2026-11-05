@@ -724,7 +724,7 @@ def test_one_connected_domain_offers_check_access_which_re_verifies_it_in_place(
 
     token = state.previews.hold("signatures", ("form",), "held")
     r = client.post("/setup/switch", data={"tenant": "example.com", "admin": ""})
-    assert "All scopes authorized." in r.text and 'hx-swap-oob="true"' in r.text
+    assert "All required scopes authorized." in r.text and 'hx-swap-oob="true"' in r.text
     assert state.connector.domain == "example.com"
     assert state.previews.take("signatures", token, ("form",)) == ("held", None)   # a re-check isn't a switch
 
@@ -749,7 +749,7 @@ def test_import_and_verify_store_a_capitalized_domain_lowercased(ctx):
     client.post("/setup/import", data={"domain": " Example.COM ", "admin": "admin@example.com", "config_dir": str(cfg)})
     assert vault.list_domains() == ["example.com"]
     r = client.post("/setup/verify", data={"domain": "Example.com", "admin": "admin@example.com"})
-    assert "All scopes authorized." in r.text and state.connector.domain == "example.com"
+    assert "All required scopes authorized." in r.text and state.connector.domain == "example.com"
 
 
 def test_remove_deletes_only_that_spellings_credentials_and_redraws_the_panel(ctx):

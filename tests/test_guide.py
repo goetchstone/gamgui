@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from gamgui.core.setup import DWD_SCOPES
+from gamgui.core.setup import DEVICES_SCOPE, DWD_SCOPES
 
 ROOT = Path(__file__).resolve().parent.parent
 GUIDE = ROOT / "docs" / "guide.md"
@@ -18,7 +18,7 @@ def _slug(heading: str) -> str:
 
 def test_the_guide_lists_exactly_the_delegation_scopes_setup_shows():
     listed = set(re.findall(r"`(https://[^`]+)`", GUIDE.read_text()))
-    assert listed == {scope for scope, _ in DWD_SCOPES}
+    assert listed == {scope for scope, _ in (*DWD_SCOPES, DEVICES_SCOPE)}
 
 
 def test_every_relative_link_in_the_guide_resolves():
@@ -53,6 +53,7 @@ SCREENS = {
     "Share a calendar": ["calendars.html", "_calendar*.html", "user_detail.html"],
     "Audit external sharing": ["builder.html", "_builder_*.html", "_read_output.html", "_records_*.html"],
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
+    "See where an account is signed in": ["user_detail.html", "_user_security.html"],
     "Jobs and Stop": ["job.html", "_job*.html"],
     "Read the audit log": ["audit.html", "_audit_rows.html"],
 }

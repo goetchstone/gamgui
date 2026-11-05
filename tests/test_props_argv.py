@@ -88,8 +88,13 @@ FREE_TEXT = (
     Spec("print_resources", (), ("query",)),
 )
 
+_SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Example-1.com"])
+
 # Every other builder with a str parameter: addresses, calendar/event ids, scopes, aliases, dates.
 IDENTIFIERS = (
+    Spec("print_chrome_profiles", (), (), {"user": _SEARCH_ADDRESS}),
+    Spec("print_mobile_devices", (), (), {"user": _SEARCH_ADDRESS}),
+    Spec("print_devices", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("check_svcacct", ("admin",), (), {"scopes": st.just(("https://mail.google.com/",))}),
     Spec("report_users", ("date",), (), {"params": st.just(("accounts:used_quota_in_mb",))}),
     Spec("info_user", ("email",)),
@@ -219,6 +224,17 @@ def _assert_slot(build, index: int, expected: str, allowed: Tuple[str, ...]) -> 
         return
     assert expected in allowed, f"passed through an invalid value as {argv[index]!r}"
     assert argv[index] == expected
+
+
+@given(address=st.one_of(TEXT, _SEARCH_ADDRESS, st.builds("{}@{}".format, TEXT, TEXT)))
+def test_a_search_address_is_one_search_value_or_refused(address):
+    # It goes inside a query or a quoted filter, so nothing in it may end the value or start another field.
+    try:
+        kept = commands.filter_address(address)
+    except ValueError:
+        return
+    assert kept == address.lower() and kept.count("@") == 1
+    assert not set(kept) - set("abcdefghijklmnopqrstuvwxyz0123456789._'-@")
 
 
 @given(word=st.one_of(SPELLED, TEXT))
