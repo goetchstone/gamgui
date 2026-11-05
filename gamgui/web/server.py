@@ -108,6 +108,8 @@ class AppState:
     previews: Previews = field(default_factory=Previews)  # per flow: single-use token -> what a preview showed
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
+    connected_apps: Optional[tuple] = None  # (AppsRead, when) from the last read on this connector
+    connected_apps_job_id: str = ""  # the last connected-apps read's job (guards a second domain-wide read)
     offboard_jobs: dict = field(default_factory=dict)  # leaver (lowercase) -> their running offboarding's job id
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
@@ -144,6 +146,8 @@ class AppState:
         self.invalidate_users()
         self.invalidate_groups()
         self.gam_version_held = None   # setup re-reads the version on the next Home
+        self.connected_apps = None     # read with the connector being replaced
+        self.connected_apps_job_id = ""
         if changed:
             self.switches += 1
             self.previews.clear()

@@ -1,0 +1,51 @@
+{#- Reports' connected apps and agents: a check of the whole tenant, read only when asked (one API call per
+    account). Carries its own id, because it also shows inside a job's page. An app's name is its maker's words:
+    it stays autoescaped. -#}
+<div id="connected-apps-panel">
+{% if job and not job.finished %}
+  <div class="flex items-center gap-2 text-sm text-brand-grayink"
+       hx-get="/reports/connected-apps?job={{ job.id }}" hx-trigger="load delay:1500ms"
+       hx-target="#connected-apps-panel" hx-swap="outerHTML"{% if announce %} data-announce="{{ job.id }}"{% endif %}>
+    <span class="spinner"></span> Reading every account’s apps… about a second an account, up to an hour. You can keep working.
+  </div>
+{% elif not connected %}
+  <p class="text-sm text-brand-grayink">Connect a domain on Setup first.</p>
+{% else %}
+  {% if job and job.error %}
+  <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800"{% if announce %} data-announce="{{ job.id }}"{% endif %}>Couldn’t read the connected apps. {{ job.error }}</div>
+  {% endif %}
+  {% if read is defined %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm"{% if announce and job and not job.error %} data-announce="{{ job.id }}"{% endif %}>
+    <ul class="space-y-1 text-sm text-brand-black">
+      {% for sentence in read.sentences %}<li>{{ sentence }}</li>{% endfor %}
+    </ul>
+    {% if not read.complete %}
+    <p class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">GAM couldn’t read at least one account, perhaps one deleted during the read, so this list and its counts may be missing that account’s apps.</p>
+    {% endif %}
+    <p class="mt-3 text-xs text-brand-grayink">Counted when read, {{ read_age | ago }}. Suspended accounts are left out. An app is called AI by its name alone.</p>
+  </div>
+  {% for title, apps in read.groups %}
+  <h3 class="mt-4 text-sm font-medium text-brand-black">{{ title }} ({{ apps | length }})</h3>
+  <ul class="mt-2 rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
+    {% for app in apps %}
+    <li class="border-b border-brand-gray/15 px-5 py-3">
+      <p class="text-sm font-medium text-brand-black">{{ app.name }}
+        {% if app.looks_like_ai %}<span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-blue-50 text-blue-700">AI, by its name</span>{% endif %}
+        {% if app.is_broad %}<span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Broad access</span>{% endif %}
+      </p>
+      <p class="mt-0.5 text-xs text-brand-blueink">{{ app.access | join(", ") or "No scopes listed" }}</p>
+      <p class="mt-0.5 text-xs text-brand-grayink">{{ "1 person" if app.users | length == 1 else (app.users | length) ~ " people" }}:
+        {% for user in app.users[:names_shown] %}<a class="hover:text-brand-black" href="/users/detail?email={{ user | urlencode }}">{{ user }}</a>{{ ", " if not loop.last }}{% endfor %}{% if app.users | length > names_shown %} and {{ (app.users | length) - names_shown }} more{% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+  <p class="mt-3 text-xs text-brand-grayink">To take an app away from everyone, block it in the Admin console (Security → API controls → App access control).</p>
+  {% else %}
+  <p class="mb-3 text-sm text-brand-blueink">The apps and AI agents people have given access to their accounts, suspended accounts aside. Read with GAM when you ask, about a second an account, up to an hour. Reading changes nothing.</p>
+  {% endif %}
+  <button type="button" hx-post="/reports/connected-apps/read" hx-target="#connected-apps-panel" hx-swap="outerHTML" hx-disabled-elt="this"
+          class="{{ 'mt-3 ' if read is defined }}inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">{{ "Read again" if read is defined else ("Try again" if job and job.error else "Read connected apps") }}</button>
+{% endif %}
+</div>

@@ -84,6 +84,7 @@ READS = {
     "print_cros": [C.print_cros("status:ACTIVE")],
     "print_filelist": [C.print_filelist("alice@example.com", "name contains 'x'")],
     "report_users": [C.report_users("2026-06-16", ["accounts:used_quota_in_mb"])],
+    "print_tokens": [C.print_tokens()],
     "info_user": [C.info_user("alice@example.com")],
     "print_calendar_acls": [C.print_calendar_acls("alice@example.com")],
     "print_resources": [C.print_resources()],

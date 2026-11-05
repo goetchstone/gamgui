@@ -58,14 +58,15 @@ PREVIEWS = {
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
 # verify, a tenant switch that is that same verify, and removing an inactive domain's Keychain
-# credentials), the calendar index (a read-only scan into a local SQLite file), and a job's Stop (a flag
-# its loop reads before the next target: it can only mean fewer writes).
+# credentials), the calendar index (a read-only scan into a local SQLite file), Reports' connected apps (a
+# read-only scan kept in memory), and a job's Stop (a flag its loop reads before the next target: it can only
+# mean fewer writes).
 LOCAL_ONLY = {
     "/builder/sequence/add", "/builder/sequence/remove", "/builder/sequence/move", "/builder/sequence/clear",
     "/signatures/templates/save", "/signatures/templates/delete",
     "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/welcome/delete", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
-    "/calendars/index/rebuild", "/jobs/stop",
+    "/calendars/index/rebuild", "/reports/connected-apps/read", "/jobs/stop",
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe
@@ -342,7 +343,7 @@ def test_a_replayed_confirm_step_does_not_write_twice(route, client, gam_calls):
 def test_every_write_button_disables_itself_while_in_flight():
     # A double-click on Run must not start two offboardings: each control that posts to a write
     # (or starts a job) carries hx-disabled-elt, so htmx disables it until the response lands.
-    writes = set(GATED) | LOW_WRITES | {"/calendars/index/rebuild"}
+    writes = set(GATED) | LOW_WRITES | {"/calendars/index/rebuild", "/reports/connected-apps/read"}
     missing, inheriting = [], []
     for path in sorted(TEMPLATES_DIR.glob("*.html")):
         text = path.read_text()

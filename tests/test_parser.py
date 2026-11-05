@@ -100,3 +100,26 @@ def test_gams_escaped_plain_csv_reads_back_whole():
         {"User": "ann@example.com", "delegateAddress": "d@example.com", "note": "back\\slash"},
         {"User": "bo@example.com", "delegateAddress": "e@example.com", "note": 'say "hi", twice\\'},
     ]
+
+
+def test_the_csv_limit_stays_up_until_the_last_reader_ends():
+    # One read parses in a thread beside others on the event loop, and the limit is process-wide. Each reader putting
+    # back what it found could drop it under another still reading a long cell.
+    import csv
+
+    from gamgui.core.gam.parser import _field_limit_at_least
+
+    base = csv.field_size_limit()
+    with _field_limit_at_least(base + 10):
+        with _field_limit_at_least(base + 100):
+            assert csv.field_size_limit() == base + 100
+        assert csv.field_size_limit() == base + 100     # the inner one ended first, the outer may need it
+    assert csv.field_size_limit() == base
+
+    first, second = _field_limit_at_least(base + 100), _field_limit_at_least(base + 10)
+    first.__enter__()
+    second.__enter__()
+    first.__exit__(None, None, None)                    # they needn't end in the order they began
+    assert csv.field_size_limit() == base + 100
+    second.__exit__(None, None, None)
+    assert csv.field_size_limit() == base
