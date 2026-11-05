@@ -1,0 +1,11 @@
+{#- The confirm step of a phone change. Its token holds the whole list it shows. -#}
+<div class="rounded-xl border {{ 'border-red-300 bg-red-50' if removes else 'border-brand-gray/40 bg-paper' }} p-4">
+  <p tabindex="-1" data-focus class="text-sm font-medium {{ 'text-red-800' if removes else 'text-brand-black' }}">{{ summary }}?</p>
+  <p class="mt-2"><code class="break-all text-xs text-brand-blueink">{{ command }}</code></p>
+  <div class="mt-3 flex gap-2">
+    <button class="inline-flex items-center rounded-lg {{ 'bg-red-700 hover:bg-red-800 text-white' if removes else 'bg-brand-blue hover:bg-brand-blueink text-brand-white' }} px-3.5 py-2 text-sm font-medium transition-colors"
+            hx-post="/users/phone/apply" hx-target="#phone-zone" hx-swap="innerHTML" hx-disabled-elt="this"
+            hx-vals='{"email": {{ email | tojson }}, "phone": {{ phone | tojson }}, "confirmed": "1", "preview": {{ token | tojson }} }'>{{ "Remove" if removes else "Save" }}</button>
+    <a data-cancel class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-black hover:bg-paper transition-colors" href="/users/detail?email={{ email | urlencode }}">Cancel</a>
+  </div>
+</div>

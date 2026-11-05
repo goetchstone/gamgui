@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
-from ..gam.commands import GAMCommands, build_user_query, cut_off_account
+from ..gam.commands import GAMCommands, Phone, build_user_query, cut_off_account
 from ..gam.errors import GAMError, GAMErrorKind
 from ..gam.models import (
     CalendarACL,
@@ -29,6 +29,7 @@ from ..gam.models import (
 from ..calendar_index import IndexedCalendar
 from ..connected_apps import AppsRead, read_from
 from ..gam.parser import parse_one, parse_records
+from ..phones import phones_from
 from ..person_reads import (
     ChromeProfile,
     Computer,
@@ -493,6 +494,14 @@ class GAMConnector(Connector):
         # Only the reset: ending sessions is offboarding's own step (revoke_access), so its failure is
         # shown and can be re-run — as a follow-up here it was swallowed (failure-log 2026-09-23).
         return await self._run_write("reset_password", email, GAMCommands.reset_password(email), RiskLevel.LOW)
+
+    async def user_phones(self, email: str) -> List[Phone]:
+        """The person's phones as Google has them now: a change sends them all back."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.info_user(email, fields=["primaryEmail", "phones"]))
+        return phones_from(parse_one(out))
+
+    async def update_phones(self, email: str, phones: Sequence[Phone], risk: RiskLevel) -> ChangeResult:
+        return await self._run_write("update_phones", email, GAMCommands.update_phones(email, phones), risk)
 
     async def set_temporary_password(self, email: str, password: str) -> ChangeResult:
         """Set a password to hand over, changed at their next sign-in. ``password`` is masked by value in what's shown,

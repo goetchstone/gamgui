@@ -77,6 +77,7 @@ CHANGE_WORDS = {
     "signout_user": "Sign out everywhere",
     "subscribe_calendar": "Add a calendar to their list",
     "transfer_data": "Transfer data",
+    "update_phones": "Change the phone a signature shows",
 }
 
 

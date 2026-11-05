@@ -16,6 +16,8 @@ unit tests pin today's intended form so drift is caught early.
 from __future__ import annotations
 
 import re
+import unicodedata
+from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
 # The GAM7 version GamGUI is pinned to and tested against — the SINGLE SOURCE OF TRUTH.
@@ -87,6 +89,23 @@ DEVICE_FIELDS = ("devicetype,model,manufacturer,osversion,hostname,serialnumber,
                  "compromisedstate,createtime,lastsynctime")
 DEVICE_USER_FIELDS = "name,useremail,createtime,firstsynctime,lastsynctime,managementstate"
 
+# GAM's phone types (`phone [type assistant|…|work_pager|(custom <String>)]`). One outside them GAM keeps as a custom type
+# of that name, so a phone goes back only with one of these, `custom` with its name, or no type.
+PHONE_TYPES = frozenset({"assistant", "callback", "car", "company_main", "grand_central", "home", "home_fax", "isdn", "main",
+                         "mobile", "other", "other_fax", "pager", "radio", "telex", "tty_tdd", "work", "work_fax",
+                         "work_mobile", "work_pager"})
+
+
+@dataclass(frozen=True)
+class Phone:
+    """One of a person's phones as Google keeps it: GAM's word for its type (or `custom` with ``custom_type``)."""
+
+    type: str = ""
+    custom_type: str = ""
+    value: str = ""
+    primary: bool = False
+
+
 _FILTER_LOCAL = re.compile(r"[a-z0-9._'-]+")
 _FILTER_LABEL = re.compile(r"[a-z0-9-]+")
 
@@ -154,6 +173,35 @@ class GAMCommands:
     def report_users(date: str, params: Sequence[str]) -> List[str]:
         # Admin SDK usage report (storage, mail, drive). Data lags ~2-3 days.
         return ["report", "users", "date", date, "parameters", ",".join(params)]
+
+    @staticmethod
+    def update_phones(email: str, phones: Sequence[Phone]) -> List[str]:
+        # The person's phones, every one: GAM sends them as the list Google keeps in place of the old one, so a phone left
+        # out is deleted, and none left is `phone clear`. A phone GAM wouldn't send back as it is raises ValueError: two
+        # primaries, a type it would keep as custom, a custom type it would trim, or a number over lines. SwiftGamGui's
+        # updatePhones.
+        if sum(p.primary for p in phones) > 1:
+            raise ValueError("only one phone can be the primary")
+        argv = ["update", "user", email]
+        for phone in phones:
+            if not phone.value or any(unicodedata.category(c) == "Cc" for c in phone.value):
+                raise ValueError("each phone is a number on one line")
+            kind = phone.type.lower()
+            if kind != "custom" and phone.custom_type:
+                raise ValueError(f"a phone of type “{phone.type}” with its own name would lose the name")
+            typed: List[str] = []
+            if kind == "custom":
+                if not phone.custom_type.strip():
+                    raise ValueError("a custom phone type has a name")
+                if phone.custom_type.strip() != phone.custom_type:
+                    raise ValueError(f"the custom phone type “{phone.custom_type}” would come back without its spaces")
+                typed = ["type", "custom", phone.custom_type]
+            elif kind:
+                if kind not in PHONE_TYPES:
+                    raise ValueError(f"“{phone.type}” isn't a phone type GAM keeps as it is")
+                typed = ["type", kind]
+            argv += ["phone", *typed, "value", phone.value, "primary" if phone.primary else "notprimary"]
+        return argv if phones else [*argv, "phone", "clear"]
 
     @staticmethod
     def set_password(email: str, password: str) -> List[str]:

@@ -117,6 +117,7 @@ rows_with() {  # <data file> <value>...: each record in the file with those key 
 # and GAM never prints it).
 not_modelled() { echo "ERROR: mock: $1 isn't modelled" 1>&2; exit 2; }
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+json_quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # Under GAM_MOCK_STATE, an account `create user` made is a user from then on. So is anyone a group fixture lists as
 # a member: the directory fixture holds three users, but those members are accounts GAM can act as too.
 was_created() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/created/$1" ]; }
@@ -296,6 +297,14 @@ fi
 if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   [ -n "${3:-}" ] || missing_arg "UserItem"
   addr=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+  # Phones changed since the directory was read: with GAM_MOCK_STATE, $GAM_MOCK_STATE/phones/<user> (a JSON list) is the
+  # record's phones, printed as GAM prints only the fields named. No fixture record has any.
+  # $GAM_MOCK_STATE/stray_stdout/<user>: a line that isn't the record first, as GAM prints a config banner there.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/stray_stdout/$addr" ]; then echo "A notice GAM printed"; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/phones/$addr" ]; then
+    printf '{"primaryEmail": "%s", "phones": %s}\n' "$addr" "$(tr -d '\n' < "$GAM_MOCK_STATE/phones/$addr")"
+    exit 0
+  fi
   case "$addr" in
     alice@example.com|a.anders@example.com|alice@alias.example.net) cat "$GAM_MOCK_FIXTURES/info_user.json" ;;
     bob@example.com)   cat "$GAM_MOCK_FIXTURES/info_user_suspended.json" ;;
@@ -782,8 +791,44 @@ fi
 # <UserAttribute>* plus the notify clause, as `gam create|add user` / `gam update user` take them. Only
 # the attributes GamGUI emits are modelled; anything else is an invalid argument.
 check_user_attrs() {
+  phone_primary="" phones_sent="" phones_json=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      phone)
+        # Grammar `phone clear`, or `phone [type <type>|custom <String>] [value <String>] notprimary|primary`, as
+        # getUserAttributes reads it: a type GAM doesn't know is kept as a custom type, so any word passes; `custom` needs a
+        # name that isn't blank; a second primary is a usage error; an empty value is dropped, none at all stops GAM.
+        shift
+        phones_sent=1
+        if [ "${1:-}" = "clear" ]; then shift; phones_json=""; continue; fi
+        phone_value="" phone_kept="" phone_type="" phone_custom="" phone_text=""
+        while :; do
+          case "${1:-}" in
+            type)
+              need_value $# "phone type"
+              if [ "$(lower "$2" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')" = custom ]; then
+                case "${3:-}" in *[![:space:]]*) phone_type=custom; phone_custom=$3; shift 3 ;; *) missing_arg "custom attribute type" ;; esac
+              else
+                phone_type=$2; shift 2
+              fi ;;
+            value) need_value $# "String"; phone_value=1; phone_text=$2; if [ -n "$2" ]; then phone_kept=1; fi; shift 2 ;;
+            primary|notprimary)
+              if [ -z "$phone_value" ]; then
+                printf 'Traceback (most recent call last):\n  File "gam/__init__.py", in appendItemToBodyList\nKeyError: %s\n' "'value'" 1>&2
+                exit 1
+              fi
+              if [ "$1" = primary ] && [ -n "$phone_kept" ]; then
+                [ -z "$phone_primary" ] || usage_error "Multiple phones are marked primary, only one can be primary"
+                phone_primary=1
+              fi
+              if [ -n "$phone_kept" ]; then
+                phones_json="${phones_json:+$phones_json, }{\"type\": \"$(json_quote "$phone_type")\", \"customType\": \"$(json_quote "$phone_custom")\", \"value\": \"$(json_quote "$phone_text")\", \"primary\": $([ "$1" = primary ] && echo true || echo false)}"
+              fi
+              shift; break ;;
+            "") missing_arg "notprimary|primary" ;;
+            *) invalid_arg "$1" ;;
+          esac
+        done ;;
       suspended|suspend|changepassword|changepasswordatnextlogin|archived|archive)
         need_value $# "Boolean"; need_bool "$2"; shift 2 ;;
       password)
@@ -873,6 +918,9 @@ if [ "${1:-}" = "update" ] && [ "${2:-}" = "user" ]; then
   user="$3"; shift 3
   check_user_attrs "$@"
   check_exists "User" "$user"
+  if [ -n "$phones_sent" ] && [ -n "${GAM_MOCK_STATE:-}" ]; then   # the list sent is the list Google keeps
+    mkdir -p "$GAM_MOCK_STATE/phones"; printf '[%s]\n' "$phones_json" > "$GAM_MOCK_STATE/phones/$(lower "$user")"
+  fi
   echo "User: $user, Updated"
   exit 0
 fi

@@ -82,7 +82,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   and scopes filled in, shown up front — and a verify. The domain is filled in from the admin email.
 - **Users** — a fast, cached list (search name, email, title, department or org unit; sort any
   column; 15–50 a page; opening a person and coming back keeps your place) and detail, profile
-  editing (title/department — location is shown but not editable) with a bulk "set department"
+  editing (title/department and the phone a signature shows — location is shown but not editable) with a bulk "set department"
   tool, mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
   (grant/revoke access to that person's own calendar), **sign out everywhere**, and a guarded
   **suspend**.
@@ -186,6 +186,7 @@ its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14) |
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Set a temporary password | Users | not yet — new to both apps |
+| Set the phone a signature shows | Users | argv-identical to SwiftGamGui's confirmed run (2026-10-24); changing or removing one is not yet, in either app |
 | Delete an account | Users, Builder | **confirmed** (2026-10-08, GAM 7.48.22, from the user page: the offboarded leaver, after the transfer completed) |
 | Undelete an account | Builder | not yet |
 | Transfer Drive + calendar data | Offboarding, Builder | **confirmed**: as two calls, and the single call offboarding makes (`drive,calendar … all`) ran (the first live offboarding, 2026-10-07, GAM 7.48.14), and the operator checked the effects in Google afterwards: the transfer completed |

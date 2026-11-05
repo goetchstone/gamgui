@@ -1,0 +1,10 @@
+{#- The phone a signature shows. Saving previews first: the change sends every other phone back as it is. -#}
+<form hx-post="/users/phone/preview" hx-target="#phone-zone" hx-swap="innerHTML" hx-disabled-elt="find button" class="space-y-3">
+  <input type="hidden" name="email" value="{{ email }}" />
+  <label class="block"><span class="text-sm text-brand-blueink">Phone</span>
+    <input name="phone" value="{{ phone or '' }}" placeholder="e.g. +1 555 0100" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink" /></label>
+  <div class="flex items-center gap-3">
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Preview</button>
+    {% if saved %}<span class="text-sm text-emerald-700" data-focus tabindex="-1">Saved ✓</span>{% endif %}
+  </div>
+</form>

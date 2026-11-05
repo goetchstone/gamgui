@@ -93,6 +93,7 @@ _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Exampl
 # Every other builder with a str parameter: addresses, calendar/event ids, scopes, aliases, dates.
 IDENTIFIERS = (
     Spec("set_password", ("email", "password")),
+    Spec("update_phones", ("email",), (), {"phones": st.just([commands.Phone("work", "", "+1 555 0100", True)])}),
     Spec("print_chrome_profiles", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_mobile_devices", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_devices", (), (), {"user": _SEARCH_ADDRESS}),

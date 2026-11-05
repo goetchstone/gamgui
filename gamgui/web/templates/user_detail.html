@@ -71,6 +71,13 @@
           {% with title=user.title, department=user.department, saved=False %}{% include "_org_form.html" %}{% endwith %}
         </div>
       </div>
+      <div class="{{ card }}">
+        <h2 class="eyebrow text-brand-grayink">Phone</h2>
+        <p class="text-xs text-brand-blueink mt-1">The number a signature shows. Their other phones stay as they are; empty it to remove this one.</p>
+        <div id="phone-zone" class="mt-3">
+          {% with phone=user.phone, saved=False %}{% include "_phone_form.html" %}{% endwith %}
+        </div>
+      </div>
     </div>
   </div>
 
