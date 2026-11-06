@@ -68,6 +68,7 @@ LOCAL_ONLY = {
     "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/welcome/delete", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
     "/calendars/index/rebuild", "/reports/connected-apps/read", "/jobs/stop",
+    "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe

@@ -106,7 +106,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
 - **Lifecycle** — a guided **offboarding** routine (reset password → revoke access & sign out →
   turn off forwarding → delegate → auto-responder → transfer Drive & calendars → remove from
   everyone's calendars → reminder on the manager), with a live preview of the generated auto-reply
-  and the exact `gam` command each step will run. Both addresses are checked against the directory,
+  and the exact `gam` command each step will run, optional added steps, and saved templates. Both addresses are checked against the directory,
   Run executes exactly what was previewed, a failed step stops the steps that rely on it, and a
   re-run can skip the steps that already succeeded.
 - **Onboarding** — editable role templates that set up a new hire: create the account (its one-time

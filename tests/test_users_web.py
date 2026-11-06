@@ -1403,7 +1403,7 @@ def test_lifecycle_page_intro_names_every_step_in_run_order(client):
     text = unescape(client.get("/lifecycle").text)
     intro = text[text.index("Runs the sequence in order:"):]
     intro = intro[:intro.index("</p>")]
-    positions = [intro.find(name) for name in lifecycle.STEP_NAMES.values()]
+    positions = [intro.find(lifecycle.STEP_NAMES[key]) for key in lifecycle.ROUTINE]
     assert -1 not in positions, f"the intro leaves out a step: {intro}"
     assert positions == sorted(positions), f"the intro names the steps out of order: {intro}"
 

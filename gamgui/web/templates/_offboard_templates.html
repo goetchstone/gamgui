@@ -1,0 +1,34 @@
+{#- Saved offboarding routines. Picking one fills the form below and nothing else: the plan is always the form's. -#}
+<div id="offboard-templates" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+  <h2 class="eyebrow text-brand-grayink">Templates</h2>
+  {% if error %}<p class="mt-2 text-sm text-amber-800" data-focus tabindex="-1">{{ error }}</p>{% endif %}
+  {% if saved %}<p class="mt-2 text-sm text-emerald-700" data-focus tabindex="-1">Saved “{{ saved }}”.</p>{% endif %}
+  {% if store.set_aside %}<p class="mt-2 text-sm text-amber-800">The templates file couldn't be read, so it was moved aside to {{ store.set_aside.name }} and these starters are showing.</p>{% endif %}
+  <ul class="mt-2 space-y-2">
+    {% for name in store.names() %}
+    {% set t = store.get(name) %}
+    <li class="flex flex-wrap items-center gap-2 text-sm">
+      <button type="button" class="rounded-lg border border-brand-blue/60 px-3 py-1 text-brand-blueink hover:bg-brand-blue/5 transition-colors"
+              hx-get="/lifecycle/template" hx-vals='{"name": {{ name | tojson }} }' hx-include="#offboard-form [name=user], #offboard-form [name=manager]"
+              hx-target="#offboard-fields" hx-swap="innerHTML">{{ name }}</button>
+      {% if name == store.default %}<span class="text-xs text-brand-grayink">opens by default</span>{% else %}
+      <button type="button" class="text-xs text-brand-blueink underline" hx-post="/lifecycle/templates/default" hx-vals='{"name": {{ name | tojson }} }'
+              hx-target="#offboard-templates" hx-swap="outerHTML" hx-disabled-elt="this" aria-label="Open with the template {{ name }}">Open with this</button>{% endif %}
+      <button type="button" class="text-xs text-brand-blueink underline" hx-post="/lifecycle/templates/delete" hx-vals='{"name": {{ name | tojson }} }'
+              hx-target="#offboard-templates" hx-swap="outerHTML" hx-disabled-elt="this" hx-confirm="Delete the template “{{ name }}”?" aria-label="Delete the template {{ name }}">Delete</button>
+      <span class="w-full text-xs text-brand-grayink">Runs {{ t.runs | length }} steps: {{ t.runs | join(", ") }}.</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="mt-3 flex flex-wrap items-end gap-2">
+    <label class="block text-sm text-brand-blueink">Save the form below as
+      <input id="offboard-template-name" name="template_name" value="{{ typed_name or '' }}" autocomplete="off" class="mt-1 block rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm text-ink" /></label>
+    <button type="button" class="rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+            hx-post="/lifecycle/templates/save" hx-include="#offboard-form, #offboard-template-name" hx-target="#offboard-templates" hx-swap="outerHTML" hx-disabled-elt="this">Save</button>
+    {% if replacing %}
+    <button type="button" class="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-800 hover:bg-red-50 transition-colors"
+            hx-post="/lifecycle/templates/save" hx-vals='{"replace": "1"}' hx-include="#offboard-form, #offboard-template-name" hx-target="#offboard-templates" hx-swap="outerHTML" hx-disabled-elt="this">Replace “{{ replacing }}”</button>
+    {% endif %}
+  </div>
+  <p class="mt-2 text-xs text-brand-grayink">A template holds the whole form but the two addresses and the "already done" ticks. It can't leave out the reset, the sign-out or forwarding off.</p>
+</div>

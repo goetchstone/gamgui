@@ -138,6 +138,12 @@ the leaver's own calendar, which it visits too, and is expected on every run. If
 its line says why and later steps that depended on it were not run. Fix the cause, tick the steps
 that already succeeded, preview again and run — the checklist covers each failure.
 
+### Save your routine as a template
+
+**Templates** at the top of the page hold the whole form but the two addresses and the "already done" ticks. Click one to fill
+the form, then Preview as usual. Type a name and **Save** to keep the form as it is; **Open with this** makes the page start on it.
+A template can't leave out the reset, the sign-out or forwarding off.
+
 ### Add steps to an offboarding
 
 Under **Add steps to this offboarding**, each is off unless you tick it, and each says what it's for. Every offboarding also

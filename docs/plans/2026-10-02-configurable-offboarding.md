@@ -78,6 +78,8 @@ Users → Print filelist for the leaver's Drive) and export to a Sheet or CSV.
 
 ### P2 — A few more common steps, off by default, in the same list
 
+Templates ("Not planned: playbooks" below) were added on the operator's parity goal, 2026-11-05 (the back-port's C5).
+
 **Mostly applied by the SwiftGamGui back-port (its C3):** GAL off, clear recovery, IMAP and POP off, handing over secondary
 calendars and removing filters that forward. `core/lifecycle.py`, `ADDABLE_STEPS`.
 

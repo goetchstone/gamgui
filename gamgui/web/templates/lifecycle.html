@@ -9,63 +9,19 @@
     <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
   </div>
 {% else %}
-{% set fld = "mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 <div class="space-y-4">
   <div>
     <p class="eyebrow text-brand-blue">Lifecycle</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Offboard a user</h1>
-    <p class="text-brand-blueink mt-1 text-sm">Runs the sequence in order: {{ step_names.values() | join(" → ") }}. The account is <strong>not</strong> deleted — IT does that later from the user's detail page.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Runs the sequence in order: {% for key in routine %}{{ step_names[key] }}{{ " → " if not loop.last }}{% endfor %}. The account is <strong>not</strong> deleted — IT does that later from the user's detail page.</p>
   </div>
 
-  <form id="offboard-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="block"><span class="text-sm text-brand-blueink">Departing user</span>
-        <input class="{{ fld }}" type="email" name="user" placeholder="leaver@example.com" required /></label>
-      <label class="block"><span class="text-sm text-brand-blueink">Manager (delegate / data + reminder)</span>
-        <input class="{{ fld }}" type="email" name="manager" placeholder="manager@example.com" required /></label>
-    </div>
-    <label class="block"><span class="text-sm text-brand-blueink">Auto-reply subject</span>
-      <input class="{{ fld }}" type="text" name="subject" value="{{ subject }}" /></label>
-    <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
-      <textarea class="{{ fld }}" name="message" rows="3">{{ message }}</textarea>
-      <span class="text-xs text-brand-grayink"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically — see below.</span></label>
+  {% include "_offboard_templates.html" %}
 
-    <!-- Live preview: fills in as soon as the departing user + manager are entered. -->
-    <div id="autoreply-preview" class="mt-1"
-         hx-post="/lifecycle/offboard/autoreply" hx-include="#offboard-form" hx-target="this" hx-swap="innerHTML"
-         hx-trigger="load, keyup changed delay:400ms from:#offboard-form, change from:#offboard-form"></div>
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="block"><span class="text-sm text-brand-blueink">Remind manager in (days)</span>
-        <input class="{{ fld }}" type="number" name="days" value="{{ days }}" min="1" /></label>
-      <label class="block"><span class="text-sm text-brand-blueink">Also invite to the reminder (IT/HR) — optional</span>
-        <input class="{{ fld }}" type="email" name="notify" placeholder="it@example.com" /></label>
+  <form id="offboard-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
+    <div id="offboard-fields" class="space-y-4">
+      {% include "_offboard_fields.html" %}
     </div>
-    <fieldset>
-      <legend class="text-sm text-brand-blueink">Doesn't apply to this leaver? Leave a step out</legend>
-      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-        {% for key in optional_steps %}
-        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="na" value="{{ key }}" /> {{ step_names[key] }}</label>
-        {% endfor %}
-      </div>
-      <span class="text-xs text-brand-grayink">A step left out is not run and never counts as done; the preview says what leaving it out means. The password reset, the sign-out and turning off forwarding always run.</span>
-    </fieldset>
-    <fieldset>
-      <legend class="text-sm text-brand-blueink">Add steps to this offboarding</legend>
-      <div class="mt-1 space-y-1">
-        {% for key in addable_steps %}
-        <label class="flex items-start gap-1.5 text-sm text-brand-blueink"><input class="mt-1" type="checkbox" name="add" value="{{ key }}" /> <span>{{ step_names[key] }} <span class="text-xs text-brand-grayink">{{ added_notes[key] }}</span></span></label>
-        {% endfor %}
-      </div>
-    </fieldset>
-    <fieldset>
-      <legend class="text-sm text-brand-blueink">Re-running after a failure? Tick the steps that already succeeded</legend>
-      <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-        {% for key in routine %}
-        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="done" value="{{ key }}" /> {{ step_names[key] }}</label>
-        {% endfor %}
-      </div>
-      <span class="text-xs text-brand-grayink">A ticked step is not run and counts as done. Don't re-run one that succeeded: GAM refuses a delegate that already exists and a second transfer while the first is running, and the reminder would be added twice.</span>
-    </fieldset>
     <button type="button"
             class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
             hx-post="/lifecycle/offboard/preview" hx-include="#offboard-form" hx-target="#offboard-result" hx-swap="innerHTML">Preview steps</button>
