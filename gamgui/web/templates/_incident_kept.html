@@ -1,0 +1,102 @@
+{#- The incidents kept here and the one open. What a person typed, autoescaped; nothing here reaches Google. -#}
+{% import "_job_live.html" as live %}
+{% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
+{% set field = "mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set primary = "inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors" %}
+{% set plain = "inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-black hover:bg-paper transition-colors" %}
+<div class="space-y-4">
+  {% if problem %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" tabindex="-1" data-focus>{{ problem }}</div>{% endif %}
+  {% if store_problem %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ store_problem }}</div>{% endif %}
+  {% if unreadable %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">Couldn't read {{ unreadable | length }} incident{{ "" if unreadable | length == 1 else "s" }}: {{ unreadable | join(", ") }}. The file was moved aside in its folder, not changed.</div>{% endif %}
+  {% if job and not job.finished %}
+  <div hx-get="/incident/kept/status?job={{ job.id }}" hx-trigger="load delay:600ms" hx-target="#incident-kept" hx-swap="innerHTML"
+       class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+    <div class="flex items-center gap-2"><span class="spinner"></span>{{ live.progress(job, "Reading the incident's saved logs") }}<span>Reading the incident's saved logs…</span></div>
+  </div>
+  {% elif job and job.error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ job.error }}</div>{% endif %}
+
+  {% if open %}
+  <section class="{{ card }} space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p class="eyebrow text-brand-grayink">Open</p>
+        <h2 class="font-serif text-lg text-brand-black break-words">{{ open.title }}</h2>
+        <p class="text-xs text-brand-blueink">Opened {{ open.opened.astimezone().strftime("%Y-%m-%d %H:%M") }}{% if open.opened_by %} by {{ open.opened_by }}{% endif %}{% if open.reported %} · {{ open.reported }}{% endif %}</p>
+      </div>
+      <button type="button" class="{{ plain }}" hx-post="/incident/kept/close" hx-target="#incident-kept" hx-swap="innerHTML">Close it here</button>
+    </div>
+
+    <div>
+      <h3 class="text-sm font-medium text-brand-black">Saved logs</h3>
+      {% if saved %}
+      <ul class="mt-1 space-y-0.5 text-sm text-brand-black">{% for name in saved %}<li class="break-all">{{ name }}</li>{% endfor %}</ul>
+      {% else %}<p class="mt-1 text-sm text-brand-grayink">None yet. Each pull of the logs made while it's open is saved here.</p>{% endif %}
+      {% if saved_unreadable %}<p class="mt-1 text-sm text-amber-800">Couldn't read: {{ saved_unreadable | join(", ") }}. The rest are shown.</p>{% endif %}
+      <p class="mt-1 text-xs text-brand-grayink break-all">Kept in {{ folder }}. Removing an incident is the Finder's for now.</p>
+      <form class="mt-2 flex flex-wrap items-end gap-3" hx-post="/incident/kept/import" hx-encoding="multipart/form-data" hx-target="#incident-kept" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <label class="block text-sm text-brand-blueink">Add an export (the zip file Export all saves)
+          <input type="file" name="export" accept=".zip" class="mt-1 block text-sm text-ink" /></label>
+        <button type="submit" class="{{ plain }}">Add it</button>
+      </form>
+    </div>
+
+    <div>
+      <h3 class="text-sm font-medium text-brand-black">Notes</h3>
+      {% if open.notes %}
+      <ul class="mt-1 space-y-1 text-sm text-brand-black">{% for n in open.notes %}<li class="break-words"><span class="text-xs text-brand-grayink">{{ n.at.astimezone().strftime("%Y-%m-%d %H:%M") }}</span> {{ n.text }}</li>{% endfor %}</ul>
+      {% endif %}
+      <form class="mt-2 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end" hx-post="/incident/kept/note" hx-target="#incident-kept" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <label class="block text-sm text-brand-blueink">A note
+          <input name="text" autocomplete="off" class="{{ field }}" /></label>
+        <label class="block text-sm text-brand-blueink">When, if not now
+          <input type="datetime-local" name="at" class="{{ field }}" /></label>
+        <button type="submit" class="{{ plain }}">Add note</button>
+      </form>
+    </div>
+
+    <details>
+      <summary class="cursor-pointer text-sm text-brand-blueink">Its details</summary>
+      <form class="mt-2 grid gap-3 sm:grid-cols-2" hx-post="/incident/kept/details" hx-target="#incident-kept" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <label class="block text-sm text-brand-blueink sm:col-span-2">Title
+          <input name="title" value="{{ open.title }}" class="{{ field }}" /></label>
+        <label class="block text-sm text-brand-blueink">How it was reported
+          <input name="reported" value="{{ open.reported }}" class="{{ field }}" /></label>
+        <label class="block text-sm text-brand-blueink">Opened by
+          <input name="opened_by" value="{{ open.opened_by }}" class="{{ field }}" /></label>
+        <label class="block text-sm text-brand-blueink">Opened
+          <input type="datetime-local" name="opened" value="{{ open.opened.astimezone().strftime('%Y-%m-%dT%H:%M') }}" class="{{ field }}" /></label>
+        <div class="flex items-end"><button type="submit" class="{{ plain }}">Save details</button></div>
+      </form>
+    </details>
+  </section>
+  {% endif %}
+
+  {% if records %}
+  <section class="{{ card }}">
+    <h2 class="text-sm font-medium text-brand-black">Kept here</h2>
+    <ul class="mt-2 space-y-2 text-sm">
+      {% for r in records %}
+      <li class="flex flex-wrap items-center justify-between gap-2">
+        <span class="break-words text-brand-black">{{ r.title }} <span class="text-xs text-brand-grayink">{{ r.opened.astimezone().strftime("%Y-%m-%d") }}{% if open and open.id == r.id %} · open{% endif %}</span></span>
+        {% if not (open and open.id == r.id) %}<button type="button" aria-label="Open the incident {{ r.title }}" class="{{ plain }}" hx-post="/incident/kept/open" hx-vals='{"incident": {{ r.id | tojson }} }' hx-target="#incident-kept" hx-swap="innerHTML">Open</button>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <form class="{{ card }} grid gap-3 sm:grid-cols-2" hx-post="/incident/kept/new" hx-encoding="multipart/form-data" hx-target="#incident-kept" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <h2 class="text-sm font-medium text-brand-black sm:col-span-2">New incident</h2>
+    <label class="block text-sm text-brand-blueink sm:col-span-2">Title
+      <input name="title" autocomplete="off" placeholder="Carol's account taken over" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">How it was reported
+      <input name="reported" autocomplete="off" placeholder="An alert, a person, a check" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">Opened by
+      <input name="opened_by" value="{{ default_by }}" autocomplete="off" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">Identified on
+      <input type="date" name="opened" value="{{ today }}" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">From an export (optional)
+      <input type="file" name="export" accept=".zip" class="mt-1 block text-sm text-ink" /></label>
+    <div class="sm:col-span-2"><button type="submit" class="{{ primary }}">Keep this incident</button></div>
+  </form>
+</div>

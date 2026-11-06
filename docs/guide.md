@@ -232,6 +232,11 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Keep an incident
+1. Open **Incident**, then **Keep an incident**. Give it a title and how it came to light, and click **Keep this incident**. It takes the pull you just made, if any, or an export you pick.
+2. While it's open, each pull of the logs is saved to it. Add notes with their own time, which can be earlier than now.
+3. It stays on this Mac, and opens again after a restart without reading Google: the logs and **Read the logs** show what it has saved.
+
 ## Pull the incident logs
 1. Open **Incident**, then **Pull the logs**. Enter the people reported, or leave it empty for every account, and how far back to read.
 2. Leave the logs ticked, or open **Other logs** for more, and click **Pull logs**. It reads in the background and changes nothing, and each log says how far it has got.

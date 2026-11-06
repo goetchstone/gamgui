@@ -37,13 +37,14 @@ PANELS = {
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",
     "incident_logs": "/incident/logs/status",
+    "incident_open": "/incident/kept/status",
     "phishing_find": "/phishing/find/status",
     "phishing": "/phishing/trash/status",
     "sequence": "/builder/sequence/status",
     "onboard": "/onboard/bulk/status",
     "finish": "/onboard/finish/status",   # steps retried until Google has set a new account up
 }
-UNSTOPPABLE = {"index", "connected_apps", "incident_check"}   # reads at once, not a loop: there is no "between targets"
+UNSTOPPABLE = {"index", "connected_apps", "incident_check", "incident_open"}   # reads at once, not a loop: there is no "between targets"
 CONFIRM_STOP = {"offboard", "incident_secure"}      # a stop leaves the leaver half offboarded, or the attacker half locked out: ask first
 ONE_STEP = "change"              # a change made from a screen's button, not a loop: no panel of its own, and no Stop
 

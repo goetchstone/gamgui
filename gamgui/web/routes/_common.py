@@ -7,6 +7,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 
 from ...core.gam.errors import GAMError
+from ...core.incident.store import IncidentStore
+from ...core.incident.store import Problem as IncidentProblem
 from ...core.signatures import SignatureStore
 from ..server import TEMPLATES
 
@@ -44,6 +46,17 @@ def write_failed(request: Request, what: str, result) -> HTMLResponse:
     """A failed write: what didn't happen and what to do about it in words (``remediation``), with
     GAM's raw error one click away — never GAM's line as the headline (plan U9)."""
     return error_partial(request, f"{what} {result.remediation}".strip(), result.detail)
+
+
+def incident_store(st):
+    """The incidents kept here, opened on first use, and why not: nothing is saved when its folder can't be read, so nothing is made over what's there."""
+    if st.incident_store is None:
+        try:
+            st.incident_store = IncidentStore()
+            st.incident_store_problem = ""
+        except IncidentProblem as exc:
+            st.incident_store_problem = str(exc)
+    return st.incident_store, st.incident_store_problem
 
 
 def signature_store(request: Request) -> SignatureStore:

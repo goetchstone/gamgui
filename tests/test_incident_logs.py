@@ -370,7 +370,7 @@ def test_gmail_is_held_to_thirty_days_on_a_longer_pull(client, state, gam_calls)
 def test_read_the_rest_on_gmail_ends_thirty_days_on_rather_than_skipping_what_s_between(client, state, gam_calls):
     _pull(client, state, "gmail", accounts=CAROL)
     held = state.incident_pull
-    old = held.log("gmail")
+    old = state.incident_pull.log("gmail")
     since = datetime.now(UTC) - timedelta(days=40)
     held.logs = [pull.Log.read("gmail", old.rows, 720, True, since)]
     client.post("/incident/logs/rest", data={"application": "gmail"})
@@ -378,7 +378,7 @@ def test_read_the_rest_on_gmail_ends_thirty_days_on_rather_than_skipping_what_s_
     read = [a for a in gam_calls() if a[:2] == ["report", "gmail"]][-1]
     assert read[read.index("start") + 1] == logs.report_time(since)
     assert read[read.index("end") + 1] == logs.report_time(since + timedelta(days=30))
-    merged = held.log("gmail")
+    merged = state.incident_pull.log("gmail")
     assert merged.capped and merged.through == since.replace() + timedelta(days=30), "the ten days after it are still to read"
 
 
@@ -495,7 +495,7 @@ def test_read_the_rest_goes_on_from_where_it_stopped(client, state, gam_calls):
     wait_for_job(client, state.jobs[state.incident_pull_job])
     read = [a for a in gam_calls() if a[:2] == ["report", "login"]][-1]
     assert read[read.index("start") + 1] == "2026-10-18T00:00:00Z"
-    merged = held.log("login")
+    merged = state.incident_pull.log("login")
     assert len(merged.rows) == len(old.rows) and not merged.capped      # each event once
 
 

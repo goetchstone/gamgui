@@ -29,7 +29,7 @@ _limit_base = 0
 
 
 @contextmanager
-def _field_limit_at_least(size: int) -> Iterator[None]:
+def field_limit_at_least(size: int) -> Iterator[None]:
     """The csv module's field limit is process-wide, and a domain-wide read parses in a thread beside others on
     the event loop. It goes back only when the last reader ends: one putting back what it found could drop the limit
     under another still reading a long cell."""
@@ -108,13 +108,13 @@ def _coerce_to_records(val: Any) -> List[Dict[str, Any]]:
 def _parse_csv(text: str, json_column: bool = True) -> List[Dict[str, Any]]:
     # newline="": the csv module does its own line handling, so a bare CR inside a cell is data, not an
     # error. And a cell may be as long as the output itself (a formatjson record, a long signature):
-    # the module's 131,072-character limit is raised while this read lasts (_field_limit_at_least).
+    # the module's 131,072-character limit is raised while this read lasts (field_limit_at_least).
     # escapechar: GAM writes every CSV in its setDialect, which adds a backslash escape character unless
     # csv_output_no_escape_char is on (off by default). Its writer doubles each backslash, so a quote inside
     # a formatjson record's JSON comes out as \\"" — read without the escape, that row was dropped and every
     # backslash came back doubled (failure log 2026-10-30; tests/test_gam_csv_dialect.py holds it to the build).
     reader = csv.DictReader(io.StringIO(text, newline=""), escapechar="\\")
-    with _field_limit_at_least(len(text)):
+    with field_limit_at_least(len(text)):
         rows = list(reader)
     if not rows:
         return []

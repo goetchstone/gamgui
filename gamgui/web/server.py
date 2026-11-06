@@ -117,6 +117,14 @@ class AppState:
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     offboard_templates: object = None  # saved offboarding routines (lazy-loaded by the lifecycle route)
+    incident_store: object = None      # the incidents kept here (lazy: routes/_common.incident_store)
+    incident_store_problem: str = ""
+    incident_open: str = ""            # the open incident's ID, on this connector
+    incident_open_job: str = ""        # the job reading its saved logs
+    incident_evidence: object = None   # its saved reads put together: what a pull saved to it is added to, in memory
+    incident_saved: list = field(default_factory=list)              # each saved read's name
+    incident_saved_unreadable: list = field(default_factory=list)   # and those that couldn't be read
+    incident_swept: set = field(default_factory=set)   # the addresses a saved read of every account was made from
     incident_check: object = None      # the last Check Account, on this connector
     incident_check_job: str = ""       # its job, which guards a second check
     incident_run_job: str = ""         # the last Secure run's job, which guards a check during it
@@ -164,6 +172,12 @@ class AppState:
         self.gam_version_held = None   # setup re-reads the version on the next Home
         self.connected_apps = None     # read with the connector being replaced
         self.connected_apps_job_id = ""
+        self.incident_open = ""        # opens only while connected to its domain
+        self.incident_open_job = ""
+        self.incident_evidence = None
+        self.incident_saved = []
+        self.incident_saved_unreadable = []
+        self.incident_swept = set()
         self.incident_check = None     # read with the connector being replaced
         self.incident_check_job = ""
         self.incident_run_job = ""
@@ -429,6 +443,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.lifecycle import router as lifecycle_router
     from .routes.onboarding import router as onboarding_router
     from .routes.incident import router as incident_router
+    from .routes.incident_kept import router as incident_kept_router
     from .routes.incident_logs import router as incident_logs_router
     from .routes.phishing import router as phishing_router
     from .routes.reports import router as reports_router
@@ -439,6 +454,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(home_router)
     app.include_router(setup_router)
     app.include_router(users_router)
+    app.include_router(incident_kept_router)
     app.include_router(incident_logs_router)
     app.include_router(incident_router)
     app.include_router(phishing_router)
