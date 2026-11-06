@@ -237,6 +237,11 @@ that list says which and how to add it, and the others still read. Not yet verif
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.
 3. **Done** lists what this app or the logs show finished. **Mark done** is for what no log can show: it asks how it was done, and stays with the incident. It isn't offered for a lock, recovery details or a read, which the logs or this app show.
 
+## See who it reached and where it started
+1. On **Respond**, each email the attacker sent has its own list, from the Gmail log: who received it, what bounced, and who's still to warn. Pulling the email from every mailbox doesn't change this list, which is what makes it the record.
+2. **Pick the warning** when you've sent one: only emails sent after it are offered, and it counts only for those the log shows it reaching. **Every address it went to** lists them, and **Export as CSV** saves them all. A group it went to is read for its members, so each counts as themselves.
+3. On **Investigate**, **Where it started** lists emails the first account received from outside before the attack. **That's the phish** keeps your pick with the incident, with who else here received it. They may have fallen for it too.
+
 ## Keep an incident
 1. Open **Incident**, then **Keep an incident**. Give it a title and how it came to light, and click **Keep this incident**. It takes the pull you just made, if any, or an export you pick.
 2. While it's open, each pull of the logs is saved to it. Add notes with their own time, which can be earlier than now.

@@ -7,6 +7,7 @@ Reads only, as a background job: a pull for every account can take many reads a 
 from __future__ import annotations
 
 import asyncio
+import csv
 import io
 import ipaddress
 import zipfile
@@ -18,7 +19,8 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.gam.commands import is_one_address
-from ...core.incident import logs, pull, reader, reads, runs, store
+from ...core.csv_safe import csv_safe
+from ...core.incident import groups, logs, pull, reader, reads, runs, store
 from ...core.phishing import MOST_AT_ONCE
 from ...core.incident.logs import report_time
 from ..jobs import start_job
@@ -199,7 +201,7 @@ def _merged(old: pull.Log, log: pull.Log, until: datetime, now: datetime) -> pul
     seen = {r.identity for r in old.rows or []}
     rows = logs.newest_first([*(old.rows or []), *(r for r in log.rows or [] if r.identity not in seen)])
     through = log.through if log.capped else until if until < now else None     # a window ended short of now leaves the rest still to read
-    return pull.Log.read(old.application, rows, old.hours, log.capped or until < now, through)
+    return pull.Log.read(old.application, rows, old.hours, log.capped or until < now, through, old.covered, whole=(*old.whole, *log.whole))
 
 
 async def _read_rest(job, st, conn, held: pull.Pull, application: str, since: datetime, record_id: str) -> None:
@@ -257,13 +259,22 @@ def _when(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _people_of(users) -> dict:
+    """Each person's addresses to their own: their aliases, and the domain aliases Google adds (`nonEditableAliases`, which GAM returns with the aliases asked for). A person's own address is never taken by
+    another's alias."""
+    people = {u.primary_email.lower(): u.primary_email.lower() for u in users}
+    for user in users:
+        extra = user.raw.get("nonEditableAliases") if isinstance(user.raw, dict) else None
+        for alias in (*user.aliases, *(extra if isinstance(extra, list) else ())):
+            if isinstance(alias, str):
+                people.setdefault(alias.lower(), user.primary_email.lower())
+    return people
+
+
 async def _context_for(st, held: pull.Pull) -> reader.Context:
     """What the pull says that its events don't. The directory, when it can be read: until it is, a group can't be told from a person."""
-    people = {}
     try:
-        for user in await st.users(stale_ok=True):
-            people[user.primary_email.lower()] = user.primary_email.lower()
-            people.update({alias.lower(): user.primary_email.lower() for alias in user.aliases})
+        people = _people_of(await st.users(stale_ok=True))
     except Exception:  # noqa: BLE001 - said on the to-do list: read the directory to finish
         people = {}
     capped = {}
@@ -278,10 +289,58 @@ async def _context_for(st, held: pull.Pull) -> reader.Context:
     known, _ = known_sign_ins(st)
     nobody, _ = nobody_has_checks(st)
     pulled = await asyncio.to_thread(runs.latest_runs, conn.audit.path, domain) if conn else []
+    record = open_incident_record(st)
+    warnings: dict = {}
+    for picked in record.warnings if record else ():
+        warnings.setdefault(reader.bare_message_id(picked.email), set()).add(reader.bare_message_id(picked.warning))
+    groups_read = _groups_read(st)
+    gmail = held.log("gmail")
     return reader.Context(pulled_by=held.query.ip, read={log.application for log in held.logs if log.rows is not None}, capped=capped, covered={log.application: set(log.covered) for log in held.logs if log.covered},
                           domains={d.lower() for d in await st.tenant_domains()}, people=people or None, swept=set(st.incident_swept), pulled=pulled,
+                          warnings=warnings, phish=record.phish if record else None, groups={g: list(m) for g, m in groups_read.members.items()}, everyone=set(groups_read.everyone),
+                          gmail_whole=list(gmail.whole) if gmail else [],
                           theirs={reader.key(m.account, m.address) for m in known.for_domain(domain)} if known else set(),
                           nobody_has=[reader.NobodyHas(c.message_id, c.at, c.by, c.gone) for c in nobody.for_domain(domain)] if nobody else [])
+
+
+def _groups_read(st) -> groups.GroupsRead:
+    if st.incident_groups is None:
+        st.incident_groups = groups.GroupsRead()
+    return st.incident_groups
+
+
+@router.get("/groups/status", response_class=HTMLResponse)
+async def groups_status(request: Request, job: str = "", part: str = "") -> HTMLResponse:
+    """A small poll while the groups are read, and the whole reading once, when they are: refreshing it each second would lose what's being typed there and read the pull again each time."""
+    held = request.app.state.gamgui.jobs.get(job)
+    return TEMPLATES.TemplateResponse(request, "_incident_groups_status.html", {"groups_job": held if held is not None and held.kind == "incident_groups" else None, "part": part if part in _PARTS else "",
+                                                                                 "on_incident": "/incident" in request.headers.get("HX-Current-URL", "")})
+
+
+async def _read_groups(job, conn, wanted, read: groups.GroupsRead) -> None:
+    def note() -> None:
+        job.done += 1
+        job.total = max(job.total, job.done)
+
+    try:
+        await groups.read_groups(conn, wanted, read, note=note)
+    finally:
+        job.finish()
+
+
+def _read_groups_behind(st, reading: reader.Reading):
+    """The groups the emails went to, read in the background; the screen then asks again and the reading counts each by its members. Until they're read, each counts on the warning's send, as it says."""
+    going = st.jobs.get(st.incident_groups_job)
+    if going is not None and not going.finished:
+        return going
+    read = _groups_read(st)
+    wanted = groups.to_ask(reading.reaches, read)
+    if not wanted or st.connector is None:
+        return None
+    job = start_job(st.jobs, len(wanted), kind="incident_groups", title="Read the members of the groups it went to")
+    st.incident_groups_job = job.id
+    job.task = asyncio.create_task(_read_groups(job, st.connector, wanted, read))
+    return job
 
 
 async def _current_reading(st) -> Optional[reader.Reading]:
@@ -309,22 +368,32 @@ def _shows_query(shown: reader.Shown) -> str:
     return pull.Filter(shown.accounts, shown.addresses, shown.logs, shown.apps, shown.agent).query
 
 
-async def _reading_panel(request: Request, part: str, problem: str = "") -> HTMLResponse:
-    st = request.app.state.gamgui
+async def _settled_reading(st) -> Optional[reader.Reading]:
     opening = st.jobs.get(st.incident_open_job)
     if opening is not None and not opening.finished and opening.task is not None:
-        await asyncio.wait({opening.task})      # what it's reading is what this shows
-    reading = await _current_reading(st)
+        await asyncio.wait({opening.task})      # what it's reading is what this reads
+    return await _current_reading(st)
+
+
+async def _reading_panel(request: Request, part: str, problem: str = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    reading = await _settled_reading(st)
     record = open_incident_record(st)
     known, known_problem = known_sign_ins(st)
     nobody, nobody_problem = nobody_has_checks(st)
     domain = st.connector.domain if st.connector else ""
+    groups_job = _read_groups_behind(st, reading) if reading and part != "findings" else None
+    # A read of the groups can end during the reading above: that reading is then of the members before it, and nothing is left to ask for it again.
+    if reading and groups_job is None and part != "findings" and st.incident_reading[0][2].groups != _groups_read(st).members:
+        reading = await _current_reading(st)
+        groups_job = _read_groups_behind(st, reading) if reading else None
     said = [known_problem, nobody_problem,
             f"A list of marked sign-ins held something else, and was moved aside as {known.moved_aside}." if known and known.moved_aside else "",
             f"A list of what Find showed gone held something else, and was moved aside as {nobody.moved_aside}." if nobody and nobody.moved_aside else ""]
     return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {
         "reading": _ticked(st, reading, record) if reading else None, "pulling": _running(st) is not None, "when": _when, "part": part if part in _PARTS else "", "problem": problem, "store_problems": [s for s in said if s],
         "marks": known.for_domain(domain) if known else [], "ticking": record is not None, "shows_query": _shows_query, "most_emails": MOST_AT_ONCE,
+        "groups_job": groups_job, "group_problems": _groups_read(st).problems, "group_nameless": _groups_read(st).nameless, "reach_summary": reader.reach_summary, "received_words": reader.received_words, "outcome_words": reader.outcome_words,
         "focus": request.method == "POST" or part != "respond"})   # opening Respond doesn't take the keyboard from its page
 
 
@@ -377,11 +446,11 @@ async def tick(request: Request, kind: Annotated[str, Form()] = "", words: Annot
     st = request.app.state.gamgui
     if st.connector is None:
         return error_partial(request, NOT_CONNECTED)
+    reading = await _settled_reading(st)
     kept, why = incident_store(st)
     record = open_incident_record(st)
     if kept is None or record is None:
         return await _reading_panel(request, part, why or "Open an incident first: what's marked done is kept with it.")
-    reading = await _current_reading(st)
     left = _ticked(st, reading, record).to_do if reading else ()
     if not any((t.kind, t.words, t.basis) == (kind, words, basis) and t.tickable for t in left):
         return await _reading_panel(request, part, "That item can't be marked done: the logs show it, or it has changed. Read it again.")
@@ -404,6 +473,69 @@ async def untick(request: Request, kind: Annotated[str, Form()] = "", words: Ann
     except store.Problem as exc:
         return await _reading_panel(request, part, str(exc))
     return await _reading_panel(request, part)
+
+
+async def _pick(request: Request, part: str, change) -> HTMLResponse:
+    """A pick kept with the open incident: which email was the warning, which started it. ``change`` makes the record as it should be, given the reading, or says why it can't."""
+    st = request.app.state.gamgui
+    reading = await _settled_reading(st)     # first: what's saved is the record as it is after this wait, never as it was before it
+    kept, why = incident_store(st)
+    record = open_incident_record(st)
+    if kept is None or record is None:
+        return await _reading_panel(request, part, why or "Open an incident first: what's picked is kept with it.")
+    try:
+        kept.save(change(record, reading))
+    except store.Problem as exc:
+        return await _reading_panel(request, part, str(exc))
+    return await _reading_panel(request, part)
+
+
+@router.post("/warning", response_class=HTMLResponse)
+async def pick_warning(request: Request, email: Annotated[str, Form()] = "", warning: Annotated[str, Form()] = "", part: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Which email warned the people the attacker's reached: only one the logs offer for it. It's checked again at every reading, and counts only on the log's own word."""
+    def change(record, reading):
+        reach = next((r for r in reading.reaches if r.message_id == email), None) if reading else None
+        if reach is None or not any(c.message_id == warning for c in reach.candidates):
+            raise store.Problem("That email isn't one sent after it to someone it reached: read the logs again.")
+        return replace(record, warnings=(*(w for w in record.warnings if (w.email, w.warning) != (email, warning)), store.Warning(email, warning)))
+
+    return await _pick(request, part, change)
+
+
+@router.post("/unwarning", response_class=HTMLResponse)
+async def unpick_warning(request: Request, email: Annotated[str, Form()] = "", warning: Annotated[str, Form()] = "", part: Annotated[str, Form()] = "") -> HTMLResponse:
+    return await _pick(request, part, lambda record, _: replace(record, warnings=tuple(w for w in record.warnings if (w.email, w.warning) != (email, warning))))
+
+
+@router.post("/phish", response_class=HTMLResponse)
+async def pick_phish(request: Request, message: Annotated[str, Form()] = "", part: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Which email started it, or none: only one the logs list. Only the operator says which it was."""
+    def change(record, reading):
+        if not message:
+            return replace(record, phish=None)
+        way_in = reading.way_in if reading else None
+        if way_in is None or not any(c.message_id == message for c in way_in.candidates):
+            raise store.Problem("That email isn't one the logs list as a way in: read the logs again.")
+        return replace(record, phish=message)
+
+    return await _pick(request, part, change)
+
+
+@router.get("/reach.csv")
+async def reach_csv(request: Request, message: str = "") -> Response:
+    """Who one email reached, every address, whatever the screen shows. It says which email and, in its name, when it isn't everyone: a file gets passed around without its page."""
+    st = request.app.state.gamgui
+    held = await _current_reading(st)
+    reach = next((r for r in held.reaches if r.message_id == message), None) if held else None
+    if reach is None:
+        return Response("That email isn't in the logs read, or a pull is going on.", status_code=404, media_type="text/plain")
+    read, job, gmail = _groups_read(st), st.jobs.get(st.incident_groups_job), st.incident_pull.log("gmail")
+    partial = (reach.unnamed or reach.unreadable or (job is not None and not job.finished) or (gmail is not None and gmail.capped)
+               or any(r.address in read.problems or r.address in read.nameless for r in reach.recipients))
+    buffer = io.StringIO()
+    csv.writer(buffer).writerows([("email", "Message-ID", *reader.REACH_COLUMNS), *([csv_safe(c) for c in (reach.subject, reach.message_id, *row)] for row in reach.rows)])
+    name = f"who-it-reached-{reader.fingerprint(reach.message_id)[:8]}{'-partial' if partial else ''}.csv"
+    return Response(buffer.getvalue(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={name}"})
 
 
 @router.post("/again", response_class=HTMLResponse)

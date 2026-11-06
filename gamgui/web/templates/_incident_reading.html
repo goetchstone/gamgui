@@ -117,6 +117,7 @@
     </ul>
   </section>
   {% endif %}
+  {% include "_incident_reach.html" %}
   {% if part == "respond" and not reading.statuses and not reading.to_do and not reading.done and not reading.findings %}
   <p class="text-sm text-brand-black">Nothing here is suspect: no sign-in Google called suspicious, and no address you pulled by. That says nothing about a log that wasn't read.</p>
   {% endif %}
@@ -137,6 +138,7 @@
   {% else %}
   <p class="text-sm text-brand-black">Nothing here is suspect: no sign-in Google called suspicious, and no address you pulled by. That says nothing about a log that wasn't read.</p>
   {% endif %}
+  {% if reading.way_in %}{% include "_incident_wayin.html" %}{% endif %}
   {% if marks %}
   <section>
     <h2 class="text-sm font-medium text-brand-black">Marked as theirs</h2>

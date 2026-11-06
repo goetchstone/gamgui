@@ -1,0 +1,64 @@
+{#- Who each email the attacker sent reached, and whether they were warned, from the Gmail log's own events. Addresses and subjects came from the logs, which an attacker writes: autoescaped text only. A
+    warning picked is the operator's word, kept with the incident, and checked again at every reading. Nothing here sends anything. -#}
+{% macro candidate(reach, c) -%}
+<form class="flex flex-wrap items-center gap-2" hx-post="/incident/logs/warning" hx-target="#incident-reading" hx-swap="innerHTML" hx-disabled-elt="find button">
+  <input type="hidden" name="part" value="{{ part }}" /><input type="hidden" name="email" value="{{ reach.message_id }}" /><input type="hidden" name="warning" value="{{ c.message_id }}" />
+  <span class="break-words">{{ c.sender }}: “{{ c.subject or "(no subject)" }}”{% if c.at %}, {{ when(c.at) }}{% endif %}, to {{ c.covers }} of them</span>
+  <button type="submit" class="{{ small }}" aria-label="Pick “{{ c.subject or "(no subject)" }}” from {{ c.sender }} as the warning">It's the warning</button>
+</form>
+{%- endmacro %}
+{% if groups_job %}{% include "_incident_groups_status.html" %}{% endif %}
+{% for reach in reading.reaches %}
+<section>
+  <h2 class="text-sm font-medium text-brand-black break-words">Who “{{ reach.subject or "(no subject)" }}” reached</h2>
+  <p class="mt-1 text-sm text-brand-black">{{ reach_summary(reach) }}</p>
+  {% set unread_groups = reach.recipients | selectattr("address", "in", group_problems) | list %}
+  {% if unread_groups %}<p class="mt-1 text-xs text-amber-800">Members not read, so each counts on the warning's send: {% for r in unread_groups %}{{ r.address }} ({{ group_problems[r.address] }}){{ "; " if not loop.last else "." }}{% endfor %}</p>{% endif %}
+  {% set part_named = reach.recipients | selectattr("address", "in", group_nameless) | list %}
+  {% if part_named %}<p class="mt-1 text-xs text-amber-800">Some of a group's members have no address, so they aren't listed: {% for r in part_named %}{{ r.address }} ({{ group_nameless[r.address] }}){{ "; " if not loop.last else "." }}{% endfor %} See the group in the Admin console.</p>{% endif %}
+  {% if not reach.recipients %}<p class="mt-1 text-xs text-amber-800">The logs read have no send of it naming its recipients: pull the sender's Gmail log over the day it went out.</p>{% endif %}
+
+  {% for w in reach.warnings %}
+  <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+    <span class="break-words {{ 'text-amber-800' if w.problem else 'text-brand-black' }}">{% if w.problem %}Warning picked, {{ w.sender or w.message_id }}, doesn't count: {{ w.problem }}.{% else %}Warning picked: {{ w.sender }}, “{{ w.subject or "(no subject)" }}”, shown reaching {{ w.covers }} of the people to warn.{% endif %}</span>
+    {% if ticking %}
+    <form class="inline" hx-post="/incident/logs/unwarning" hx-target="#incident-reading" hx-swap="innerHTML">
+      <input type="hidden" name="part" value="{{ part }}" /><input type="hidden" name="email" value="{{ reach.message_id }}" /><input type="hidden" name="warning" value="{{ w.message_id }}" />
+      <button type="submit" class="text-brand-blueink underline" aria-label="It isn't the warning: {{ w.subject or w.message_id }}">Not the warning</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {% if reach.candidates and ticking %}
+  <details class="mt-1">
+    <summary class="cursor-pointer text-xs text-brand-blueink">Pick the warning <span>({{ reach.candidates | length }} sent after it)</span></summary>
+    <div class="mt-1 space-y-1 text-xs text-brand-black">
+      {% for c in reach.candidates[:10] %}{{ candidate(reach, c) }}{% endfor %}
+      {% if reach.candidates | length > 10 %}
+      <details><summary class="cursor-pointer text-brand-blueink">More emails sent after it ({{ reach.candidates | length - 10 }})</summary>
+        <div class="mt-1 space-y-1">{% for c in reach.candidates[10:] %}{{ candidate(reach, c) }}{% endfor %}</div>
+      </details>
+      {% endif %}
+    </div>
+  </details>
+  {% elif reach.candidates %}
+  <p class="mt-1 text-xs text-brand-grayink"><a href="/incident/kept" class="underline">Keep an incident</a> to pick which email was the warning.</p>
+  {% elif reach.recipients and not reach.warnings %}
+  <p class="mt-1 text-xs text-brand-grayink">No email sent after it shows in the logs read, so none can be picked as the warning: pull the Gmail log of whoever sent one.</p>
+  {% endif %}
+
+  {% if reach.recipients %}
+  <details class="mt-1">
+    <summary class="cursor-pointer text-xs text-brand-blueink">Every address it went to <span>({{ reach.recipients | length }})</span></summary>
+    <ul class="mt-1 space-y-0.5 text-xs">
+      {% for r in reach.recipients[:300] %}
+      <li class="break-all {{ 'font-medium text-amber-800' if r.to_warn else 'text-brand-black' }}">{{ r.address }} <span class="font-normal {{ 'text-amber-800' if r.to_warn else 'text-brand-grayink' }}">{{ "inside" if r.inside else "outside" }} · {{ outcome_words(r) }}{% if r.via %} · through {{ r.via }}{% endif %}{% if r.warned %} · warned{% elif r.warned is false %} · not shown warned{% endif %}{% if r.to_warn %} · to warn{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if reach.recipients | length > 300 %}<p class="mt-1 text-xs text-brand-grayink">Showing 300 of {{ reach.recipients | length }}. Export the CSV for all of them.</p>{% endif %}
+  </details>
+  <p class="mt-1"><a download href="/incident/logs/reach.csv?message={{ reach.message_id | urlencode }}" class="text-xs text-brand-blueink underline" aria-label="Export who “{{ reach.subject or "(no subject)" }}” reached as CSV">Export as CSV</a></p>
+  {% endif %}
+</section>
+{% endfor %}

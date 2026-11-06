@@ -1,0 +1,8 @@
+{#- While the groups an email went to are read: a small poll, and the reading once when they are. -#}
+{% if groups_job and not groups_job.finished %}
+<p hx-get="/incident/logs/groups/status?job={{ groups_job.id }}{% if part %}&amp;part={{ part }}{% endif %}" hx-trigger="load delay:1000ms" hx-swap="outerHTML" class="text-xs text-brand-blueink">Reading the members of the groups it went to… {{ groups_job.done }} read. Each counts on the warning's send until they are.</p>
+{% elif on_incident %}
+<div hx-get="/incident/logs/reading{% if part %}?part={{ part }}{% endif %}" hx-trigger="load" hx-target="#incident-reading" hx-swap="innerHTML"></div>
+{% else %}
+<p class="text-sm text-brand-blueink">Read. <a href="/incident" class="underline">Respond</a> counts each by its members.</p>
+{% endif %}
