@@ -7,6 +7,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 
 from ...core.gam.errors import GAMError
+from ...core.incident.known import KnownSignIns, NobodyHasChecks
 from ...core.incident.store import IncidentStore
 from ...core.incident.store import Problem as IncidentProblem
 from ...core.signatures import SignatureStore
@@ -57,6 +58,42 @@ def incident_store(st):
         except IncidentProblem as exc:
             st.incident_store_problem = str(exc)
     return st.incident_store, st.incident_store_problem
+
+
+def known_sign_ins(st):
+    """The sign-ins marked as the person's own, opened on first use, and why not."""
+    if st.incident_known is None:
+        try:
+            st.incident_known = KnownSignIns()
+            st.incident_known_problem = ""
+        except IncidentProblem as exc:
+            st.incident_known_problem = f"Sign-ins can't be marked as theirs: {exc}"
+    return st.incident_known, st.incident_known_problem
+
+
+def nobody_has_checks(st):
+    """What Phishing's Find showed nobody here has, opened on first use, and why not."""
+    if st.incident_nobody is None:
+        try:
+            st.incident_nobody = NobodyHasChecks()
+            st.incident_nobody_problem = ""
+        except IncidentProblem as exc:
+            st.incident_nobody_problem = f"What Phishing's Find showed gone can't be kept: {exc}"
+    return st.incident_nobody, st.incident_nobody_problem
+
+
+def admin_address(st) -> str:
+    """The admin signed in, when the sign-in says: who did it, in what's kept. A Keychain refusal just leaves it unsaid."""
+    try:
+        return st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None and st.connector else ""
+    except Exception:  # noqa: BLE001 - never its message
+        return ""
+
+
+def open_incident_record(st):
+    """The incident open here, if any, for the header above the incident screens."""
+    kept, _ = incident_store(st)
+    return kept.get(st.incident_open) if kept and st.incident_open else None
 
 
 def signature_store(request: Request) -> SignatureStore:

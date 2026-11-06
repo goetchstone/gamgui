@@ -1,16 +1,39 @@
-{#- What the logs show, worked out by the reader. Code finds and code recommends: nothing here changes anything, and each draft only opens a screen with its own read, preview and
-    confirmation. Addresses, subjects, URLs and app names came from the logs, which an attacker writes, so everything is only ever autoescaped text. -#}
+{#- What the logs show, worked out by the reader. Code finds and code recommends: nothing here changes the tenant, and each draft only opens a screen with its own read, preview and confirmation. What's
+    saved here is the operator's word, on this Mac. Addresses, subjects, URLs and app names came from the logs, which an attacker writes, so everything is only ever autoescaped text. `part` is
+    "findings" on Investigate, "respond" on Respond, and neither shows both. -#}
+{% set small = "inline-flex items-center rounded-lg border border-brand-gray/60 px-2.5 py-1 text-xs text-brand-black hover:bg-paper transition-colors" %}
+{% set field = "rounded-lg border border-brand-field bg-brand-white px-2.5 py-1 text-xs text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
 {% macro draft_link(d) -%}
-{%- if d.kind == "secureAccount" or d.kind == "undo" -%}<a href="/incident?person={{ d.account | urlencode }}" class="underline">{{ d.title }}</a>
+{%- if d.kind == "secureAccount" -%}<a href="/incident?person={{ d.account | urlencode }}" class="underline">{{ d.title }}</a>
+{%- elif d.kind == "undo" and d.pick == "clearRecovery" -%}<a href="/incident?person={{ d.account | urlencode }}&amp;fix=clear_recovery" class="underline">{{ d.title }}</a>
 {%- elif d.kind == "pullEmail" -%}<a href="/phishing?message={{ d.message_id | urlencode }}" class="underline">{{ d.title }}</a>
 {%- endif -%}
 {%- endmacro %}
+{% macro that_was_them(account, addresses) -%}
+<details class="mt-1">
+  <summary class="cursor-pointer text-xs text-brand-blueink">That was them…</summary>
+  <form class="mt-1 flex flex-wrap items-end gap-2" hx-post="/incident/logs/theirs" hx-target="#incident-reading" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="part" value="{{ part }}" />
+    <input type="hidden" name="account" value="{{ account }}" />
+    {% if addresses | length == 1 %}<input type="hidden" name="address" value="{{ addresses[0] }}" />
+    {% else %}<label class="block text-xs text-brand-blueink">Address
+      <select name="address" class="{{ field }} mt-0.5 block">{% for a in addresses %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select></label>{% endif %}
+    <label class="block text-xs text-brand-blueink">How do you know it was {{ account }}{% if addresses | length == 1 %} from {{ addresses[0] }}{% endif %}?
+      <input name="note" autocomplete="off" class="{{ field }} mt-0.5 block w-72 max-w-full" /></label>
+    <button type="submit" class="{{ small }}" aria-label="Mark {{ account }} as theirs">Mark as theirs</button>
+  </form>
+</details>
+{%- endmacro %}
 {% if reading is none %}
-<p class="text-sm text-brand-blueink">Nothing to read yet: pull the logs first.</p>
+{% if problem %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ problem }}</div>{% endif %}
+<p class="text-sm text-brand-blueink">{% if pulling %}A pull of the logs is going on: what it read shows here when it's done.{% else %}Nothing to read yet: pull the logs first.{% endif %}</p>
 {% else %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-5">
-  <p tabindex="-1" data-focus class="text-sm text-brand-blueink">Read from {{ reading.events }} event{{ "" if reading.events == 1 else "s" }}. Rules in code found this: it changes nothing.</p>
+  <p{% if focus %} tabindex="-1" data-focus{% endif %} class="text-sm text-brand-blueink">Read from {{ reading.events }} event{{ "" if reading.events == 1 else "s" }}. Rules in code found this: it changes nothing.</p>
+  {% if problem %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ problem }}</div>{% endif %}
+  {% for said in store_problems %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ said }}</div>{% endfor %}
 
+  {% if part != "findings" %}
   {% if reading.statuses %}
   <section>
     <h2 class="text-sm font-medium text-brand-black">Where each account stands</h2>
@@ -33,12 +56,45 @@
 
   {% if reading.to_do %}
   <section>
-    <h2 class="text-sm font-medium text-brand-black">Still to do</h2>
-    <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-brand-black">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-sm font-medium text-brand-black">Still to do</h2>
+      {% set left = reading.emails_to_pull %}
+      {% if left | length > 1 %}<a href="/phishing?message={{ left[:most_emails] | join('\n') | urlencode }}" class="text-xs text-brand-blueink underline">{% if left | length > most_emails %}Pull the first {{ most_emails }} emails…{% else %}Pull all {{ left | length }} emails…{% endif %}</a>{% endif %}
+    </div>
+    <ol class="mt-2 list-decimal space-y-2.5 pl-5 text-sm text-brand-black">
       {% for t in reading.to_do %}
-      <li class="break-words">{{ t.words }}{% for d in t.drafts %} {{ draft_link(d) }}{% endfor %}{% if t.sweeps %} <a href="/incident/logs?ip={{ t.sweeps | urlencode }}" class="underline">Pull every account from {{ t.sweeps }}</a>{% endif %}{% if t.pulls_again %} <a href="/incident/logs?accounts={{ t.accounts | join(',') | urlencode }}" class="underline">Pull again</a>{% endif %}</li>
+      <li class="break-words">{{ t.words }}
+        <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {% for d in t.drafts %}{{ draft_link(d) }}{% endfor %}
+          {% if t.sweeps %}<a href="/incident/logs?ip={{ t.sweeps | urlencode }}" class="underline">Pull every account from {{ t.sweeps }}</a>{% endif %}
+          {% if t.shows %}<a href="/incident/logs?{{ shows_query(t.shows) }}" class="underline">Show the events</a>{% endif %}
+          {% if t.pulls_again %}
+          <form hx-post="/incident/logs/again" hx-target="#incident-reading" hx-swap="innerHTML" hx-disabled-elt="find button" class="inline">
+            <input type="hidden" name="part" value="{{ part }}" />
+            <input type="hidden" name="accounts" value="{{ t.accounts | join(' ') }}" />
+            {% for name in t.pulls_again %}<input type="hidden" name="log" value="{{ name }}" />{% endfor %}
+            <button type="submit" class="{{ small }}" aria-label="Pull again: {{ t.words }}">Pull again</button>
+          </form>
+          {% endif %}
+        </div>
+        {% if t.theirs and t.accounts %}{{ that_was_them(t.accounts[0], t.theirs) }}{% endif %}
+        {% if ticking and t.tickable %}
+        <details class="mt-1">
+          <summary class="cursor-pointer text-xs text-brand-blueink">Mark done…</summary>
+          <form class="mt-1 flex flex-wrap items-end gap-2" hx-post="/incident/logs/tick" hx-target="#incident-reading" hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="part" value="{{ part }}" />
+            <input type="hidden" name="kind" value="{{ t.kind }}" /><input type="hidden" name="words" value="{{ t.words }}" /><input type="hidden" name="basis" value="{{ t.basis }}" />
+            <label class="block text-xs text-brand-blueink">How was it done?
+              <input name="how" autocomplete="off" class="{{ field }} mt-0.5 block w-72 max-w-full" /></label>
+            <button type="submit" class="{{ small }}" aria-label="Mark done: {{ t.words }}">Mark done</button>
+          </form>
+        </details>
+        {% endif %}
+      </li>
       {% endfor %}
     </ol>
+    {% if ticking and reading.to_do | rejectattr("tickable") | list %}<p class="mt-2 text-xs text-brand-grayink">A lock, recovery details cleared, a computer, and a read of the logs or the directory can't be marked done by hand: the logs show them done whoever did them.</p>{% endif %}
+    {% if not ticking %}<p class="mt-2 text-xs text-brand-grayink"><a href="/incident/kept" class="underline">Keep an incident</a> to mark an item done by hand, for what no log can show.</p>{% endif %}
   </section>
   {% endif %}
 
@@ -46,22 +102,57 @@
   <section>
     <h2 class="text-sm font-medium text-brand-black">Done</h2>
     <ul class="mt-2 space-y-1 text-sm text-brand-black">
-      {% for t in reading.done %}<li class="break-words">{{ t.words }} <span class="text-xs text-brand-grayink">{{ when(t.done.at) }}{% if t.done.by %}, by {{ t.done.by }}{% endif %}</span></li>{% endfor %}
+      {% for t in reading.done %}
+      <li class="break-words">{{ t.words }}{% if t.done.said %} <span class="text-xs">Done by hand: {{ t.done.said }}.</span>{% endif %}
+        <span class="text-xs text-brand-grayink">{{ when(t.done.at) }}{% if t.done.by %}, by {{ t.done.by }}{% endif %}{% if t.done.how == "nobodyHasIt" %}, as Phishing's Find showed{% elif t.done.how == "trashed" %}, as this app's audit log shows{% elif t.done.how == "byHand" %}, kept with the incident{% endif %}</span>
+        {% if t.done.how == "byHand" and ticking %}
+        <form class="inline" hx-post="/incident/logs/untick" hx-target="#incident-reading" hx-swap="innerHTML">
+          <input type="hidden" name="part" value="{{ part }}" />
+          <input type="hidden" name="kind" value="{{ t.kind }}" /><input type="hidden" name="words" value="{{ t.words }}" /><input type="hidden" name="basis" value="{{ t.basis }}" />
+          <button type="submit" class="text-xs text-brand-blueink underline" aria-label="Undo: {{ t.words }}">Undo</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
     </ul>
   </section>
   {% endif %}
+  {% if part == "respond" and not reading.statuses and not reading.to_do and not reading.done and not reading.findings %}
+  <p class="text-sm text-brand-black">Nothing here is suspect: no sign-in Google called suspicious, and no address you pulled by. That says nothing about a log that wasn't read.</p>
+  {% endif %}
+  {% endif %}
 
+  {% if part != "respond" %}
   {% if reading.findings %}
   <section>
     <h2 class="text-sm font-medium text-brand-black">What the logs show</h2>
-    <ul class="mt-2 space-y-1.5 text-sm text-brand-black">
+    <ul class="mt-2 space-y-2 text-sm text-brand-black">
       {% for f in reading.findings %}
-      <li class="break-words">{{ f.words }} <span class="text-xs text-brand-grayink">{{ f.events }} event{{ "" if f.events == 1 else "s" }}</span>{% for d in f.drafts %} <span class="text-xs">{{ draft_link(d) }}</span>{% endfor %}</li>
+      <li class="break-words">{{ f.words }} <span class="text-xs text-brand-grayink">{{ f.events }} event{{ "" if f.events == 1 else "s" }}</span>{% for d in f.drafts %} <span class="text-xs">{{ draft_link(d) }}</span>{% endfor %}
+        {% if f.addresses %}{% for account in f.markable %}{{ that_was_them(account, f.addresses[:1]) }}{% endfor %}{% endif %}
+      </li>
       {% endfor %}
     </ul>
   </section>
   {% else %}
   <p class="text-sm text-brand-black">Nothing here is suspect: no sign-in Google called suspicious, and no address you pulled by. That says nothing about a log that wasn't read.</p>
+  {% endif %}
+  {% if marks %}
+  <section>
+    <h2 class="text-sm font-medium text-brand-black">Marked as theirs</h2>
+    <ul class="mt-2 space-y-1 text-sm text-brand-black">
+      {% for m in marks %}
+      <li class="break-words">{{ m.account }} from {{ m.address }}: {{ m.note }} <span class="text-xs text-brand-grayink">{{ when(m.at) }}</span>
+        <form class="inline" hx-post="/incident/logs/unmark" hx-target="#incident-reading" hx-swap="innerHTML">
+          <input type="hidden" name="part" value="{{ part }}" /><input type="hidden" name="mark" value="{{ m.id }}" />
+          <button type="submit" class="text-xs text-brand-blueink underline" aria-label="Undo: {{ m.account }} from {{ m.address }}">Undo</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% if part == "findings" %}<p class="text-sm text-brand-blueink"><a href="/incident" class="underline">Respond</a> has where each account stands and what's still to do.</p>{% endif %}
   {% endif %}
 </div>
 {% endif %}

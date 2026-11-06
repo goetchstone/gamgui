@@ -20,12 +20,14 @@ from ...core import bulk, guard, phishing
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import MessageId
 from ...core.gam.errors import GAMError
+from ...core.incident import runs
+from ...core.incident.store import Problem as IncidentProblem
 from ...core.onboarding import looks_like_email
 from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, error_partial, friendly
+from ._common import NOT_CONNECTED, admin_address, error_partial, friendly, nobody_has_checks
 
 router = APIRouter(prefix="/phishing")
 
@@ -107,10 +109,23 @@ async def _find(job, st, conn, messages: List[MessageId]) -> None:
             bulk.stop_requested(job)
         elif st.connector is conn:
             st.phishing_found = found
+            _remember_gone(st, conn, found)
         else:
             job.error = "Not kept: the connection changed during the search. Find again."
     finally:
         job.finish()
+
+
+def _remember_gone(st, conn, found: phishing.Found) -> None:
+    """What Find showed of each email, kept so Respond can show it done, a read being never audited: gone only with every mailbox and its Spam searched. A copy or an unsure answer is kept too, since it
+    takes back an earlier word that it was gone. Said on Respond if it can't be."""
+    nobody, _ = nobody_has_checks(st)
+    if nobody is not None and found.searches:
+        try:
+            nobody.record(conn.domain, [s.message.id for s in found.nobody_has], admin_address(st), not_gone=[s.message.id for s in (*found.with_copies, *found.unsure)])
+            st.incident_nobody_problem = ""
+        except IncidentProblem as exc:
+            st.incident_nobody_problem = f"What Phishing's Find showed gone couldn't be kept: {exc}"
 
 
 @router.post("/find", response_class=HTMLResponse)
@@ -172,13 +187,13 @@ async def _trash(job, st, conn, steps: List[phishing.TrashStep]) -> None:
     counts: Dict[str, int] = {}
     for step in steps:
         counts[step.message.id] = counts.get(step.message.id, 0) + 1
+    by = admin_address(st)
     try:
         for i, step in enumerate(steps):
             if bulk.stop_requested(job):
                 break
             job.current = step.email
-            about = {"message_id": step.message.id, "steps": str(counts[step.message.id]),
-                     "searched_everywhere": str(step.searched_everywhere).lower(), "place": "spam" if step.in_spam else "mailbox"}
+            about = runs.about(step.message.id, job.id, conn.domain, counts[step.message.id], step.searched_everywhere, by, "spam" if step.in_spam else "mailbox")
             kind, why, detail = None, "", ""
             try:
                 if step.in_spam:

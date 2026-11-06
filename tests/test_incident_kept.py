@@ -62,7 +62,7 @@ def _new(kept: IncidentStore, title: str = "Carol's account") -> Record:
 
 def test_an_incident_survives_a_restart(kept, tmp_path):
     record = kept.save(replace(_new(kept), notes=(Note(NOW, "Called the bank"),), warnings=(Warning("a@b.c", "d@e.f"),), phish="p@q.r",
-                               ticks=(Tick("look", "See it", "b1", "By phone", NOW, "admin"),), marks=(store.Mark(CAROL, "192.0.2.1", "her phone"),),
+                               ticks=(Tick("look", "See it", "b1", "By phone", NOW, "admin"),),
                                review=Review(kind="Unauthorized access", severity="High", meeting=NOW, cause="A phish", summary="s")))
     again = IncidentStore(tmp_path / "incidents")
     assert again.records == [record] and again.unreadable == []
@@ -346,15 +346,54 @@ def test_saved_reads_put_together():
     t = datetime(2026, 10, 19, tzinfo=timezone.utc)
     a = logs.Row("a", "login", "t", t, CAROL, "e", "", (), False)
     b = logs.Row("b", "login", "t", t + timedelta(hours=1), CAROL, "e", "", (), False)
-    older = pull.Pull(pull.Query(("login",), (), 72), [pull.Log.read("login", [a], 72, True, t)], ended=True)
-    newer = pull.Pull(pull.Query(("login",), (CAROL,), 240, "1.2.3.4"), [pull.Log.read("login", [a, b], 240)], ended=True)
+    older = pull.Pull(pull.Query(("login",), (), 72), [pull.Log.read("login", [a], 72, True, t)], ended=True, at=t)
+    newer = pull.Pull(pull.Query(("login",), (CAROL,), 240, "1.2.3.4"), [pull.Log.read("login", [a, b], 240)], ended=True, at=t + timedelta(days=1))
     together = pull.merged([older, newer])
-    log = together.log("login")
-    assert [r.identity for r in log.rows] == ["b", "a"], "an event two reads hold, once; newest first"
-    assert not log.capped and log.through is None, "one read whole: whole"
+    assert [r.identity for r in together.log("login").rows] == ["b", "a"], "an event two reads hold, once; newest first"
     assert together.query.users == () and together.query.hours == 240 and together.query.ip == "1.2.3.4", "every account if any was"
+    assert together.at == t + timedelta(days=1), "the window's end stays said"
     both_short = pull.merged([older, pull.Pull(pull.Query(("login",), (), 72), [pull.Log.read("login", [b], 72, True, t + timedelta(days=1))], ended=True)])
     assert both_short.log("login").capped and both_short.log("login").through == t + timedelta(days=1)
+
+
+def _capped_every_account(t):
+    return pull.Pull(pull.Query(("login",), (), 72), [pull.Log.read("login", [logs.Row("a", "login", "t", t, CAROL, "e", "", (), False)], 72, True)], ended=True)
+
+
+def _whole(t, users=(), ip=""):
+    return pull.Pull(pull.Query(("login",), tuple(users), 72, ip), [pull.Log.read("login", [logs.Row("b", "login", "t", t, CAROL, "e", "", (), False)], 72)], ended=True)
+
+
+def test_a_narrow_read_never_makes_a_log_read_whole():
+    t = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    narrow = pull.merged([_capped_every_account(t), _whole(t, [CAROL])]).log("login")
+    assert narrow.capped and narrow.covered == {CAROL} and narrow.file_name.endswith("-partial.csv") and f"read only for {CAROL}" in narrow.how_far
+    assert not pull.merged([_capped_every_account(t), _whole(t)]).log("login").capped, "a read of every account is"
+    by_address = pull.merged([_capped_every_account(t), _whole(t, ip="1.2.3.4")]).log("login")
+    assert by_address.capped and not by_address.covered, "a read by an address holds only that address's"
+
+
+def test_a_short_read_of_named_accounts_is_whole_once_each_is_covered():
+    t = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    short = pull.Pull(pull.Query(("login",), (CAROL, "b@example.com"), 72), [pull.Log.read("login", [], 72, True)], ended=True)
+    one = pull.merged([short, _whole(t, [CAROL.upper()])])
+    assert one.log("login").capped and one.log("login").covered == {CAROL}
+    both = pull.merged([one, _whole(t, ["b@example.com"])]).log("login")
+    assert not both.capped and not both.covered
+
+
+def test_putting_reads_together_at_once_is_adding_them_one_by_one():
+    t = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    reads = [_capped_every_account(t), _whole(t, [CAROL]), _whole(t, ["b@example.com"]), _whole(t, ip="1.2.3.4")]
+    at_once = pull.merged(reads).log("login")
+    folded = pull.merged([pull.merged([pull.merged(reads[:2]), reads[2]]), reads[3]]).log("login")
+    assert (at_once.capped, at_once.covered) == (folded.capped, folded.covered) == (True, {CAROL, "b@example.com"})
+
+
+def test_a_saved_read_says_the_end_of_its_window():
+    assert pull.About.of("Over the 3 days up to 2026-10-20T12:00:00Z.\n").at == datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
+    assert pull.About.of("From 2026-10-17T12:00:00Z to 2026-10-20T12:00:00Z.\n").at == datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
+    assert pull.About.of("Over the last 3 days.\n").at is None
 
 
 def test_a_log_one_read_couldn_t_read_comes_from_the_other():

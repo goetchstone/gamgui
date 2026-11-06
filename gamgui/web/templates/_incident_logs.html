@@ -19,13 +19,17 @@
   <div class="flex flex-wrap items-center gap-3">
     <p class="text-sm text-brand-black">{% if pull.from_evidence %}Saved in the incident: {% endif %}{{ pull.logs | length }} log{{ "" if pull.logs | length == 1 else "s" }}, {% if pull.query.users %}{{ pull.query.users | join(", ") }}{% else %}every account{% endif %}{% if pull.query.ip %}, from {{ pull.query.ip }}{% endif %}.</p>
     {% if pull.ended %}
-    <button type="button" hx-get="/incident/logs/reading" hx-target="#incident-reading" hx-swap="innerHTML" class="inline-flex items-center rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Read the logs</button>
+    <button type="button" hx-get="/incident/logs/reading?part=findings" hx-target="#incident-reading" hx-swap="innerHTML" class="inline-flex items-center rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Read the logs</button>
     <a download href="/incident/logs/export.zip" class="text-sm text-brand-blueink underline">Export all</a>
     {% endif %}
   </div>
   {% if pull.addresses %}<p class="text-sm text-brand-blueink">Addresses in the sign-in log, the flagged ones first. Pull every account by one:
     {% for ip in pull.addresses[:10] %}<a href="/incident/logs?ip={{ ip | urlencode }}" class="underline">{{ ip }}</a>{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
-  {% for log in pull.logs %}
+  {% if narrowing %}
+  <p class="text-sm text-brand-black">Showing only {{ narrowing.words }}. <a href="/incident/logs" class="underline">Show all</a></p>
+  {% if not narrowed %}<p class="text-sm text-brand-blueink">None of the logs shown hold those events.</p>{% endif %}
+  {% endif %}
+  {% for log in (narrowed if narrowing else pull.logs) %}
   <section>
     {% if log.rows is none %}
     <p class="text-sm text-amber-800"><span class="font-medium">{{ log.name }}</span>: couldn't be read. {{ log.problem }}</p>
@@ -44,7 +48,7 @@
       </table>
       {% if log.rows | length > shown %}<p class="mt-1 text-xs text-brand-grayink">The newest {{ shown }}. The rest are in its CSV.</p>{% endif %}
       {% endif %}
-      {% if not log.nothing_kept %}<p class="mt-1"><a download href="/incident/logs/log.csv?application={{ log.application }}" class="text-xs text-brand-blueink underline">Export {{ log.name }} as CSV</a></p>{% endif %}
+      {% if not log.nothing_kept %}<p class="mt-1"><a download href="/incident/logs/log.csv?application={{ log.application }}{% if narrowing %}&amp;{{ narrowing.query }}{% endif %}" class="text-xs text-brand-blueink underline">Export {{ log.name }} as CSV</a></p>{% endif %}
     </details>
     {% if log.capped %}
     <p class="mt-1 text-xs text-amber-800">{{ log.how_far }}{% if log.through %}

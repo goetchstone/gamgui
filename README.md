@@ -88,6 +88,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   **suspend**.
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
+- **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
 - **Kept incidents** — an incident's details, notes and every pull of the logs, kept on this Mac in `0600` files, so it opens again after a restart without reading Google.
 - **Incident logs** — pull every activity log an incident needs, by account and by the attacker's address, each read whole, oldest first, with CSV exports. **Read the logs** then says where each account stands, what's still to do and what the logs show, by rules in code.
 - **Incident** — check a compromised account for what an attacker changed (forwarding, filters, delegates, send-as addresses, the auto-reply,

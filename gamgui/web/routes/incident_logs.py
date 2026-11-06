@@ -12,22 +12,24 @@ import ipaddress
 import zipfile
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.gam.commands import is_one_address
-from ...core.incident import logs, pull, reader, reads, store
+from ...core.incident import logs, pull, reader, reads, runs, store
+from ...core.phishing import MOST_AT_ONCE
 from ...core.incident.logs import report_time
 from ..jobs import start_job
 from ..server import TEMPLATES
 from .incident_kept import read_back, reopen_remembered
-from ._common import NOT_CONNECTED, error_partial, incident_store
+from ._common import NOT_CONNECTED, admin_address, error_partial, incident_store, known_sign_ins, nobody_has_checks, open_incident_record
 
 router = APIRouter(prefix="/incident/logs")
 
 _SHOWN = 100     # rows drawn a log: the CSV has them all
+_PARTS = ("findings", "respond")     # Investigate's and Respond's of a reading
 _PANEL = "_incident_logs.html"
 
 
@@ -36,21 +38,31 @@ def _running(st):
     return job if job is not None and not job.finished else None
 
 
-def _context(st, job=None) -> dict:
+def _shown_job(st):
+    """What the logs screen shows going on: a pull, or an incident's saved logs still being read, which is what it will then show."""
+    opening = st.jobs.get(st.incident_open_job)
+    return _running(st) or (opening if opening is not None and not opening.finished else None)
+
+
+def _context(st, job=None, narrowing=None, narrowed=None) -> dict:
     return {"job": job, "pull": st.incident_pull, "progress": st.incident_progress, "names": logs.NAMES, "shown": _SHOWN, "report_time": report_time,
-            "window_words": logs.window_words}
+            "window_words": logs.window_words, "narrowing": narrowing, "narrowed": narrowed}
 
 
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request, accounts: str = "", ip: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     reopen_remembered(st)
+    narrowing = pull.Filter.of_query(request.query_params)
+    held = st.incident_pull
+    narrowed = await asyncio.to_thread(lambda: [one for one in (narrowing.applied(log) for log in held.logs) if one]) if narrowing and held is not None else None
     return TEMPLATES.TemplateResponse(request, "incident_logs.html", {
         "connected": st.connector is not None, "applications": logs.APPLICATIONS, "defaults": logs.INCIDENT_DEFAULT, "hours": logs.HOURS,
-        "default_hours": logs.DEFAULT_HOURS, "window_words": logs.window_words, "accounts": accounts, "ip": ip, **_context(st, _running(st))})
+        "default_hours": logs.DEFAULT_HOURS, "window_words": logs.window_words, "accounts": accounts, "ip": ip, "here": "/incident/logs", "open_incident": open_incident_record(st),
+        **_context(st, _shown_job(st), narrowing, narrowed)})
 
 
-async def _pull(job, st, conn, query: pull.Query, into: pull.Pull, record_id: str) -> None:
+async def _pull(job, st, conn, query: pull.Query, into: pull.Pull, record_id: str, adding: Optional[pull.Pull] = None) -> None:
     def stopped() -> bool:
         return job.cancel_requested
 
@@ -59,17 +71,28 @@ async def _pull(job, st, conn, query: pull.Query, into: pull.Pull, record_id: st
 
     try:
         await pull.pull_logs(conn, query, into, st.incident_progress, stopped=stopped, finished=finished)
+        # What this read adds to wasn't saved when it's on screen and not from the evidence: it goes first, or the evidence shown next would lose it.
+        adding_saved = True
+        if record_id and adding is not None and not adding.from_evidence:
+            adding_saved = await _keep(job, st, conn, adding, record_id)
+        said = job.error
         await _keep(job, st, conn, into, record_id)
+        job.error = " ".join(s for s in (said, None if job.error == said else job.error) if s) or None
+        # Whatever no incident took: a narrower read never takes away what the wider one found.
+        if adding is not None and st.connector is conn and st.incident_open == record_id and (st.incident_pull is into or not adding_saved):
+            st.incident_pull, unread = pull.and_unread(await asyncio.to_thread(pull.merged, [adding, st.incident_pull]), into)
+            job.error = " ".join((*([job.error] if job.error else []), *unread)) or None
+            st.incident_reading = None
     finally:
         job.finish()
 
 
-async def _keep(job, st, conn, read: pull.Pull, record_id: str) -> None:
+async def _keep(job, st, conn, read: pull.Pull, record_id: str) -> bool:
     """A read made while an incident was open, saved to that incident, whichever is open by now, before it ends, and added to what's shown in memory from the very text written: no saved read is read
     again, which took minutes in SwiftGamGui (its failure log 2026-10-23). All of them are read back only when that could differ: the evidence isn't read, a read was added beside this one, or this
-    read's name isn't last. Whatever can't be saved is still shown, said so, and what it couldn't read is still said once the evidence shows instead."""
+    read's name isn't last. Whatever can't be saved is still shown, said so, and what it couldn't read is still said once the evidence shows instead. False when it couldn't be saved."""
     if not record_id:
-        return
+        return True
     job.title = "Save this pull to the incident"
     opening = st.jobs.get(st.incident_open_job)
     if opening is not None and not opening.finished and opening.task is not None:
@@ -85,23 +108,23 @@ async def _keep(job, st, conn, read: pull.Pull, record_id: str) -> None:
             others = set(await asyncio.to_thread(kept.names, record_id)) - {name}
     except (store.Problem, OSError) as exc:
         job.error = f"This pull wasn't saved to the incident: {exc}"
-        return
+        return False
 
     def elsewhere() -> bool:
         return st.incident_open != record_id or st.connector is not conn
 
     if elsewhere():
-        return
+        return True
     if export is not None:
         saved = await asyncio.to_thread(pull.pull_of_export, export)
         known = {*st.incident_saved, *st.incident_saved_unreadable}
         if saved is None or st.incident_evidence is None or others != known or any(earlier >= name for earlier in st.incident_saved):
             if not await read_back(st, conn, kept, record_id):
-                return
+                return True
         else:
             together = await asyncio.to_thread(pull.merged, [st.incident_evidence, saved])
             if elsewhere():
-                return
+                return True
             st.incident_evidence = together
             st.incident_saved = [*st.incident_saved, name]
             if (swept := pull.swept_address(export.about)):
@@ -110,15 +133,16 @@ async def _keep(job, st, conn, read: pull.Pull, record_id: str) -> None:
         st.incident_pull, unread = pull.and_unread(st.incident_evidence, read)
         job.error = " ".join(unread) or job.error
         st.incident_reading = None
+    return True
 
 
-def _start(st, conn, query: pull.Query, into: pull.Pull, title: str):
+def _start(st, conn, query: pull.Query, into: pull.Pull, title: str, adding: Optional[pull.Pull] = None):
     reopen_remembered(st)       # a tab left open across a restart: its pull belongs to the incident this comes back to
     st.incident_pull = into
     st.incident_progress = {a: pull.Progress() for a in query.applications}
     job = start_job(st.jobs, len(query.applications), kind="incident_logs", title=title)
     st.incident_pull_job = job.id
-    job.task = asyncio.create_task(_pull(job, st, conn, query, into, st.incident_open))
+    job.task = asyncio.create_task(_pull(job, st, conn, query, into, st.incident_open, adding))
     return job
 
 
@@ -168,7 +192,7 @@ async def start_pull(request: Request, accounts: Annotated[str, Form()] = "", ip
 async def status(request: Request, job: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     held = st.jobs.get(job)
-    return TEMPLATES.TemplateResponse(request, _PANEL, _context(st, held if held is not None and held.kind == "incident_logs" else None))
+    return TEMPLATES.TemplateResponse(request, _PANEL, _context(st, held if held is not None and held.kind in ("incident_logs", "incident_open") else None))
 
 
 def _merged(old: pull.Log, log: pull.Log, until: datetime, now: datetime) -> pull.Log:
@@ -249,25 +273,168 @@ async def _context_for(st, held: pull.Pull) -> reader.Context:
             capped[log.application] = min(dates)
         elif log.capped and log.through:
             capped[log.application] = log.through
-    return reader.Context(pulled_by=held.query.ip, read={log.application for log in held.logs if log.rows is not None}, capped=capped,
-                          domains={d.lower() for d in await st.tenant_domains()}, people=people or None, swept=set(st.incident_swept))
+    conn = st.connector
+    domain = conn.domain if conn else ""
+    known, _ = known_sign_ins(st)
+    nobody, _ = nobody_has_checks(st)
+    pulled = await asyncio.to_thread(runs.latest_runs, conn.audit.path, domain) if conn else []
+    return reader.Context(pulled_by=held.query.ip, read={log.application for log in held.logs if log.rows is not None}, capped=capped, covered={log.application: set(log.covered) for log in held.logs if log.covered},
+                          domains={d.lower() for d in await st.tenant_domains()}, people=people or None, swept=set(st.incident_swept), pulled=pulled,
+                          theirs={reader.key(m.account, m.address) for m in known.for_domain(domain)} if known else set(),
+                          nobody_has=[reader.NobodyHas(c.message_id, c.at, c.by, c.gone) for c in nobody.for_domain(domain)] if nobody else [])
 
 
-@router.get("/reading", response_class=HTMLResponse)
-async def reading(request: Request) -> HTMLResponse:
-    """The reader's findings, worked out once a pull and off the event loop: it's linear in the events, and a whole pull holds hundreds of thousands."""
-    st = request.app.state.gamgui
+async def _current_reading(st) -> Optional[reader.Reading]:
+    """The reader's findings, worked out once for a pull and what's known beside it, and off the event loop: it's linear in the events, and a whole pull holds hundreds of thousands. None before a
+    pull has ended. A new mark, or a run in the audit log (back from Phishing), makes a new context, so a new reading."""
     held = st.incident_pull
-    if held is None or not held.ended:
-        return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {"reading": None})
+    if held is None or not held.ended or _running(st):      # one still saving and merging has ended its reads, and isn't yet what's shown
+        return None
     context = await _context_for(st, held)
-    key = (held.run, id(held.logs))
+    key = (held.run, id(held.logs), context)
     if st.incident_reading is None or st.incident_reading[0] != key:
         def read_pull() -> reader.Reading:
             return reader.read([reader.event_from_row(r) for log in held.logs for r in log.rows or []], context)
 
         st.incident_reading = (key, await asyncio.to_thread(read_pull))
-    return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {"reading": st.incident_reading[1], "when": _when})
+    return st.incident_reading[1]
+
+
+def _ticked(st, reading: reader.Reading, record) -> reader.Reading:
+    """With what the open incident marks done by hand: cheap, so a tick never reads the pull again."""
+    return reading.ticking([reader.Ticked(t.kind, t.words, t.basis, t.how, t.at, t.by) for t in record.ticks]) if record else reading
+
+
+def _shows_query(shown: reader.Shown) -> str:
+    return pull.Filter(shown.accounts, shown.addresses, shown.logs, shown.apps, shown.agent).query
+
+
+async def _reading_panel(request: Request, part: str, problem: str = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    opening = st.jobs.get(st.incident_open_job)
+    if opening is not None and not opening.finished and opening.task is not None:
+        await asyncio.wait({opening.task})      # what it's reading is what this shows
+    reading = await _current_reading(st)
+    record = open_incident_record(st)
+    known, known_problem = known_sign_ins(st)
+    nobody, nobody_problem = nobody_has_checks(st)
+    domain = st.connector.domain if st.connector else ""
+    said = [known_problem, nobody_problem,
+            f"A list of marked sign-ins held something else, and was moved aside as {known.moved_aside}." if known and known.moved_aside else "",
+            f"A list of what Find showed gone held something else, and was moved aside as {nobody.moved_aside}." if nobody and nobody.moved_aside else ""]
+    return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {
+        "reading": _ticked(st, reading, record) if reading else None, "pulling": _running(st) is not None, "when": _when, "part": part if part in _PARTS else "", "problem": problem, "store_problems": [s for s in said if s],
+        "marks": known.for_domain(domain) if known else [], "ticking": record is not None, "shows_query": _shows_query, "most_emails": MOST_AT_ONCE,
+        "focus": request.method == "POST" or part != "respond"})   # opening Respond doesn't take the keyboard from its page
+
+
+@router.get("/reading", response_class=HTMLResponse)
+async def reading(request: Request, part: str = "") -> HTMLResponse:
+    return await _reading_panel(request, part)
+
+
+@router.post("/theirs", response_class=HTMLResponse)
+async def mark_theirs(request: Request, account: Annotated[str, Form()] = "", address: Annotated[str, Form()] = "", note: Annotated[str, Form()] = "",
+                      part: Annotated[str, Form()] = "") -> HTMLResponse:
+    """A sign-in Google marked that was the person's own: their word, on this Mac, shown with its note and undone from there."""
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    known, why = known_sign_ins(st)
+    if known is None:
+        return await _reading_panel(request, part, why)
+    # Only what the reading offers, as Mark Done is: a mark clears a suspect, so it's never a pair no log asked about, or a warning Google raised that isn't their own sign-in.
+    held = await _current_reading(st)
+    offered = {(a.lower(), f.addresses[0]) for f in held.findings if f.addresses for a in f.markable} | {(t.accounts[0].lower(), a) for t in held.to_do if t.accounts for a in t.theirs} if held else set()
+    if (account.strip().lower(), address.strip()) not in offered:
+        return await _reading_panel(request, part, "That sign-in isn't one the logs ask about: read them again.")
+    try:
+        known.mark(st.connector.domain, account, address, note)
+    except store.Problem as exc:
+        return await _reading_panel(request, part, str(exc))
+    return await _reading_panel(request, part)
+
+
+@router.post("/unmark", response_class=HTMLResponse)
+async def unmark(request: Request, mark: Annotated[str, Form()] = "", part: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    known, why = known_sign_ins(st)
+    problem = why
+    if known is not None and any(m.id == mark for m in known.for_domain(st.connector.domain)):
+        try:
+            known.unmark(mark)
+        except store.Problem as exc:
+            problem = str(exc)
+    return await _reading_panel(request, part, problem)
+
+
+@router.post("/tick", response_class=HTMLResponse)
+async def tick(request: Request, kind: Annotated[str, Form()] = "", words: Annotated[str, Form()] = "", basis: Annotated[str, Form()] = "", how: Annotated[str, Form()] = "",
+               part: Annotated[str, Form()] = "") -> HTMLResponse:
+    """A to-do item marked done by hand, kept with the incident: only one on the list now, of a kind that can take it. A lock, a read, or anything else the logs show done never can."""
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    kept, why = incident_store(st)
+    record = open_incident_record(st)
+    if kept is None or record is None:
+        return await _reading_panel(request, part, why or "Open an incident first: what's marked done is kept with it.")
+    reading = await _current_reading(st)
+    left = _ticked(st, reading, record).to_do if reading else ()
+    if not any((t.kind, t.words, t.basis) == (kind, words, basis) and t.tickable for t in left):
+        return await _reading_panel(request, part, "That item can't be marked done: the logs show it, or it has changed. Read it again.")
+    try:
+        kept.save(replace(record, ticks=(*record.ticks, store.Tick(kind, words, basis, how.strip(), datetime.now(timezone.utc), admin_address(st)))))
+    except store.Problem as exc:
+        return await _reading_panel(request, part, str(exc))
+    return await _reading_panel(request, part)
+
+
+@router.post("/untick", response_class=HTMLResponse)
+async def untick(request: Request, kind: Annotated[str, Form()] = "", words: Annotated[str, Form()] = "", basis: Annotated[str, Form()] = "", part: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    kept, why = incident_store(st)
+    record = open_incident_record(st)
+    if kept is None or record is None:
+        return await _reading_panel(request, part, why or "Open an incident first: what's marked done is kept with it.")
+    try:
+        kept.save(replace(record, ticks=tuple(t for t in record.ticks if (t.kind, t.words, t.basis) != (kind, words, basis))))
+    except store.Problem as exc:
+        return await _reading_panel(request, part, str(exc))
+    return await _reading_panel(request, part)
+
+
+@router.post("/again", response_class=HTMLResponse)
+async def pull_again(request: Request, accounts: Annotated[str, Form()] = "", part: Annotated[str, Form()] = "") -> Response:
+    """The logs a to-do item says stopped short, again for just the accounts that matter, over the window shown: a read, added to what's shown. Those in the directory, 20 at most."""
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    held = st.incident_pull
+    wanted = [str(v) for v in (await request.form()).getlist("log") if str(v) in logs.NAMES]
+    if held is None or not wanted:
+        return await _reading_panel(request, part, "Pull the logs first.")
+    if _running(st):
+        return await _reading_panel(request, part, "A pull is going on: wait for it to finish, then pull again.")
+    try:
+        directory = {u.primary_email.lower() for u in await st.users(stale_ok=True)}
+    except Exception as exc:  # noqa: BLE001 - said, whatever it was
+        return await _reading_panel(request, part, f"Couldn't read the directory to check those addresses: {reads.in_words(exc)}")
+    typed = logs.accounts_typed(accounts)
+    users = [u for u in typed if u.lower() in directory][:pull.MOST_ACCOUNTS]
+    if not users:
+        return await _reading_panel(request, part, "None of those accounts is in the directory.")
+    # Over the window shown, the one the first read looked at, never one that's moved on since. The rest past 20 stay to do, the log still short for them.
+    hours = min(held.query.hours, max(logs.HOURS))
+    end = held.at or datetime.now(timezone.utc)
+    query = pull.Query(tuple(wanted), tuple(users), hours, "", end - timedelta(hours=hours), end)
+    job = _start(st, conn, query, pull.Pull(query), f"Pull {len(wanted)} log{'' if len(wanted) == 1 else 's'} again", adding=held)
+    if missing := [u for u in typed if u.lower() not in directory]:
+        job.error = f"Not in the directory, so not read: {', '.join(missing)}."
+    return Response(status_code=204, headers={"HX-Redirect": "/incident/logs"})
 
 
 @router.get("/log.csv")
@@ -276,8 +443,14 @@ async def log_csv(request: Request, application: str = "") -> Response:
     log = held.log(application) if held else None
     if log is None or log.nothing_kept:     # never an empty CSV that would pass as no events
         return Response(f"That log wasn't read. {log.how_far if log else ''}".strip(), status_code=404, media_type="text/plain")
+    name = log.file_name
+    if narrowing := pull.Filter.of_query(request.query_params):     # just the events shown, and it says so: a file gets passed around without its page
+        log = await asyncio.to_thread(narrowing.applied, log)
+        if log is None or log.nothing_kept:
+            return Response("None of that log's events are those.", status_code=404, media_type="text/plain")
+        name = name.removesuffix(".csv") + "-narrowed.csv"
     text = await asyncio.to_thread(pull.csv_of, log)
-    return Response(text, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={log.file_name}"})
+    return Response(text, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={name}"})
 
 
 def _zip(held: pull.Pull, stamp: str) -> bytes:
@@ -292,8 +465,9 @@ def _zip(held: pull.Pull, stamp: str) -> bytes:
 
 @router.get("/export.zip")
 async def export_all(request: Request) -> Response:
-    held = request.app.state.gamgui.incident_pull
-    if held is None or not held.ended:
+    st = request.app.state.gamgui
+    held = st.incident_pull
+    if held is None or not held.ended or _running(st):      # one still saving and merging isn't yet what's shown
         return Response("There's no finished pull to export.", status_code=404, media_type="text/plain")
     now = datetime.now().astimezone()
     data = await asyncio.to_thread(_zip, held, now.strftime("%Y-%m-%d %H:%M %Z"))

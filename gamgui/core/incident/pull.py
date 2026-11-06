@@ -18,7 +18,8 @@ import time
 import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
+from urllib.parse import urlencode
+from typing import Any, Awaitable, Callable, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ..csv_safe import csv_safe
 from .logs import (
@@ -116,10 +117,11 @@ class Log:
     through: Optional[datetime] = None      # with it, read completely up to that time and the later events weren't; without, the older weren't
     flagged: int = 0
     accounts: int = 0
+    covered: FrozenSet[str] = frozenset()   # stopped short, and these accounts read whole past where it stopped, by a later read of just them
 
     @classmethod
-    def read(cls, application: str, rows: List[Row], hours: int, capped: bool = False, through: Optional[datetime] = None) -> "Log":
-        return cls(application, rows, "", hours, capped, through, sum(r.flagged for r in rows), len({r.who for r in rows}))
+    def read(cls, application: str, rows: List[Row], hours: int, capped: bool = False, through: Optional[datetime] = None, covered: Iterable[str] = ()) -> "Log":
+        return cls(application, rows, "", hours, capped, through, sum(r.flagged for r in rows), len({r.who for r in rows}), frozenset(covered))
 
     @property
     def name(self) -> str:
@@ -139,9 +141,10 @@ class Log:
     def how_far(self) -> str:
         if not self.capped:
             return ""
+        also = f" Past that, read only for {', '.join(sorted(self.covered))}." if self.covered else ""
         if self.through:
-            return f"Read completely through {report_time(self.through)}: later events weren't read."
-        return f"Older events past the cap ({CAP} an account a read) weren't read."
+            return f"Read completely through {report_time(self.through)}: later events weren't read.{also}"
+        return f"Older events past the cap ({CAP} an account a read) weren't read.{also}"
 
 
 @dataclass
@@ -365,7 +368,7 @@ async def pull_logs(conn: Any, query: Query, pull: Pull, progress: Dict[str, Pro
                     stopped: Callable[[], bool] = lambda: False, finished: Callable[[], None] = lambda: None) -> None:
     """Every log of ``query`` into ``pull``, at most ``AT_ONCE`` at a time, each as it finishes, in the query's order."""
     at = now or datetime.now(timezone.utc)
-    pull.at = at
+    pull.at = query.end or at
     gate = asyncio.Semaphore(AT_ONCE)
     done: Dict[str, Log] = {}
 
@@ -407,11 +410,13 @@ class About:
     windows: Mapping[str, int] = field(default_factory=dict)
     capped: FrozenSet[str] = frozenset()
     through: Mapping[str, datetime] = field(default_factory=dict)
+    at: Optional[datetime] = None       # the window's end
 
     @classmethod
     def of(cls, text: str) -> "About":
         users: Tuple[str, ...] = ()
         every, ip, hours = False, "", 0
+        at: Optional[datetime] = None
         windows: Dict[str, int] = {}
         capped = set()
         through: Dict[str, datetime] = {}
@@ -429,9 +434,12 @@ class About:
                 ip = "" if named == "any" else named
             elif (over := re.match(r"Over the (?:last )?(\d{1,6}) (hours|days)", line)):
                 hours = span(over.group(1), over.group(2))
+                if (up_to := re.search(r" up to (\S+)\.$", line)):
+                    at = parse_time(up_to.group(1))
             elif (between := re.fullmatch(r"From (\S+) to (\S+)\.", line)):
                 start, end = parse_time(between.group(1)), parse_time(between.group(2))
                 hours = math.ceil((end - start).total_seconds() / 3600) if start and end else 0
+                at = end
             elif (log := _about_log(line)):
                 name, rest = log
                 if (last := _ABOUT_LAST.search(rest)):
@@ -441,7 +449,7 @@ class About:
                 if (read_to := _ABOUT_THROUGH.search(rest)) and (when := parse_time(read_to.group(1))):
                     capped.add(name)
                     through[name] = when
-        return cls(users, every, ip, hours, windows, frozenset(capped), through)
+        return cls(users, every, ip, hours, windows, frozenset(capped), through, at)
 
 
 def _application_order(application: str) -> int:
@@ -463,7 +471,7 @@ def pull_of_export(export: Any) -> Optional[Pull]:
             left -= len(rows)
             logs.append(Log.read(application, rows, note.windows.get(application, note.hours), application in note.capped, note.through.get(application)))
         logs.sort(key=lambda log: _application_order(log.application))
-        held = Pull(Query(tuple(log.application for log in logs), note.users, note.hours, note.ip), logs, ended=True, from_evidence=True)
+        held = Pull(Query(tuple(log.application for log in logs), note.users, note.hours, note.ip), logs, ended=True, at=note.at, from_evidence=True)
         held.work_out_addresses()
         return held
     except Exception:  # noqa: BLE001 - named as unreadable, whatever it was
@@ -490,9 +498,15 @@ def merged(pulls: Sequence[Pull]) -> Pull:
             rows = log.rows or []
             kept += [r for r in rows if r.identity not in known]
             known.update(r.identity for r in rows)
-        stopped = all(log.capped for log in read)      # every read stopped short: read through the latest of them; one read whole: whole
-        throughs = [log.through for log in read if log.through]
-        logs.append(Log.read(application, newest_first(kept), max(log.hours for log in read), stopped, max(throughs) if stopped and throughs else None))
+        # A log that stopped short stays so until a read holds what it left out: of every account, or of each account it was for. A read of just some accounts covers those alone (it's what clears Still
+        # to do's "pull again" for them), and a read by an address holds only that address's, whatever it filtered out of the rest.
+        short = [p for p in pulls if (log := p.log(application)) and log.rows is not None and log.capped]
+        whole = [p for p in pulls if (log := p.log(application)) and log.rows is not None and not log.capped and not p.query.ip]
+        covered = {a.lower() for p in whole for a in p.query.users}.union(*(log.covered for log in read))
+        every_read = any(not p.query.users for p in whole)
+        stopped = bool(short) and not every_read and not all(p.query.users and {a.lower() for a in p.query.users} <= covered for p in short)
+        throughs = [log.through for log in read if log.capped and log.through]
+        logs.append(Log.read(application, newest_first(kept), max(log.hours for log in read), stopped, max(throughs) if stopped and throughs else None, covered if stopped else ()))
     every_account = any(not p.query.users for p in pulls)
     users: List[str] = []
     if not every_account:
@@ -503,7 +517,7 @@ def merged(pulls: Sequence[Pull]) -> Pull:
                     seen.add(user.lower())
                     users.append(user)
     together = Pull(Query(tuple(log.application for log in logs), tuple(users), max(p.query.hours for p in pulls), next((p.query.ip for p in pulls if p.query.ip), "")), logs,
-                    ended=all(p.ended for p in pulls), from_evidence=all(p.from_evidence for p in pulls))
+                    ended=all(p.ended for p in pulls), at=max((p.at for p in pulls if p.at), default=None), from_evidence=all(p.from_evidence for p in pulls))
     together.work_out_addresses()
     return together
 
@@ -519,6 +533,55 @@ def evidence(exports: Sequence[Any]) -> Tuple[Optional[Pull], List[str]]:
         else:
             unreadable.append(export.name)
     return (merged(pulls) if pulls else None), unreadable
+
+
+@dataclass(frozen=True)
+class Filter:
+    """Which events a to-do item is about, for the logs to narrow to. Empty: any. An app's or agent's name is the logs' text, so this only ever compares it."""
+
+    accounts: Tuple[str, ...] = ()
+    addresses: Tuple[str, ...] = ()
+    applications: Tuple[str, ...] = ()
+    apps: Tuple[str, ...] = ()
+    agent: str = ""
+
+    def __bool__(self) -> bool:
+        return bool(self.accounts or self.addresses or self.applications or self.apps or self.agent)
+
+    def keeps(self, row: Row) -> bool:
+        return ((not self.accounts or row.who.lower() in {a.lower() for a in self.accounts}) and (not self.addresses or row.ip in self.addresses)
+                and (not self.applications or row.application in self.applications) and (not self.apps or row.app in self.apps) and (not self.agent or row.agent == self.agent))
+
+    def applied(self, log: Log) -> Optional[Log]:
+        """``log`` with only the rows kept, or None when this leaves the log out or keeps none of them. A log that wasn't read stays said, and so does one that stopped short: no events there isn't none at all."""
+        if self.applications and log.application not in self.applications:
+            return None
+        if log.rows is None:
+            return log
+        kept = [r for r in log.rows if self.keeps(r)]
+        return Log.read(log.application, kept, log.hours, log.capped, log.through, log.covered) if kept or log.capped else None
+
+    @property
+    def words(self) -> str:
+        """"carol@example.com's events from 198.51.100.23, in Gmail, through Mail Sync Pro"."""
+        names = [NAMES.get(a, a) for a in self.applications]
+        return (f"{list_words(self.accounts)}'s events" if self.accounts else "Every account's events") + (f" from {list_words(self.addresses)}" if self.addresses else "") \
+            + (f", in {list_words(names)}" if names else "") + (f", through {list_words(self.apps)}" if self.apps else "") + (f", by {self.agent}" if self.agent else "")
+
+    @property
+    def query(self) -> str:
+        """As a page's address asks for it."""
+        pairs = [("who", a) for a in self.accounts] + [("from", a) for a in self.addresses] + [("in", a) for a in self.applications] + [("app", a) for a in self.apps]
+        return urlencode(pairs + ([("agent", self.agent)] if self.agent else []))
+
+    @classmethod
+    def of_query(cls, params: Any) -> "Filter":
+        return cls(tuple(params.getlist("who")), tuple(params.getlist("from")), tuple(params.getlist("in")), tuple(params.getlist("app")), params.get("agent") or "")
+
+
+def list_words(items: Sequence[str]) -> str:
+    items = list(items)
+    return " and ".join(items) if len(items) < 3 else f"{', '.join(items[:-1])} and {items[-1]}"
 
 
 def and_unread(together: Pull, read: Pull) -> Tuple[Pull, List[str]]:
@@ -573,8 +636,8 @@ def about(pull: Pull, exported: str) -> str:
              f"From IP address: {query.ip or 'any'}.", ""]
     for log in pull.logs:
         if not log.nothing_kept:
-            stopped = "" if not log.capped else (f"; read completely through {report_time(log.through)}, later events weren't read" if log.through
-                                                 else "; older events past the cap weren't read")
+            stopped = "" if not log.capped else ((f"; read completely through {report_time(log.through)}, later events weren't read" if log.through
+                                                  else "; older events past the cap weren't read") + (f"; past that, read only for {', '.join(sorted(log.covered))}" if log.covered else ""))
             shorter = f", the last {window_words(log.hours)} (the most it reads)" if log.hours < query.hours else ""
             unfiltered = "; its registrations, which name no address, not filtered by it" if log.application == "mobile" and query.ip else ""
             lines.append(f"{log.file_name}: the {log.name} log, {len(log.rows or [])} events{shorter}{stopped}{unfiltered}.")

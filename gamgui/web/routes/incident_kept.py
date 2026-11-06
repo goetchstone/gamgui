@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse
 from ...core.incident import pull, store
 from ..jobs import start_job
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, error_partial, incident_store
+from ._common import NOT_CONNECTED, admin_address, error_partial, incident_store, open_incident_record
 
 router = APIRouter(prefix="/incident/kept")
 
@@ -43,15 +43,7 @@ def _context(request: Request, problem: str = "", job=None) -> dict:
     open_id = st.incident_open
     return {"connected": st.connector is not None, "records": kept.for_domain(domain) if kept else [], "unreadable": kept.unreadable if kept else [], "store_problem": why, "problem": problem,
             "open": kept.get(open_id) if kept and open_id else None, "saved": st.incident_saved, "saved_unreadable": st.incident_saved_unreadable, "job": job or _running(st),
-            "today": datetime.now().astimezone().strftime("%Y-%m-%d"), "default_by": _admin(st), "folder": str(kept.root / open_id) if kept and open_id else ""}
-
-
-def _admin(st) -> str:
-    """Who "opened by" starts as: the admin signed in, when the sign-in says. Only ever a starting value, so a Keychain refusal just leaves it empty."""
-    try:
-        return st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None and st.connector else ""
-    except Exception:  # noqa: BLE001 - never its message
-        return ""
+            "today": datetime.now().astimezone().strftime("%Y-%m-%d"), "default_by": admin_address(st), "here": "/incident/kept", "open_incident": open_incident_record(st), "folder": str(kept.root / open_id) if kept and open_id else ""}
 
 
 def _running(st):

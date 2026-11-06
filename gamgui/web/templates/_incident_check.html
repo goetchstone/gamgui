@@ -38,8 +38,9 @@
   </div>
 
   <fieldset class="{{ card }} space-y-2"><legend class="{{ heading }}">The lock</legend>
+    {% if pick %}<p class="text-sm text-amber-800">Only {{ names[pick] }} is picked, as the to-do item asked. The rest of the lock is off: tick what else you want.</p>{% endif %}
     {% for key in switchable %}
-    <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="switch" value="{{ key }}" class="mt-1"{% if key in on_by_default and key not in check.done %} checked{% endif %} />
+    <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="switch" value="{{ key }}" class="mt-1"{% if key == pick or (not pick and key in on_by_default and key not in check.done) %} checked{% endif %} />
       <span><span class="text-brand-black">{{ names[key] }}</span>{% if key in check.done %} <span class="text-brand-grayink">(done in an earlier run)</span>{% endif %}<br><span class="text-xs text-brand-blueink">{{ notes[key] }}</span></span></label>
     {% endfor %}
   </fieldset>
