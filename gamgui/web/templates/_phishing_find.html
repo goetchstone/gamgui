@@ -1,0 +1,56 @@
+{#- Find's result. Every active mailbox and its Spam are searched: one not searched is said, never counted as clear. A job's error is said. -#}
+{% import "_job_live.html" as live %}
+{% if job and not job.finished %}
+<div hx-get="/phishing/find/status?job={{ job.id }}" hx-trigger="load delay:800ms" hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2"><span class="spinner"></span>{{ live.progress(job, "Finding copies") }}
+    <span>Searching every active mailbox… {{ job.done }} of {{ job.total }} emails done. You can keep working.</span>{{ live.stop(job) }}</div>
+</div>
+{% else %}
+{% if job and job.error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" {{ live.ended(job) }}>{{ job.error }}</div>{% endif %}
+{% if found %}
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4"{% if job %} data-announce="{{ job.id }}"{% endif %}>
+  {% for message, why in found.problems %}
+  <p class="text-sm text-amber-800">Couldn't search &lt;{{ message.id }}&gt;: {{ why }}</p>
+  {% endfor %}
+  {% for search in found.with_copies + found.unsure %}
+  <section>
+    <h2 class="text-sm font-medium text-brand-black break-all">&lt;{{ search.message.id }}&gt;</h2>
+    {% if search.copies.looks_like_missing_scope %}<p class="mt-1 text-sm text-amber-800">Every mailbox says Gmail is off: more likely the Gmail scope isn't delegated than Gmail off for everyone.</p>{% endif %}
+    {% include "_phishing_sample.html" %}
+    {% if search.spam_problem %}<p class="mt-1 text-sm text-amber-800">Spam wasn't searched: {{ search.spam_problem }} Copies there stay until you find again.</p>{% endif %}
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for m in search.copies.with_copies[:shown] %}<li class="text-brand-black">{{ m.email }} <span class="text-brand-grayink">— {{ m.copies }} cop{{ "y" if m.copies == 1 else "ies" }}{% if m.copies > 2 %}, more than one email usually leaves: worth a look{% endif %}</span></li>{% endfor %}
+      {% if search.spam %}{% for m in search.spam.mailboxes[:shown] %}<li class="text-brand-black">{{ m.email }} <span class="text-brand-grayink">— {{ m.copies }} in Spam</span></li>{% endfor %}{% endif %}
+    </ul>
+    {% set past = [0, search.copies.with_copies | length - shown] | max + ([0, search.spam.mailboxes | length - shown] | max if search.spam else 0) %}
+    {% if past %}<p class="mt-1 text-xs text-brand-grayink">And {{ past }} more in the CSV.</p>{% endif %}
+    {% if search.copies.unsearched or (search.spam and search.spam.unsearched) %}
+    <details class="mt-2 text-sm"><summary class="text-amber-800 cursor-pointer">Not searched: a copy there is unknown, never "none"</summary>
+      <ul class="mt-1 space-y-1 text-xs text-brand-blueink">
+        {% for m in search.copies.unsearched[:shown] %}<li>{{ m.email }} — {{ m.why_unsearched }}</li>{% endfor %}
+        {% if search.spam %}{% for email, why in search.spam.unsearched[:shown] %}<li>{{ email }} (Spam) — {{ why }}</li>{% endfor %}{% endif %}
+        {% set unlisted = [0, search.copies.unsearched | length - shown] | max + ([0, search.spam.unsearched | length - shown] | max if search.spam else 0) %}
+        {% if unlisted %}<li>And {{ unlisted }} more in the CSV.</li>{% endif %}
+      </ul></details>
+    {% endif %}
+    {% if search.gam_also_said %}
+    <details class="mt-2 text-sm"><summary class="text-amber-800 cursor-pointer">GAM also said what this can't read, so a copy it missed is unknown</summary>
+      <ul class="mt-1 space-y-1 text-xs text-brand-blueink">
+        {% for line in search.gam_also_said[:shown] %}<li class="break-all">{{ line }}</li>{% endfor %}
+        {% if search.gam_also_said | length > shown %}<li>And {{ search.gam_also_said | length - shown }} more.</li>{% endif %}
+      </ul></details>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% if found.nobody_has %}<p class="text-sm text-brand-blueink">No mailbox here has {{ found.nobody_has | length }} of them, every active mailbox and its Spam searched: sent only outside, removed since, or never delivered. Email Log Search in the Admin console says which.</p>{% endif %}
+  <div class="flex flex-wrap items-center gap-3">
+    {% if found.step_count %}
+    <button type="button" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors"
+            hx-post="/phishing/trash/preview" hx-target="#phishing-find" hx-swap="innerHTML" hx-disabled-elt="this">Trash the copies…</button>
+    {% endif %}
+    <a download href="/phishing/copies.csv" class="text-sm text-brand-blueink underline">Export CSV</a>
+  </div>
+</div>
+{% endif %}
+{% endif %}

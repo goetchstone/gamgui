@@ -117,6 +117,10 @@ class AppState:
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     offboard_templates: object = None  # saved offboarding routines (lazy-loaded by the lifecycle route)
+    phishing_found: object = None      # the last Find, on this connector
+    phishing_job_id: str = ""          # the last Find's job (guards a second domain-wide search)
+    phishing_kept_rows: list = field(default_factory=list)   # the last Find's CSV rows, once a run has dropped its counts
+    phishing_recipients: list = field(default_factory=list)  # the last recipients list's CSV rows
     domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
     gam_version_held: Optional[tuple] = None  # (the binary's stat key, `gam version`'s first line) — see gam_version
     switches: int = 0   # tenant switches so far — see tenant_key
@@ -152,6 +156,10 @@ class AppState:
         self.gam_version_held = None   # setup re-reads the version on the next Home
         self.connected_apps = None     # read with the connector being replaced
         self.connected_apps_job_id = ""
+        self.phishing_found = None     # read with the connector being replaced
+        self.phishing_job_id = ""
+        self.phishing_kept_rows = []
+        self.phishing_recipients = []
         if changed:
             self.switches += 1
             self.previews.clear()
@@ -404,6 +412,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.jobs import router as jobs_router
     from .routes.lifecycle import router as lifecycle_router
     from .routes.onboarding import router as onboarding_router
+    from .routes.phishing import router as phishing_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
     from .routes.signatures import router as signatures_router
@@ -412,6 +421,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(home_router)
     app.include_router(setup_router)
     app.include_router(users_router)
+    app.include_router(phishing_router)
     app.include_router(reports_router)
     app.include_router(groups_router)
     app.include_router(signatures_router)

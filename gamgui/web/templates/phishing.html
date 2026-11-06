@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Phishing — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-blue">Phishing</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Take an email out of every mailbox</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Find who has a copy by its Message-ID (suspended accounts aren't searched), then move the copies to each person's Trash, where they stay for 30 days. The sender's Sent copy is kept as evidence.</p>
+  </div>
+  <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3" hx-post="/phishing/find" hx-target="#phishing-find" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <label class="block"><span class="text-sm text-brand-blueink">Message-ID (in Gmail, More › Show original), or up to {{ most }}, one a line</span>
+      <textarea name="messages" rows="3" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink font-mono"></textarea></label>
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Find copies</button>
+  </form>
+  <div id="phishing-find">{% include "_phishing_find.html" %}</div>
+  <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3" hx-post="/phishing/recipients" hx-target="#phishing-recipients" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <h2 class="eyebrow text-brand-grayink">Who it was sent to</h2>
+    <p class="text-xs text-brand-blueink">Read from the sender's own copy, the only one that can hold a Bcc. It changes nothing.</p>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <label class="block"><span class="text-sm text-brand-blueink">Sender</span>
+        <input name="sender" type="email" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink" /></label>
+      <label class="block"><span class="text-sm text-brand-blueink">Message-ID</span>
+        <input name="message" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink font-mono" /></label>
+    </div>
+    <button type="submit" class="inline-flex items-center rounded-lg border border-brand-blue/60 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-brand-blue/5 transition-colors">List recipients</button>
+    <div id="phishing-recipients"></div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

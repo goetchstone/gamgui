@@ -117,6 +117,9 @@ rows_with() {  # <data file> <value>...: each record in the file with those key 
 # and GAM never prints it).
 not_modelled() { echo "ERROR: mock: $1 isn't modelled" 1>&2; exit 2; }
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+# The users listed, as writeGotMessage writes them: each page's running count after a CR on one line, the last the total. A real
+# page is 500 users; here the first is one, so every read of this line meets more than one page.
+got_users() { [ "$1" -le 1 ] || printf '\rGot 1 User...' 1>&2; printf '\rGot %s Users...\r\n' "$1" 1>&2; }
 json_quote() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # Under GAM_MOCK_STATE, an account `create user` made is a user from then on. So is anyone a group fixture lists as
 # a member: the directory fixture holds three users, but those members are accounts GAM can act as too.
@@ -486,6 +489,158 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "groups" ]; then
     exit 0
   fi
   print_formatjson email groups.json
+  exit 0
+fi
+
+# `<user> print messages query rfc822msgid:<id> includespamtrash max_to_print <n> headers all showlabels showdate`: the
+# Phishing screen's recipients read (GamCommands.searchMessages, detail .headers), strict, as GAM 7.48.30's
+# printShowMessagesThreads runs it, from the mailboxes in mock_gam/messages.csv and each message's headers in
+# mock_gam/message_headers/<id> (its `Gmail-` lines are Gmail's own fields; the rest its headers, in order; made up).
+# With GAM_MOCK_STATE, $GAM_MOCK_STATE/trashed/<id> is in Trash (still found: includespamtrash), deleted/<id> purged
+# (gone), and nogmail/<user> Gmail off. As GAM does:
+#   - a token for the user (token_refused, "User Print Failed"); with showlabels the labels are read first, so Gmail off is
+#     userGmailServiceNotEnabledWarning (73) before any list;
+#   - the list ("Getting all Messages…" on stderr), at most max_to_print (0 is no limit); none sets NO_ENTITIES_FOUND_RC (60);
+#   - the CSV (_printMessage, SortTitles): User,threadId,id, GAM's default headers, LabelsCount,Labels, then every other
+#     header name sorted; each header under its own name, a repeat as "<name> 1"; Date is the message's own time
+#     (showdate overwrites the header); the header line is printed even with no row, after any failure.
+# The same read answers Users' "Search a mailbox" (MailboxSearch, docs/domains/compromised-account.md slice 3): a query of
+# space-separated Gmail terms, each modelled from the fixtures: `rfc822msgid:<id>`; `in:<label>` (the message's labels,
+# case aside: the compromised-account check's `in:scheduled` is the SCHEDULED label, carol@'s one scheduled phish, a name
+# for the live check to confirm); `from:<text>` (its From header) and `to:<text>` (To, Cc or Bcc), case aside, as part of the header;
+# `newer_than:<N>d|h`, a known lie: every fixture message is newer (their dates are fixed). Any other term, or a message
+# whose headers the fixtures don't hold, is refused as not modelled, never answered more kindly than Gmail.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ] && [ "${5:-}" = "query" ] \
+    && case "${6:-}" in rfc822msgid:*) true ;; *) false ;; esac; then
+  user=$2; query=$6
+  shift 6
+  spamtrash=""; all=""; labels=""; dates=""; most=0
+  while [ $# -gt 0 ]; do
+    word=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '_')
+    case "$word" in
+      includespamtrash) spamtrash=1; shift ;;
+      maxtoprint)
+        [ $# -ge 2 ] || missing_arg "integer x>=0"
+        case "$2" in ''|*[!0-9]*) usage_error "Invalid argument: Expected <integer x>=0>" ;; esac
+        most=$2; shift 2 ;;
+      headers)
+        [ $# -ge 2 ] || missing_arg "String"
+        [ "$2" = all ] || not_modelled "print messages with headers other than all"
+        all=1; shift 2 ;;
+      showlabels) labels=1; shift ;;
+      showdate) dates=1; shift ;;
+      *) not_modelled "an rfc822msgid: search with $1" ;;
+    esac
+  done
+  { [ -n "$spamtrash" ] && [ -n "$all" ] && [ -n "$labels" ] && [ -n "$dates" ]; } \
+    || not_modelled "an rfc822msgid: search other than the recipients read"
+  [ -n "$query" ] || empty_arg "Query"
+  set -f
+  for term in $query; do
+    case "$term" in
+      *[*?[]*) not_modelled "a Gmail term like $term" ;;
+      rfc822msgid:?*|in:?*|from:?*|to:?*) ;;
+      newer_than:[0-9]*[dh]) case "${term#newer_than:}" in *[!0-9dh]*|*[dh]?*) not_modelled "a Gmail term like $term" ;; esac ;;
+      *) not_modelled "a Gmail term like $term" ;;
+    esac
+  done
+  set +f
+  # Each term of the query, against one message: its Message-ID, its labels, and its header file (`Gmail-` lines aside).
+  matches() {  # <message-id> <labels> <id>; the terms hold no glob character (refused above)
+    for term in $query; do
+      case "$term" in
+        rfc822msgid:*) [ "$1" = "${term#rfc822msgid:}" ] || return 1 ;;
+        in:*) want=$(printf '%s' "${term#in:}" | tr '[:lower:]' '[:upper:]')
+              case " $2 " in *" $want "*) ;; *) return 1 ;; esac ;;
+        newer_than:*) ;;
+        from:*|to:*)
+          [ -f "$GAM_MOCK_FIXTURES/message_headers/$3" ] || not_modelled "message $3's headers"
+          case "$term" in from:*) names='^From:' ;; *) names='^(To|Cc|CC|Bcc|BCC):' ;; esac
+          grep -E "$names" "$GAM_MOCK_FIXTURES/message_headers/$3" | grep -qiF -- "${term#*:}" || return 1 ;;
+      esac
+    done
+    return 0
+  }
+  base="User
+threadId
+id
+Date
+Subject
+From
+Reply-To
+To
+Delivered-To
+Content-Type
+Message-ID
+LabelsCount
+Labels"
+  header_only() { gam_row $(printf '%s' "$base" | tr '\n' ' '); }
+  if ! known_user "$user"; then header_only; token_refused "$user" Print; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2
+    header_only; exit 73
+  fi
+  printf 'Getting all Messages that match query ((%s)) for %s\n' "$query" "$user" 1>&2
+  ids=""; labels_of=""
+  while IFS=, read -r owner id message tags; do
+    [ "$owner" = "$user" ] || continue
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/trashed/$id" ]; then now="$tags TRASH"; else now=$tags; fi
+    matches "$message" "$now" "$id" || continue
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/deleted/$id" ]; then continue; fi
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/trashed/$id" ]; then tags="$tags TRASH"; fi
+    ids="$ids $id"
+    labels_of="$labels_of
+$id $tags"
+    # At most max_to_print (GAM's maxToProcess; 0 is no limit).
+    set -- $ids
+    if [ "$most" -gt 0 ] && [ "$#" -ge "$most" ]; then break; fi
+  done < "$GAM_MOCK_FIXTURES/messages.csv"
+  if [ -z "$ids" ]; then
+    printf '\rGot 0 Messages that matched query ((%s)) for %s...\r\n' "$query" "$user" 1>&2
+    header_only; exit 60
+  fi
+  rows=$(mktemp -d)
+  trap 'rm -rf "$rows"' EXIT
+  n=0
+  for id in $ids; do
+    n=$((n + 1)); data="$GAM_MOCK_FIXTURES/message_headers/$id"
+    [ -f "$data" ] || not_modelled "message $id's headers"
+    tags=$(printf '%s\n' "$labels_of" | sed -n "s/^$id //p")
+    {
+      printf 'User\t%s\nthreadId\t%s\nid\t%s\n' "$user" "$(sed -n 's/^Gmail-ThreadId: //p' "$data")" "$id"
+      # Each header under its own name, a repeat numbered from 1 (headerCounts); Date is replaced below.
+      awk '/^Gmail-/ { next } { name = substr($0, 1, index($0, ": ") - 1); value = substr($0, index($0, ": ") + 2)
+             c = seen[name]++; if (c > 0) name = name " " c; if (name != "Date") print name "\t" value }' "$data"
+      printf 'Date\t%s\n' "$(sed -n 's/^Gmail-InternalDate: //p' "$data")"
+      set -- $tags
+      printf 'LabelsCount\t%s\nLabels\t%s\n' "$#" "$tags"
+    } > "$rows/$n"
+  done
+  extras=$(cut -f1 "$rows"/* | LC_ALL=C sort -u | while IFS= read -r name; do
+    printf '%s\n' "$base" | grep -qxF -- "$name" || printf '%s\n' "$name"; done)
+  columns="$base
+$extras"
+  printf '\rGot %s Messages that matched query ((%s)) for %s...\r\n' "$n" "$query" "$user" 1>&2
+  # The header, then each message's cells in the same order.
+  old_ifs=$IFS; IFS='
+'
+  set --
+  for column in $columns; do [ -n "$column" ] && set -- "$@" "$column"; done
+  IFS=$old_ifs
+  gam_row "$@"
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    i=$((i + 1))
+    old_ifs=$IFS; IFS='
+'
+    set --
+    for column in $columns; do
+      [ -n "$column" ] || continue
+      set -- "$@" "$(awk -F '\t' -v k="$column" '$1 == k { print substr($0, length($1) + 2); exit }' "$rows/$i")"
+    done
+    IFS=$old_ifs
+    gam_row "$@"
+  done
   exit 0
 fi
 
@@ -1964,6 +2119,243 @@ if [ "${1:-}" = "user" ] && case "${3:-}" in imap|imap4|pop|pop3) true ;; *) fal
        else echo "User: $user, POP Enabled: False"; fi ;;
   esac
   exit 0
+fi
+
+# `all users print messages query "rfc822msgid:<id> in:spam" includespamtrash headers message-id showlabels`: the Phishing
+# screen's read of the copies Gmail filed to Spam (GamCommands.findSpamCopies, SpamCopies), strict, as GAM 7.48.30's
+# printShowMessagesThreads runs it over every active user (isSuspended=False, by address), from mock_gam/messages.csv and
+# each message's mock_gam/message_headers/<id>. With GAM_MOCK_STATE, nogmail/<user> is Gmail off, deleted/<id> gone and
+# trashed/<id> in Trash with its SPAM label kept beside TRASH (whether Gmail's messages.trash drops SPAM isn't known here,
+# so the app has to skip a copy in Trash by that label either way). Labels are the fixture's system labels, never a user
+# label whose name holds a space (GAM joins names with one; the reader's own tests carry that case). As GAM does:
+#   - every argument read first (getArgument: lowercased, `_` dropped), `query` needing a value; only this one form;
+#   - the users listed ("Got <n> Users..."), then each in order, numbered (i/n) past one: showlabels reads the labels
+#     first, so Gmail off is userGmailServiceNotEnabledWarning (73) before that user's "Getting all Messages…" line; the
+#     list, Spam and Trash included (includeSpamTrash), of that Message-ID in Spam; none sets NO_ENTITIES_FOUND_RC (60);
+#   - the CSV once every user is read (CSVPrintFile): User,threadId,id, the Message-ID header under its SMTP_HEADERS_MAP
+#     name, LabelsCount,Labels; the header line even with no row; the last code set stands (setSysExitRC).
+if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ]; then
+  shift 4
+  query=""; queries=0; spamtrash=""; header=""; labels=""
+  while [ $# -gt 0 ]; do
+    word=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '_')
+    case "$word" in
+      query)
+        [ $# -ge 2 ] || missing_arg "Query"
+        [ -n "$2" ] || empty_arg "Query"
+        queries=$((queries + 1)); query=$2; shift 2 ;;
+      includespamtrash) spamtrash=1; shift ;;
+      headers)
+        [ $# -ge 2 ] || missing_arg "String"
+        [ "$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')" = message-id ] || not_modelled "all users print messages with headers $2"
+        header=1; shift 2 ;;
+      showlabels) labels=1; shift ;;
+      *) not_modelled "all users print messages with $1" ;;
+    esac
+  done
+  { [ "$queries" -eq 1 ] && [ -n "$spamtrash" ] && [ -n "$header" ] && [ -n "$labels" ]; } \
+    || not_modelled "all users print messages other than the read of copies in Spam"
+  case "$query" in
+    "rfc822msgid:"*" in:spam") msgid=${query#rfc822msgid:}; msgid=${msgid% in:spam} ;;
+    *) not_modelled "a Gmail query other than rfc822msgid:<id> in:spam" ;;
+  esac
+  case "$msgid" in ''|*[[:space:]]*) not_modelled "a Gmail query other than rfc822msgid:<id> in:spam" ;; esac
+  users=$(grep -vF '"suspended": true' "$GAM_MOCK_FIXTURES/print_users.json" \
+    | sed -n 's/.*"primaryEmail": "\([^"]*\)".*/\1/p' | LC_ALL=C sort)
+  count=$(printf '%s\n' "$users" | grep -c . || true)
+  printf 'Getting all Users that match query (isSuspended=False isGuest=False), may take some time on a large Google Workspace Account...\n' 1>&2
+  got_users "$count"
+  rows=""; rc=0; i=0
+  for user in $users; do
+    i=$((i + 1))
+    if [ "$count" -gt 1 ]; then n=" ($i/$count)"; else n=""; fi
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+      printf 'User: %s, Gmail Service/App not enabled%s\n' "$user" "$n" 1>&2
+      rc=73; continue
+    fi
+    printf 'Getting all Messages that match query ((%s)) for %s%s\n' "$query" "$user" "$n" 1>&2
+    found=0
+    while IFS=, read -r owner id message tags; do
+      { [ "$owner" = "$user" ] && [ "$message" = "$msgid" ]; } || continue
+      case " $tags " in *" SPAM "*) ;; *) continue ;; esac
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/deleted/$id" ]; then continue; fi
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/trashed/$id" ]; then tags="$tags TRASH"; fi
+      data="$GAM_MOCK_FIXTURES/message_headers/$id"
+      [ -f "$data" ] || not_modelled "message $id's headers"
+      set -- $tags
+      rows="$rows$(gam_row "$user" "$(sed -n 's/^Gmail-ThreadId: //p' "$data")" "$id" \
+        "$(sed -n 's/^Message-ID: //p' "$data" | head -n 1)" "$#" "$tags")
+"
+      found=$((found + 1))
+    done < "$GAM_MOCK_FIXTURES/messages.csv"
+    if [ "$found" -eq 1 ]; then noun=Message; else noun=Messages; fi
+    printf '\rGot %s %s that matched query ((%s)) for %s...\r\n' "$found" "$noun" "$query" "$user" 1>&2
+    [ "$found" -gt 0 ] || rc=60
+  done
+  gam_row User threadId id Message-ID LabelsCount Labels
+  printf '%s' "$rows"
+  exit "$rc"
+fi
+
+# `<user> trash messages ids <MessageIDEntity>` (8197-8201; _processMessagesThreads with ids: nothing is listed, so Spam is no
+# bar; no doit, no count check): the Phishing screen's trash of one mailbox's copies in Spam, by the IDs SpamCopies read. As
+# GAM 7.48.30 does: a token for the user; getProfile, so Gmail off is userGmailServiceNotEnabledWarning (73); "User: <u>,
+# Trash N Messages"; then Gmail's messages.trash on each ID, a batch request each: "  User: <u>, Message: <id>, Trashed
+# (j/N)", or for an ID the mailbox doesn't have (messages.csv, not deleted) "  User: <u>, Message: <id>, Trash Failed: Does
+# not exist (j/N)" on stderr (Gmail's notFound by _GMAIL_ERROR_REASON_TO_MESSAGE_MAP; entityActionFailedWarning, exit 50),
+# the rest trashed. A copy already in Trash is trashed again without complaint (messages.trash as idempotent: assumed, not
+# seen live). With GAM_MOCK_STATE a trashed message is $GAM_MOCK_STATE/trashed/<id>. Only a list of ASCII letters, digits,
+# `-`, `_` and commas is modelled: GAM splits on whitespace too, and reads a file for a list selector. A word after the list
+# that GAM takes there (doit, a count, csv…) isn't modelled, any other is GAM's invalid argument; and a suspended user's
+# mailbox isn't, as for the trash by query: what GAM says for one is unknown.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "trash" ] && [ "${4:-}" = "messages" ] && [ "${5:-}" = "ids" ]; then
+  user=$2
+  [ $# -ge 6 ] || missing_arg "MessageIDEntity"
+  if [ $# -gt 6 ]; then
+    case "$(printf '%s' "$7" | tr '[:upper:]' '[:lower:]' | tr -d '_')" in
+      doit|quick|notquick|maxtotrash|maxtoprocess|maxmessagesperthread|query|querytime*|matchlabel|or|and|labelids|\
+      labelmatchpattern|sendermatchpattern|ids|csv) not_modelled "trash messages ids with $7" ;;
+      *) invalid_arg "$7" ;;
+    esac
+  fi
+  case "$6" in *[!A-Za-z0-9_,-]*) not_modelled "a message ID list like $6" ;; esac
+  case "$(printf '%s' "$6" | tr '[:upper:]' '[:lower:]' | tr -d '_-')" in csvkmd|csvsubkey|csv|csvfile|file|csvdata) not_modelled "trash messages ids from $6" ;; esac
+  known_user "$user" || token_refused "$user" Trash
+  ! grep -F "\"primaryEmail\": \"$user\"" "$GAM_MOCK_FIXTURES/print_users.json" | grep -qF '"suspended": true' \
+    || not_modelled "trash messages as a suspended user"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
+  fi
+  set -f; ids=$(printf '%s' "$6" | tr ',' ' '); set +f
+  n=$(printf '%s\n' $ids | grep -c . || true); failed=""
+  if [ "$n" -eq 0 ]; then printf 'User: %s, Messages: 0, Not Trashed: No Messages matched\n' "$user" 1>&2; exit 60; fi
+  if [ "$n" -eq 1 ]; then noun=Message; else noun=Messages; fi
+  printf 'User: %s, Trash %s %s\n' "$user" "$n" "$noun"
+  j=0
+  for id in $ids; do
+    j=$((j + 1)); of=""; [ "$n" -gt 1 ] && of=" ($j/$n)"
+    if grep -q "^$user,$id," "$GAM_MOCK_FIXTURES/messages.csv" \
+       && ! { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/deleted/$id" ]; }; then
+      if [ -n "${GAM_MOCK_STATE:-}" ]; then mkdir -p "$GAM_MOCK_STATE/trashed"; : > "$GAM_MOCK_STATE/trashed/$id"; fi
+      printf '  User: %s, Message: %s, Trashed%s\n' "$user" "$id" "$of"
+    else
+      printf '  User: %s, Message: %s, Trash Failed: Does not exist%s\n' "$user" "$id" "$of" 1>&2
+      failed=1
+    fi
+  done
+  [ -z "$failed" ] || exit 50
+  exit 0
+fi
+
+# ---- One email out of every mailbox (docs/domains/phishing.md) --------------------------------------------------------
+# `<UserTypeEntity> trash messages (query <QueryGmail>)+ [quick|notquick] [doit] [max_to_trash <Number>]` (8197-8201), as
+# GAM 7.48.30's _processMessagesThreads runs it, for `all users` (every active user, by address: isSuspended=False) or
+# `user <email>`. The mailboxes are mock_gam/messages.csv (`user,id,rfc822msgid,labels`, a message a line, made up); with
+# GAM_MOCK_STATE a trashed message is $GAM_MOCK_STATE/trashed/<id>, and $GAM_MOCK_STATE/nogmail/<user> a person with
+# Gmail off. Only the query the app sends, `rfc822msgid:<id> -in:sent`, is modelled; any other, and the grammar's other
+# options, are refused as not modelled. As GAM does:
+#   - every argument is read first, each keyword lowercased with `_` dropped (getArgument): `query` needs a value
+#     (getString: missing or empty, Cmd.OB_QUERY), `max_to_trash` an integer x>=0 (getInteger), 0 being no limit; any
+#     other word is an invalid argument; no query at all is "Missing argument: Expected <query|matchlabel|ids|labelids>";
+#   - then per user: a token (token_refused, "User Trash Failed"); Gmail off, userGmailServiceNotEnabledWarning (73); the list
+#     leaves Spam and Trash out (includeSpamTrash is False for trash) and, with `quick` (the default), asks Gmail for at
+#     most max_to_trash, so only `notquick` sees more than the cap;
+#   - none is "Messages: 0, Not Trashed: No Messages matched" (60); over the cap, "Count N exceeds maximum to Trash M"
+#     (51); without doit, 'Use the "doit" argument to perform action' (51), each on stderr with (i/n) past one user;
+#   - with doit, "Trash N Messages" and each message's "Trashed" on stdout;
+#   - every user sets the exit code and the last one set stands (setSysExitRC): a domain's dry run is never 0;
+#   - `all users … doit`, a domain-wide trash the app never sends, is refused as not modelled.
+if { { [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ]; } || [ "${1:-}" = "user" ]; } && [ "${3:-}" = "trash" ] \
+   && [ "${4:-}" = "messages" ]; then
+  entity=$1; target=${2:-}
+  shift 4
+  query=""; queries=0; quick=1; doit=""; max=1
+  while [ $# -gt 0 ]; do
+    word=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '_')
+    case "$word" in
+      query)
+        [ $# -ge 2 ] || missing_arg "Query"
+        [ -n "$2" ] || empty_arg "Query"
+        queries=$((queries + 1)); query=$2; shift 2 ;;
+      quick) quick=1; shift ;;
+      notquick) quick=""; shift ;;
+      doit) doit=1; shift ;;
+      maxtotrash|maxtoprocess)
+        [ $# -ge 2 ] || missing_arg "integer x>=0"
+        value=$(printf '%s' "$2" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        case "$value" in ''|*[!0-9]*) usage_error "Invalid argument: Expected <integer x>=0>" ;; esac
+        value=$(printf '%s' "$value" | sed 's/^0*//')
+        if [ -z "$value" ]; then max=0; elif [ ${#value} -gt 9 ]; then max=999999999; else max=$value; fi
+        shift 2 ;;
+      matchlabel|or|and|labelids|ids|labelmatchpattern|sendermatchpattern|maxmessagesperthread|csv|todrive|querytime*)
+        not_modelled "trash messages with $1" ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  [ "$queries" -gt 0 ] || missing_arg "query|matchlabel|ids|labelids"
+  [ "$queries" -eq 1 ] || not_modelled "trash messages with more than one query"
+  case "$query" in
+    "rfc822msgid:"*" -in:sent") msgid=${query#rfc822msgid:}; msgid=${msgid% -in:sent} ;;
+    *) not_modelled "a Gmail query other than rfc822msgid:<id> -in:sent" ;;
+  esac
+  case "$msgid" in ''|*[[:space:]]*) not_modelled "a Gmail query other than rfc822msgid:<id> -in:sent" ;; esac
+  if [ "$entity" = all ]; then
+    [ -z "$doit" ] || not_modelled "all users trash messages with doit (the app trashes one mailbox at a time)"
+    users=$(grep -vF '"suspended": true' "$GAM_MOCK_FIXTURES/print_users.json" \
+      | sed -n 's/.*"primaryEmail": "\([^"]*\)".*/\1/p' | LC_ALL=C sort)
+    count=$(printf '%s\n' "$users" | grep -c . || true)
+    printf 'Getting all Users that match query (isSuspended=False isGuest=False), may take some time on a large Google Workspace Account...\n' 1>&2
+    # getPageMessage(): "Got <n> Users...", the count the reader checks every user's line against.
+    got_users "$count"
+  else
+    known_user "$target" || token_refused "$target" Trash
+    ! grep -F "\"primaryEmail\": \"$target\"" "$GAM_MOCK_FIXTURES/print_users.json" | grep -qF '"suspended": true' \
+      || not_modelled "trash messages as a suspended user"
+    users=$target; count=1
+  fi
+  rc=0; i=0
+  for user in $users; do
+    i=$((i + 1))
+    if [ "$count" -gt 1 ]; then n=" ($i/$count)"; else n=""; fi
+    # The progress first: GAM prints it before the list call that finds Gmail off.
+    printf 'Getting all Messages that match query ((%s)) for %s%s\n' "$query" "$user" "$n" 1>&2
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+      printf 'User: %s, Gmail Service/App not enabled%s\n' "$user" "$n" 1>&2
+      rc=73; continue
+    fi
+    # Theirs, with this Message-ID, in neither Sent (the query), Spam nor Trash, and not trashed here since.
+    ids=""; found=0
+    while IFS=, read -r owner id message labels; do
+      { [ "$owner" = "$user" ] && [ "$message" = "$msgid" ]; } || continue
+      case " $labels " in *" SENT "*|*" SPAM "*|*" TRASH "*) continue ;; esac
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/trashed/$id" ]; then continue; fi
+      if [ -n "$quick" ] && [ "$max" -gt 0 ] && [ "$found" -ge "$max" ]; then break; fi
+      found=$((found + 1)); ids="$ids $id"
+    done < "$GAM_MOCK_FIXTURES/messages.csv"
+    if [ "$found" -eq 1 ]; then noun=Message; else noun=Messages; fi
+    printf '\rGot %s %s that matched query ((%s)) for %s...\r\n' "$found" "$noun" "$query" "$user" 1>&2
+    if [ "$found" -eq 0 ]; then
+      printf 'User: %s, Messages: 0, Not Trashed: No Messages matched%s\n' "$user" "$n" 1>&2
+      rc=60; continue
+    fi
+    if [ "$max" -gt 0 ] && [ "$found" -gt "$max" ]; then
+      printf 'User: %s, %s: %s, Not Trashed: Count %s exceeds maximum to Trash %s%s\n' "$user" "$noun" "$found" "$found" "$max" "$n" 1>&2
+      rc=51; continue
+    fi
+    if [ -z "$doit" ]; then
+      printf 'User: %s, %s: %s, Not Trashed: Use the "doit" argument to perform action%s\n' "$user" "$noun" "$found" "$n" 1>&2
+      rc=51; continue
+    fi
+    echo "User: $user, Trash $found $noun$n"
+    j=0
+    for id in $ids; do
+      j=$((j + 1))
+      if [ "$found" -gt 1 ]; then m=" ($j/$found)"; else m=""; fi
+      if [ -n "${GAM_MOCK_STATE:-}" ]; then mkdir -p "$GAM_MOCK_STATE/trashed"; : > "$GAM_MOCK_STATE/trashed/$id"; fi
+      echo "  User: $user, Message: $id, Trashed$m"
+    done
+  done
+  exit "$rc"
 fi
 
 # Anything else is unhandled. Fail loudly: a catch-all that succeeded is how the mock used to lie — a

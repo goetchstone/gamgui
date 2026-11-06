@@ -9,7 +9,7 @@
 > **GamGUI is being brought to feature parity with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**,
 > its native SwiftUI rewrite, which runs the same `gam` commands, held to them by tests
 > ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). Until then each has things the other lacks. Only
-> in SwiftGamGui for now: incident response, phishing clean-up, and some smaller reads and writes. Only here:
+> in SwiftGamGui for now: incident response. Only here:
 > sharing a calendar with a group, deleting a calendar or an event, a signature for many people at
 > once, and deleting a leaver's account.
 
@@ -88,6 +88,8 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   **suspend**.
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
+- **Phishing** — find every copy of an email by its Message-ID, Spam included, see who it went to, and trash the copies from
+  one preview, one guarded step per mailbox with the count typed. The sender's Sent copy is kept.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.
@@ -187,6 +189,8 @@ its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Offboarding's added steps: clear recovery, hide from the directory, IMAP off, POP off | Lifecycle | argv-identical to SwiftGamGui's confirmed runs (2026-10-16) |
 | Offboarding's added steps: hand over secondary calendars, remove filters that forward | Lifecycle | not yet — not live in either app |
+| Trash an email's copies, by Message-ID | Phishing | argv-identical to SwiftGamGui's confirmed runs (2026-10-19, 2026-10-23) |
+| Trash an email's copies in Spam, by ID | Phishing | not yet — not live in either app |
 | Set a temporary password | Users | not yet — new to both apps |
 | Set the phone a signature shows | Users | argv-identical to SwiftGamGui's confirmed run (2026-10-24); changing or removing one is not yet, in either app |
 | Delete an account | Users, Builder | **confirmed** (2026-10-08, GAM 7.48.22, from the user page: the offboarded leaver, after the transfer completed) |

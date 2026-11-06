@@ -218,4 +218,14 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   captured one when it can't be reproduced on demand, and when neither is possible, report it as unproven.
 - **Enforcement home if changed:** skill (`post-failure` step 2, on what counts as a reproduction).
 
+## 2026-11-05 — A port can drop what the original already fixed
+- **What happened:** the phishing port from SwiftGamGui left out three things that app's runbook lists as fixed: showing what a
+  Message-ID matched before trashing (F5), showing lines GAM said that no reader knows (P5), and saying suspended accounts aren't
+  searched. A false "no mailbox has it" was one result. A review caught them before merge, with its runbook as the evidence.
+- **Invariant in force:** none numbered. The back-port plan says to read the runbook first, and it was read, for behaviour.
+- **Why it didn't hold:** weak wording. "Read the runbook" reads as learning how it works, not as a list to tick off.
+- **Would a rule have caught it?** Yes, if a port treats the original's list of past fixes as acceptance criteria: each one is
+  ported or said to be left out.
+- **Enforcement home if changed:** skill (`start-session`, or a line in the back-port plan's Phase E).
+
 <!-- Add new entries ABOVE this line, newest first. -->

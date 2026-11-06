@@ -189,6 +189,14 @@ class GAMRunner:
                 return await _do()
         return await _do()
 
+    async def run_any_exit(self, domain: str, argv: Sequence[str], timeout: Optional[float] = None) -> RunResult:
+        """A reviewed read whose exit code isn't its answer: an ``all users`` run's is the last user's, so never 0 across a real
+        domain, and its result is on stderr. Credentials as ``run_authenticated``. Never for a write: those go through _run_write."""
+        argv = list(argv)
+        with EphemeralConfig(self.vault, domain, base_dir=self.base_dir) as cfgdir:
+            res = await self._exec(argv, cfgdir, timeout or self.timeout)
+        return RunResult(stdout=strip_cfgdir_noise(res.stdout, cfgdir), stderr=res.stderr, returncode=res.returncode)
+
     async def version(self) -> str:
         """Return GAM's reported version (no credentials needed)."""
         from ..secrets.ephemeral import app_runtime_dir
