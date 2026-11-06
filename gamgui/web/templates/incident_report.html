@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Incident report — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  {% include "_incident_nav.html" %}
+  <div>
+    <p class="eyebrow text-brand-blue">Incident</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">The incident report</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Each number opens its list, and each step sits beside the record that shows it. It's worked out from Google's logs and this app's audit log, and only your review is typed.</p>
+  </div>
+  <div id="incident-report">{% include "_incident_report.html" %}</div>
+</div>
+{% endif %}
+{% endblock %}

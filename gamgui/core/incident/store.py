@@ -649,6 +649,35 @@ class IncidentStore:
             os.close(evidence)
         return exports, unreadable
 
+    @staticmethod
+    def _saved_reads(evidence: int) -> List[str]:
+        """What's in the evidence folder that counts as a saved read: anything but a stray file. A link stays in, to be refused when it's read: it's evidence left out, never passed over."""
+        names: List[str] = []
+        for name in sorted(n for n in os.listdir(evidence) if not n.startswith(".")):
+            if not stat.S_ISREG(os.stat(name, dir_fd=evidence, follow_symlinks=False).st_mode):
+                names.append(name)
+        return names[:EXPORTS_CAP]
+
+    def saved_about(self, record_id: str) -> List[Tuple[str, str]]:
+        """Each saved read's name and its `about.txt`, without reading its logs: what the report lists. One that can't be read is named, with nothing about it."""
+        evidence = self._evidence(record_id)
+        if evidence is None:
+            return []
+        found: List[Tuple[str, str]] = []
+        try:
+            for name in self._saved_reads(evidence):
+                try:
+                    folder = _sub_dir(evidence, name, make=False)
+                    try:
+                        found.append((name, _read_at(folder, _ABOUT, ABOUT_CAP).decode("utf-8", "replace")))
+                    finally:
+                        os.close(folder)
+                except (OSError, Problem):
+                    found.append((name, ""))
+        finally:
+            os.close(evidence)
+        return found
+
     def evidence_files(self, record_id: str) -> Iterator[Tuple[str, bytes, str]]:
         """Every saved file, as (its path under the evidence, its bytes, its SHA-256): what shows the evidence unchanged. A stray file is no saved read; anything else that won't open (a link, no
         access) is evidence left out, so it raises, naming it."""
@@ -656,12 +685,10 @@ class IncidentStore:
         if evidence is None:
             return
         try:
-            for name in sorted(n for n in os.listdir(evidence) if not n.startswith("."))[:EXPORTS_CAP]:
+            for name in self._saved_reads(evidence):
                 try:
                     folder = _sub_dir(evidence, name, make=False)
-                except NotADirectoryError:
-                    continue
-                except OSError as exc:
+                except OSError as exc:      # a link included: on macOS O_NOFOLLOW with O_DIRECTORY says not a directory
                     raise Problem(f"Couldn't read the evidence {name}: {exc.strerror}.") from exc
                 try:
                     for file_name in sorted(n for n in os.listdir(folder) if not n.startswith(".")):

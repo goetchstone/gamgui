@@ -7,6 +7,17 @@
   <button type="submit" class="{{ small }}" aria-label="Pick “{{ c.subject or "(no subject)" }}” from {{ c.sender }} as the warning">It's the warning</button>
 </form>
 {%- endmacro %}
+{% if got_it %}
+<section>
+  <h2 class="text-sm font-medium text-brand-black">Everyone it got to: {{ got_it | length }}</h2>
+  <p class="mt-1 text-sm text-brand-black">Each address once, however many of the attacker's emails got to it: a receipt here, or a send nothing in the logs read says failed. {{ got_it | selectattr("to_warn") | list | length }} still to warn. A bounce didn't get through, so it isn't here.</p>
+  <div class="copy-wrap mt-1 flex flex-wrap items-center gap-3 text-xs">
+    <input type="text" readonly aria-label="Everyone it got to, for a Bcc" value="{{ got_it | map(attribute='address') | join(', ') }}" class="{{ field }} w-72 max-w-full" />
+    <button type="button" data-action="copy" class="{{ small }}">Copy addresses</button>
+    <a download href="/incident/logs/got-it.csv" class="text-brand-blueink underline">Export for import</a>
+  </div>
+</section>
+{% endif %}
 {% if groups_job %}{% include "_incident_groups_status.html" %}{% endif %}
 {% for reach in reading.reaches %}
 <section>

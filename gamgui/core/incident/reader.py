@@ -291,6 +291,7 @@ class Status:
     unseen: Optional[str]
     earlier_lock_at: Optional[datetime]
     timeline: Tuple[Moment, ...]
+    timeline_cut: int = 0       # how many of the attacker's events past the cap aren't in it, the saved logs having them
 
     def words(self, when: Callable[[datetime], str]) -> str:
         if self.state == "stillIn":
@@ -768,7 +769,7 @@ class _Accounts:
         return [self._events[i] for i in self._indices.get(account.lower(), ())]
 
 
-def _timeline(me: str, events: Sequence[Event], acting: Set[str], since: Optional[datetime], known: Callable[[str], bool], joined: Sequence[Event]) -> Tuple[Moment, ...]:
+def _timeline(me: str, events: Sequence[Event], acting: Set[str], since: Optional[datetime], known: Callable[[str], bool], joined: Sequence[Event]) -> Tuple[Tuple[Moment, ...], int]:
     """`me`'s timeline, from the attack on: each attacker sign-in, failure and change from a suspect address, the device that joined at one, and the rest the attacker did a line per
     log; each step of every lock an admin took; what Google did; and the person's own changes, said with the address when it's not one they used before the attack."""
     start = since or _DISTANT_PAST
@@ -873,7 +874,8 @@ def _timeline(me: str, events: Sequence[Event], acting: Set[str], since: Optiona
         if (moment.at, moment.words) not in seen:
             seen.add((moment.at, moment.words))
             out.append(moment)
-    return tuple(out[:TIMELINE_CAP])
+    # The earliest kept, and always what was done about it: a long attack must never push the lock out of what the report shows done.
+    return (*out[:TIMELINE_CAP], *(m for m in out[TIMELINE_CAP:] if m.who in ("admin", "google"))), sum(m.who not in ("admin", "google") for m in out[TIMELINE_CAP:])
 
 
 def _status(account: str, events: Sequence[Event], acting: Set[str], context: Context, joined: Sequence[Event] = (), phished_at: Optional[datetime] = None,
@@ -964,7 +966,7 @@ def _status(account: str, events: Sequence[Event], acting: Set[str], context: Co
         earlier = last[-1].time if last else None
     state = "stillIn" if back_in else "locked" if whole else "partlyLocked" if locked_at else "notLocked"
     return Status(account, state, bool(entries), attacked_at, reset, sign_out, suspended, locked_at, back_in.time if back_in else None, back_in.ip if back_in else "",
-                  max(tried) if tried else None, tuple(new_addresses), unseen, earlier, _timeline(me, events, acting, attacked_at, known, joined))
+                  max(tried) if tried else None, tuple(new_addresses), unseen, earlier, *_timeline(me, events, acting, attacked_at, known, joined))
 
 
 # --- who it reached ---------------------------------------------------------------------------------------------------------

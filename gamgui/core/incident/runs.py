@@ -4,11 +4,13 @@ is passed over: never shown done, so never hidden. Runbook: docs/domains/inciden
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..audit import iter_records
 from .logs import parse_time
 from .reader import Pulled
+from .report import Change
 
 ACTIONS = frozenset({"trash_message", "trash_spam_messages"})
 SCAN_LIMIT = 100_000
@@ -37,3 +39,26 @@ def latest_runs(path: Optional[Path], domain: str, limit: int = SCAN_LIMIT) -> L
         one["trashed" if record.get("ok") is True else "failed"] += 1
         one["mailboxes"].add(str(record.get("target") or "").lower())
     return [Pulled(message_id, one["at"], one["by"], one["steps"], one["trashed"], one["failed"], len(one["mailboxes"]), one["searched"]) for message_id, one in seen.items()]
+
+
+NOT_WRITES = frozenset({"sensitive_read", "sensitive_csv_export"})      # audited, and changing nothing
+
+
+def changes_since(path: Optional[Path], since: datetime, words: Callable[[str], str], limit: int = SCAN_LIMIT) -> Tuple[List[Change], Optional[datetime]]:
+    """What this app's audit log shows it ran, newest first, stopping at ``since``, and how far back it read when ``limit`` stopped it first (None when it got there): an older step isn't "none". Phishing's trash
+    steps are said once an email, as pulled, so they aren't here. Off the event loop."""
+    changes: List[Change] = []
+    read, oldest = 0, None
+    for record in iter_records(path, limit=limit):
+        read += 1
+        at = parse_time(str(record.get("ts") or ""))
+        if at is None:
+            continue
+        if at < since:
+            return changes, None
+        oldest = at
+        action = str(record.get("action") or "")
+        if action and action not in ACTIONS and action not in NOT_WRITES and record.get("target"):
+            ok = record.get("ok")
+            changes.append(Change(at, words(action), str(record.get("target")), str(record.get("actor") or ""), ok if isinstance(ok, bool) else None))
+    return changes, oldest if read >= limit else None

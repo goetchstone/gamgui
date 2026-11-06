@@ -1,0 +1,4 @@
+{#- A made export, one save. A failure was said before this, on the screen, since a download link's response is saved as a file in the app window whatever its status. -#}
+<div tabindex="-1" data-focus class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+  The report is ready. <a download href="/incident/report/export.zip?file={{ token | urlencode }}" class="font-medium underline">Save the export</a>
+</div>

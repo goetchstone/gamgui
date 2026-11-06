@@ -1,0 +1,17 @@
+{#- The list behind one number. A cell may be text an attacker wrote: autoescaped only. -#}
+<div class="rounded-lg border border-brand-gray/40 p-3" tabindex="-1" data-focus>
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h3 class="text-sm font-medium text-brand-black">{{ count.label }}: {{ count.number }}</h3>
+    {% if count.table.rows %}<a download href="/incident/report/list.csv?id={{ count.id | urlencode }}" class="text-xs text-brand-blueink underline" aria-label="Export {{ count.label }} as CSV">Export as CSV</a>{% endif %}
+  </div>
+  <p class="mt-1 text-xs text-brand-blueink">{{ count.about }}</p>
+  {% if rows %}
+  <div class="mt-2 overflow-x-auto">
+    <table class="w-full text-left text-xs">
+      <thead><tr class="text-brand-grayink">{% for column in count.table.columns %}<th scope="col" class="py-1 pr-3 font-normal">{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for row in rows %}<tr class="border-t border-brand-gray/30 align-top">{% for cell in row %}<td class="py-1 pr-3 break-words text-brand-black">{{ words(cell) }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% if count.table.rows | length > shown %}<p class="mt-1 text-xs text-brand-grayink">The first {{ shown }}. The CSV has them all.</p>{% endif %}
+  {% else %}<p class="mt-2 text-sm text-brand-blueink">None.</p>{% endif %}
+</div>

@@ -328,4 +328,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **E5** — applied (`feat/incident-respond`: reads and this Mac only). The screens are Incidents, Investigate and Respond; Report comes with E8.
 - **E6** — applied (`feat/incident-reach`: reads and this Mac only). The groups are read in the background on Respond, as SwiftGamGui does.
 - **E7** — applied (`feat/incident-devices`: offline only; both writes unproven live in either app).
-- E8, F — approved 2026-11-05 (G1), not started.
+- **E8** — applied (`feat/incident-report`: reads and this Mac only). G4: a PDF from a small writer with no dependency, in the export zip. The summary is typed: the on-device model's draft is Apple-only.
+- F — approved 2026-11-05 (G1), not started.
