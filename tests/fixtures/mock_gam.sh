@@ -450,13 +450,15 @@ groupsenterprise|enterprisegroups|profile|ldap|directorysync|gcp|cloud|cloudsear
     *)
       # A window as two times, both or neither (the app's, fixed once and read page by page): the hours between them. A
       # time that isn't one (a 13th month, Feb 30) is GAM's parse error; macOS's date rolls those over, so it must read
-      # back the same. An end before the start is GAM's usage error (StartEndTime); an end equal to it isn't modelled.
+      # back the same. CI's Linux has GNU date, which takes -d and refuses them.
+      # An end before the start is GAM's usage error (StartEndTime); an end equal to it isn't modelled.
+      as_utc() { date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" "$2" 2>/dev/null || date -u -d "$1" "$2" 2>/dev/null; }
       printf '%s' "$start" | grep -Eq "$iso" && [ -n "$before" ] || not_modelled "report start $start"
       for t in "$start" "$before"; do
-        [ "$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$t" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" = "$t" ] \
+        [ "$(as_utc "$t" +%Y-%m-%dT%H:%M:%SZ)" = "$t" ] \
           || usage_error "Invalid argument: Expected <$(printf '%s' "$t" | tr '[:lower:]' '[:upper:]')>: not a valid date/time"
       done
-      from=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$start" +%s); to=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$before" +%s)
+      from=$(as_utc "$start" +%s); to=$(as_utc "$before" +%s)
       [ "$to" -ge "$from" ] || usage_error "Invalid argument: Expected <end time after start time>"
       [ "$to" -gt "$from" ] || not_modelled "report end $before equal to start $start"
       hours=$(( (to - from + 3599) / 3600 )) ;;

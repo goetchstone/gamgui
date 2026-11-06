@@ -123,7 +123,8 @@ def is_report_time(when: str) -> bool:
 def is_one_address(address: str) -> bool:
     """One plain address, as GAM will act on it as given: GAM reads `Name <a@b>` as `a@b` and `id:`/`uid:` as an ID, and splits a list on
     commas and whitespace. A removal names what the operator was shown, or nothing."""
-    return bool(re.fullmatch(r"[^\s<>:,@]+@[^\s<>:,@]+", address or ""))
+    local, at, host = (address or "").partition("@")
+    return bool(at and local and host) and not any(c.isspace() or c in "<>:,@" for c in local + host)
 
 
 @dataclass(frozen=True)
