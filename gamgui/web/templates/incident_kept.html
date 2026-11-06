@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Incidents — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-blue">Incident</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Keep an incident</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Keep its details, notes and every pull of the logs on this Mac. It stays here, and opens again after a restart without reading Google. <a href="/incident/logs" class="underline">Pull the logs</a> or <a href="/incident" class="underline">secure an account</a> while it's open.</p>
+  </div>
+  <div id="incident-kept">{% include "_incident_kept.html" %}</div>
+</div>
+{% endif %}
+{% endblock %}

@@ -107,16 +107,16 @@ def test_the_csv_limit_stays_up_until_the_last_reader_ends():
     # back what it found could drop it under another still reading a long cell.
     import csv
 
-    from gamgui.core.gam.parser import _field_limit_at_least
+    from gamgui.core.gam.parser import field_limit_at_least
 
     base = csv.field_size_limit()
-    with _field_limit_at_least(base + 10):
-        with _field_limit_at_least(base + 100):
+    with field_limit_at_least(base + 10):
+        with field_limit_at_least(base + 100):
             assert csv.field_size_limit() == base + 100
         assert csv.field_size_limit() == base + 100     # the inner one ended first, the outer may need it
     assert csv.field_size_limit() == base
 
-    first, second = _field_limit_at_least(base + 100), _field_limit_at_least(base + 10)
+    first, second = field_limit_at_least(base + 100), field_limit_at_least(base + 10)
     first.__enter__()
     second.__enter__()
     first.__exit__(None, None, None)                    # they needn't end in the order they began

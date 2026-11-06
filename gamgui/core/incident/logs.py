@@ -7,17 +7,21 @@ Pure. Ported from SwiftGamGui's ``ActivityLogs.swift``.
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from ..gam.parser import parse_records
+from ..gam.parser import field_limit_at_least, parse_records
 
 HOURS = (24, 72, 240, 360, 720, 4320)   # a day, 3, 10, 15 and 30 days, and six months (the Reports API keeps about six; Gmail's 30 days)
 DEFAULT_HOURS = 72
 CAP = 1000              # each read's bound: the newest this many activities per account
 PAGES = 10              # a read at the cap is read on further back, at most this many reads
+EXPORT_ROWS = 3_000_000 # a saved read's events, all its logs together: a row of a hostile zip costs about 310 bytes held and a dozen on disk. Past any pull READS_PER_LOG lets one log reach
+EARLIEST_YEAR, LATEST_YEAR = 1990, 2200     # a time every screen can say in any zone: year 1 or 9999 can't be moved to one
 READS_PER_DAY = 100     # a log read whole: at most this many reads for one day of it, and this many for the log. Past them it stops, oldest
 READS_PER_LOG = 200     # first, so what's left unread is the newest, said, with the time it was read through
 GMAIL_MAX_HOURS = 720   # the Reports API reads the Gmail log at most this far back (doReport says so)
@@ -158,6 +162,8 @@ def parse_time(text: str) -> Optional[datetime]:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
+        return None
+    if not EARLIEST_YEAR <= parsed.year <= LATEST_YEAR:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
@@ -368,6 +374,57 @@ def rows_from(stdout: str, application: str) -> List[Row]:
         if columns is None or columns.keys != keys:
             columns = _Columns(keys)
         rows.append(_row(record, application, columns))
+    return rows
+
+
+_PARAMETER_NAME = re.compile(r"[\w.-]+")
+
+
+def parameters_from_cell(cell: str) -> Tuple[Tuple[str, str], ...]:
+    """The parameters cell back into parameters: `name: value` pieces joined by " | ". A piece that isn't `name: value` is the rest of the value before it, which held " | " (a subject can)."""
+    if not cell:
+        return ()
+    out: List[Tuple[str, List[str]]] = []
+    for piece in cell.split(" | "):
+        name, colon, value = piece.partition(": ")
+        if colon and _PARAMETER_NAME.fullmatch(name):
+            out.append((name, [value]))
+        elif out:
+            out[-1][1].append(piece)
+    return tuple((name, " | ".join(pieces)) for name, pieces in out)
+
+
+def _unsafe(cell: str) -> str:
+    """A cell as it was before the export made it safe to open in a spreadsheet: a `'` before a formula's lead. A value that itself began with `'` and one of those reads back without it: the
+    export doesn't say which it was."""
+    return cell[1:] if len(cell) > 1 and cell[0] == "'" and cell[1] in "=+-@\t\r" else cell
+
+
+def rows_from_export(text: str, application: str, limit: int = EXPORT_ROWS) -> Optional[List[Row]]:
+    """A log's rows read back from this app's export of it, in the file's order, or None when the text isn't one (its header isn't ours, or a row names another log) or holds more than ``limit``.
+    The export's own dialect, not GAM's, and a cell as long as GAM's read let it be. Its identity is its content, the export keeping no unique qualifier: one event saved by two exports counts once."""
+    reader = csv.reader(io.StringIO(text, newline=""))
+    rows: List[Row] = []
+    with field_limit_at_least(len(text) + 1):
+        try:
+            if next(reader) != list(TABLE_HEADER):
+                return None
+            for raw in reader:
+                if not raw:
+                    continue
+                if len(raw) != len(TABLE_HEADER) or raw[0] != application or len(rows) >= limit:
+                    return None
+                _, time, who, event, ip, flagged, via, cell = (_unsafe(c) for c in raw)
+                agent, app = "", ""
+                if via.startswith("by "):
+                    agent, _, app = via[3:].partition("; through ")
+                elif via.startswith("through "):
+                    app = via[8:]
+                parameters = parameters_from_cell(cell)
+                identity = "|".join([application, time, who, event, ip, *(f"{n}={v}" for n, v in parameters)])
+                rows.append(Row(identity, application, time, parse_time(time), who, event, ip, parameters, flagged == "yes", agent, app))
+        except (csv.Error, StopIteration):
+            return None
     return rows
 
 

@@ -13,7 +13,7 @@
   <div>
     <p class="eyebrow text-brand-blue">Incident</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Pull the incident logs</h1>
-    <p class="text-brand-blueink mt-1 text-sm">Read what happened, by the people reported, then by the attacker's address. Each log is read whole, oldest first, and changes nothing. <a href="/incident" class="underline">Secure an account</a> when you know who.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Read what happened, by the people reported, then by the attacker's address. Each log is read whole, oldest first, and changes nothing. <a href="/incident" class="underline">Secure an account</a> when you know who. <a href="/incident/kept" class="underline">Keep an incident</a> to save each pull on this Mac.</p>
   </div>
   <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4" hx-post="/incident/logs/pull" hx-target="#incident-logs" hx-swap="innerHTML" hx-disabled-elt="find button">
     <div class="grid gap-4 sm:grid-cols-3">

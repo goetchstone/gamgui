@@ -9,20 +9,44 @@ never a part passed as the whole. Ported from SwiftGamGui's ``IncidentLogs.swift
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import math
+import re
 import secrets
 import time
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 
-from .logs import CAP, GMAIL_MAX_HOURS, NAMES, READS_PER_DAY, READS_PER_LOG, Row, addresses as addresses_in, capped as is_capped, newest_first, parse_time, report_time, window_words
+from ..csv_safe import csv_safe
+from .logs import (
+    CAP,
+    EXPORT_ROWS,
+    GMAIL_MAX_HOURS,
+    NAMES,
+    READS_PER_DAY,
+    READS_PER_LOG,
+    Row,
+    capped as is_capped,
+    newest_first,
+    parse_time,
+    report_time,
+    rows_from_export,
+    table,
+    window_words,
+)
+from .logs import addresses as addresses_in
+from .store import Export, export_of
 from .reads import in_words
 
 AT_ONCE = 3     # at most this many reads at once
 MOST_ACCOUNTS = 20
 
 Read = Callable[[Sequence[str], str, str], Awaitable[List[Row]]]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -127,6 +151,7 @@ class Pull:
     ended: bool = False
     run: str = field(default_factory=lambda: secrets.token_hex(8))
     at: Optional[datetime] = None       # the window's end
+    from_evidence: bool = False         # made from an incident's saved reads, not read from Google: never saved to it again
     addresses: List[str] = field(default_factory=list)      # the sign-in log's IP addresses, the flagged ones first: what to filter every log by next
 
     def log(self, application: str) -> Optional[Log]:
@@ -353,6 +378,190 @@ async def pull_logs(conn: Any, query: Query, pull: Pull, progress: Dict[str, Pro
     await asyncio.gather(*(one(a) for a in query.applications))
     await asyncio.to_thread(pull.work_out_addresses)
     pull.ended = True
+
+
+_ABOUT_FILE = re.compile(r"([a-z]+)-log(?:-partial)?\.csv")
+_ABOUT_LAST = re.compile(r", the last (\d{1,6}) (hours|days) \(the most it reads\)")
+_ABOUT_THROUGH = re.compile(r"; read completely through (\S+), later events weren't read")
+
+
+def _about_log(line: str) -> Optional[Tuple[str, str]]:
+    """`<log>-log.csv: the <name> log, <count> events<what else>.` as (log, what else), found by hand: this line is a zip's words, and a pattern over it backtracked for seconds on a few KB."""
+    file_name, colon, said = line.partition(": the ")
+    found = _ABOUT_FILE.fullmatch(file_name)
+    at = said.find(" log, ")
+    if not (colon and found and at >= 0 and line.endswith(".")):
+        return None
+    count, events, rest = said[at + len(" log, "):-1].partition(" events")
+    return (found.group(1), rest) if events and count.isdigit() else None
+
+
+@dataclass(frozen=True)
+class About:
+    """What a saved read's `about.txt` says: its window, accounts and address, and each log's own window and how far it was read. What a CSV alone can't."""
+
+    users: Tuple[str, ...] = ()
+    every_account: bool = False
+    ip: str = ""
+    hours: int = 0
+    windows: Mapping[str, int] = field(default_factory=dict)
+    capped: FrozenSet[str] = frozenset()
+    through: Mapping[str, datetime] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, text: str) -> "About":
+        users: Tuple[str, ...] = ()
+        every, ip, hours = False, "", 0
+        windows: Dict[str, int] = {}
+        capped = set()
+        through: Dict[str, datetime] = {}
+
+        def span(count: str, unit: str) -> int:
+            return int(count) * (24 if unit == "days" else 1)
+
+        for line in text.split("\n"):
+            if line.startswith("Accounts: ") and line.endswith("."):
+                named = line[len("Accounts: "):-1]
+                every = named == "every account"
+                users = () if every else tuple(n.strip() for n in named.split(","))
+            elif line.startswith("From IP address: ") and line.endswith("."):
+                named = line[len("From IP address: "):-1]
+                ip = "" if named == "any" else named
+            elif (over := re.match(r"Over the (?:last )?(\d{1,6}) (hours|days)", line)):
+                hours = span(over.group(1), over.group(2))
+            elif (between := re.fullmatch(r"From (\S+) to (\S+)\.", line)):
+                start, end = parse_time(between.group(1)), parse_time(between.group(2))
+                hours = math.ceil((end - start).total_seconds() / 3600) if start and end else 0
+            elif (log := _about_log(line)):
+                name, rest = log
+                if (last := _ABOUT_LAST.search(rest)):
+                    windows[name] = span(last.group(1), last.group(2))
+                if "older events past the cap weren't read" in rest:
+                    capped.add(name)
+                if (read_to := _ABOUT_THROUGH.search(rest)) and (when := parse_time(read_to.group(1))):
+                    capped.add(name)
+                    through[name] = when
+        return cls(users, every, ip, hours, windows, frozenset(capped), through)
+
+
+def _application_order(application: str) -> int:
+    order = list(NAMES)
+    return order.index(application) if application in order else len(order)
+
+
+def pull_of_export(export: Any) -> Optional[Pull]:
+    """One saved read as the pull it saved, or None when it can't be read as one: a log isn't readable, it holds more than EXPORT_ROWS events, or anything else in it fails. Saved reads can come from
+    a zip someone else made, and one must never stop the others being shown."""
+    try:
+        note = About.of(export.about)
+        logs: List[Log] = []
+        left = EXPORT_ROWS
+        for application, text in export.logs:
+            rows = rows_from_export(text, application, left)
+            if rows is None:
+                return None
+            left -= len(rows)
+            logs.append(Log.read(application, rows, note.windows.get(application, note.hours), application in note.capped, note.through.get(application)))
+        logs.sort(key=lambda log: _application_order(log.application))
+        held = Pull(Query(tuple(log.application for log in logs), note.users, note.hours, note.ip), logs, ended=True, from_evidence=True)
+        held.work_out_addresses()
+        return held
+    except Exception:  # noqa: BLE001 - named as unreadable, whatever it was
+        logger.exception("a saved read of the logs couldn't be read back")
+        return None
+
+
+def merged(pulls: Sequence[Pull]) -> Pull:
+    """``pulls`` (at least one, oldest first) put together: each log's rows newest first, an event an earlier pull read once, within one pull every row kept, as two events can match in every column;
+    a log stopped at its cap only while every read of it was, since a read for just the accounts that matter reaches further back; a log a pull couldn't read taken from those that could. The
+    widest window, every account if any pull was, and the first address given. A narrower read never takes away what a wider one found."""
+    if len(pulls) == 1:
+        return pulls[0]
+    logs: List[Log] = []
+    for application in sorted({log.application for p in pulls for log in p.logs}, key=_application_order):
+        every = [log for p in pulls if (log := p.log(application))]
+        read = [log for log in every if log.rows is not None]
+        if len(read) <= 1:      # read by one pull alone, or by none: the last one's words for why not
+            logs.append(read[0] if read else every[-1])
+            continue
+        known: Set[str] = set()
+        kept: List[Row] = []
+        for log in read:
+            rows = log.rows or []
+            kept += [r for r in rows if r.identity not in known]
+            known.update(r.identity for r in rows)
+        stopped = all(log.capped for log in read)      # every read stopped short: read through the latest of them; one read whole: whole
+        throughs = [log.through for log in read if log.through]
+        logs.append(Log.read(application, newest_first(kept), max(log.hours for log in read), stopped, max(throughs) if stopped and throughs else None))
+    every_account = any(not p.query.users for p in pulls)
+    users: List[str] = []
+    if not every_account:
+        seen: Set[str] = set()
+        for p in pulls:
+            for user in p.query.users:
+                if user.lower() not in seen:
+                    seen.add(user.lower())
+                    users.append(user)
+    together = Pull(Query(tuple(log.application for log in logs), tuple(users), max(p.query.hours for p in pulls), next((p.query.ip for p in pulls if p.query.ip), "")), logs,
+                    ended=all(p.ended for p in pulls), from_evidence=all(p.from_evidence for p in pulls))
+    together.work_out_addresses()
+    return together
+
+
+def evidence(exports: Sequence[Any]) -> Tuple[Optional[Pull], List[str]]:
+    """An incident's saved reads put together as one pull, and the names of those that can't be read. Run off the event loop."""
+    pulls: List[Pull] = []
+    unreadable: List[str] = []
+    for export in exports:
+        held = pull_of_export(export)
+        if held:
+            pulls.append(held)
+        else:
+            unreadable.append(export.name)
+    return (merged(pulls) if pulls else None), unreadable
+
+
+def and_unread(together: Pull, read: Pull) -> Tuple[Pull, List[str]]:
+    """What ``read`` couldn't read is still said, once the evidence is what's shown: a log the evidence lacks shows as this read's failure, and a log it holds is said in words, its rows being older.
+    ``together`` itself stays what reading the saved reads back gives."""
+    unread = [log for log in read.logs if log.nothing_kept]
+    missing = [log for log in unread if together.log(log.application) is None]
+    words = [f"This pull didn't read the {log.name} log: {log.problem or log.how_far} What's shown of it is from the saved reads." for log in unread if log not in missing]
+    return (replace(together, logs=[*together.logs, *missing]) if missing else together), words
+
+
+def swept_address(about_text: str) -> Optional[str]:
+    """The address a saved read of every account was made from, by its `about.txt`: what makes that address's sweep done. "Every account" is said, never taken from an Accounts line left out."""
+    note = About.of(about_text)
+    return note.ip if note.every_account and note.ip else None
+
+
+def csv_of(log: Log) -> str:
+    """A log as its export: safe to open in a spreadsheet."""
+    buffer = io.StringIO()
+    csv.writer(buffer).writerows([[csv_safe(c) for c in row] for row in table(log.rows or [])])
+    return buffer.getvalue()
+
+
+def from_another_tenant(held: Pull, domains: Set[str]) -> bool:
+    """A saved read's events have an actor, and none at these domains: one tenant's logs never go into another's incident. For an honest mix-up: a hostile file can write a row at the right domain."""
+    seen = False
+    for log in held.logs:
+        for row in log.rows or ():
+            if "@" in row.who:
+                seen = True
+                if row.who.rsplit("@", 1)[-1].lower() in domains:
+                    return False
+    return seen
+
+
+def as_export(pull: Pull, now: Optional[datetime] = None) -> Optional[Export]:
+    """A pull as Export all writes it, named for when, ready to keep: only what was read from Google, never what's shown from the evidence. None when no log of it was read."""
+    moment = (now or datetime.now(timezone.utc)).astimezone()
+    logs = [(log.file_name, csv_of(log)) for log in pull.logs if not log.nothing_kept]
+    if pull.from_evidence or not logs:
+        return None
+    return export_of(about(pull, moment.strftime("%Y-%m-%d %H:%M:%S %Z")), logs, f"Incident logs {moment.strftime('%Y-%m-%d %H%M%S')}")
 
 
 def about(pull: Pull, exported: str) -> str:

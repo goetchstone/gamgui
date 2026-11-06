@@ -69,6 +69,8 @@ LOCAL_ONLY = {
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
     "/calendars/index/rebuild", "/reports/connected-apps/read", "/jobs/stop",
     "/incident/check", "/incident/logs/pull", "/incident/logs/rest",   # reads only
+    # A kept incident: a person's words and saved reads, on this Mac. Nothing reaches Google.
+    "/incident/kept/new", "/incident/kept/open", "/incident/kept/close", "/incident/kept/details", "/incident/kept/note", "/incident/kept/import",
     "/phishing/find", "/phishing/recipients",      # two reads, and one: GAM's dry run changes nothing without doit
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
 }

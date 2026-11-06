@@ -324,4 +324,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **E1** — applied (`feat/incident-check`: offline only), with C4's typed address. The check's devices, scripts and connected apps land with E7.
 - **E2** — applied (`feat/incident-logs`: offline only, reads). Saved to disk with E4's kept incident, which is where a pull has a place to live.
 - **E3** — applied (`feat/incident-reader`: pure, with Swift's tests ported; the on-device model's are Apple-only and stay out).
-- E4–E8, F — approved 2026-11-05 (G1), not started.
+- **E4** — applied (`feat/incident-kept`: reads and this Mac only; adversarially verified). E2's "saved as 0600" is here. An export comes in as Export all's zip, since a page has no folder picker.
+- E5–E8, F — approved 2026-11-05 (G1), not started.

@@ -7,23 +7,23 @@ Reads only, as a background job: a pull for every account can take many reads a 
 from __future__ import annotations
 
 import asyncio
-import csv
 import io
 import ipaddress
 import zipfile
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, List
+from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.gam.commands import is_one_address
-from ...core.incident import logs, pull, reader, reads
+from ...core.incident import logs, pull, reader, reads, store
 from ...core.incident.logs import report_time
-from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, error_partial
+from .incident_kept import read_back, reopen_remembered
+from ._common import NOT_CONNECTED, error_partial, incident_store
 
 router = APIRouter(prefix="/incident/logs")
 
@@ -44,12 +44,13 @@ def _context(st, job=None) -> dict:
 @router.get("", response_class=HTMLResponse)
 async def page(request: Request, accounts: str = "", ip: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
+    reopen_remembered(st)
     return TEMPLATES.TemplateResponse(request, "incident_logs.html", {
         "connected": st.connector is not None, "applications": logs.APPLICATIONS, "defaults": logs.INCIDENT_DEFAULT, "hours": logs.HOURS,
         "default_hours": logs.DEFAULT_HOURS, "window_words": logs.window_words, "accounts": accounts, "ip": ip, **_context(st, _running(st))})
 
 
-async def _pull(job, st, conn, query: pull.Query, into: pull.Pull) -> None:
+async def _pull(job, st, conn, query: pull.Query, into: pull.Pull, record_id: str) -> None:
     def stopped() -> bool:
         return job.cancel_requested
 
@@ -58,16 +59,66 @@ async def _pull(job, st, conn, query: pull.Query, into: pull.Pull) -> None:
 
     try:
         await pull.pull_logs(conn, query, into, st.incident_progress, stopped=stopped, finished=finished)
+        await _keep(job, st, conn, into, record_id)
     finally:
         job.finish()
 
 
+async def _keep(job, st, conn, read: pull.Pull, record_id: str) -> None:
+    """A read made while an incident was open, saved to that incident, whichever is open by now, before it ends, and added to what's shown in memory from the very text written: no saved read is read
+    again, which took minutes in SwiftGamGui (its failure log 2026-10-23). All of them are read back only when that could differ: the evidence isn't read, a read was added beside this one, or this
+    read's name isn't last. Whatever can't be saved is still shown, said so, and what it couldn't read is still said once the evidence shows instead."""
+    if not record_id:
+        return
+    job.title = "Save this pull to the incident"
+    opening = st.jobs.get(st.incident_open_job)
+    if opening is not None and not opening.finished and opening.task is not None:
+        await asyncio.wait({opening.task})      # what it's reading would replace what this adds
+    kept, why = incident_store(st)
+    name, export, others = "", None, set()
+    try:
+        if kept is None:
+            raise store.Problem(why)
+        export = await asyncio.to_thread(pull.as_export, read)
+        if export is not None:
+            name = await asyncio.to_thread(kept.keep, export, record_id)
+            others = set(await asyncio.to_thread(kept.names, record_id)) - {name}
+    except (store.Problem, OSError) as exc:
+        job.error = f"This pull wasn't saved to the incident: {exc}"
+        return
+
+    def elsewhere() -> bool:
+        return st.incident_open != record_id or st.connector is not conn
+
+    if elsewhere():
+        return
+    if export is not None:
+        saved = await asyncio.to_thread(pull.pull_of_export, export)
+        known = {*st.incident_saved, *st.incident_saved_unreadable}
+        if saved is None or st.incident_evidence is None or others != known or any(earlier >= name for earlier in st.incident_saved):
+            if not await read_back(st, conn, kept, record_id):
+                return
+        else:
+            together = await asyncio.to_thread(pull.merged, [st.incident_evidence, saved])
+            if elsewhere():
+                return
+            st.incident_evidence = together
+            st.incident_saved = [*st.incident_saved, name]
+            if (swept := pull.swept_address(export.about)):
+                st.incident_swept = {*st.incident_swept, swept}
+    if st.incident_evidence is not None:
+        st.incident_pull, unread = pull.and_unread(st.incident_evidence, read)
+        job.error = " ".join(unread) or job.error
+        st.incident_reading = None
+
+
 def _start(st, conn, query: pull.Query, into: pull.Pull, title: str):
+    reopen_remembered(st)       # a tab left open across a restart: its pull belongs to the incident this comes back to
     st.incident_pull = into
     st.incident_progress = {a: pull.Progress() for a in query.applications}
     job = start_job(st.jobs, len(query.applications), kind="incident_logs", title=title)
     st.incident_pull_job = job.id
-    job.task = asyncio.create_task(_pull(job, st, conn, query, into))
+    job.task = asyncio.create_task(_pull(job, st, conn, query, into, st.incident_open))
     return job
 
 
@@ -127,7 +178,7 @@ def _merged(old: pull.Log, log: pull.Log, until: datetime, now: datetime) -> pul
     return pull.Log.read(old.application, rows, old.hours, log.capped or until < now, through)
 
 
-async def _read_rest(job, st, conn, held: pull.Pull, application: str, since: datetime) -> None:
+async def _read_rest(job, st, conn, held: pull.Pull, application: str, since: datetime, record_id: str) -> None:
     """One log from where it stopped to now: added to what's shown, each event once, read through the later of the two. Gmail reads at most 30 days at once: its window ends 30
     days past where it stopped, never starts later than that, or the stretch between would be skipped and the log claimed whole."""
     now = datetime.now(timezone.utc)
@@ -147,8 +198,14 @@ async def _read_rest(job, st, conn, held: pull.Pull, application: str, since: da
             job.error = f"Couldn't read the rest of the {old.name} log: {log.problem}"
             return
         merged = await asyncio.to_thread(_merged, old, log, until, now)
-        held.logs = [merged if x.application == application else x for x in held.logs]
-        await asyncio.to_thread(held.work_out_addresses)
+        # A new pull, not this one changed: this one can be the incident's evidence, which stays what reading it back gives.
+        shown = replace(held, logs=[merged if x.application == application else x for x in held.logs])
+        await asyncio.to_thread(shown.work_out_addresses)
+        st.incident_pull = shown
+        st.incident_reading = None
+        # Saved as what it read, stopped where the two stopped: put together with what's saved, one read whole makes the log whole.
+        rest = pull.Pull(query, [pull.Log.read(application, log.rows or [], old.hours, merged.capped, merged.through)], ended=True, at=now)
+        await _keep(job, st, conn, rest, record_id)
     finally:
         job.done += 1
         job.finish()
@@ -168,7 +225,7 @@ async def read_the_rest(request: Request, application: Annotated[str, Form()] = 
         return TEMPLATES.TemplateResponse(request, _PANEL, _context(st, existing))
     job = start_job(st.jobs, 1, kind="incident_logs", title=f"Read the rest of the {log.name} log")
     st.incident_pull_job = job.id
-    job.task = asyncio.create_task(_read_rest(job, st, conn, held, application, log.through))
+    job.task = asyncio.create_task(_read_rest(job, st, conn, held, application, log.through, st.incident_open))
     return TEMPLATES.TemplateResponse(request, _PANEL, _context(st, job))
 
 
@@ -193,7 +250,7 @@ async def _context_for(st, held: pull.Pull) -> reader.Context:
         elif log.capped and log.through:
             capped[log.application] = log.through
     return reader.Context(pulled_by=held.query.ip, read={log.application for log in held.logs if log.rows is not None}, capped=capped,
-                          domains={d.lower() for d in await st.tenant_domains()}, people=people or None)
+                          domains={d.lower() for d in await st.tenant_domains()}, people=people or None, swept=set(st.incident_swept))
 
 
 @router.get("/reading", response_class=HTMLResponse)
@@ -213,20 +270,13 @@ async def reading(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {"reading": st.incident_reading[1], "when": _when})
 
 
-def _csv_text(rows: List[List[str]]) -> str:
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerows([[csv_safe(c) for c in row] for row in rows])
-    return buffer.getvalue()
-
-
 @router.get("/log.csv")
 async def log_csv(request: Request, application: str = "") -> Response:
     held = request.app.state.gamgui.incident_pull
     log = held.log(application) if held else None
     if log is None or log.nothing_kept:     # never an empty CSV that would pass as no events
         return Response(f"That log wasn't read. {log.how_far if log else ''}".strip(), status_code=404, media_type="text/plain")
-    text = await asyncio.to_thread(lambda: _csv_text(logs.table(log.rows or [])))
+    text = await asyncio.to_thread(pull.csv_of, log)
     return Response(text, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={log.file_name}"})
 
 
@@ -235,7 +285,7 @@ def _zip(held: pull.Pull, stamp: str) -> bytes:
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for log in held.logs:
             if not log.nothing_kept:
-                archive.writestr(log.file_name, _csv_text(logs.table(log.rows or [])))
+                archive.writestr(log.file_name, pull.csv_of(log))
         archive.writestr("about.txt", pull.about(held, stamp))
     return buffer.getvalue()
 
