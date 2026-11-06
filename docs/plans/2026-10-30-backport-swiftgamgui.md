@@ -1,9 +1,7 @@
 # Plan: back-port SwiftGamGui's features and fixes to GamGUI
 
-**Status: IN PROGRESS. The operator's goal since 2026-11-05: GamGUI reaches feature parity with SwiftGamGui, so
-Phases B–F are approved (G1) and are being done in order. Phase A applied: A1 (#67, `add6308`); A2 (#68, `9c1bb72`);
-A3 (#69, `8d14022`); A4 (#75, `d1bee56`); A5 (#76, `7f8cf18`); A6 (#77, `a85f435`); A7 (#78, `3525a63`); A8 (#79,
-`ec6ea27`); A9 (#80, `ae5e050`). Swift's fixtures are still to re-run. "Status by item" at the end is current.**
+**Status: APPLIED, 2026-11-06. GamGUI has every SwiftGamGui feature but the Apple-only ones under "Not ported". Don't re-apply any
+item: "Status by item" at the end says where each landed. Still owed: the live checks and the list for SwiftGamGui, both below.**
 Written 2026-10-30 at GamGUI `9cad029` and SwiftGamGui `3394130`, for a reader with no session context.
 Re-baselined 2026-11-05 at SwiftGamGui `fef14cc`: its five PRs since are fixes, a small jobs tray change and the GAM
 bump, so no item changed. `CLAUDE.md` is auto-loaded. Before any item, read the SwiftGamGui runbook and failure-log entries it names
@@ -329,4 +327,25 @@ README's Status, including what is only in which app; a "Live verification statu
 - **E6** — applied (`feat/incident-reach`: reads and this Mac only). The groups are read in the background on Respond, as SwiftGamGui does.
 - **E7** — applied (`feat/incident-devices`: offline only; both writes unproven live in either app).
 - **E8** — applied (`feat/incident-report`: reads and this Mac only). G4: a PDF from a small writer with no dependency, in the export zip. The summary is typed: the on-device model's draft is Apple-only.
-- F — approved 2026-11-05 (G1), not started.
+- **F** — applied (`docs/parity-sweep`). A final check against SwiftGamGui's README at `f4c7c5b` found nothing left but the Apple-only pieces.
+
+## Live checks owed
+
+All of Phases B to E has run offline only. Each write needs the operator's yes for that one action, on a throwaway account.
+
+- **Writes:** a temporary password; changing or removing a signature's phone; handing over secondary calendars and removing forwarding filters at offboarding; trashing a copy in Spam; deleting filters, send-as addresses, drafts and scheduled emails from an account, including whether Gmail honours `in:scheduled` and whether a delete stops the send; blocking a computer, and taking an account off one.
+- **Reads, the operator's say:** `scripts/acceptance.py` (last run 2026-10-08); each person's Security tab and Check Account against the Admin console; a real incident's logs, Read the logs, each account's status, Who it reached against a list made by hand, Where it started's sender fields; `RESOURCE_ID` as Google's device ID; a Receive row's actor and IP; a group it went to read by its members; a domain alias in `nonEditableAliases`.
+- **On this Mac:** the report's PDF and Markdown read in order; `shasum -a 256` of an evidence file against `evidence-sha256.txt`; an export saved from the app window, through its two steps; an incident open again after a relaunch.
+- **Setup:** the computers need the devices scope, and blocking needs its full form, so an existing install re-authorizes the delegation.
+
+## What SwiftGamGui should take back
+
+Found while porting, by review or by reading GAM's source. Each is a gap in its code or its spec, not checked there beyond reading.
+
+- **Done can read finished when it isn't.** A later Find showing a copy doesn't take back "nobody has it" or an earlier run, and a delivery the log shows after the last look doesn't put the email back on the list.
+- **A narrow read makes a log read whole.** `merged` clears a log's cap on any uncapped read, including one for a few accounts, and `max(throughs)` lets a narrow read's stand for a wide one's. Here a log stays short until each account it was for is covered.
+- **A silent exit 0 on `block deviceuser`, `delete deviceuser` and `print devices`.** GAM builds the service first, and exits 0 with no word on a refreshed token it refuses; and it exits 0 while Google's operation is still going. A block can read as done, and computers as none.
+- **The report never says what it rests on**: a capped or unread log and a group not read can give a clean-looking report. It also reads 2-Step Verification as "on" for anyone not in the set, counts failures and notes in Steps taken, and a line break in a subject can forge a heading in the text.
+- **A long attack pushes the lock out of What was done**, through the timeline's cap.
+- **Do It Here can pick a computer for a phone's to-do item**, and `firstSyncTime` as the fallback makes an old computer look new.
+- **Smaller:** a stray row at a read's cap; Read the Rest on Gmail skipping what's past 30 days; `listlimit 0` on `print mobile`; a member with no address and a group listing no one, both dropped without a word; re-running `gen_fixtures.py` and dropping its shims.
