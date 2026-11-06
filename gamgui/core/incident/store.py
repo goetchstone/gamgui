@@ -380,23 +380,28 @@ def read_zip(name: str, data: bytes) -> Export:
         raise Problem("That isn't an export of the incident logs: it isn't a zip file.") from exc
     files: Dict[str, bytes] = {}
     total = 0
-    with archive:
-        for info in archive.infolist():
-            if info.is_dir() or (info.filename != _ABOUT and not _LOG_FILE.fullmatch(info.filename)):
-                continue
-            if info.file_size > FILE_CAP:
-                raise Problem(f"{info.filename} is larger than {FILE_CAP >> 20} MB.")
-            total += info.file_size
-            if total > EXPORT_CAP:
-                raise Problem(f"The export is larger than {EXPORT_CAP >> 30} GB together.")
-            try:
-                with archive.open(info) as member:
-                    body = member.read(FILE_CAP + 1)    # what it says it holds is only what it says
-            except Exception as exc:  # noqa: BLE001 - and zlib.error here
-                raise Problem(f"{info.filename} wasn't read from the zip file.") from exc
-            if len(body) > FILE_CAP:
-                raise Problem(f"{info.filename} is larger than {FILE_CAP >> 20} MB.")
-            files[info.filename] = body
+    try:
+        with archive:
+            for info in archive.infolist():
+                if info.is_dir() or (info.filename != _ABOUT and not _LOG_FILE.fullmatch(info.filename)):
+                    continue
+                if info.file_size > FILE_CAP:
+                    raise Problem(f"{info.filename} is larger than {FILE_CAP >> 20} MB.")
+                total += info.file_size
+                if total > EXPORT_CAP:
+                    raise Problem(f"The export is larger than {EXPORT_CAP >> 30} GB together.")
+                try:
+                    with archive.open(info) as member:
+                        body = member.read(FILE_CAP + 1)    # what it says it holds is only what it says
+                except Exception as exc:  # noqa: BLE001 - and zlib.error here
+                    raise Problem(f"{info.filename} wasn't read from the zip file.") from exc
+                if len(body) > FILE_CAP:
+                    raise Problem(f"{info.filename} is larger than {FILE_CAP >> 20} MB.")
+                files[info.filename] = body
+    except Problem:
+        raise
+    except Exception as exc:  # noqa: BLE001 - Python 3.10's is_dir() raises IndexError on a member with an empty name
+        raise Problem("That isn't an export of the incident logs: its zip file couldn't be read.") from exc
     return check_export(name, files)
 
 

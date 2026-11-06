@@ -818,6 +818,21 @@ def test_whatever_a_zip_does_wrong_is_said_in_words():
             pass
 
 
+def test_a_member_with_an_empty_name_is_said_in_words(monkeypatch):
+    # Python 3.10's ZipInfo.is_dir() raises IndexError on it; the fuzz above found that on CI's oldest Python.
+    good = _zip({"about.txt": "Incident logs exported x.\n", "login-log.csv": f"{HEADER}\n{ROW}\n"})
+    real = zipfile.ZipInfo.is_dir
+
+    def raises(info):
+        if info.filename == "login-log.csv":
+            raise IndexError("string index out of range")
+        return real(info)
+
+    monkeypatch.setattr(zipfile.ZipInfo, "is_dir", raises)
+    with pytest.raises(Problem, match="couldn't be read"):
+        store.read_zip("x", good)
+
+
 def test_a_corrupt_zip_is_refused_on_the_screen(client, state):
     _open_new(client, state)
     r = client.post("/incident/kept/import", files={"export": ("x.zip", _corrupt_deflate(), "application/zip")})
