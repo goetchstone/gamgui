@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Incident logs — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-blue">Incident</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Pull the incident logs</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Read what happened, by the people reported, then by the attacker's address. Each log is read whole, oldest first, and changes nothing. <a href="/incident" class="underline">Secure an account</a> when you know who.</p>
+  </div>
+  <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4" hx-post="/incident/logs/pull" hx-target="#incident-logs" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <div class="grid gap-4 sm:grid-cols-3">
+      <label class="block sm:col-span-2"><span class="text-sm text-brand-blueink">Accounts, at most 20, or leave empty for every account</span>
+        <textarea name="accounts" rows="2" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink">{{ accounts }}</textarea></label>
+      <div class="space-y-3">
+        <label class="block"><span class="text-sm text-brand-blueink">From IP address (optional)</span>
+          <input name="ip" value="{{ ip }}" autocomplete="off" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink" /></label>
+        <label class="block"><span class="text-sm text-brand-blueink">How far back</span>
+          <select name="hours" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink">
+            {% for h in hours %}<option value="{{ h }}"{% if h == default_hours %} selected{% endif %}>{{ window_words(h) }}</option>{% endfor %}
+          </select></label>
+      </div>
+    </div>
+    <fieldset class="space-y-1"><legend class="text-sm text-brand-blueink">The logs an incident needs first</legend>
+      <div class="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+      {% for key, name, about in applications %}{% if key in defaults %}
+        <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="log" value="{{ key }}" class="mt-1" checked /><span><span class="text-brand-black">{{ name }}</span><br><span class="text-xs text-brand-grayink">{{ about }}</span></span></label>
+      {% endif %}{% endfor %}
+      </div>
+    </fieldset>
+    <details><summary class="text-sm text-brand-blueink cursor-pointer">Other logs</summary>
+      <div class="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+      {% for key, name, about in applications %}{% if key not in defaults %}
+        <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="log" value="{{ key }}" class="mt-1" /><span><span class="text-brand-black">{{ name }}</span><br><span class="text-xs text-brand-grayink">{{ about }}</span></span></label>
+      {% endif %}{% endfor %}
+      </div>
+    </details>
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Pull logs</button>
+  </form>
+  <div id="incident-logs">{% include "_incident_logs.html" %}</div>
+</div>
+{% endif %}
+{% endblock %}

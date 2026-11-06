@@ -322,4 +322,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **C5** — applied (`feat/offboarding-templates`: local files only).
 - **D1–D3** — applied (`feat/phishing`: offline only; trash by query argv-identical to Swift's live runs, Spam not live in either app).
 - **E1** — applied (`feat/incident-check`: offline only), with C4's typed address. The check's devices, scripts and connected apps land with E7.
-- E2–E8, F — approved 2026-11-05 (G1), not started.
+- **E2** — applied (`feat/incident-logs`: offline only, reads). Saved to disk with E4's kept incident, which is where a pull has a place to live.
+- E3–E8, F — approved 2026-11-05 (G1), not started.

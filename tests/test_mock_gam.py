@@ -101,6 +101,7 @@ READS = {
     "print_owned_calendars": [C.print_owned_calendars("carol@example.com")],
     "print_filters": [C.print_filters("carol@example.com")],
     "print_forward": [C.print_forward("carol@example.com")],
+    "report_activity": [C.report_activity("login", ["carol@example.com"], 72)],
     "print_send_as": [C.print_send_as("carol@example.com")],
     "print_admins": [C.print_admins("alice@example.com")],
     "list_drafts": [C.list_drafts("carol@example.com", 5000)],

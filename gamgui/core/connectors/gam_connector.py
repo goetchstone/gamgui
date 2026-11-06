@@ -43,6 +43,9 @@ from ..incident.check import (
     ScheduledSend,
     SendAs,
 )
+from ..incident.logs import CAP as LOG_CAP
+from ..incident.logs import Row as LogRow
+from ..incident.logs import rows_from as log_rows_from
 from ..phones import phones_from
 from ..person_reads import (
     ChromeProfile,
@@ -131,6 +134,7 @@ logger = logging.getLogger(__name__)
 
 ACCOUNT_ID_FIELDS = ("primaryEmail", "id")
 MESSAGES_TIMEOUT = 600.0    # thousands of drafts listed or deleted meet Gmail's per-user quota
+LOG_TIMEOUT = 600.0         # one read of a log: GAM reads one account after another, and twenty accounts' Gmail is slow
 UNANSWERED = "GAM returned nothing for this mailbox, so it may not have been read."
 
 
@@ -575,6 +579,13 @@ class GAMConnector(Connector):
 
     async def vault_holds(self, email: str) -> List[Dict[str, Any]]:
         return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_vault_holds(email)))
+
+    async def activity(self, application: str, users: Sequence[str], hours: int, *, start: str = "", end: str = "", ip: str = "",
+                       events: Sequence[str] = (), cap: int = LOG_CAP, chrome: str = "profile", admin: str = "actor") -> List[LogRow]:
+        """One read of an activity log. Parsed off the event loop: a whole pull is up to hundreds of reads of a thousand events each."""
+        argv = GAMCommands.report_activity(application, users, hours, start, end, ip, events, cap, chrome, admin)
+        out = await self.runner.run_authenticated(self.domain, argv, timeout=LOG_TIMEOUT)
+        return await asyncio.to_thread(log_rows_from, out, application)
 
     # --- what Check Account reads (core/incident) --------------------------------------
     async def account_to_check(self, email: str) -> Account:

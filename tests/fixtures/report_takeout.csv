@@ -1,0 +1,2 @@
+name,INITIATED_BY,PRODUCTS_REQUESTED,TAKEOUT_DESTINATION,TAKEOUT_ID,USER_EMAIL,actor.callerType,actor.email,actor.profileId,id.applicationName,id.customerId,id.time,id.uniqueQualifier,ipAddress,type
+STARTED_USER_TAKEOUT,USER,Mail Contacts,DOWNLOAD,tk-1,carol@example.com,USER,carol@example.com,1003,takeout,C0demo,2026-10-19T14:22:00Z,-69001,198.51.100.23,TAKEOUT_EVENT

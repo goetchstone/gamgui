@@ -36,6 +36,7 @@ PANELS = {
     "connected_apps": "/reports/connected-apps",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",
+    "incident_logs": "/incident/logs/status",
     "phishing_find": "/phishing/find/status",
     "phishing": "/phishing/trash/status",
     "sequence": "/builder/sequence/status",

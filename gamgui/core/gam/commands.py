@@ -15,9 +15,11 @@ unit tests pin today's intended form so drift is caught early.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import unicodedata
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional, Sequence
 
 # The GAM7 version GamGUI is pinned to and tested against — the SINGLE SOURCE OF TRUTH.
@@ -108,6 +110,14 @@ class Phone:
 
 # RFC 5322's atext, less Gmail's { and }, and *.
 _MESSAGE_ID_ATEXT = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'+-/=?^_`|~")
+
+
+def is_report_time(when: str) -> bool:
+    """A time GAM reads as one, in the one form the app writes: `yyyy-mm-ddThh:mm:ssZ`, UTC to the second."""
+    try:
+        return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", when)) and bool(datetime.strptime(when, "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        return False
 
 
 def is_one_address(address: str) -> bool:
@@ -203,6 +213,12 @@ def filter_address(address: str) -> str:
 
 
 class GAMCommands:
+    # GAM's REPORT_CHOICE_MAP keys, as `report` takes them. Not `gplus` or `jamboard`, whose services have ended.
+    REPORT_APPLICATIONS = ("login", "token", "saml", "gmail", "accessevaluation", "chat", "useraccounts", "takeout", "mobile", "chrome", "drive", "calendar",
+                           "groups", "admin", "rules", "contextawareaccess", "vault", "geminiinworkspaceapps", "meet", "contacts", "keep", "tasks",
+                           "admindataaction", "accesstransparency", "datastudio", "groupsenterprise", "profile", "ldap", "directorysync", "gcp",
+                           "cloudsearch", "classroom", "datamigration", "meethardware", "assignments", "graduation")
+
     # --- diagnostics / setup ----------------------------------------------------------
     @staticmethod
     def version() -> List[str]:
@@ -713,6 +729,59 @@ class GAMCommands:
     @staticmethod
     def print_forwarding_addresses(email: str) -> List[str]:
         return ["user", email, "print", "forwardingaddresses"]
+
+    @staticmethod
+    def report_activity(application: str, users: Sequence[str] = (), hours: int = 72, start: str = "", end: str = "", ip: str = "",
+                        events: Sequence[str] = (), max_activities: int = 1000, chrome: str = "profile", admin: str = "actor") -> List[str]:
+        # Activity events, newest first (GamCommands.txt `gam report <ActivityApplicationName>`): `user` for one account, `select users` for
+        # several, `user all` for none. `start -<hours>h end now`, or both given as times, which GAM passes on as they are: a window fixed once, read
+        # further back page by page. `ip` is server-side. `maxactivities` bounds each read. The admin log reads the accounts by `admin`: with
+        # `userisactor` what they did as admins, without it what admins did to them, which doReport maps to the filter `USER_EMAIL==<account>`. Chrome's
+        # is read one account at a time, by `chrome`: the profile's account (`user all filter PROFILE_USER_NAME==<account>`, the filter passed as given,
+        # so lowercased as Google keeps it), or GAM's own `user <account>`, which it turns into `DEVICE_USER==<account>`.
+        if application not in GAMCommands.REPORT_APPLICATIONS:
+            raise ValueError(f"“{application}” isn't an activity log")
+        if not 1 <= hours <= 4320 or max_activities < 1:
+            raise ValueError("a report reads 1 hour to 180 days")
+        if bool(start) != bool(end) or (start and not (is_report_time(start) and is_report_time(end) and start < end)):
+            raise ValueError("a report's window is a start and an end, each yyyy-mm-ddThh:mm:ssZ, the start first")
+        if application == "gmail" and hours > 720:
+            raise ValueError("the Gmail log reads at most 30 days")
+        if len(users) > 20 or not all(is_one_address(u) for u in users):
+            raise ValueError("each account is one email address, and at most 20 at once")
+        if application == "chrome" and len(users) > 1:
+            raise ValueError("the Chrome log reads one account at a time")
+        if chrome not in ("profile", "device") or admin not in ("actor", "affected"):
+            raise ValueError("a log is read by one of its two matches")
+        if application == "admin" and admin == "affected" and not all(filter_address(u) for u in users):
+            raise ValueError("an account the admin log reads what was done to is one plain address")
+        account = ""
+        if application == "chrome" and users:
+            account = filter_address(users[0]) or ""
+            if not account:
+                raise ValueError(f"“{users[0]}” isn't an address the Chrome log can match")
+        if ip:
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError as exc:
+                raise ValueError(f"“{ip}” isn't one IP address") from exc
+        if not all(re.fullmatch(r"[A-Za-z_]+", e) for e in events):
+            raise ValueError("an event name is letters and “_”")
+        if not users:
+            who = ["user", "all"]
+        elif account:
+            who = ["user", "all", "filter", f"PROFILE_USER_NAME=={account}"] if chrome == "profile" else ["user", account]
+        else:
+            who = ["user", users[0]] if len(users) == 1 else ["select", "users", ",".join(users)]
+        argv = ["report", application, *who]
+        if application == "admin" and users and admin == "actor":
+            argv.append("userisactor")
+        argv += ["start", start or f"-{hours}h", "end", end or "now"]
+        if ip:
+            argv += ["ip", ip]
+        if events:
+            argv += ["events", ",".join(events)]
+        return [*argv, "maxactivities", str(max_activities)]
 
     @staticmethod
     def print_forward(email: str) -> List[str]:

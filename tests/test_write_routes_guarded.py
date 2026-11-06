@@ -68,7 +68,7 @@ LOCAL_ONLY = {
     "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/welcome/delete", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
     "/calendars/index/rebuild", "/reports/connected-apps/read", "/jobs/stop",
-    "/incident/check",   # reads only
+    "/incident/check", "/incident/logs/pull", "/incident/logs/rest",   # reads only
     "/phishing/find", "/phishing/recipients",      # two reads, and one: GAM's dry run changes nothing without doit
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
 }

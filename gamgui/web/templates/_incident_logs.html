@@ -1,0 +1,56 @@
+{#- A pull's progress, then what it read. Bounded: one line a log while it reads, and at most `shown` rows a log, the CSV having them all. A log that
+    wasn't read is said, never as no events, and everything in a row came from Google, so it's only ever autoescaped text. -#}
+{% import "_job_live.html" as live %}
+{% if job and not job.finished %}
+<div hx-get="/incident/logs/status?job={{ job.id }}" hx-trigger="load delay:800ms" hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2"><span class="spinner"></span>{{ live.progress(job, "Pulling the logs") }}
+    <span>{{ job.title }}… {{ job.done }} of {{ job.total }} done. You can keep working.</span>{{ live.stop(job) }}</div>
+  <ul class="mt-2 space-y-0.5 text-xs">
+    {% for application, p in progress.items() %}
+    <li>{{ names[application] }}: {% if p.state == "waiting" %}waiting its turn{% elif p.state == "done" %}{{ "couldn't be read" if p.failed else "done, " ~ p.events ~ " events" }}{% else %}reading, {{ p.events }} events in {{ p.reads }} read{{ "" if p.reads == 1 else "s" }}{% if p.through %}, whole through {{ report_time(p.through) }}{% endif %}{% endif %}{% if p.estimate and p.state != "done" %}. {{ p.estimate.words }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+{% if job and job.error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" {{ live.ended(job) }}>{{ job.error }}</div>{% endif %}
+{% if pull and pull.logs %}
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3"{% if job %} data-announce="{{ job.id }}"{% endif %}>
+  <div class="flex flex-wrap items-center gap-3">
+    <p class="text-sm text-brand-black">{{ pull.logs | length }} log{{ "" if pull.logs | length == 1 else "s" }}, {% if pull.query.users %}{{ pull.query.users | join(", ") }}{% else %}every account{% endif %}{% if pull.query.ip %}, from {{ pull.query.ip }}{% endif %}.</p>
+    {% if pull.ended %}<a download href="/incident/logs/export.zip" class="text-sm text-brand-blueink underline">Export all</a>{% endif %}
+  </div>
+  {% if pull.addresses %}<p class="text-sm text-brand-blueink">Addresses in the sign-in log, the flagged ones first. Pull every account by one:
+    {% for ip in pull.addresses[:10] %}<a href="/incident/logs?ip={{ ip | urlencode }}" class="underline">{{ ip }}</a>{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
+  {% for log in pull.logs %}
+  <section>
+    {% if log.rows is none %}
+    <p class="text-sm text-amber-800"><span class="font-medium">{{ log.name }}</span>: couldn't be read. {{ log.problem }}</p>
+    {% else %}
+    <details>
+      <summary class="cursor-pointer text-sm"><span class="font-medium text-brand-black">{{ log.name }}</span> <span class="text-brand-blueink">{{ log.rows | length }} event{{ "" if log.rows | length == 1 else "s" }}{% if log.hours < pull.query.hours %} (the last {{ window_words(log.hours) }}: the most this log reads){% endif %}{% if log.application == "mobile" and pull.query.ip %} (its registrations for the accounts asked: this log names no address){% endif %}{% if log.flagged %}, <span class="text-amber-800">{{ log.flagged }} flagged by Google</span>{% endif %}{% if log.accounts %}, {{ log.accounts }} account{{ "" if log.accounts == 1 else "s" }}{% endif %}</span></summary>
+      {% if log.rows %}
+      <table class="mt-2 w-full table-fixed text-left text-xs">
+        <thead><tr class="text-brand-grayink"><th scope="col" class="w-40 py-1 font-normal">When (UTC)</th><th scope="col" class="w-48 py-1 font-normal">Who</th><th scope="col" class="py-1 font-normal">What</th><th scope="col" class="w-32 py-1 font-normal">IP address</th></tr></thead>
+        <tbody>
+          {% for r in log.rows[:shown] %}
+          <tr class="border-t border-brand-gray/30 align-top"><td class="py-1 pr-2 text-brand-grayink">{{ r.time }}</td><td class="py-1 pr-2 break-all text-brand-black">{{ r.who }}</td>
+            <td class="py-1 pr-2 break-words {{ 'text-amber-800' if r.flagged else 'text-brand-black' }}">{{ r.words }}{% if r.details %} <span class="text-brand-grayink">— {{ r.details | join(", ") }}</span>{% endif %}</td><td class="py-1 break-all text-brand-black">{{ r.ip }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if log.rows | length > shown %}<p class="mt-1 text-xs text-brand-grayink">The newest {{ shown }}. The rest are in its CSV.</p>{% endif %}
+      {% endif %}
+      {% if not log.nothing_kept %}<p class="mt-1"><a download href="/incident/logs/log.csv?application={{ log.application }}" class="text-xs text-brand-blueink underline">Export {{ log.name }} as CSV</a></p>{% endif %}
+    </details>
+    {% if log.capped %}
+    <p class="mt-1 text-xs text-amber-800">{{ log.how_far }}{% if log.through %}
+      <button type="button" hx-post="/incident/logs/rest" hx-vals='{"application": {{ log.application | tojson }} }' hx-target="#incident-logs" hx-swap="innerHTML" hx-disabled-elt="this" aria-label="Read the rest of the {{ log.name }} log" class="ml-1 underline">Read the Rest</button>{% endif %}</p>
+    {% endif %}
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% if not pull.ended %}<p class="text-sm text-brand-grayink">Stopped before every log was read.</p>{% endif %}
+</div>
+{% endif %}
+{% endif %}

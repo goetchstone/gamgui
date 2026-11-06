@@ -121,6 +121,9 @@ class AppState:
     incident_check_job: str = ""       # its job, which guards a second check
     incident_run_job: str = ""         # the last Secure run's job, which guards a check during it
     incident_done: dict = field(default_factory=dict)   # the switched steps the last run finished, by the person: only theirs
+    incident_pull: object = None       # the last pull of the logs, on this connector
+    incident_pull_job: str = ""
+    incident_progress: dict = field(default_factory=dict)   # each log of the pull going on
     phishing_found: object = None      # the last Find, on this connector
     phishing_job_id: str = ""          # the last Find's job (guards a second domain-wide search)
     phishing_kept_rows: list = field(default_factory=list)   # the last Find's CSV rows, once a run has dropped its counts
@@ -164,6 +167,9 @@ class AppState:
         self.incident_check_job = ""
         self.incident_run_job = ""
         self.incident_done = {}
+        self.incident_pull = None
+        self.incident_pull_job = ""
+        self.incident_progress = {}
         self.phishing_found = None
         self.phishing_job_id = ""
         self.phishing_kept_rows = []
@@ -421,6 +427,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.lifecycle import router as lifecycle_router
     from .routes.onboarding import router as onboarding_router
     from .routes.incident import router as incident_router
+    from .routes.incident_logs import router as incident_logs_router
     from .routes.phishing import router as phishing_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
@@ -430,6 +437,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(home_router)
     app.include_router(setup_router)
     app.include_router(users_router)
+    app.include_router(incident_logs_router)
     app.include_router(incident_router)
     app.include_router(phishing_router)
     app.include_router(reports_router)

@@ -1,0 +1,2 @@
+name,actor.callerType,actor.email,actor.profileId,id.applicationName,id.customerId,id.time,id.uniqueQualifier,ipAddress,type
+recovery_phone_edit,USER,carol@example.com,1003,user_accounts,C0demo,2026-10-19T14:20:30Z,-65001,198.51.100.23,recovery_info_change

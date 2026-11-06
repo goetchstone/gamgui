@@ -1,0 +1,11 @@
+name,actor.callerType,actor.email,actor.profileId,affected_email_address,id.applicationName,id.customerId,id.time,id.uniqueQualifier,ipAddress,is_second_factor,is_suspicious,login_challenge_method,login_challenge_status,login_timestamp,login_type,type
+login_failure,USER,carol@example.com,1003,,login,C0demo,2026-10-19T15:20:10Z,-61008,198.51.100.23,,False,,,,google_password,login
+blocked_sender,USER,carol@example.com,1003,mailer-daemon@googlemail.com,login,C0demo,2026-10-19T14:30:00Z,-61010,198.51.100.23,,,,,,,blocked_sender_change
+passkey_enrolled,USER,carol@example.com,1003,,login,C0demo,2026-10-19T14:21:00Z,-61009,198.51.100.23,,,,,,,login
+login_success,USER,carol@example.com,1003,,login,C0demo,2026-10-19T14:12:40Z,-61001,198.51.100.23,False,True,,,,google_password,login
+suspicious_login,,,,carol@example.com,login,C0demo,2026-10-19T14:12:39Z,-61002,198.51.100.23,,,,,1792419159000000,,account_warning
+login_success,USER,dana@example.com,1004,,login,C0demo,2026-10-19T13:58:02Z,-61003,198.51.100.23,False,False,,,,google_password,login
+login_success,USER,carol@example.com,1003,,login,C0demo,2026-10-19T09:30:05Z,-61004,203.0.113.10,False,False,,,,google_password,login
+login_challenge,USER,carol@example.com,1003,,login,C0demo,2026-10-19T09:30:00Z,-61005,203.0.113.10,,,google_authenticator,Challenge Passed,,google_password,login
+login_success,USER,alice@example.com,1001,,login,C0demo,2026-10-18T16:00:00Z,-61006,203.0.113.50,False,False,,,,google_password,login
+logout,USER,carol@example.com,1003,,login,C0demo,2026-10-18T08:00:00Z,-61007,203.0.113.10,,,,,,,login

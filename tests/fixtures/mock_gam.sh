@@ -409,6 +409,120 @@ EOF
   exit 0
 fi
 
+# `gam report <application> ...` (doReport), the incident logs: a CSV row per event from report_<application>.csv, a log without one its titles alone.
+# $GAM_MOCK_STATE/nolog/<application> is an edition without it (exit 4). Gmail over 30 days is exit 56 (an account) or 53 (all); an address outside
+# example.com is 73; the admin log's accounts are the actor only with `userisactor`. A known lie: the start keeps every fixture event, whatever the window.
+# A window as two times, both or neither: an end before the start is GAM's usage error, an end keeps the events before it. Chrome reads an account by
+# `user <address>` (DEVICE_USER) or `user all filter PROFILE_USER_NAME==<address>`. Only the app's shape.
+if [ "${1:-}" = "report" ] && case "${2:-}" in login|logins|token|tokens|oauthtoken|gmail|accessevaluation|chat|useraccounts|drive|doc|docs|takeout|admin|mobile|devices|chrome|saml|calendar|calendars|groups|group|rules|contextawareaccess|vault|\
+geminiinworkspaceapps|gemini|geminiforworkspace|meet|hangoutsmeet|contacts|keep|tasks|admindataaction|accesstransparency|access|datastudio|lookerstudio|\
+groupsenterprise|enterprisegroups|profile|ldap|directorysync|gcp|cloud|cloudsearch|classroom|datamigration|meethardware|assignments|graduation) true ;;
+  *) false ;; esac; then
+  case "$2" in logins) app=login ;; tokens|oauthtoken) app=token ;; doc|docs) app=drive ;; devices) app=mobile ;; calendars) app=calendar ;;
+    group) app=groups ;; gemini|geminiforworkspace) app=geminiinworkspaceapps ;; hangoutsmeet) app=meet ;; access) app=accesstransparency ;;
+    lookerstudio) app=datastudio ;; enterprisegroups) app=groupsenterprise ;; cloud) app=gcp ;; *) app=$2 ;; esac
+  shift 2; who=""; start=""; end=""; ip=""; max=""; events=""; actor=""; filter=""; selected=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      user) need_value $# "EmailAddress"; who=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]'); shift 2 ;;
+      select) [ "${2:-}" = users ] || not_modelled "report select ${2:-}"; need_value $(($# - 1)) "UserList"
+              who=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]'); selected=1; shift 3 ;;
+      filter|filters) need_value $# "String"; filter="$2"; shift 2 ;;
+      start|starttime) need_value $# "Time"; start="$2"; shift 2 ;;
+      end|endtime) need_value $# "Time"; end="$2"; shift 2 ;;
+      ip) need_value $# "String"; ip="$2"; shift 2 ;;
+      maxactivities) need_value $# "Number"; max="$2"; shift 2 ;;
+      event|events) need_value $# "EventNameList"; events=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]'); shift 2 ;;
+      userisactor) actor=1; shift ;;
+      *) not_modelled "report $app with $1" ;;
+    esac
+  done
+  [ -n "$who" ] && [ -n "$start" ] && [ -n "$max" ] || not_modelled "report $app without user, start and maxactivities"
+  iso='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+  case "$end" in ""|now|NOW) before="" ;; *) printf '%s' "$end" | grep -Eq "$iso" || not_modelled "report end $end"; before=$end ;; esac
+  case "$start" in
+    -*)
+      span=${start#-}; unit=${span#"${span%?}"}; count=${span%?}
+      case "$unit:$count" in [hHdD]:[0-9]*) case "$count" in *[!0-9]*) usage_error "Invalid argument: Expected <(+|-)<Number>(m|h|d|w|y)>" ;; esac ;;
+        *) usage_error "Invalid argument: Expected <(+|-)<Number>(m|h|d|w|y)>" ;; esac
+      case "$unit" in [dD]) hours=$((count * 24)) ;; *) hours=$count ;; esac
+      [ -z "$before" ] || not_modelled "report start $start with end $before" ;;
+    *)
+      # A window as two times, both or neither (the app's, fixed once and read page by page): the hours between them. A
+      # time that isn't one (a 13th month, Feb 30) is GAM's parse error; macOS's date rolls those over, so it must read
+      # back the same. An end before the start is GAM's usage error (StartEndTime); an end equal to it isn't modelled.
+      printf '%s' "$start" | grep -Eq "$iso" && [ -n "$before" ] || not_modelled "report start $start"
+      for t in "$start" "$before"; do
+        [ "$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$t" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" = "$t" ] \
+          || usage_error "Invalid argument: Expected <$(printf '%s' "$t" | tr '[:lower:]' '[:upper:]')>: not a valid date/time"
+      done
+      from=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$start" +%s); to=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$before" +%s)
+      [ "$to" -ge "$from" ] || usage_error "Invalid argument: Expected <end time after start time>"
+      [ "$to" -gt "$from" ] || not_modelled "report end $before equal to start $start"
+      hours=$(( (to - from + 3599) / 3600 )) ;;
+  esac
+  [ -z "$actor" ] || [ "$app" = admin ] || not_modelled "report $app userisactor"
+  match=""
+  # doReport's REPORT_ACTIVITIES_UPPERCASE_EVENTS: these logs' event names are capitals; the rest, lower case.
+  case "$app" in admin|chrome|contextawareaccess|mobile|takeout|accesstransparency|cloudsearch|datamigration|datastudio|directorysync|\
+    gcp|meethardware|profile) events=$(printf '%s' "$events" | tr '[:lower:]' '[:upper:]') ;; esac
+  if [ "$app" = chrome ]; then
+    [ -z "$selected" ] || not_modelled "report chrome select users"
+    if [ -n "$filter" ]; then
+      [ "$who" = all ] || not_modelled "report chrome user $who with a filter"
+      case "$filter" in PROFILE_USER_NAME==?*) ;; *) not_modelled "report chrome filter $filter" ;; esac
+      by=PROFILE_USER_NAME; match=${filter#PROFILE_USER_NAME==}   # as given: GAM passes a filter unchanged
+    elif [ "$who" != all ]; then
+      by=DEVICE_USER; match=$who; who=all
+    fi
+  else
+    [ -z "$filter" ] || not_modelled "report $app filter"
+  fi
+  case "$max" in ""|*[!0-9]*) usage_error "Invalid argument: Expected <Number>" ;; esac
+  case "$who" in *[[:space:]]*) not_modelled "an account list like $who" ;; esac
+  if [ "$who" = all ]; then printf 'Getting all Activities for all users\n' 1>&2; fi
+  if [ "$app" = gmail ] && [ "$hours" -gt 720 ]; then
+    if [ "$who" = all ]; then printf '\nERROR: Bad Request\n' 1>&2; exit 53; fi
+    printf 'name\n'
+    for account in $(printf '%s' "$who" | tr ',' ' '); do printf 'User: %s, Does not exist\n' "$account" 1>&2; done
+    exit 56
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nolog/$app" ]; then
+    printf "\nERROR: 400: This application's log isn't available for this customer - invalid\n" 1>&2; exit 4
+  fi
+  file="$GAM_MOCK_FIXTURES/report_$app.csv"
+  if [ -f "$file" ]; then head -n 1 "$file"; else printf 'name\n'; fi
+  missing=""; rc=56; seen=" "
+  # The admin log without userisactor reads the events that affected the account (USER_EMAIL), not what it did.
+  filtered=""
+  if [ "$app" = admin ] && [ -z "$actor" ]; then by=USER_EMAIL; filtered=1; elif [ -z "$match" ]; then by=actor.email; fi
+  for account in $(printf '%s' "$who" | tr ',' ' '); do
+    case "$seen" in *" $account "*) continue ;; esac
+    seen="$seen$account "
+    if [ "$account" != all ]; then
+      printf 'Getting all Activities for %s\n' "$account" 1>&2
+      if [ -z "$filtered" ] && ! in_directory "$account"; then
+        case "$account" in
+          *@example.com) printf 'User: %s, Does not exist\n' "$account" 1>&2; rc=56 ;;   # setSysExitRC: the last one wins
+          *) printf 'User: %s, Service not applicable\n' "$account" 1>&2; rc=73 ;;
+        esac
+        missing=1; continue
+      fi
+    fi
+    [ -f "$file" ] || continue
+    tail -n +2 "$file" | awk -F, -v who="$account" -v ip="$ip" -v events="$events" -v by="$by" -v only="$match" \
+      -v before="$before" -v header="$(head -n 1 "$file")" '
+      BEGIN { n = split(header, h, ","); for (i = 1; i <= n; i++) col[h[i]] = i
+              m = split(events, e, ","); for (i = 1; i <= m; i++) want[e[i]] = 1 }
+      (only != "" ? ((by in col) && $col[by] == only) : (who == "all" || ((by in col) && $col[by] == who))) \
+        && (ip == "" || (("ipAddress" in col) && $col["ipAddress"] == ip)) && (m == 0 || ($1 in want)) \
+        && (before == "" || (("id.time" in col) && $col["id.time"] < before))' \
+      | head -n "$max"
+  done
+  [ -z "$missing" ] || exit "$rc"
+  exit 0
+fi
+
 # `gam user <email> show signature` (no formatjson) -> THAT user's signature, as text.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && [ "${4:-}" = "signature" ]; then
   [ $# -eq 4 ] || invalid_arg "$5"
