@@ -1,0 +1,100 @@
+{#- The report: what the logs and this app's audit log show, and the review as the operator writes it. A subject or a name is text an attacker wrote: autoescaped only. -#}
+{% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
+{% set field = "mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set heading = "text-sm font-medium text-brand-black" %}
+<div class="space-y-4">
+  {% if problem %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" tabindex="-1" data-focus>{{ problem }}</div>{% endif %}
+  {% if not record %}
+  <p class="text-sm text-brand-blueink"><a href="/incident/kept" class="underline">Keep or open an incident</a> to make its report.</p>
+  {% elif not report %}
+  <p class="text-sm text-brand-blueink">{% if pulling %}A pull of the logs is going on: open this again when it's done.{% else %}<a href="/incident/logs" class="underline">Pull the logs</a> for this incident to make its report.{% endif %}</p>
+  {% else %}
+  <section class="{{ card }} space-y-2">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="font-serif text-lg text-brand-black break-words">{{ report.record.title }}</h2>
+        <p class="text-xs text-brand-blueink">Opened {{ when(report.record.opened) }}{% if report.record.opened_by %} by {{ report.record.opened_by }}{% endif %}.</p>
+      </div>
+      <button type="button" hx-post="/incident/report/export" hx-target="#report-export" hx-swap="innerHTML" hx-disabled-elt="this" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Export report</button>
+    </div>
+    <div id="report-export"></div>
+    <p class="text-xs text-brand-grayink">The export is a zip of the report as a PDF, Markdown and text, each list as a CSV, and every saved read with its SHA-256.</p>
+    {% if report.first_sign %}<p class="text-sm text-brand-black">First sign of the attacker in the logs: {{ when(report.first_sign) }}.</p>{% endif %}
+    {% if report.contained %}<p class="text-sm text-brand-black">Every account these logs show touched locked by {{ when(report.contained) }}.</p>{% elif report.standing %}<p class="text-sm text-amber-800">Not yet contained: the logs don't show every account touched locked.</p>{% endif %}
+  </section>
+
+  {% if report.coverage %}
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">What this report can't show</h2>
+    <ul class="mt-2 space-y-1 text-sm text-brand-black">{% for line in report.coverage %}<li class="break-words">{{ line }}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">In numbers</h2>
+    <p class="mt-1 text-xs text-brand-blueink">Each opens its list.</p>
+    <ul class="mt-2 grid gap-2 sm:grid-cols-2">
+      {% for count in report.counts %}
+      <li><button type="button" hx-get="/incident/report/list?id={{ count.id | urlencode }}" hx-target="#report-list" hx-swap="innerHTML" aria-label="{{ count.label }}: {{ count.number }}. Open its list" class="flex w-full items-baseline justify-between gap-3 rounded-lg border border-brand-gray/50 px-3 py-2 text-left text-sm hover:bg-paper transition-colors"><span class="text-brand-black">{{ count.label }}</span><span class="font-medium text-brand-black">{{ count.number }}</span></button></li>
+      {% endfor %}
+    </ul>
+    <div id="report-list" class="mt-3"></div>
+  </section>
+
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">Where it started</h2>
+    <p class="mt-1 text-sm text-brand-black break-words">{{ report.way_in_words(when) }}</p>
+  </section>
+
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">What was done</h2>
+    {% if not report.actions %}<p class="mt-1 text-sm text-brand-blueink">No step taken shows in the logs read, this app's audit log, or the notes.</p>{% endif %}
+    <ul class="mt-2 space-y-1 text-sm text-brand-black">
+      {% for a in report.actions[:300] %}<li class="break-words"><span class="text-xs text-brand-grayink">{{ when(a.at) }}</span> {{ a.what }}{% if a.account %} <span class="text-brand-blueink">[{{ a.account }}]</span>{% endif %} <span class="text-xs text-brand-grayink">shown by {{ a.source }}</span></li>{% endfor %}
+    </ul>
+    {% if report.actions | length > 300 %}<p class="mt-1 text-xs text-brand-grayink">The first 300. The export has them all.</p>{% endif %}
+  </section>
+
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">Where each account stands</h2>
+    {% if not report.standing %}<p class="mt-1 text-sm text-brand-blueink">No account the attacker touched shows in the logs read.</p>{% endif %}
+    <ul class="mt-2 space-y-1 text-sm text-brand-black">{% for account, words in report.standing %}<li class="break-words"><span class="font-medium">{{ account }}</span>: {{ words }}</li>{% endfor %}</ul>
+  </section>
+
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">Evidence</h2>
+    {% if not report.evidence %}<p class="mt-1 text-sm text-brand-blueink">No read of the logs is saved with this incident yet.</p>{% endif %}
+    <ul class="mt-2 space-y-1 text-sm text-brand-black">{% for e in report.evidence %}<li class="break-words">{{ e.name }}{% if e.about %} <span class="text-xs text-brand-blueink">{{ e.about }}</span>{% endif %}</li>{% endfor %}</ul>
+  </section>
+
+  {% set review = report.record.review %}
+  <form class="{{ card }} grid gap-3 sm:grid-cols-2" hx-post="/incident/report/review" hx-target="#incident-report" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="incident" value="{{ report.record.id }}" />
+    <div class="sm:col-span-2"><h2 class="{{ heading }}">The review</h2><p class="mt-1 text-xs text-brand-blueink">Lessons learned and the plan going forward, as you write them. They go in the report as typed.</p><div id="report-review-said"></div></div>
+    <label class="block text-sm text-brand-blueink sm:col-span-2">Summary
+      <textarea name="summary" rows="3" class="{{ field }}">{{ review.summary }}</textarea></label>
+    <label class="block text-sm text-brand-blueink">Type
+      <input name="kind" value="{{ review.kind }}" autocomplete="off" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">Severity
+      <input name="severity" value="{{ review.severity }}" autocomplete="off" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">The meeting
+      <input type="datetime-local" name="meeting" value="{{ review.meeting.astimezone().strftime('%Y-%m-%dT%H:%M') if review.meeting else '' }}" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink">Who attended
+      <input name="attendees" value="{{ review.attendees }}" autocomplete="off" class="{{ field }}" /></label>
+    <label class="block text-sm text-brand-blueink sm:col-span-2">How they got in
+      <textarea name="cause" rows="2" class="{{ field }}">{{ review.cause }}</textarea></label>
+    <label class="block text-sm text-brand-blueink">What went well
+      <textarea name="went_well" rows="2" class="{{ field }}">{{ review.went_well }}</textarea></label>
+    <label class="block text-sm text-brand-blueink">What to do better
+      <textarea name="improve" rows="2" class="{{ field }}">{{ review.improve }}</textarea></label>
+    <label class="block text-sm text-brand-blueink sm:col-span-2">The plan going forward, a line an item, with who and by when
+      <textarea name="plan" rows="3" class="{{ field }}">{{ review.plan }}</textarea></label>
+    <div class="sm:col-span-2"><button type="submit" class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-black hover:bg-paper transition-colors">Save the review</button></div>
+  </form>
+
+  <section class="{{ card }}">
+    <h2 class="{{ heading }}">The review meeting's agenda</h2>
+    <ol class="mt-2 space-y-1 text-sm text-brand-black">{% for step in report.agenda() %}<li class="break-words">{{ step }}</li>{% endfor %}</ol>
+  </section>
+  {% endif %}
+</div>

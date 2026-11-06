@@ -43,7 +43,8 @@ def test_the_attachment_routes_are_the_ones_we_think():
     # A new download route must be added here and linked with `download`; this catches it appearing.
     assert _attachment_paths() == {"/audit/export.csv", "/builder/export.csv", "/onboard/bulk/template.csv",
                                    "/phishing/copies.csv", "/phishing/recipients.csv",
-                                   "/incident/logs/log.csv", "/incident/logs/export.zip", "/incident/logs/reach.csv"}
+                                   "/incident/logs/log.csv", "/incident/logs/export.zip", "/incident/logs/reach.csv", "/incident/logs/got-it.csv",
+                                   "/incident/report/list.csv", "/incident/report/export.zip"}
 
 
 def test_every_link_to_a_download_route_carries_the_download_attribute():

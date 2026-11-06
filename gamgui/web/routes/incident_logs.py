@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, Response
 from ...core.gam.commands import is_one_address
 from ...core.csv_safe import csv_safe
 from ...core.incident import groups, logs, pull, reader, reads, runs, store
+from ...core.incident.report import got_it_table
 from ...core.phishing import MOST_AT_ONCE
 from ...core.incident.logs import report_time
 from ..jobs import start_job
@@ -393,7 +394,7 @@ async def _reading_panel(request: Request, part: str, problem: str = "") -> HTML
     return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {
         "reading": _ticked(st, reading, record) if reading else None, "pulling": _running(st) is not None, "when": _when, "part": part if part in _PARTS else "", "problem": problem, "store_problems": [s for s in said if s],
         "marks": known.for_domain(domain) if known else [], "ticking": record is not None, "shows_query": _shows_query, "most_emails": MOST_AT_ONCE,
-        "groups_job": groups_job, "group_problems": _groups_read(st).problems, "group_nameless": _groups_read(st).nameless, "reach_summary": reader.reach_summary, "received_words": reader.received_words, "outcome_words": reader.outcome_words,
+        "groups_job": groups_job, "group_problems": _groups_read(st).problems, "group_nameless": _groups_read(st).nameless, "got_it": reader.got_it(reading.reaches) if reading else [], "reach_summary": reader.reach_summary, "received_words": reader.received_words, "outcome_words": reader.outcome_words,
         "focus": request.method == "POST" or part != "respond"})   # opening Respond doesn't take the keyboard from its page
 
 
@@ -521,6 +522,28 @@ async def pick_phish(request: Request, message: Annotated[str, Form()] = "", par
     return await _pick(request, part, change)
 
 
+def _partial(st, reaches=None) -> bool:
+    """Whether a list of who an email reached can't be everyone: a send naming no one, an address that doesn't read, a group not read or still being read, the Gmail log short or not read. It goes in the file's name."""
+    held = st.incident_reading[1] if st.incident_reading else None
+    reaches = (held.reaches if held else ()) if reaches is None else reaches
+    read, job, pulled = _groups_read(st), st.jobs.get(st.incident_groups_job), st.incident_pull
+    gmail = pulled.log("gmail") if pulled else None
+    return bool(gmail is None or gmail.rows is None or gmail.capped or (job is not None and not job.finished) or any(r.unnamed or r.unreadable for r in reaches)
+                or any(x.address in read.problems or x.address in read.nameless for r in reaches for x in r.recipients))
+
+
+@router.get("/got-it.csv")
+async def got_it_csv(request: Request) -> Response:
+    """Everyone the attacker's emails got to, once each, for a mail merge or a contacts import: its first column is `Email`."""
+    st = request.app.state.gamgui
+    held = await _current_reading(st)
+    if held is None:
+        return Response("Pull the logs first.", status_code=404, media_type="text/plain")
+    table = got_it_table(reader.got_it(held.reaches), None)
+    name = f"who-got-it{'-partial' if _partial(st, held.reaches) else ''}.csv"
+    return Response(table.csv_text(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={name}"})
+
+
 @router.get("/reach.csv")
 async def reach_csv(request: Request, message: str = "") -> Response:
     """Who one email reached, every address, whatever the screen shows. It says which email and, in its name, when it isn't everyone: a file gets passed around without its page."""
@@ -529,9 +552,7 @@ async def reach_csv(request: Request, message: str = "") -> Response:
     reach = next((r for r in held.reaches if r.message_id == message), None) if held else None
     if reach is None:
         return Response("That email isn't in the logs read, or a pull is going on.", status_code=404, media_type="text/plain")
-    read, job, gmail = _groups_read(st), st.jobs.get(st.incident_groups_job), st.incident_pull.log("gmail")
-    partial = (reach.unnamed or reach.unreadable or (job is not None and not job.finished) or (gmail is not None and gmail.capped)
-               or any(r.address in read.problems or r.address in read.nameless for r in reach.recipients))
+    partial = _partial(st, [reach])
     buffer = io.StringIO()
     csv.writer(buffer).writerows([("email", "Message-ID", *reader.REACH_COLUMNS), *([csv_safe(c) for c in (reach.subject, reach.message_id, *row)] for row in reach.rows)])
     name = f"who-it-reached-{reader.fingerprint(reach.message_id)[:8]}{'-partial' if partial else ''}.csv"

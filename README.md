@@ -89,6 +89,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
+- **The incident's report** — each number with the list behind it, every step beside the record that shows it, and the review, exported as a PDF, Markdown, text and CSVs with the evidence and its SHA-256.
 - **What was left on the account** — computers, phones, apps and Apps Script projects in Check Account, with a computer blocked or the account taken off it from the same preview as the lock.
 - **Who it reached and where it started** — every address an attacker's email went to, who bounced and who's still to warn, with a CSV, read from the Gmail log; and the emails from outside before the attack, for you to say which started it.
 - **Kept incidents** — an incident's details, notes and every pull of the logs, kept on this Mac in `0600` files, so it opens again after a restart without reading Google.

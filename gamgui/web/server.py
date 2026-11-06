@@ -129,6 +129,8 @@ class AppState:
     incident_known_problem: str = ""
     incident_nobody: object = None     # what Find showed nobody here has (lazy: routes/_common.nobody_has_checks)
     incident_nobody_problem: str = ""
+    incident_report: object = None     # (what it's made of, the report): made at most once for each change of that
+    incident_export: object = None     # (its token, its private temp file, the incident's ID): a made export waiting to be saved
     incident_groups: object = None     # the members of the groups an email reached, on this connector (core/incident/groups.py)
     incident_groups_job: str = ""
     incident_pick: object = None       # Do It Here: (the person, the one fix to pick, the computer's ID, when it registered) until another check is asked for
@@ -186,6 +188,7 @@ class AppState:
         self.incident_saved = []
         self.incident_saved_unreadable = []
         self.incident_swept = set()
+        self.incident_report = None
         self.incident_groups = None
         self.incident_groups_job = ""
         self.incident_pick = None
@@ -456,6 +459,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.incident import router as incident_router
     from .routes.incident_kept import router as incident_kept_router
     from .routes.incident_logs import router as incident_logs_router
+    from .routes.incident_report import router as incident_report_router
     from .routes.phishing import router as phishing_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
@@ -467,6 +471,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(users_router)
     app.include_router(incident_kept_router)
     app.include_router(incident_logs_router)
+    app.include_router(incident_report_router)
     app.include_router(incident_router)
     app.include_router(phishing_router)
     app.include_router(reports_router)

@@ -237,6 +237,11 @@ that list says which and how to add it, and the others still read. Not yet verif
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.
 3. **Done** lists what this app or the logs show finished. **Mark done** is for what no log can show: it asks how it was done, and stays with the incident. It isn't offered for a lock, recovery details or a read, which the logs or this app show.
 
+## Make the incident's report
+1. With an incident open and its logs pulled, open **Report**. Each number opens its list, with **Export as CSV**. **What was done** lists every step taken, beside the record that shows it.
+2. **The review** holds the summary, the type and severity, the meeting, how they got in, what went well, what to do better, and the plan. Click **Save the review**. It goes in the report as typed.
+3. **What this report can't show** says which logs it rests on and what's missing, so read it first. **Export report** makes a zip: the report as a PDF, Markdown and text, each list as a CSV, and every saved read with its SHA-256, to show the evidence unchanged. Then click **Save the export**.
+
 ## See what was left on the account
 1. **Check account** on **Respond** also lists the computers and phones signed in with the account, the apps with access, and the Apps Script projects in their Drive. A script someone authorized keeps acting for them on its triggers.
 2. For each computer, pick **Keep it**, **Block it** or **Take the account off it**. It runs from the same preview as the lock. Blocking can be undone in the Admin console.

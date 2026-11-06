@@ -1,7 +1,7 @@
 {#- The incident screens, in the order an incident is worked, and the incident open across them. A person's words: autoescaped. -#}
 <div class="space-y-1">
   <nav aria-label="Incident" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-brand-gray/40 pb-2 text-sm">
-    {% for href, label in [("/incident/kept", "Incidents"), ("/incident/logs", "Investigate"), ("/incident", "Respond")] %}
+    {% for href, label in [("/incident/kept", "Incidents"), ("/incident/logs", "Investigate"), ("/incident", "Respond"), ("/incident/report", "Report")] %}
     <a href="{{ href }}"{% if here == href %} aria-current="page"{% endif %} class="{{ 'font-medium text-brand-black underline underline-offset-4' if here == href else 'text-brand-blueink hover:underline' }}">{{ label }}</a>
     {% endfor %}
   </nav>

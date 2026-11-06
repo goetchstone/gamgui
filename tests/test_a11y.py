@@ -355,6 +355,18 @@ def _screens(p: Page, st):
     p.goto("/incident")
     p.settle("/Still to do/.test(document.querySelector('#incident-reading')?.innerText ?? '')")
     yield "incident/respond"
+    p.goto("/incident/kept")
+    p.fill("input[name=title]", "A test incident")
+    p.click("button", "Keep this incident")
+    p.settle("/Close it here/.test(document.querySelector('#incident-kept')?.innerText ?? '') && !document.querySelector('#incident-kept .spinner')")
+    p.goto("/incident/report")
+    yield "incident/report"
+    p.click("#incident-report button", "Accounts the attacker touched")
+    p.settle("/Export as CSV/.test(document.querySelector('#report-list')?.innerText ?? '')")
+    yield "incident/report list"
+    p.goto("/incident/kept")
+    p.click("button", "Close it here")
+    p.settle("!/Close it here/.test(document.querySelector('#incident-kept')?.innerText ?? '')")
 
     p.goto("/incident/kept")
     yield "incident/kept"
@@ -497,7 +509,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
 RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/signatures", "/calendars",
-             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/phishing", "/reports", "/audit", "/setup")
+             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/incident/report", "/phishing", "/reports", "/audit", "/setup")
 
 
 @pytest.mark.a11y
