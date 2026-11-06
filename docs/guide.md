@@ -232,6 +232,18 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Secure a compromised account
+1. Open **Incident**, enter the address, and click **Check account**, or open a person's **Security** tab and follow **Secure this account**. It
+   reads forwarding, filters, delegates, send-as addresses, the auto-reply, drafts and scheduled emails, recovery details and admin roles, and
+   changes nothing. What matters most is said first, and a read that failed is said beside its list, never as "none".
+2. Leave the lock's switches as they are or change them: reset the password, sign out everywhere, turn off forwarding, IMAP and POP. Clearing
+   recovery details is off to start, since they may be the person's own. Turn the reset off if you already did it in the Admin console.
+3. Tick what to undo. Nothing is ticked until you tick it.
+4. Click **Preview the steps**, read each step and its command, type the person's address, and click **Secure the account**. It stops if the
+   account changed since the check, and the reset failing stops the steps after it. The account is then checked again, with what finished
+   switched off, so you can preview the rest.
+5. Give the person a new password from their page, then [take what they sent out of every mailbox](#take-a-phishing-email-out-of-every-mailbox).
+
 ## Take a phishing email out of every mailbox
 
 1. Open **Phishing** and paste the email's Message-ID (in Gmail, More › Show original), or several, one a line. Click

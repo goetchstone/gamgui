@@ -110,6 +110,12 @@ class Phone:
 _MESSAGE_ID_ATEXT = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'+-/=?^_`|~")
 
 
+def is_one_address(address: str) -> bool:
+    """One plain address, as GAM will act on it as given: GAM reads `Name <a@b>` as `a@b` and `id:`/`uid:` as an ID, and splits a list on
+    commas and whitespace. A removal names what the operator was shown, or nothing."""
+    return bool(re.fullmatch(r"[^\s<>:,@]+@[^\s<>:,@]+", address or ""))
+
+
 @dataclass(frozen=True)
 class MessageId:
     """An email's Message-ID, without its angle brackets: Gmail's `rfc822msgid:` takes it bare. RFC 5322 `id-left@id-right`,
@@ -707,6 +713,50 @@ class GAMCommands:
     @staticmethod
     def print_forwarding_addresses(email: str) -> List[str]:
         return ["user", email, "print", "forwardingaddresses"]
+
+    @staticmethod
+    def print_forward(email: str) -> List[str]:
+        # `User,forwardEnabled,forwardTo,disposition` (printShowForward), the address and disposition only while on.
+        return ["user", email, "print", "forward"]
+
+    # --- gmail: what an attacker leaves behind ------------------------------------------
+    @staticmethod
+    def print_send_as(email: str) -> List[str]:
+        # The person's send-as addresses, the primary among them. `verifyonly` makes each signature a yes or no, not its HTML.
+        return ["user", email, "print", "sendas", "verifyonly"]
+
+    @staticmethod
+    def delete_send_as(email: str, address: str) -> List[str]:
+        if not is_one_address(address):
+            raise ValueError("each send-as address to remove is one email address")
+        return ["user", email, "delete", "sendas", address]
+
+    @staticmethod
+    def print_admins(email: str) -> List[str]:
+        # The roles assigned to the person directly. Not one held through a group: that takes `recursive`.
+        return ["print", "admins", "user", email]
+
+    @staticmethod
+    def list_drafts(email: str, most: int) -> List[str]:
+        # A draft is a message with the DRAFT label: GAM has no drafts command. Only the subject, since a phishing draft's Bcc runs
+        # to hundreds of addresses. Without includespamtrash, so one already in Trash isn't listed.
+        return ["user", email, "print", "messages", "query", "in:drafts", "max_to_print", str(most), "headers", "subject", "showlabels", "showdate"]
+
+    @staticmethod
+    def search_scheduled(email: str, most: int) -> List[str]:
+        # The emails waiting in Gmail's Scheduled, each with its recipients. Gmail sends one at its time with nobody signed in, and
+        # the drafts' listing never shows it. The mailbox search's own shape (`search_messages`), to more than its cap of 50.
+        return ["user", email, "print", "messages", "query", "in:scheduled", "includespamtrash", "max_to_print", str(most), "headers", "all",
+                "showlabels", "showdate"]
+
+    @staticmethod
+    def delete_messages(email: str, ids: Sequence[str]) -> List[str]:
+        # For good, as Gmail's Discard deletes a draft: a draft in Trash may still be a draft, and sendable. With `ids` GAM needs no
+        # `doit` and checks no count. Batches of 50: one holding an ID Gmail refuses fails whole, the other batches done.
+        joined = id_list(ids)
+        if joined is None:
+            raise ValueError("each message to delete is one message ID")
+        return ["user", email, "delete", "messages", "ids", joined]
 
     @staticmethod
     def set_forward(email: str, address: str, action: str = "keep") -> List[str]:

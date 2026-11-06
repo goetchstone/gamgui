@@ -34,14 +34,16 @@ PANELS = {
     "subscribe": "/calendars/share/status",
     "index": "/calendars/index/status",
     "connected_apps": "/reports/connected-apps",
+    "incident_check": "/incident/check/status",
+    "incident_secure": "/incident/secure/status",
     "phishing_find": "/phishing/find/status",
     "phishing": "/phishing/trash/status",
     "sequence": "/builder/sequence/status",
     "onboard": "/onboard/bulk/status",
     "finish": "/onboard/finish/status",   # steps retried until Google has set a new account up
 }
-UNSTOPPABLE = {"index", "connected_apps"}   # one domain-wide read, not a loop: there is no "between targets"
-CONFIRM_STOP = {"offboard"}      # a stop leaves the leaver half offboarded: ask first
+UNSTOPPABLE = {"index", "connected_apps", "incident_check"}   # reads at once, not a loop: there is no "between targets"
+CONFIRM_STOP = {"offboard", "incident_secure"}      # a stop leaves the leaver half offboarded, or the attacker half locked out: ask first
 ONE_STEP = "change"              # a change made from a screen's button, not a loop: no panel of its own, and no Stop
 
 # A write in one of these is already that job's row. A task copies the context it's made in, and a route makes a job's
@@ -80,6 +82,8 @@ CHANGE_WORDS = {
     "signout_user": "Sign out everywhere",
     "subscribe_calendar": "Add a calendar to their list",
     "delete_filters": "Remove filters that forward",
+    "delete_messages": "Delete drafts or scheduled emails",
+    "delete_send_as": "Remove a send-as address",
     "hide_from_directory": "Hide from the directory",
     "imap_off": "Turn off IMAP",
     "pop_off": "Turn off POP",
@@ -117,6 +121,7 @@ class Job:
     error: Optional[str] = None
     cancel_requested: bool = False   # Stop pressed (plan U5): each loop checks it before its next target
     interrupted: bool = False        # cut off (the app quit) before every step was accounted for
+    about: str = ""                  # the person a run is for, when its panel names them
     title: str = ""                  # what the tray calls it ("Offboarding carol@example.com")
     kind: str = ""                   # a PANELS key: which screen's panel shows it
     retry: object = None             # what "Retry the N that failed" re-runs: a signature's template, a department

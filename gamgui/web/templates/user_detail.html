@@ -132,6 +132,11 @@
   <!-- ACCOUNT / DANGER: suspend + delete -->
   <div class="max-h-[calc(100vh-19rem)] overflow-y-auto pr-1 hidden grid gap-4 sm:grid-cols-2 items-start" role="tabpanel" id="panel-security" aria-labelledby="tab-security">
     <div class="{{ card }}">
+      <h2 class="eyebrow text-brand-grayink">Compromised?</h2>
+      <p class="mt-3 text-xs text-brand-blueink">Check what an attacker commonly changes, which changes nothing, then lock the account from one preview.</p>
+      <a href="/incident?person={{ user.primary_email | urlencode }}" class="mt-3 inline-block text-sm text-brand-blueink underline">Secure this account</a>
+    </div>
+    <div class="{{ card }}">
       <h2 class="eyebrow text-brand-grayink">Password</h2>
       <div id="password-zone" class="mt-3">
         <p class="text-xs text-brand-blueink">A temporary password you hand over. Their current one stops working, and Google asks for a new one when they next sign in. It shows once, after it's set, and isn't written to the audit log.</p>

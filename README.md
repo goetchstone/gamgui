@@ -88,6 +88,8 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
   **suspend**.
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
+- **Incident** — check a compromised account for what an attacker changed (forwarding, filters, delegates, send-as addresses, the auto-reply,
+  drafts, scheduled emails, recovery details, admin roles), and lock it from one preview with the address typed.
 - **Phishing** — find every copy of an email by its Message-ID, Spam included, see who it went to, and trash the copies from
   one preview, one guarded step per mailbox with the count typed. The sender's Sent copy is kept.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
@@ -189,6 +191,8 @@ its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Offboarding's added steps: clear recovery, hide from the directory, IMAP off, POP off | Lifecycle | argv-identical to SwiftGamGui's confirmed runs (2026-10-16) |
 | Offboarding's added steps: hand over secondary calendars, remove filters that forward | Lifecycle | not yet — not live in either app |
+| Secure an account: reset, sign-out, forwarding, IMAP and POP off, clear recovery | Incident | argv-identical to SwiftGamGui's confirmed runs |
+| Secure an account: delete filters, send-as addresses, drafts and scheduled emails | Incident | not yet — not live in either app |
 | Trash an email's copies, by Message-ID | Phishing | argv-identical to SwiftGamGui's confirmed runs (2026-10-19, 2026-10-23) |
 | Trash an email's copies in Spam, by ID | Phishing | not yet — not live in either app |
 | Set a temporary password | Users | not yet — new to both apps |

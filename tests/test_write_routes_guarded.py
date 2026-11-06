@@ -48,7 +48,7 @@ DOMAIN = "example.com"
 # --- exempt POST routes, by reason -----------------------------------------------------------------
 # Previews: they resolve and render the confirm step (a GAM read at most), never write.
 PREVIEWS = {
-    "/users/password/preview", "/users/phone/preview", "/phishing/trash/preview",
+    "/users/password/preview", "/users/phone/preview", "/phishing/trash/preview", "/incident/secure/preview",
     "/users/bulk/preview", "/users/suspend/preview", "/users/delete/confirm",
     "/calendars/delete/preview", "/calendars/event/preview",
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
@@ -68,6 +68,7 @@ LOCAL_ONLY = {
     "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/welcome/delete", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
     "/calendars/index/rebuild", "/reports/connected-apps/read", "/jobs/stop",
+    "/incident/check",   # reads only
     "/phishing/find", "/phishing/recipients",      # two reads, and one: GAM's dry run changes nothing without doit
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
 }
@@ -91,6 +92,13 @@ def _phishing_found(client) -> None:
     from gamgui.core.gam.commands import MessageId
     copies = phishing.MessageCopies((phishing.Mailbox("alice@example.com", copies=1),))
     client.app.state.gamgui.phishing_found = phishing.Found([phishing.EmailSearch(MessageId("CAPh1sh+Notice=0001@mail.example.com"), copies, phishing.SpamCopies())])
+
+
+def _incident_checked(run: str):
+    def setup(client) -> None:
+        from gamgui.core.incident.check import Account, Check
+        client.app.state.gamgui.incident_check = Check("carol@example.com", Account("carol@example.com"), run=run)
+    return setup
 
 
 def _sales_role(client) -> None:
@@ -122,6 +130,9 @@ GATED = {
                                  {"email": "alice@example.com"}),
     "/users/bulk/apply": Case({"store": "Downtown", "group": "", "emails": "alice@example.com"}, "/users/bulk/preview",
                               edit={"store": "Finance", "emails": "alice@example.com\ncarol@example.com"}),
+    "/incident/secure/apply": Case({}, "/incident/secure/preview", {"run": "r1", "switch": "forward"}, setup=_incident_checked("r1"),
+                                   typed={"confirm_email": "carol@example.com"},
+                                   edit=_incident_checked("r2")),    # a check since: the page no longer lists what the preview held
     "/phishing/trash/apply": Case({}, "/phishing/trash/preview", setup=_phishing_found, typed={"confirm_count": "1"},
                                   edit=_phishing_found),   # a Find since: the page no longer lists what the preview held
     "/users/phone/apply": Case({"email": "alice@example.com", "phone": "+1 555 0100"}, "/users/phone/preview",

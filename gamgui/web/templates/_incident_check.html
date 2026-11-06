@@ -1,0 +1,102 @@
+{#- Check Account's result, and the picks for the preview. Each read stands alone: one that failed is said beside its list, never "none".
+    Everything here but the switches' words came from the account or the attacker, so it's only ever autoescaped text. -#}
+{% import "_job_live.html" as live %}
+{% macro unread(read, what) %}{% if read.problem %}<p class="text-sm text-amber-800">Couldn't read {{ what }}: {{ read.problem }}</p>{% endif %}{% endmacro %}
+{% set card = "rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm" %}
+{% set heading = "text-sm font-medium text-brand-black" %}
+{% if job and not job.finished %}
+{% if clear_plan %}<div id="incident-plan" hx-swap-oob="innerHTML"></div>{% endif %}
+<div hx-get="/incident/check/status?job={{ job.id }}" hx-trigger="load delay:800ms" hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2"><span class="spinner"></span>{{ live.progress(job, "Checking the account") }}
+    <span>{{ job.title }}… {{ job.done }} of {{ job.total }} reads done. You can keep working.</span></div>
+</div>
+{% else %}
+{% if job and job.error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800" {{ live.ended(job) }}>{{ job.error }}</div>{% endif %}
+{% if check and on_screen %}
+{% set account = check.account %}
+{% if job %}<span hidden data-announce="{{ job.id }}">Checked {{ account.primary_email }}</span>{% endif %}
+<form hx-post="/incident/secure/preview" hx-target="#incident-plan" hx-swap="innerHTML" hx-disabled-elt="find button" class="space-y-4">
+  <input type="hidden" name="run" value="{{ check.run }}" />
+  <div class="{{ card }} space-y-3">
+    <h2 class="font-serif text-lg text-brand-black break-all">{{ account.full_name or account.primary_email }}{% if account.full_name %} <span class="text-sm text-brand-grayink">{{ account.primary_email }}</span>{% endif %}</h2>
+    {% if check.cut_off %}<p class="text-sm text-amber-800">{{ check.cut_off }}</p>{% endif %}
+    {% if check.findings %}
+    <ul class="list-disc space-y-1 pl-5 text-sm text-brand-black">{% for line in check.findings %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% else %}<p class="text-sm text-brand-blueink">Nothing here stands out. A read that failed is said below it.</p>{% endif %}
+    <dl class="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+      <div><dt class="inline text-brand-grayink">Forwarding:</dt> <dd class="inline text-brand-black">{% if check.forwarding.problem %}not read{% elif check.forwarding.value %}{{ check.forwarding.value.words }}{% else %}Gmail gave no answer{% endif %}</dd></div>
+      <div><dt class="inline text-brand-grayink">2-Step Verification:</dt> <dd class="inline text-brand-black">{{ "On" if account.enrolled_2sv else "Off" }}{% if account.enforced_2sv %}, enforced{% endif %}</dd></div>
+      <div><dt class="inline text-brand-grayink">Recovery email:</dt> <dd class="inline text-brand-black">{{ account.recovery_email or "None" }}</dd></div>
+      <div><dt class="inline text-brand-grayink">Recovery phone:</dt> <dd class="inline text-brand-black">{{ account.recovery_phone or "None" }}</dd></div>
+    </dl>
+    {{ unread(check.forwarding, "forwarding") }}
+    {{ unread(check.admin_roles, "their admin roles") }}
+    {% if check.admin_roles.value %}<p class="text-sm text-brand-black">Admin roles: {% for r in check.admin_roles.value %}{{ r.words }}{{ "; " if not loop.last }}{% endfor %}</p>{% endif %}
+    {{ unread(check.forwarding_addresses, "forwarding addresses") }}
+    {% if check.forwarding_addresses.value %}<p class="text-sm text-brand-black">Addresses forwarding may send to: {% for a in check.forwarding_addresses.value %}{{ a.address }}{% if a.status %} ({{ a.status }}){% endif %}{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}
+  </div>
+
+  <fieldset class="{{ card }} space-y-2"><legend class="{{ heading }}">The lock</legend>
+    {% for key in switchable %}
+    <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="switch" value="{{ key }}" class="mt-1"{% if key in on_by_default and key not in check.done %} checked{% endif %} />
+      <span><span class="text-brand-black">{{ names[key] }}</span>{% if key in check.done %} <span class="text-brand-grayink">(done in an earlier run)</span>{% endif %}<br><span class="text-xs text-brand-blueink">{{ notes[key] }}</span></span></label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset class="{{ card }} space-y-3"><legend class="{{ heading }}">What to undo: nothing is ticked until you tick it</legend>
+    {% if check.scheduled.problem %}{{ unread(check.scheduled, "scheduled emails") }}{% elif check.scheduled.value %}
+    <div>
+      {% if check.scheduled_sends %}<label class="flex items-start gap-2 text-sm"><input type="checkbox" name="delete_scheduled" value="1" class="mt-1" /><span class="text-brand-black">Delete all {{ check.scheduled_sends | length }} scheduled email{{ "" if check.scheduled_sends | length == 1 else "s" }}</span></label>{% endif %}
+      <ul class="mt-1 space-y-1 pl-6 text-xs text-brand-blueink">
+        {% for s in check.scheduled_sends[:shown] %}<li class="break-words">“{{ s.subject or "(no subject)" }}” to {{ s.recipients | join(", ") or "nobody it says" }}{% if s.date %}, {{ s.date }}{% endif %}</li>{% endfor %}
+        {% if check.scheduled_sends | length > shown %}<li>And {{ check.scheduled_sends | length - shown }} more.</li>{% endif %}
+      </ul>
+      {% if check.scheduled.value | length >= scheduled_cap %}<p class="mt-1 pl-6 text-xs text-amber-800">This is the first {{ scheduled_cap }}: there may be more. After deleting these, check again to list the rest.</p>{% endif %}
+      {% if check.scheduled.value | length > check.scheduled_sends | length %}<p class="mt-1 pl-6 text-xs text-amber-800">{{ check.scheduled.value | length - check.scheduled_sends | length }} found aren't plainly labelled scheduled, so they're left alone.</p>{% endif %}
+    </div>
+    {% else %}<p class="text-sm text-brand-grayink">No email is scheduled to send.</p>{% endif %}
+
+    {% if check.filters.problem %}{{ unread(check.filters, "filters") }}{% elif check.filters.value %}
+    <div class="space-y-1"><p class="text-sm text-brand-grayink">Filters to delete</p>
+      {% for f in check.filters.value %}<label class="flex items-start gap-2 text-sm"><input type="checkbox" name="filter" value="{{ f.id }}" class="mt-1" /><span class="break-words {{ 'text-amber-800' if f.hides_or_forwards else 'text-brand-black' }}">{{ f.words }}</span></label>{% endfor %}
+    </div>
+    {% else %}<p class="text-sm text-brand-grayink">No filters.</p>{% endif %}
+
+    {% if check.delegates.problem %}{{ unread(check.delegates, "delegates") }}{% elif check.delegates.value %}
+    <div class="space-y-1"><p class="text-sm text-brand-grayink">Delegates to remove</p>
+      {% for d in check.delegates.value %}<label class="flex items-start gap-2 text-sm"><input type="checkbox" name="delegate" value="{{ d }}" class="mt-1" /><span class="break-all text-brand-black">{{ d }}</span></label>{% endfor %}
+    </div>
+    {% else %}<p class="text-sm text-brand-grayink">No delegates.</p>{% endif %}
+
+    {% if check.send_as.problem %}{{ unread(check.send_as, "send-as addresses") }}{% elif check.other_send_as %}
+    <div class="space-y-1"><p class="text-sm text-brand-grayink">Send-as addresses to remove</p>
+      {% for s in check.other_send_as %}<label class="flex items-start gap-2 text-sm"><input type="checkbox" name="send_as" value="{{ s.address }}" class="mt-1" /><span class="break-all text-brand-black">{{ s.words }}</span></label>{% endfor %}
+    </div>
+    {% else %}<p class="text-sm text-brand-grayink">No other send-as addresses.</p>{% endif %}
+
+    {% if check.auto_reply.problem %}{{ unread(check.auto_reply, "the auto-reply") }}{% elif check.auto_reply.value and check.auto_reply.value.enabled %}
+    <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="auto_reply" value="1" class="mt-1" /><span class="break-words text-brand-black">Turn off the auto-reply: “{{ check.auto_reply.value.subject }}”</span></label>
+    {% else %}<p class="text-sm text-brand-grayink">No auto-reply is on.</p>{% endif %}
+
+    {% if check.drafts.problem %}{{ unread(check.drafts, "drafts") }}{% elif check.drafts.value %}
+    <fieldset class="space-y-1"><legend class="text-sm text-brand-grayink">{{ check.drafts.value | length }} draft{{ "" if check.drafts.value | length == 1 else "s" }}, newest first</legend>
+      <label class="flex items-center gap-2 text-sm"><input type="radio" name="drafts" value="none" checked /><span class="text-brand-black">Keep them</span></label>
+      <label class="flex items-center gap-2 text-sm"><input type="radio" name="drafts" value="all" /><span class="text-brand-black">Delete every one listed</span></label>
+      <label class="flex flex-wrap items-center gap-2 text-sm"><input type="radio" name="drafts" value="subject" /><span class="text-brand-black">Delete those whose subject contains</span>
+        <input name="drafts_subject" autocomplete="off" aria-label="Text in the subject of the drafts to delete" class="rounded-lg border border-brand-field bg-brand-white px-2 py-1 text-sm text-ink" /></label>
+      <ul class="mt-1 max-h-40 space-y-1 overflow-y-auto pl-6 text-xs text-brand-blueink">
+        {% for d in check.drafts.value[:shown] %}<li class="break-words">“{{ d.subject or "(no subject)" }}”{% if d.date %}, {{ d.date }}{% endif %}</li>{% endfor %}
+        {% if check.drafts.value | length > shown %}<li>And {{ check.drafts.value | length - shown }} more.</li>{% endif %}
+      </ul>
+      {% if check.drafts.value | length >= draft_cap %}<p class="mt-1 pl-6 text-xs text-amber-800">This is the newest {{ draft_cap }}: there may be more. After deleting these, check again to list the rest.</p>{% endif %}
+    </fieldset>
+    {% else %}<p class="text-sm text-brand-grayink">No drafts.</p>{% endif %}
+  </fieldset>
+
+  <button type="submit"{% if check.cut_off %} disabled{% endif %} class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors disabled:opacity-50">Preview the steps</button>
+</form>
+{% elif check %}
+<a href="/incident" class="text-sm text-brand-blueink underline">Open the check on the Incident screen</a>
+{% endif %}
+{% endif %}

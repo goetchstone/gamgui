@@ -37,7 +37,7 @@ needs_grammar = pytest.mark.skipif(
 )
 
 SEARCH_ADDRESS = "person@example.com"
-VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1", "987654"}
+VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -55,6 +55,10 @@ ENUM_ARGS = {
     ("trash_message", "copies"): (987654,),
     ("trash_messages", "ids"): (["F1"],),
     ("transfer_calendar_ownership", "calendar_ids"): (["c_x@group.calendar.google.com"],),
+    ("delete_send_as", "address"): ("send.as@example.com",),
+    ("delete_messages", "ids"): (["M1"],),
+    ("list_drafts", "most"): (5000,),
+    ("search_scheduled", "most"): (500,),
     ("delete_filters", "filter_ids"): (["F1"],),
     ("update_phones", "phones"): ([], [Phone("work", "", "<value>", True)], [Phone("custom", "<name>", "<value>", False)],
                                   [Phone("", "", "<value>", False)]),
@@ -437,6 +441,7 @@ READ_BY_CONTRACT = {
 AUDITED_OUTSIDE_CONNECTOR = {
     ("gamgui/core/setup.py", "remove_domain"): "Setup's Remove deletes a domain's Keychain credentials",
     ("gamgui/web/routes/lifecycle.py", "offboard_run"): "`offboard_plan`: the steps left out of an offboarding",
+    ("gamgui/web/routes/incident.py", "secure_apply"): "`incident_secure`: the steps one Secure run planned",
 }
 
 

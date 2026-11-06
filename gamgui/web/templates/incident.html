@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Incident — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-blue">Incident</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Secure a compromised account</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Check what an attacker commonly changes, which changes nothing. Then pick what to undo, and run the lock and your picks from one preview. To take the email they sent out of every mailbox, use <a href="/phishing" class="underline">Phishing</a>.</p>
+  </div>
+  <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3" hx-post="/incident/check" hx-target="#incident-check" hx-swap="innerHTML" hx-disabled-elt="find button"{% if start %} hx-trigger="load, submit"{% endif %}>
+    <label class="block"><span class="text-sm text-brand-blueink">The account that was taken over</span>
+      <input name="person" value="{{ person }}" autocomplete="off" placeholder="name@example.com" class="mt-1 w-full max-w-md rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink" /></label>
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Check account</button>
+  </form>
+  <div id="incident-check">{% if not start %}{% include "_incident_check.html" %}{% endif %}</div>
+  {#- Outside the check, which a run's end reads again: its result stays on screen. -#}
+  <div id="incident-plan"></div>
+</div>
+{% endif %}
+{% endblock %}
