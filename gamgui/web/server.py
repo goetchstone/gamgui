@@ -129,6 +129,8 @@ class AppState:
     incident_known_problem: str = ""
     incident_nobody: object = None     # what Find showed nobody here has (lazy: routes/_common.nobody_has_checks)
     incident_nobody_problem: str = ""
+    incident_groups: object = None     # the members of the groups an email reached, on this connector (core/incident/groups.py)
+    incident_groups_job: str = ""
     incident_pick: object = None       # Do It Here: (the person, the one fix to pick) until their check is shown or another is asked for
     incident_check: object = None      # the last Check Account, on this connector
     incident_check_job: str = ""       # its job, which guards a second check
@@ -183,6 +185,8 @@ class AppState:
         self.incident_saved = []
         self.incident_saved_unreadable = []
         self.incident_swept = set()
+        self.incident_groups = None
+        self.incident_groups_job = ""
         self.incident_pick = None
         self.incident_check = None     # read with the connector being replaced
         self.incident_check_job = ""

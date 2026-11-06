@@ -326,4 +326,5 @@ README's Status, including what is only in which app; a "Live verification statu
 - **E3** — applied (`feat/incident-reader`: pure, with Swift's tests ported; the on-device model's are Apple-only and stay out).
 - **E4** — applied (`feat/incident-kept`: reads and this Mac only; adversarially verified). E2's "saved as 0600" is here. An export comes in as Export all's zip, since a page has no folder picker.
 - **E5** — applied (`feat/incident-respond`: reads and this Mac only). The screens are Incidents, Investigate and Respond; Report comes with E8.
-- E6–E8, F — approved 2026-11-05 (G1), not started.
+- **E6** — applied (`feat/incident-reach`: reads and this Mac only). The groups are read in the background on Respond, as SwiftGamGui does.
+- E7–E8, F — approved 2026-11-05 (G1), not started.

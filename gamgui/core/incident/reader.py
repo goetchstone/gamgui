@@ -1871,3 +1871,50 @@ def read(events: Sequence[Event], context: Optional[Context] = None) -> Reading:
                          tuple(t[4].addresses) if t[0] == "confirmAddress" and t[4] else (), t[6]) for i, t in enumerate(ordered)),
         done=tuple(Task(f"D{i + 1}", t[0], t[1], tuple(t[2]), done=t[3]) for i, t in enumerate(done_tasks)),
         events=len(events), reaches=reaches, way_in=_way_in(statuses, events, context))
+
+
+def reach_summary(reach: Reach) -> str:
+    """One email's reach in numbers, and whether the warnings picked count."""
+    everyone = reach.recipients
+
+    def count(test: Callable[[Recipient], bool]) -> int:
+        return sum(1 for r in everyone if test(r))
+
+    parts = [f"{n} {words}" for n, words in ((count(lambda r: r.outcome == "received"), "received it here"),
+                                             (count(lambda r: r.outcome == "sent" and not r.inside), "outside with no bounce in the logs read"),
+                                             (count(lambda r: r.outcome == "sent" and r.inside), "here with no receipt in the logs read"),
+                                             (count(lambda r: r.outcome == "bounced"), "bounced"),
+                                             (count(lambda r: r.outcome == "blocked"), "quarantined or rejected"),
+                                             (count(lambda r: r.outcome == "notAMailbox" and not r.expanded), "no one's mailbox here (a group not read, or an address no account has)")) if n]
+    text = f"It went to {len(everyone)} {'address' if len(everyone) == 1 else 'addresses'}" + (": " + ", ".join(parts) + "." if parts else ".")
+    groups, through = count(lambda r: r.expanded), count(lambda r: r.via is not None)
+    if groups:
+        text += f" {'A group' if groups == 1 else f'{groups} groups'} here {'counts' if groups == 1 else 'count'} by {'its' if groups == 1 else 'their'} members, {through} of them listed only through a group."
+    if reach.unreadable:
+        text += f" {reach.unreadable} more the log names don't read as an address: see the Admin console's Gmail log events."
+    if reach.unnamed:
+        text += f" {'A send of it names' if reach.unnamed == 1 else f'{reach.unnamed} sends of it name'} no recipient: who that went to isn't in the logs read."
+    if not reach.warnings:
+        return text + " No warning picked yet."
+    if all(w.problem for w in reach.warnings):
+        return text + " No warning picked counts yet, so who was warned can't be told."
+    left = len(reach.to_warn)
+    if left:
+        return text + f" The log doesn't show the warnings picked reaching {left} of the people to warn."
+    return text + (" The log shows the warnings picked reaching everyone to warn." if not reach.unnamed and not reach.unreadable
+                   else " The log shows the warnings picked reaching everyone listed, but the list isn't whole (above).")
+
+
+def received_words(picked: WayInEmail, way_in: WayIn, when: Callable[[datetime], str]) -> str:
+    """When the email that started it came, and who else here got it. They may have fallen for it too."""
+    first = (f"First received {when(picked.at)}, before" if picked.at else "Before") + f" the attacker's first sign, on {way_in.account} at {when(way_in.attacked_at)}."
+    others = [a for a in picked.received_by if a != way_in.account]
+    if not picked.received_by:
+        who = "No one here is shown receiving it."
+    elif not others:
+        who = f"Only {way_in.account} is shown receiving it."
+    elif way_in.account in picked.received_by:
+        who = f"{way_in.account} received it, and so did {', '.join(others)}: they may have fallen for it too."
+    else:
+        who = f"Received here by {', '.join(others)}: they may have fallen for it too."
+    return f"{first} {who}"

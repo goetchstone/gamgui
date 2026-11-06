@@ -1,0 +1,44 @@
+{#- Where it started: emails the first account the attacker got into received from outside before the attack. Code lists them; only the operator says which it was. A sender's name and a subject are text an attacker wrote: autoescaped. -#}
+{% set way_in = reading.way_in %}
+<section>
+  <h2 class="text-sm font-medium text-brand-black">Where it started</h2>
+  {% if way_in.picked %}
+  <p class="mt-1 text-sm text-brand-black break-words">The email that started it: “{{ way_in.picked.subject or "(no subject)" }}” from {{ way_in.picked.sender or "a sender the log doesn't name" }}.</p>
+  <p class="mt-0.5 text-sm text-brand-blueink">{{ received_words(way_in.picked, way_in, when) }}</p>
+  <div class="mt-1 flex flex-wrap items-center gap-3 text-xs">
+    <a href="/phishing?message={{ way_in.picked.message_id | urlencode }}" class="underline">Pull from every mailbox…</a>
+    <form class="inline" hx-post="/incident/logs/phish" hx-target="#incident-reading" hx-swap="innerHTML">
+      <input type="hidden" name="part" value="{{ part }}" /><input type="hidden" name="message" value="" />
+      <button type="submit" class="text-brand-blueink underline">Not this one</button>
+    </form>
+  </div>
+  {% elif way_in.picked_unread %}
+  <p class="mt-1 text-sm text-amber-800 break-words">The email picked, {{ way_in.picked_unread }}, isn't shown reaching anyone here in the logs read. Pull the Gmail log of whoever received it.</p>
+  <form class="mt-1" hx-post="/incident/logs/phish" hx-target="#incident-reading" hx-swap="innerHTML">
+    <input type="hidden" name="part" value="{{ part }}" /><input type="hidden" name="message" value="" />
+    <button type="submit" class="text-xs text-brand-blueink underline">Not this one</button>
+  </form>
+  {% endif %}
+  <p class="mt-1 text-xs text-brand-blueink">Emails {{ way_in.account }} received from outside in the 3 days before the attacker's first sign, at {{ when(way_in.attacked_at) }}. Listed by rules in code from the Gmail log; which one started it is yours to say.{% if not ticking %} <a href="/incident/kept" class="underline">Keep an incident</a> to keep which it was.{% endif %}</p>
+  {% if way_in.unnamed %}<p class="mt-1 text-xs text-brand-grayink">{{ way_in.unnamed }} more name no sender in the log, so they aren't listed.</p>{% endif %}
+  {% if way_in.candidates %}
+  <ul class="mt-2 space-y-2 text-sm">
+    {% for email in way_in.candidates %}
+    <li class="flex flex-wrap items-start justify-between gap-2">
+      <div class="min-w-0">
+        <p class="font-medium text-brand-black break-words">“{{ email.subject or "(no subject)" }}”</p>
+        <p class="text-xs text-brand-blueink break-words">From {{ email.sender }}{% if email.at %} · received {{ when(email.at) }}{% endif %}{% if email.received_by | length > 1 %} · also received by {{ email.received_by | length - 1 }} more here{% endif %}</p>
+      </div>
+      {% if ticking and not (way_in.picked and way_in.picked.message_id == email.message_id) %}
+      <form hx-post="/incident/logs/phish" hx-target="#incident-reading" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <input type="hidden" name="part" value="{{ part }}" /><input type="hidden" name="message" value="{{ email.message_id }}" />
+        <button type="submit" class="{{ small }}" aria-label="Mark “{{ email.subject or "(no subject)" }}” from {{ email.sender }} as the email that started it">That's the phish</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif not way_in.picked %}
+  <p class="mt-1 text-sm text-brand-black">The Gmail log read shows no email from outside before it.</p>
+  {% endif %}
+</section>

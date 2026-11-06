@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 from typing import Any, Awaitable, Callable, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ..csv_safe import csv_safe
+from .reader import Whole
 from .logs import (
     CAP,
     EXPORT_ROWS,
@@ -118,10 +119,22 @@ class Log:
     flagged: int = 0
     accounts: int = 0
     covered: FrozenSet[str] = frozenset()   # stopped short, and these accounts read whole past where it stopped, by a later read of just them
+    whole: Tuple[Whole, ...] = ()       # whose events it holds every one of, and between when: what tells a quiet mailbox from one not read
 
     @classmethod
-    def read(cls, application: str, rows: List[Row], hours: int, capped: bool = False, through: Optional[datetime] = None, covered: Iterable[str] = ()) -> "Log":
-        return cls(application, rows, "", hours, capped, through, sum(r.flagged for r in rows), len({r.who for r in rows}), frozenset(covered))
+    def read(cls, application: str, rows: List[Row], hours: int, capped: bool = False, through: Optional[datetime] = None, covered: Iterable[str] = (), scope: Optional[Sequence[str]] = None,
+             whole: Sequence[Whole] = ()) -> "Log":
+        """``scope``: the accounts a read with no address filter was for (empty: every account), to work out ``whole`` from its rows, never from a window it claims; None for a read that can't say. A read
+        stopped at its cap holds only up to where it read through. ``whole`` given instead: a log put together from reads, theirs."""
+        times = [r.date for r in rows if r.date]
+        held: Tuple[Whole, ...]
+        if scope is not None and times and (not capped or through is not None):
+            newest = max(times)
+            to = min(newest, through) if through else newest
+            held = (Whole(frozenset(a.lower() for a in scope) if scope else None, min(times), to),) if min(times) < to else ()
+        else:
+            held = tuple(whole)
+        return cls(application, rows, "", hours, capped, through, sum(r.flagged for r in rows), len({r.who for r in rows}), frozenset(covered), held)
 
     @property
     def name(self) -> str:
@@ -356,7 +369,7 @@ async def read_log(conn: Any, application: str, query: Query, now: datetime, cap
                 state.estimate = estimate
 
             rows, through = await complete(query.users, start, end, cap, one, through=reached, reading=note, estimated=estimated)
-            log = await asyncio.to_thread(Log.read, application, rows, hours, through is not None, through)
+            log = await asyncio.to_thread(Log.read, application, rows, hours, through is not None, through, scope=query.users if not ip and not events else None)
     except Exception as exc:  # noqa: BLE001 - said beside the rest, whatever it was
         log = Log(application, None, in_words(exc), hours)
     state.state, state.failed = "done", log.rows is None
@@ -411,12 +424,14 @@ class About:
     capped: FrozenSet[str] = frozenset()
     through: Mapping[str, datetime] = field(default_factory=dict)
     at: Optional[datetime] = None       # the window's end
+    says_whose: bool = False    # it says both whose events and from which address: what a read holding a mailbox whole is judged by
 
     @classmethod
     def of(cls, text: str) -> "About":
         users: Tuple[str, ...] = ()
         every, ip, hours = False, "", 0
         at: Optional[datetime] = None
+        said_accounts, said_address = False, False
         windows: Dict[str, int] = {}
         capped = set()
         through: Dict[str, datetime] = {}
@@ -427,10 +442,12 @@ class About:
         for line in text.split("\n"):
             if line.startswith("Accounts: ") and line.endswith("."):
                 named = line[len("Accounts: "):-1]
+                said_accounts = True
                 every = named == "every account"
                 users = () if every else tuple(n.strip() for n in named.split(","))
             elif line.startswith("From IP address: ") and line.endswith("."):
                 named = line[len("From IP address: "):-1]
+                said_address = True
                 ip = "" if named == "any" else named
             elif (over := re.match(r"Over the (?:last )?(\d{1,6}) (hours|days)", line)):
                 hours = span(over.group(1), over.group(2))
@@ -449,7 +466,7 @@ class About:
                 if (read_to := _ABOUT_THROUGH.search(rest)) and (when := parse_time(read_to.group(1))):
                     capped.add(name)
                     through[name] = when
-        return cls(users, every, ip, hours, windows, frozenset(capped), through, at)
+        return cls(users, every, ip, hours, windows, frozenset(capped), through, at, said_accounts and said_address)
 
 
 def _application_order(application: str) -> int:
@@ -469,7 +486,10 @@ def pull_of_export(export: Any) -> Optional[Pull]:
             if rows is None:
                 return None
             left -= len(rows)
-            logs.append(Log.read(application, rows, note.windows.get(application, note.hours), application in note.capped, note.through.get(application)))
+            # Chrome's and the admin log's reads for accounts go newest first, each account to its own cap: they can't say. Nor can an about.txt that doesn't say whose and from where.
+            per_account = application in ("chrome", "admin") and bool(note.users)
+            scope = note.users if note.says_whose and not note.ip and not per_account else None
+            logs.append(Log.read(application, rows, note.windows.get(application, note.hours), application in note.capped, note.through.get(application), scope=scope))
         logs.sort(key=lambda log: _application_order(log.application))
         held = Pull(Query(tuple(log.application for log in logs), note.users, note.hours, note.ip), logs, ended=True, at=note.at, from_evidence=True)
         held.work_out_addresses()
@@ -505,8 +525,10 @@ def merged(pulls: Sequence[Pull]) -> Pull:
         covered = {a.lower() for p in whole for a in p.query.users}.union(*(log.covered for log in read))
         every_read = any(not p.query.users for p in whole)
         stopped = bool(short) and not every_read and not all(p.query.users and {a.lower() for a in p.query.users} <= covered for p in short)
-        throughs = [log.through for log in read if log.capped and log.through]
-        logs.append(Log.read(application, newest_first(kept), max(log.hours for log in read), stopped, max(throughs) if stopped and throughs else None, covered if stopped else ()))
+        # Read through the latest of the widest reads: a later read of just some accounts says nothing of the rest.
+        widest = [log.through for p in short if not p.query.users and (log := p.log(application)) and log.through]
+        throughs = widest or [log.through for log in read if log.capped and log.through]
+        logs.append(Log.read(application, newest_first(kept), max(log.hours for log in read), stopped, max(throughs) if stopped and throughs else None, covered if stopped else (), whole=[w for log in read for w in log.whole]))
     every_account = any(not p.query.users for p in pulls)
     users: List[str] = []
     if not every_account:
@@ -559,7 +581,7 @@ class Filter:
         if log.rows is None:
             return log
         kept = [r for r in log.rows if self.keeps(r)]
-        return Log.read(log.application, kept, log.hours, log.capped, log.through, log.covered) if kept or log.capped else None
+        return Log.read(log.application, kept, log.hours, log.capped, log.through, log.covered, whole=log.whole) if kept or log.capped else None
 
     @property
     def words(self) -> str:

@@ -67,6 +67,8 @@ def _pick_for(st) -> str:
 async def page(request: Request, person: str = "", fix: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     reopen_remembered(st)
+    if st.incident_groups is not None:      # opening the screen again tries the group reads that failed
+        st.incident_groups.forget_failures()
     person = person.strip()
     held = st.incident_check
     # From a person's page: their check, read now unless it's the one on screen.
