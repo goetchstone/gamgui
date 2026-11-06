@@ -123,6 +123,7 @@ class AppState:
     incident_done: dict = field(default_factory=dict)   # the switched steps the last run finished, by the person: only theirs
     incident_pull: object = None       # the last pull of the logs, on this connector
     incident_pull_job: str = ""
+    incident_reading: object = None    # (the pull it read, the reader's findings): worked out once a pull
     incident_progress: dict = field(default_factory=dict)   # each log of the pull going on
     phishing_found: object = None      # the last Find, on this connector
     phishing_job_id: str = ""          # the last Find's job (guards a second domain-wide search)
@@ -169,6 +170,7 @@ class AppState:
         self.incident_done = {}
         self.incident_pull = None
         self.incident_pull_job = ""
+        self.incident_reading = None
         self.incident_progress = {}
         self.phishing_found = None
         self.phishing_job_id = ""

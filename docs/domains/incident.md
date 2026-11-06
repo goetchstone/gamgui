@@ -40,8 +40,19 @@ past fixes as a checklist when porting a slice.
 - **A log that wasn't read is said, never an empty CSV** that would pass as no events. Export All's `about.txt` says the window, the accounts, the address and how far each log read.
 - **Not kept on disk yet:** a pull is held in memory until a kept incident saves it (E4).
 
+## The log reader
+`core/incident/reader.py`, ported from SwiftGamGui's `Assist/LogReading.swift` with its tests. Code finds and code recommends; a draft only names a person or a Message-ID for a screen to open.
+- **A suspect address is one Google called suspicious, or the one you pulled by**, never one only because many accounts used it. A person's own failed challenge is flagged too, and makes no suspect. Past ten accounts signing in from one, it's set aside as likely shared: securing everyone behind an office's address would lock the office out.
+- **Google's mark isn't always the attacker**: a sign-in proved with a passkey is the person, unless the account added a passkey in these logs first, and a re-sign-in from an address they use unmarked is theirs.
+- **Google's own warnings have no actor**: the account is `affected_email_address` (failure log 2026-10-22). Where there is an actor, that parameter names someone else.
+- **Every Gmail event is `delivery`**, and `event_info.mail_event_type` says what happened. Only 1 and 35 are sends: the rest, from the attacker's address, are the person's own mail the attacker read, and pulling it would take real mail from everyone (failure log 2026-10-23).
+- **A device action counts only once `EXECUTED`**: a guessed `SUCCESS` matched nothing Google sends, so a computer an admin blocked stayed on the list (failure log 2026-10-22).
+- **The lock is read in time order**: a reset and a sign-out since the attacker's first event, by an admin not from a suspect address nor through an account the attacker held, or by Google. A suspension later undone isn't one. A sign-in from a suspect address after a lock starts it over.
+- **Linear in the events**: each account's rules read only its own events and the admin's done to it (`_Accounts`), and Who it reached is two passes over the Gmail events. Run off the event loop, once a pull. 200,000 events read in under a second.
+- **A difference from Swift:** Python compares strings by code point, so the two forms of an accented address count apart. A warning to one doesn't show the other warned, which over-warns, the safe side.
+
 ## Not in this slice
-The log reader, a kept incident, where each account stands, who it reached, devices and scripts, and the report: back-port plan E2-E8.
+ a kept incident, where each account stands, who it reached, devices and scripts, and the report: back-port plan E2-E8.
 
 ## Testing / live-verification status
 Offline only here. In SwiftGamGui the lock steps (reset, sign-out, forwarding off, IMAP and POP off, clear recovery) are confirmed live. Deleting filters, send-as addresses and drafts, and the scheduled-send clean-up, are not, in either app: check them on a throwaway account before relying on them, and whether Gmail's API honours `in:scheduled` and that a delete stops the send.

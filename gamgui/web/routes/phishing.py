@@ -49,10 +49,10 @@ def _found_context(st) -> dict:
 
 
 @router.get("", response_class=HTMLResponse)
-async def page(request: Request) -> HTMLResponse:
+async def page(request: Request, message: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     return TEMPLATES.TemplateResponse(request, "phishing.html", {
-        "connected": st.connector is not None, "most": phishing.MOST_AT_ONCE, "job": st.jobs.get(st.phishing_job_id), **_found_context(st)})
+        "connected": st.connector is not None, "most": phishing.MOST_AT_ONCE, "message": message, "job": st.jobs.get(st.phishing_job_id), **_found_context(st)})
 
 
 async def _search_one(conn, message: MessageId) -> phishing.EmailSearch:

@@ -504,6 +504,26 @@ def test_read_the_rest_of_a_log_that_was_whole_is_refused(client, state):
     assert "nothing left to read" in client.post("/incident/logs/rest", data={"application": "login"}).text
 
 
+def test_read_the_logs_says_where_each_account_stands(client, state, gam_calls):
+    _pull(client, state, "login", "token", "gmail", "admin", "mobile", "chrome", "useraccounts", accounts="", ip="")
+    before = len(gam_calls())
+    page = unescape(client.get("/incident/logs/reading").text)
+    assert "Where each account stands" in page and "Still to do" in page and "What the logs show" in page and ATTACKER in page
+    assert "/incident?person=" in page and "/phishing?message=" in page
+    assert all(a[0] != "update" and "doit" not in a for a in gam_calls()[before:]), "reading changes nothing"
+    first = state.incident_reading
+    client.get("/incident/logs/reading")
+    assert state.incident_reading is first, "worked out once a pull"
+
+
+def test_read_the_logs_before_a_pull_says_so(client):
+    assert "pull the logs first" in client.get("/incident/logs/reading").text
+
+
+def test_a_finding_opens_phishing_with_its_message_id(client):
+    assert "CAPh1sh+Notice=0001@mail.example.com</textarea>" in client.get("/phishing?message=CAPh1sh%2BNotice%3D0001%40mail.example.com").text
+
+
 def test_the_pull_goes_with_the_connection(client, state):
     _pull(client, state)
     state.activate(state.connector)

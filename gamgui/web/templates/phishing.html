@@ -17,7 +17,7 @@
   </div>
   <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3" hx-post="/phishing/find" hx-target="#phishing-find" hx-swap="innerHTML" hx-disabled-elt="find button">
     <label class="block"><span class="text-sm text-brand-blueink">Message-ID (in Gmail, More › Show original), or up to {{ most }}, one a line</span>
-      <textarea name="messages" rows="3" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink font-mono"></textarea></label>
+      <textarea name="messages" rows="3" class="mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink font-mono">{{ message }}</textarea></label>
     <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Find copies</button>
   </form>
   <div id="phishing-find">{% include "_phishing_find.html" %}</div>

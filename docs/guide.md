@@ -236,8 +236,9 @@ that list says which and how to add it, and the others still read. Not yet verif
 1. Open **Incident**, then **Pull the logs**. Enter the people reported, or leave it empty for every account, and how far back to read.
 2. Leave the logs ticked, or open **Other logs** for more, and click **Pull logs**. It reads in the background and changes nothing, and each log says how far it has got.
 3. Open a log to see its newest events. Google's own warnings are marked. The sign-in log's addresses are listed flagged first: follow one to pull every account by it.
-4. A busy log read a day at a time may stop before the end of the window. It says how far it read, and **Read the Rest** goes on from there.
-5. Each log has a CSV, and **Export all** saves them with a note of what was pulled. A log that couldn't be read says why, and is never exported as empty.
+4. Click **Read the logs** for what they add up to: where each account stands, what's still to do, and what the logs show, most serious first. Rules in code find it, and nothing here changes anything: each link opens the screen that does it, with its own preview.
+5. A busy log read a day at a time may stop before the end of the window. It says how far it read, and **Read the Rest** goes on from there.
+6. Each log has a CSV, and **Export all** saves them with a note of what was pulled. A log that couldn't be read says why, and is never exported as empty.
 
 ## Secure a compromised account
 1. Open **Incident**, enter the address, and click **Check account**, or open a person's **Security** tab and follow **Secure this account**. It

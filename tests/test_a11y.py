@@ -344,6 +344,15 @@ def _screens(p: Page, st):
     p.settle("document.querySelector('#incident-typed')")
     yield "incident/confirm"
 
+    p.goto("/incident/logs")
+    p.fill("textarea[name=accounts]", "carol@example.com")
+    p.click("button", "Pull logs")
+    p.settle("/Read the logs/.test(document.querySelector('#incident-logs')?.innerText ?? '')", timeout=45)
+    yield "incident/logs"
+    p.click("#incident-logs button", "Read the logs")
+    p.settle("/Read from [0-9]+ event/.test(document.querySelector('#incident-reading')?.innerText ?? '')")
+    yield "incident/reading"
+
     p.goto("/phishing")
     p.fill("textarea[name=messages]", "CAPh1sh+Notice=0001@mail.example.com")
     p.click("button", "Find copies")
@@ -475,7 +484,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
 RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/signatures", "/calendars",
-             "/builder", "/onboard", "/lifecycle", "/incident", "/phishing", "/reports", "/audit", "/setup")
+             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/phishing", "/reports", "/audit", "/setup")
 
 
 @pytest.mark.a11y
