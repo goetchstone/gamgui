@@ -18,7 +18,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.gam.commands import is_one_address
-from ...core.incident import logs, pull, reads
+from ...core.incident import logs, pull, reader, reads
 from ...core.incident.logs import report_time
 from ..csvutil import csv_safe
 from ..jobs import start_job
@@ -170,6 +170,47 @@ async def read_the_rest(request: Request, application: Annotated[str, Form()] = 
     st.incident_pull_job = job.id
     job.task = asyncio.create_task(_read_rest(job, st, conn, held, application, log.through))
     return TEMPLATES.TemplateResponse(request, _PANEL, _context(st, job))
+
+
+def _when(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+async def _context_for(st, held: pull.Pull) -> reader.Context:
+    """What the pull says that its events don't. The directory, when it can be read: until it is, a group can't be told from a person."""
+    people = {}
+    try:
+        for user in await st.users(stale_ok=True):
+            people[user.primary_email.lower()] = user.primary_email.lower()
+            people.update({alias.lower(): user.primary_email.lower() for alias in user.aliases})
+    except Exception:  # noqa: BLE001 - said on the to-do list: read the directory to finish
+        people = {}
+    capped = {}
+    for log in held.logs:
+        dates = [r.date for r in log.rows or [] if r.date]
+        if log.capped and not log.through and dates:    # read newest first to its cap: its oldest event is as far back as it got
+            capped[log.application] = min(dates)
+        elif log.capped and log.through:
+            capped[log.application] = log.through
+    return reader.Context(pulled_by=held.query.ip, read={log.application for log in held.logs if log.rows is not None}, capped=capped,
+                          domains={d.lower() for d in await st.tenant_domains()}, people=people or None)
+
+
+@router.get("/reading", response_class=HTMLResponse)
+async def reading(request: Request) -> HTMLResponse:
+    """The reader's findings, worked out once a pull and off the event loop: it's linear in the events, and a whole pull holds hundreds of thousands."""
+    st = request.app.state.gamgui
+    held = st.incident_pull
+    if held is None or not held.ended:
+        return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {"reading": None})
+    context = await _context_for(st, held)
+    key = (held.run, id(held.logs))
+    if st.incident_reading is None or st.incident_reading[0] != key:
+        def read_pull() -> reader.Reading:
+            return reader.read([reader.event_from_row(r) for log in held.logs for r in log.rows or []], context)
+
+        st.incident_reading = (key, await asyncio.to_thread(read_pull))
+    return TEMPLATES.TemplateResponse(request, "_incident_reading.html", {"reading": st.incident_reading[1], "when": _when})
 
 
 def _csv_text(rows: List[List[str]]) -> str:

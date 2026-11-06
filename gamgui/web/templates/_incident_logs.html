@@ -18,7 +18,10 @@
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3"{% if job %} data-announce="{{ job.id }}"{% endif %}>
   <div class="flex flex-wrap items-center gap-3">
     <p class="text-sm text-brand-black">{{ pull.logs | length }} log{{ "" if pull.logs | length == 1 else "s" }}, {% if pull.query.users %}{{ pull.query.users | join(", ") }}{% else %}every account{% endif %}{% if pull.query.ip %}, from {{ pull.query.ip }}{% endif %}.</p>
-    {% if pull.ended %}<a download href="/incident/logs/export.zip" class="text-sm text-brand-blueink underline">Export all</a>{% endif %}
+    {% if pull.ended %}
+    <button type="button" hx-get="/incident/logs/reading" hx-target="#incident-reading" hx-swap="innerHTML" class="inline-flex items-center rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Read the logs</button>
+    <a download href="/incident/logs/export.zip" class="text-sm text-brand-blueink underline">Export all</a>
+    {% endif %}
   </div>
   {% if pull.addresses %}<p class="text-sm text-brand-blueink">Addresses in the sign-in log, the flagged ones first. Pull every account by one:
     {% for ip in pull.addresses[:10] %}<a href="/incident/logs?ip={{ ip | urlencode }}" class="underline">{{ ip }}</a>{{ ", " if not loop.last }}{% endfor %}</p>{% endif %}

@@ -1,0 +1,67 @@
+{#- What the logs show, worked out by the reader. Code finds and code recommends: nothing here changes anything, and each draft only opens a screen with its own read, preview and
+    confirmation. Addresses, subjects, URLs and app names came from the logs, which an attacker writes, so everything is only ever autoescaped text. -#}
+{% macro draft_link(d) -%}
+{%- if d.kind == "secureAccount" or d.kind == "undo" -%}<a href="/incident?person={{ d.account | urlencode }}" class="underline">{{ d.title }}</a>
+{%- elif d.kind == "pullEmail" -%}<a href="/phishing?message={{ d.message_id | urlencode }}" class="underline">{{ d.title }}</a>
+{%- endif -%}
+{%- endmacro %}
+{% if reading is none %}
+<p class="text-sm text-brand-blueink">Nothing to read yet: pull the logs first.</p>
+{% else %}
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-5">
+  <p tabindex="-1" data-focus class="text-sm text-brand-blueink">Read from {{ reading.events }} event{{ "" if reading.events == 1 else "s" }}. Rules in code found this: it changes nothing.</p>
+
+  {% if reading.statuses %}
+  <section>
+    <h2 class="text-sm font-medium text-brand-black">Where each account stands</h2>
+    <ul class="mt-2 space-y-2 text-sm">
+      {% for s in reading.statuses %}
+      <li>
+        <p><span class="font-medium {{ 'text-amber-800' if s.state in ('stillIn', 'notLocked') else 'text-brand-black' }}">{{ s.account }}</span>: {{ s.words(when) }}</p>
+        {% if s.timeline %}
+        <details class="mt-1"><summary class="cursor-pointer text-xs text-brand-blueink">What happened to it ({{ s.timeline | length }})</summary>
+          <ul class="mt-1 space-y-0.5 text-xs text-brand-black">
+            {% for m in s.timeline %}<li><span class="text-brand-grayink">{{ when(m.at) }}{% if m.until %} to {{ when(m.until) }}{% endif %}</span> {{ m.words }}</li>{% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if reading.to_do %}
+  <section>
+    <h2 class="text-sm font-medium text-brand-black">Still to do</h2>
+    <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-brand-black">
+      {% for t in reading.to_do %}
+      <li class="break-words">{{ t.words }}{% for d in t.drafts %} {{ draft_link(d) }}{% endfor %}{% if t.sweeps %} <a href="/incident/logs?ip={{ t.sweeps | urlencode }}" class="underline">Pull every account from {{ t.sweeps }}</a>{% endif %}{% if t.pulls_again %} <a href="/incident/logs?accounts={{ t.accounts | join(',') | urlencode }}" class="underline">Pull again</a>{% endif %}</li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+
+  {% if reading.done %}
+  <section>
+    <h2 class="text-sm font-medium text-brand-black">Done</h2>
+    <ul class="mt-2 space-y-1 text-sm text-brand-black">
+      {% for t in reading.done %}<li class="break-words">{{ t.words }} <span class="text-xs text-brand-grayink">{{ when(t.done.at) }}{% if t.done.by %}, by {{ t.done.by }}{% endif %}</span></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if reading.findings %}
+  <section>
+    <h2 class="text-sm font-medium text-brand-black">What the logs show</h2>
+    <ul class="mt-2 space-y-1.5 text-sm text-brand-black">
+      {% for f in reading.findings %}
+      <li class="break-words">{{ f.words }} <span class="text-xs text-brand-grayink">{{ f.events }} event{{ "" if f.events == 1 else "s" }}</span>{% for d in f.drafts %} <span class="text-xs">{{ draft_link(d) }}</span>{% endfor %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% else %}
+  <p class="text-sm text-brand-black">Nothing here is suspect: no sign-in Google called suspicious, and no address you pulled by. That says nothing about a log that wasn't read.</p>
+  {% endif %}
+</div>
+{% endif %}
