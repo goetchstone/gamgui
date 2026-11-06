@@ -1,0 +1,4 @@
+User,id,from,subject,forward,archive,label,JSON
+carol@example.com,ANe1Bmj001,from billing@vendor.example,,forward carol.home@example.org,,,"{""id"": ""ANe1Bmj001"", ""criteria"": {""from"": ""billing@vendor.example""}, ""action"": {""forward"": ""carol.home@example.org""}}"
+carol@example.com,ANe1Bmj002,from news@example.org,,,,label Label_7,"{""id"": ""ANe1Bmj002"", ""criteria"": {""from"": ""news@example.org""}, ""action"": {""addLabelIds"": [""Label_7""]}}"
+carol@example.com,ANe1Bmj003,,subject invoice,forward accounts@example.com,archive,,"{""id"": ""ANe1Bmj003"", ""criteria"": {""subject"": ""invoice""}, ""action"": {""forward"": ""accounts@example.com"", ""removeLabelIds"": [""INBOX""]}}"

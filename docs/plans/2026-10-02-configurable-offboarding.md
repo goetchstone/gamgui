@@ -78,6 +78,9 @@ Users → Print filelist for the leaver's Drive) and export to a Sheet or CSV.
 
 ### P2 — A few more common steps, off by default, in the same list
 
+**Mostly applied by the SwiftGamGui back-port (its C3):** GAL off, clear recovery, IMAP and POP off, handing over secondary
+calendars and removing filters that forward. `core/lifecycle.py`, `ADDABLE_STEPS`.
+
 One PR each: GAL off; `deprovision popimap` as part of revoke; clear recovery email and phone (only
 after a live test shows GAM 7.48.14 accepts an empty value; the mock rejects it until then); remove
 admin roles (read in the preview, one argv per assignment); groups (promote a new owner, then remove

@@ -7,7 +7,8 @@ import pytest
 import shlex
 
 from gamgui.core.gam.commands import GAMCommands
-from gamgui.core.lifecycle import (DEFAULT_MESSAGE, DEFAULT_SUBJECT, STEP_NAMES, autoreply_html, autoreply_text,
+from gamgui.core import lifecycle
+from gamgui.core.lifecycle import (DEFAULT_MESSAGE, DEFAULT_SUBJECT, autoreply_html, autoreply_text,
                                    build_offboard_steps, command_line, run_offboard)
 
 from .helpers import gam_writes
@@ -491,7 +492,7 @@ async def test_offboard_failed_sign_out_is_a_failed_step_that_stops_nothing(conn
     # new sign-ins, and a missing security scope must not strand the mailbox without its delegate).
     job = await _offboard(connector, "SIGNOUTFAIL-leaver@example.com")
     assert job.failed_items == ["Revoke access & sign out"] and job.skipped == []
-    assert job.applied == len(STEP_NAMES) - 1
+    assert job.applied == len(lifecycle.ROUTINE) - 1
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
     assert line.startswith("✗ Revoke access & sign out — ") and "Sign Out Failed" in line
     audit = [(e["action"], e["ok"]) for e in connector.audit.tail()]

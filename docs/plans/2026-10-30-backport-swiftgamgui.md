@@ -197,6 +197,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
   This closes most of `2026-10-02-configurable-offboarding.md` P2 (GAL off, `popimap`, recovery); mark it
   there. Check that eight steps plus the added ones reach the guard's typed `confirm` (≥10 targets with a
   destructive step), as Swift's `offboarding.md`, "Typed confirm", found.
+
+  **Applied:** `lifecycle.ADDABLE_STEPS`, with the secondary-calendar and Vault-hold warnings. Offline only here.
 - **C4. Typed address for a destructive step.** GamGUI already asks for the exact address on every account
   delete (`core/guard.py`), and for the word or the count on a large destructive change. Swift also asks for
   it on its other destructive single-person changes. Extend the guard's rule to the incident lock (E1) when E1
@@ -311,4 +313,6 @@ README's Status, including what is only in which app; a "Live verification statu
 - **B4** — applied (`feat/person-security-reads`: Chrome profiles, phones and computers, offline only).
 - **C1** — applied (`feat/temporary-password`: offline only, the live check on a throwaway user owed).
 - **C2** — applied (`feat/signature-phone`: offline only, setting argv-identical to Swift's live run).
-- C3–C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.
+- **C3** — applied (`feat/offboarding-added-steps`: offline only, four steps argv-identical to Swift's live runs).
+- **C4** — the typed address on the incident lock lands with E1; a long offboarding's typed word landed with C3.
+- C5, D1–D3, E1–E8, F — approved 2026-11-05 (G1), not started.

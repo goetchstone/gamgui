@@ -93,6 +93,15 @@ _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Exampl
 # Every other builder with a str parameter: addresses, calendar/event ids, scopes, aliases, dates.
 IDENTIFIERS = (
     Spec("set_password", ("email", "password")),
+    Spec("clear_recovery", ("email",)),
+    Spec("hide_from_directory", ("email",)),
+    Spec("imap_off", ("email",)),
+    Spec("pop_off", ("email",)),
+    Spec("print_owned_calendars", ("email",)),
+    Spec("print_filters", ("email",)),
+    Spec("print_vault_holds", ("email",)),
+    Spec("transfer_calendar_ownership", ("new_owner",), (), {"calendar_ids": st.just(["c_x@group.calendar.google.com"])}),
+    Spec("delete_filters", ("email",), (), {"filter_ids": st.just(["F1", "F2"])}),
     Spec("update_phones", ("email",), (), {"phones": st.just([commands.Phone("work", "", "+1 555 0100", True)])}),
     Spec("print_chrome_profiles", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_mobile_devices", (), (), {"user": _SEARCH_ADDRESS}),

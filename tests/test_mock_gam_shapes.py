@@ -34,6 +34,8 @@ HEADERS = {
     "print_chrome_profiles": "name,profileId,JSON",
     "print_mobile_devices": "resourceId,JSON",
     "print_devices": "name,JSON",
+    "print_owned_calendars": "primaryEmail,calendarId,JSON",
+    "print_filters": "User,id,from,subject,forward,archive,label,JSON",
     "print_calendar_acls": "primaryEmail,calendarId,JSON",
     "print_calendar_acls_cal": "calendarId,JSON",
     "print_events": "calendarId,id,JSON",

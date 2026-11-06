@@ -14,7 +14,7 @@ import shlex
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, Awaitable, Callable, Dict, FrozenSet, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Awaitable, Callable, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .audit import redact_argv
 from .bulk import stop_requested
@@ -63,6 +63,36 @@ REQUIRES: Dict[str, Tuple[str, ...]] = {
     "transfer": ("password", "delegate"),
     "calacls": ("password",),
     "reminder": ("password", "delegate", "transfer"),
+    # The added steps need the reset, and gate nothing.
+    "clear_recovery": ("password",),
+    "forwarding_filters": ("password",),
+    "imap_off": ("password",),
+    "pop_off": ("password",),
+    "secondary_calendars": ("password",),
+    "hide_from_directory": ("password",),
+}
+# The routine every offboarding runs. The steps below it run only when added.
+ROUTINE: Tuple[str, ...] = ("password", "revoke", "forward", "delegate", "vacation", "transfer", "calacls", "reminder")
+# Steps an operator may add, off by default, in run order. With none added the routine is the eight, byte for byte.
+ADDABLE_STEPS: Tuple[str, ...] = ("clear_recovery", "forwarding_filters", "imap_off", "pop_off", "secondary_calendars",
+                                  "hide_from_directory")
+RUN_ORDER: Tuple[str, ...] = ("password", "clear_recovery", "revoke", "forward", "forwarding_filters", "imap_off", "pop_off",
+                              "delegate", "vacation", "transfer", "secondary_calendars", "calacls", "reminder",
+                              "hide_from_directory")
+# What each is for, said beside its switch.
+ADDED_NOTES = {
+    "clear_recovery": "So “Forgot password?” can't send a code to their own phone or address and undo the reset. The old "
+                      "values aren't kept.",
+    "forwarding_filters": "Deletes each Gmail filter that forwards their mail: turning forwarding off doesn't stop those. The "
+                          "whole filter goes, with its other actions.",
+    "imap_off": "Belt and braces: the reset and the sign-out already cut off the mail apps they had. With IMAP off, none can "
+                "download their mail over IMAP.",
+    "pop_off": "Belt and braces, as IMAP: no mail app can download their mail over POP. Mail already downloaded stays where it "
+               "is; nothing in Gmail is deleted.",
+    "secondary_calendars": "Makes the manager the owner of each secondary calendar they own: Google deletes those with the "
+                           "account, and the transfer doesn't move them. GAM looks each one up as you, so one not shared with "
+                           "you fails and says so, and the rest still go.",
+    "hide_from_directory": "Colleagues stop being offered their address; mail to it still arrives. Google can take up to a day.",
 }
 # The steps an operator may leave out of an offboarding ("doesn't apply"): the hand-over, the sweep and
 # the reminder, for an org that doesn't delegate a leaver's mailbox, set an auto-reply or move their data
@@ -99,7 +129,10 @@ def effective_requires(key: str, not_applicable: FrozenSet[str] = frozenset()) -
 # The steps as the form's "already done" boxes name them (a re-run skips a ticked step).
 STEP_NAMES = {"password": "Reset password", "revoke": "Revoke access & sign out", "forward": "Turn off forwarding",
               "delegate": "Set delegate", "vacation": "Auto-reply", "transfer": "Transfer Drive & Calendar",
-              "calacls": "Remove from everyone's calendars", "reminder": "Manager reminder"}
+              "calacls": "Remove from everyone's calendars", "reminder": "Manager reminder",
+              "clear_recovery": "Clear recovery email & phone", "forwarding_filters": "Remove filters that forward",
+              "imap_off": "Turn off IMAP", "pop_off": "Turn off POP", "secondary_calendars": "Hand over secondary calendars",
+              "hide_from_directory": "Hide from the directory"}
 
 # GAM's own password generators (grammar <UserBasicAttribute>): keywords, not secrets, so shown as-is.
 _PASSWORD_KEYWORDS = frozenset({"random", "uniquerandom", "blocklogin", "prompt", "uniqueprompt"})
@@ -276,10 +309,85 @@ class OffboardStep:
         return [command_line(argv) for argv in self.commands]
 
 
+@dataclass(frozen=True)
+class OwnedCalendar:
+    id: str
+    label: str
+
+
+@dataclass(frozen=True)
+class ForwardingFilter:
+    id: str
+    forward: str     # where it sends the mail
+
+
+@dataclass(frozen=True)
+class VaultHold:
+    matter: str
+    hold: str
+    org_unit: str = ""   # the org unit it covers them through, "" for a hold on their account
+
+
+def owned_calendars_from(records: Iterable[Mapping[str, object]]) -> List[OwnedCalendar]:
+    return [OwnedCalendar(id=str(r.get("id") or ""), label=str(r.get("summary") or r.get("id") or ""))
+            for r in records if r.get("id")]
+
+
+def forwarding_filters_from(records: Iterable[Mapping[str, object]]) -> List[ForwardingFilter]:
+    """The filters that forward: `forward off` doesn't stop those."""
+    found = []
+    for r in records:
+        action = r.get("action")
+        forward = action.get("forward") if isinstance(action, dict) else None
+        if r.get("id") and forward:
+            found.append(ForwardingFilter(id=str(r["id"]), forward=str(forward)))
+    return found
+
+
+def vault_holds_from(records: Iterable[Mapping[str, object]]) -> List[VaultHold]:
+    return [VaultHold(matter=str(r.get("matterName") or ""), hold=str(r.get("name") or ""), org_unit=str(r.get("orgUnitPath") or ""))
+            for r in records]
+
+
+def _named(names: Sequence[str]) -> str:
+    return ", ".join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else "")
+
+
+def secondary_calendars_warning(user: str, owned: Sequence[OwnedCalendar]) -> str:
+    """The transfer doesn't move them, and Google deletes them with the account."""
+    if not owned:
+        return ""
+    one = len(owned) == 1
+    return (f"{user} owns {len(owned)} secondary calendar{'' if one else 's'}: {_named([f'“{c.label}”' for c in owned])}. The Drive "
+            f"& Calendar transfer doesn't move {'it' if one else 'them'}, and Google deletes {'it' if one else 'them'} with the "
+            f"account: add “{STEP_NAMES['secondary_calendars']}”, or hand {'it' if one else 'each'} over before the account is deleted.")
+
+
+def secondary_calendars_unread(user: str, reason: str, asked: bool = False) -> str:
+    return (f"Couldn't check whether {user} owns secondary calendars ({reason}), so {'none will be handed over' if asked else 'none is listed'}. "
+            f"Google deletes the secondary calendars a deleted account owns: check before the account is deleted.")
+
+
+def vault_holds_warning(user: str, holds: Sequence[VaultHold], transfer_runs: bool) -> str:
+    """Google says held data can't be transferred, and a held account can't be deleted."""
+    if not holds:
+        return ""
+    named = _named([f"“{h.hold}” in “{h.matter}”" + (f" (through the org unit {h.org_unit})" if h.org_unit else "") for h in holds])
+    held = "a Vault hold" if len(holds) == 1 else f"{len(holds)} Vault holds"
+    moved = ", so the Drive & Calendar transfer may move nothing" if transfer_runs else ""
+    return f"{user} is under {held}: {named}. Google doesn't transfer held data{moved}, and the account can't be deleted while it's held."
+
+
+def vault_holds_unread(user: str, reason: str, transfer_runs: bool) -> str:
+    transfer = "the Drive & Calendar transfer and " if transfer_runs else ""
+    return f"Couldn't check {user} for Vault holds ({reason}). A hold stops {transfer}the account's deletion: check in Google Vault."
+
+
 def build_offboard_steps(
     user: str, manager: str, subject: str, message: str, days: int, today: date,
     notify: str = "", employee_name: str = "", manager_contact: str = "",
-    not_applicable: FrozenSet[str] = frozenset(),
+    not_applicable: FrozenSet[str] = frozenset(), added: FrozenSet[str] = frozenset(),
+    calendars: Sequence[OwnedCalendar] = (), filters: Sequence[ForwardingFilter] = (),
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence).
 
@@ -291,6 +399,8 @@ def build_offboard_steps(
     ``employee_name`` / ``manager_contact`` are the directory-resolved display forms used only in the
     auto-reply TEXT; the raw ``manager`` email is still what the delegate/transfer/reminder steps act on.
     """
+    if not added <= set(ADDABLE_STEPS):
+        raise ValueError(f"only {', '.join(ADDABLE_STEPS)} can be added")
     if not not_applicable <= set(OPTIONAL_STEPS):
         raise ValueError(f"only {', '.join(OPTIONAL_STEPS)} can be left out; the reset, the sign-out and "
                          f"forwarding off always run")
@@ -354,6 +464,36 @@ def build_offboard_steps(
                      [GAMCommands.add_calendar_event(
                          manager, reminder_summary, start, end, description=reminder_desc, attendee=notify)]),
     ]
+    calendar_ids = [c.id for c in calendars]
+    filter_ids = [f.id for f in filters]
+    adding = {
+        "clear_recovery": lambda: OffboardStep(
+            "clear_recovery", STEP_NAMES["clear_recovery"],
+            f"Empty {user}'s recovery email and phone, so “Forgot password?” can't reach their own. The old values aren't kept",
+            lambda c: c.clear_recovery(user), [GAMCommands.clear_recovery(user)]),
+        "forwarding_filters": lambda: OffboardStep(
+            "forwarding_filters", STEP_NAMES["forwarding_filters"],
+            f"Delete {len(filters)} Gmail filter{'' if len(filters) == 1 else 's'} of {user}'s that forward mail, to "
+            f"{_named(sorted({f.forward for f in filters}))}. The whole filter goes, with its other actions",
+            lambda c: c.delete_filters(user, filter_ids), [GAMCommands.delete_filters(user, filter_ids)]),
+        "imap_off": lambda: OffboardStep(
+            "imap_off", STEP_NAMES["imap_off"], f"Turn off IMAP for {user}",
+            lambda c: c.imap_off(user), [GAMCommands.imap_off(user)]),
+        "pop_off": lambda: OffboardStep(
+            "pop_off", STEP_NAMES["pop_off"], f"Turn off POP for {user}. Nothing in Gmail is deleted",
+            lambda c: c.pop_off(user), [GAMCommands.pop_off(user)]),
+        "secondary_calendars": lambda: OffboardStep(
+            "secondary_calendars", STEP_NAMES["secondary_calendars"],
+            f"Make {manager} the owner of {_named([f'“{c.label}”' for c in calendars])}. A failure leaves the rest done",
+            lambda c: c.transfer_calendar_ownership(user, calendar_ids, manager),
+            [GAMCommands.transfer_calendar_ownership(calendar_ids, manager)]),
+        "hide_from_directory": lambda: OffboardStep(
+            "hide_from_directory", STEP_NAMES["hide_from_directory"],
+            f"Take {user} out of the Global Address List and autocomplete. Mail to them still arrives",
+            lambda c: c.hide_from_directory(user), [GAMCommands.hide_from_directory(user)]),
+    }
+    steps += [adding[key]() for key in ADDABLE_STEPS if key in added]
+    steps.sort(key=lambda step: RUN_ORDER.index(step.key))
     for step in steps:
         step.requires = effective_requires(step.key, not_applicable)
     return steps

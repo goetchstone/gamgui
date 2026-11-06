@@ -37,6 +37,7 @@ needs_grammar = pytest.mark.skipif(
 )
 
 SEARCH_ADDRESS = "person@example.com"
+VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -48,6 +49,8 @@ ENUM_ARGS = {
     ("search_messages", "detail"): GAMCommands.MESSAGE_DETAIL,
     ("create_datatransfer", "privacy"): ("", *GAMCommands.TRANSFER_PRIVACY),
     # filter_address refuses a placeholder: these go inside a search value, so they take a real address.
+    ("transfer_calendar_ownership", "calendar_ids"): (["c_x@group.calendar.google.com"],),
+    ("delete_filters", "filter_ids"): (["F1"],),
     ("update_phones", "phones"): ([], [Phone("work", "", "<value>", True)], [Phone("custom", "<name>", "<value>", False)],
                                   [Phone("", "", "<value>", False)]),
     ("print_chrome_profiles", "user"): (SEARCH_ADDRESS,),
@@ -61,8 +64,9 @@ ENTITY_PREFIXES = (("user", None), ("all", "users"), ("calendars", None), ("upda
 
 
 def _value(tok: str) -> bool:
-    # A `<param>` placeholder this test passed in, alone or joined into a list, or the address joined into a search.
-    return "<" in tok or SEARCH_ADDRESS in tok
+    # A `<param>` placeholder this test passed in, alone or joined into a list, the address joined into a search, or an
+    # ID a builder validates: a real one stands in for the placeholder it would refuse.
+    return "<" in tok or SEARCH_ADDRESS in tok or tok in VALIDATED_VALUES
 
 
 def builder_argvs():
@@ -157,6 +161,10 @@ def _command_words(argv) -> int:
 
 def _matches_grammar(argv) -> bool:
     _, _, heads, enums = _grammar()
+    # The reference says `calendars <CalendarEntity> transfer <UserItem>`, but GAM's own source and comment at the pin take
+    # `transfer ownership`, and anything else is an invalid choice: the source is the authority (back-port plan C3).
+    if len(argv) > 3 and argv[0] == "calendars" and argv[2:4] == ["transfer", "ownership"]:
+        argv = [*argv[:3], *argv[4:]]
     return any(_head_accepts(h, argv, enums) >= _command_words(argv) for h in heads)
 
 
@@ -232,7 +240,8 @@ def _shapes():
     slot given and omitted (curated catalog commands call the builders). {length: [(name, shape, pattern)]}"""
     from gamgui.core.catalog import load_catalog
 
-    shapes = [(name, [t.replace(SEARCH_ADDRESS, "<user>") for t in argv]) for name, argv in builder_argvs()]
+    shapes = [(name, ["<id>" if t in VALIDATED_VALUES else t.replace(SEARCH_ADDRESS, "<user>") for t in argv])
+              for name, argv in builder_argvs()]
     for c in load_catalog().commands:
         if c.buildable and c.id.startswith("raw."):
             optional = [s.key for s in c.slots if not s.required]

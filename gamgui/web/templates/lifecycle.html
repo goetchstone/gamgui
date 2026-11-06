@@ -50,10 +50,18 @@
       <span class="text-xs text-brand-grayink">A step left out is not run and never counts as done; the preview says what leaving it out means. The password reset, the sign-out and turning off forwarding always run.</span>
     </fieldset>
     <fieldset>
+      <legend class="text-sm text-brand-blueink">Add steps to this offboarding</legend>
+      <div class="mt-1 space-y-1">
+        {% for key in addable_steps %}
+        <label class="flex items-start gap-1.5 text-sm text-brand-blueink"><input class="mt-1" type="checkbox" name="add" value="{{ key }}" /> <span>{{ step_names[key] }} <span class="text-xs text-brand-grayink">{{ added_notes[key] }}</span></span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <fieldset>
       <legend class="text-sm text-brand-blueink">Re-running after a failure? Tick the steps that already succeeded</legend>
       <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-        {% for key, name in step_names.items() %}
-        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="done" value="{{ key }}" /> {{ name }}</label>
+        {% for key in routine %}
+        <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="done" value="{{ key }}" /> {{ step_names[key] }}</label>
         {% endfor %}
       </div>
       <span class="text-xs text-brand-grayink">A ticked step is not run and counts as done. Don't re-run one that succeeded: GAM refuses a delegate that already exists and a second transfer while the first is running, and the reminder would be added twice.</span>

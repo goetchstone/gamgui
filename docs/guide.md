@@ -138,6 +138,12 @@ the leaver's own calendar, which it visits too, and is expected on every run. If
 its line says why and later steps that depended on it were not run. Fix the cause, tick the steps
 that already succeeded, preview again and run — the checklist covers each failure.
 
+### Add steps to an offboarding
+
+Under **Add steps to this offboarding**, each is off unless you tick it, and each says what it's for. Every offboarding also
+reads the secondary calendars the leaver owns and any Vault holds on them, and warns: Google deletes those calendars with the
+account, the transfer doesn't move them, and a held account can't be deleted. Ten or more steps ask you to type `confirm`.
+
 ## Roll out a signature
 
 **Signatures** designs one HTML signature with variables such as `{name}` and `{title}`, previews it

@@ -106,6 +106,9 @@ class Phone:
     primary: bool = False
 
 
+_CALENDAR_ID = re.compile(r"[A-Za-z0-9._+\-]+@[A-Za-z0-9._+\-]*\.calendar\.google\.com", re.I)
+_FILTER_ID = re.compile(r"[A-Za-z0-9_\-]+")
+_LIST_SELECTORS = frozenset({"csvkmd", "csvsubkey", "csv", "csvfile", "file", "csvdata"})   # GAM's ENTITY_LIST_SELECTORS
 _FILTER_LOCAL = re.compile(r"[a-z0-9._'-]+")
 _FILTER_LABEL = re.compile(r"[a-z0-9-]+")
 
@@ -173,6 +176,64 @@ class GAMCommands:
     def report_users(date: str, params: Sequence[str]) -> List[str]:
         # Admin SDK usage report (storage, mail, drive). Data lags ~2-3 days.
         return ["report", "users", "date", date, "parameters", ",".join(params)]
+
+    @staticmethod
+    def clear_recovery(email: str) -> List[str]:
+        # Both recovery fields emptied, so "Forgot password?" can't reach the leaver's own phone or address. GAM sends an
+        # empty value as a cleared field. Shown and audited masked. SwiftGamGui's clearRecovery.
+        return ["update", "user", email, "recoveryemail", "", "recoveryphone", ""]
+
+    @staticmethod
+    def hide_from_directory(email: str) -> List[str]:
+        # Out of the Global Address List and autocomplete. Always the explicit `off`: GAM reads a bare `gal` as on.
+        return ["update", "user", email, "gal", "off"]
+
+    @staticmethod
+    def imap_off(email: str) -> List[str]:
+        # GAM sends its defaults with it (auto-expunge, archive, no folder limit), which matter only while IMAP is on.
+        return ["user", email, "imap", "off"]
+
+    @staticmethod
+    def pop_off(email: str) -> List[str]:
+        # GAM sends `leaveInInbox` with it, so no mail is moved or deleted.
+        return ["user", email, "pop", "off"]
+
+    @staticmethod
+    def print_owned_calendars(email: str) -> List[str]:
+        # The secondary calendars `email` owns, hidden ones too: GAM filters the person's own list, which leaves hidden
+        # entries out. The grammar has `ownedsecondary` and `showhidden` as alternatives, but GAM's source reads both.
+        # CSV `primaryEmail,calendarId,JSON`. SwiftGamGui's printOwnedSecondaryCalendars.
+        return ["user", email, "print", "calendars", "ownedsecondary", "showhidden", "fields", "id,summary", "formatjson"]
+
+    @staticmethod
+    def transfer_calendar_ownership(calendar_ids: Sequence[str], new_owner: str) -> List[str]:
+        # Each calendar's owner made `new_owner`, in one command: GAM goes through the list and a failure leaves the rest
+        # done. `transfer ownership`: the grammar's bare `transfer` lacks a word GAM's source requires. The list is one
+        # element GAM splits on commas and whitespace, so each ID is checked. Any other ID GAM takes as a user's calendar.
+        if not calendar_ids or not all(_CALENDAR_ID.fullmatch(c) for c in calendar_ids):
+            raise ValueError("each calendar to hand over is one calendar ID")
+        return ["calendars", ",".join(calendar_ids), "transfer", "ownership", new_owner]
+
+    @staticmethod
+    def print_filters(email: str) -> List[str]:
+        # The person's Gmail filters, each one's JSON with its `action.forward`. `labelidsonly` skips a label-name lookup.
+        return ["user", email, "print", "filters", "labelidsonly", "formatjson"]
+
+    @staticmethod
+    def delete_filters(email: str, filter_ids: Sequence[str]) -> List[str]:
+        # The filters deleted in one command: GAM goes through the list, a failure leaving the rest done. The list is one
+        # element split on commas, and must not be a list selector GAM reads a file from instead.
+        joined = ",".join(filter_ids)
+        if (not filter_ids or not all(_FILTER_ID.fullmatch(f) for f in filter_ids)
+                or joined.lower().replace("_", "").replace("-", "") in _LIST_SELECTORS):
+            raise ValueError("each filter to delete is one filter ID")
+        return ["user", email, "delete", "filters", joined]
+
+    @staticmethod
+    def print_vault_holds(email: str) -> List[str]:
+        # The open Vault matters' holds that cover `email`, directly or through an org unit above them. CSV only:
+        # `User,matterId,matterName,holdId,name,orgUnitId,orgUnitPath`.
+        return ["user", email, "print", "vaultholds"]
 
     @staticmethod
     def update_phones(email: str, phones: Sequence[Phone]) -> List[str]:
