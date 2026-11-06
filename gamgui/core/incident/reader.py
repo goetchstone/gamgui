@@ -75,11 +75,13 @@ class Whole:
 
 @dataclass(frozen=True)
 class NobodyHas:
-    """Phishing's Find showed no mailbox here has this email, every mailbox and its Spam searched: the usual end of pulling an email."""
+    """What Phishing's Find last showed of this email. Gone: no mailbox here has it, every mailbox and its Spam searched, the usual end of pulling an email. Not gone: a mailbox has it, or Find couldn't tell,
+    which takes back a run or a check from before."""
 
     message_id: str
     at: datetime
     by: str = ""
+    gone: bool = True
 
 
 @dataclass(frozen=True)
@@ -151,6 +153,7 @@ class Context:
     read: Optional[Set[str]] = None             # the logs it read, by name; None: not said. A lock is seen only where the admin log was read, by the accounts
     theirs: Set[str] = field(default_factory=set)       # the sign-ins the operator marked as the person's own (`key`)
     capped: Dict[str, datetime] = field(default_factory=dict)   # the logs that stopped at their cap, each with its oldest event read
+    covered: Dict[str, Set[str]] = field(default_factory=dict)  # of those, the accounts a later read holds whole past the cap, lowercased
     pulled: List[Pulled] = field(default_factory=list)
     nobody_has: List[NobodyHas] = field(default_factory=list)
     domains: Set[str] = field(default_factory=set)      # the tenant's domains, lowercased: an address at one is inside
@@ -1727,6 +1730,14 @@ def read(events: Sequence[Event], context: Optional[Context] = None) -> Reading:
         at = bare_message_id(check.message_id)
         if at not in checks or checks[at].at < check.at:
             checks[at] = check
+    # A delivery or a resend the log shows after the last look: what that look said is out of date.
+    newest_mail: Dict[str, datetime] = {}
+    for e in events:
+        raw = e.parameters.get("message_info.rfc2822_message_id") if e.log == "gmail" else None
+        if raw and e.time and _mail_type(e) in (1, 2, 6, 35):
+            bare = bare_message_id(raw)
+            if bare not in newest_mail or newest_mail[bare] < e.time:
+                newest_mail[bare] = e.time
     pulled_done: Set[str] = set()
     done_tasks: List[Tuple[str, str, Sequence[str], Done]] = []
     for message, theirs in messages.items():
@@ -1734,8 +1745,16 @@ def read(events: Sequence[Event], context: Optional[Context] = None) -> Reading:
         named = f"“{subject or '(no subject)'}” ({message})"
         sent_by = unique(e.who for e in theirs if is_account(e.who))
         last_run, last_check = runs.get(bare_message_id(message)), checks.get(bare_message_id(message))
+        newest = newest_mail.get(bare_message_id(message))
+        looked = max((a for a in (last_run.at if last_run else None, last_check.at if last_check else None) if a), default=None)
+        stale = looked is not None and newest is not None and newest > looked
+        check_is_latest = last_check is not None and (last_run is None or last_run.at <= last_check.at)
         todo = []
-        if last_check and (last_run is None or last_run.at <= last_check.at):
+        if stale:
+            todo = [("pullEmail", f"Pull {named} from every mailbox: it went out from the attacker's address. The log shows it after Phishing last looked, so find it again.", [pull_draft(message, subject)])]
+        elif last_check and check_is_latest and not last_check.gone:
+            todo = [("pullEmail", f"Pull {named} from every mailbox: it went out from the attacker's address. Phishing's Find last showed a mailbox with it, or couldn't search them all.", [pull_draft(message, subject)])]
+        elif last_check and check_is_latest:
             pulled_done.add(message)
             done_tasks.append(("pullEmail", f"Nobody here has {named}: Phishing's Find searched every mailbox and its Spam.", sent_by, Done("nobodyHasIt", last_check.at, last_check.by)))
         elif last_run and last_run.is_done:
@@ -1813,8 +1832,10 @@ def read(events: Sequence[Event], context: Optional[Context] = None) -> Reading:
     attack_times = [s.attacked_at for s in statuses if s.attacked_at]
     if attack_times:
         first_attack = min(attack_times)
-        short = sorted(log for log, oldest in context.capped.items() if oldest > first_attack)
-        everyone = [s.account for s in statuses]
+        accounts = [s.account for s in statuses]
+        # A read for just some accounts reaches further back for them alone: the log stays short for the rest, and the next pull is for those.
+        short = sorted(log for log, oldest in context.capped.items() if oldest > first_attack and any(a.lower() not in context.covered.get(log, ()) for a in accounts))
+        everyone = [a for a in accounts if any(a.lower() not in context.covered.get(log, ()) for log in short)]
         if short:
             coverage.append(("pullAgain", f"Pull the {list_words([log_name(s) for s in short])} {'log' if len(short) == 1 else 'logs'} again for just " + (list_words(everyone) if len(everyone) <= 20 else "the accounts above, 20 at a time")
                              + ": read for every account, " + ("it stops at its newest events and doesn't" if len(short) == 1 else "they stop at their newest events and don't") + " reach back to the attack.", everyone, [], None))

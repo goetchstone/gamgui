@@ -71,6 +71,8 @@ LOCAL_ONLY = {
     "/incident/check", "/incident/logs/pull", "/incident/logs/rest",   # reads only
     # A kept incident: a person's words and saved reads, on this Mac. Nothing reaches Google.
     "/incident/kept/new", "/incident/kept/open", "/incident/kept/close", "/incident/kept/details", "/incident/kept/note", "/incident/kept/import",
+    # The operator's word about what the logs show, on this Mac. And a read of the logs again.
+    "/incident/logs/theirs", "/incident/logs/unmark", "/incident/logs/tick", "/incident/logs/untick", "/incident/logs/again",
     "/phishing/find", "/phishing/recipients",      # two reads, and one: GAM's dry run changes nothing without doit
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
 }

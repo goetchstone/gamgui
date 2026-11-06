@@ -232,6 +232,11 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Respond to an incident
+1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.
+2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.
+3. **Done** lists what this app or the logs show finished. **Mark done** is for what no log can show: it asks how it was done, and stays with the incident. It isn't offered for a lock, recovery details or a read, which the logs or this app show.
+
 ## Keep an incident
 1. Open **Incident**, then **Keep an incident**. Give it a title and how it came to light, and click **Keep this incident**. It takes the pull you just made, if any, or an export you pick.
 2. While it's open, each pull of the logs is saved to it. Add notes with their own time, which can be earlier than now.

@@ -58,7 +58,7 @@ ENUM_ARGS = {
     ("transfer_calendar_ownership", "calendar_ids"): (["c_x@group.calendar.google.com"],),
     ("delete_send_as", "address"): ("send.as@example.com",),
     ("report_activity", "application"): GAMCommands.REPORT_APPLICATIONS,
-    ("report_activity", "users"): ((), (SEARCH_ADDRESS,)),
+    ("report_activity", "users"): ((), (SEARCH_ADDRESS,), (SEARCH_ADDRESS, SEARCH_ADDRESS)),
     ("report_activity", "hours"): (72,),
     ("report_activity", "start"): ("2026-10-19T00:00:00Z",),
     ("report_activity", "end"): ("2026-10-20T00:00:00Z",),
@@ -89,6 +89,11 @@ def _value(tok: str) -> bool:
     return "<" in tok or SEARCH_ADDRESS in tok or tok in VALIDATED_VALUES
 
 
+def _refused_on_purpose(name: str, args: dict) -> bool:
+    """A combination the builder raises on: it can never be sent, so it has no shape."""
+    return name == "report_activity" and args["application"] == "chrome" and len(args["users"]) > 1
+
+
 def builder_argvs():
     """Every argv each builder can emit: a `<param>` placeholder per value, both sides of each flag,
     each accepted enum, and each optional value both given and omitted."""
@@ -109,7 +114,8 @@ def builder_argvs():
                     vals.append(p.default)   # omitted: exercises the builder's default branch
             choices.append([(p.name, v) for v in vals])
         for combo in itertools.product(*choices):
-            yield name, fn(**dict(combo))
+            if not _refused_on_purpose(name, dict(combo)):
+                yield name, fn(**dict(combo))
 
 
 @functools.lru_cache(maxsize=None)

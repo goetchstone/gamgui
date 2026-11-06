@@ -115,15 +115,6 @@ class Tick:
 
 
 @dataclass(frozen=True)
-class Mark:
-    """"That was them": a sign-in the operator says was the person's own, shown in the report, never hidden, and undoable."""
-
-    account: str
-    address: str
-    note: str = ""
-
-
-@dataclass(frozen=True)
 class Review:
     """The post-incident review, as the operator writes it."""
 
@@ -155,7 +146,6 @@ class Record:
     review: Review = field(default_factory=Review)
     phish: Optional[str] = None     # the email the operator picked as where it started
     ticks: Tuple[Tick, ...] = ()
-    marks: Tuple[Mark, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -200,8 +190,6 @@ def valid(record: Record) -> Record:
         raise Problem(f"Say how it was done in 1 to {NOTE_LENGTH} characters.")
     if not all(1 <= len(t.kind) <= 40 and 1 <= len(t.words) <= REVIEW_LENGTH and len(t.basis) <= 40 and len(t.by) <= NAME_LENGTH for t in record.ticks):
         raise Problem(f"That item can't be kept as done: its words are longer than {REVIEW_LENGTH} characters.")
-    if len(record.marks) > NOTES_CAP or not all(1 <= len(m.account) <= 320 and 1 <= len(m.address) <= 64 and len(m.note) <= NOTE_LENGTH for m in record.marks):
-        raise Problem("That can't be kept as theirs.")
     return record
 
 
@@ -211,8 +199,7 @@ def _as_json(record: Record) -> Dict[str, Any]:
             "notes": [{"at": _iso(n.at), "text": n.text} for n in record.notes], "warnings": [{"email": w.email, "warning": w.warning} for w in record.warnings],
             "review": {"kind": r.kind, "severity": r.severity, "attendees": r.attendees, "cause": r.cause, "wentWell": r.went_well, "improve": r.improve, "plan": r.plan, "summary": r.summary,
                        "meeting": _iso(r.meeting) if r.meeting else None},
-            "phish": record.phish, "ticks": [{"kind": t.kind, "words": t.words, "basis": t.basis, "how": t.how, "at": _iso(t.at), "by": t.by} for t in record.ticks],
-            "marks": [{"account": m.account, "address": m.address, "note": m.note} for m in record.marks]}
+            "phish": record.phish, "ticks": [{"kind": t.kind, "words": t.words, "basis": t.basis, "how": t.how, "at": _iso(t.at), "by": t.by} for t in record.ticks]}
 
 
 def _from_json(data: Any, record_id: str) -> Optional[Record]:
@@ -227,7 +214,6 @@ def _from_json(data: Any, record_id: str) -> Optional[Record]:
         notes = tuple(Note(_must_be_time(n["at"]), str(n["text"])) for n in data.get("notes") or [])
         warnings = tuple(Warning(str(w["email"]), str(w["warning"])) for w in data.get("warnings") or [])
         ticks = tuple(Tick(str(t["kind"]), str(t["words"]), str(t["basis"]), str(t["how"]), _must_be_time(t["at"]), str(t["by"])) for t in data.get("ticks") or [])
-        marks = tuple(Mark(str(m["account"]), str(m["address"]), str(m.get("note") or "")) for m in data.get("marks") or [])
         kept = data.get("review") or {}
         meeting = _when(kept.get("meeting")) if kept.get("meeting") else None
         if kept.get("meeting") and meeting is None:
@@ -235,7 +221,7 @@ def _from_json(data: Any, record_id: str) -> Optional[Record]:
         review = Review(str(kept.get("kind") or ""), str(kept.get("severity") or ""), meeting, str(kept.get("attendees") or ""), str(kept.get("cause") or ""), str(kept.get("wentWell") or ""),
                         str(kept.get("improve") or ""), str(kept.get("plan") or ""), str(kept.get("summary") or ""))
         phish = data.get("phish")
-        return valid(Record(record_id, str(domain), str(title), opened, str(opened_by), str(reported), notes, warnings, review, phish if isinstance(phish, str) else None, ticks, marks))
+        return valid(Record(record_id, str(domain), str(title), opened, str(opened_by), str(reported), notes, warnings, review, phish if isinstance(phish, str) else None, ticks))
     except (KeyError, TypeError, AttributeError, ValueError, Problem):
         return None
 
@@ -700,4 +686,4 @@ def export_of(about: str, logs: Sequence[Tuple[str, str]], name: str) -> Export:
     return check_export(name, files)
 
 
-__all__ = ["CAP", "EXPORTS_CAP", "Export", "IncidentStore", "Mark", "Note", "Problem", "Record", "Review", "Tick", "Warning", "check_export", "export_of", "is_id", "read_zip", "valid"]
+__all__ = ["CAP", "EXPORTS_CAP", "Export", "IncidentStore", "Note", "Problem", "Record", "Review", "Tick", "Warning", "check_export", "export_of", "is_id", "read_zip", "valid"]

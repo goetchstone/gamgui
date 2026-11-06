@@ -125,6 +125,11 @@ class AppState:
     incident_saved: list = field(default_factory=list)              # each saved read's name
     incident_saved_unreadable: list = field(default_factory=list)   # and those that couldn't be read
     incident_swept: set = field(default_factory=set)   # the addresses a saved read of every account was made from
+    incident_known: object = None      # the sign-ins marked as theirs (lazy: routes/_common.known_sign_ins)
+    incident_known_problem: str = ""
+    incident_nobody: object = None     # what Find showed nobody here has (lazy: routes/_common.nobody_has_checks)
+    incident_nobody_problem: str = ""
+    incident_pick: object = None       # Do It Here: (the person, the one fix to pick) until their check is shown or another is asked for
     incident_check: object = None      # the last Check Account, on this connector
     incident_check_job: str = ""       # its job, which guards a second check
     incident_run_job: str = ""         # the last Secure run's job, which guards a check during it
@@ -178,6 +183,7 @@ class AppState:
         self.incident_saved = []
         self.incident_saved_unreadable = []
         self.incident_swept = set()
+        self.incident_pick = None
         self.incident_check = None     # read with the connector being replaced
         self.incident_check_job = ""
         self.incident_run_job = ""

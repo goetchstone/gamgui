@@ -23,7 +23,8 @@ from ...core.onboarding import looks_like_email
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, error_partial
+from .incident_kept import reopen_remembered
+from ._common import open_incident_record, NOT_CONNECTED, error_partial
 
 router = APIRouter(prefix="/incident")
 
@@ -47,7 +48,7 @@ def _on_incident(request: Request) -> bool:
 
 
 def _context(st, job=None, on_screen: bool = True) -> dict:
-    return {"job": job, "check": st.incident_check, "shown": _SHOWN, "switchable": secure.SWITCHABLE, "on_by_default": secure.ON_BY_DEFAULT,
+    return {"job": job, "check": st.incident_check, "shown": _SHOWN, "pick": _pick_for(st), "switchable": secure.SWITCHABLE, "on_by_default": secure.ON_BY_DEFAULT,
             "notes": secure.NOTES, "names": lifecycle.STEP_NAMES, "on_screen": on_screen, "draft_cap": DRAFT_CAP, "scheduled_cap": SCHEDULED_CAP}
 
 
@@ -56,15 +57,26 @@ def _running(st, job_id: str):
     return job if job is not None and not job.finished else None
 
 
+def _pick_for(st) -> str:
+    """The one fix Do It Here asked for, for the check on screen only: a check of anyone else leaves it unpicked."""
+    held, pick = st.incident_check, st.incident_pick
+    return pick[1] if held is not None and pick and pick[0] in (held.asked.lower(), held.account.primary_email.lower()) else ""
+
+
 @router.get("", response_class=HTMLResponse)
-async def page(request: Request, person: str = "") -> HTMLResponse:
+async def page(request: Request, person: str = "", fix: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
+    reopen_remembered(st)
     person = person.strip()
     held = st.incident_check
     # From a person's page: their check, read now unless it's the one on screen.
     start = bool(person) and not (held is not None and person.lower() in (held.asked.lower(), held.account.primary_email.lower()))
+    # Do It Here: this one fix picked and the lock left off, the lock being a to-do item of its own. Anything else asked for drops it.
+    pick = fix if person and fix in secure.SWITCHABLE and not _running(st, st.incident_run_job) else ""
+    st.incident_pick = (person.lower(), pick) if pick and not start else None
     return TEMPLATES.TemplateResponse(request, "incident.html", {
-        "connected": st.connector is not None, "person": person, "start": start,
+        "connected": st.connector is not None, "person": person, "start": start, "check_pick": pick if start else "", "here": "/incident", "open_incident": open_incident_record(st),
+        "has_pull": (st.incident_pull is not None and st.incident_pull.ended) or _running(st, st.incident_open_job) is not None,
         **_context(st, _running(st, st.incident_check_job))})
 
 
@@ -86,8 +98,10 @@ async def _read(job, st, conn, person: str) -> None:
 
 
 @router.post("/check", response_class=HTMLResponse)
-async def check_account(request: Request, person: Annotated[str, Form()] = "", after_run: Annotated[str, Form()] = "") -> HTMLResponse:
+async def check_account(request: Request, person: Annotated[str, Form()] = "", after_run: Annotated[str, Form()] = "", pick: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
+    # A check by hand, another person's, or a run going on drops it: the screen's own form posts no pick.
+    st.incident_pick = (person.strip().lower(), pick) if pick in secure.SWITCHABLE and person.strip() and not _running(st, st.incident_run_job) else None
     conn = st.connector
     if conn is None:
         return error_partial(request, NOT_CONNECTED)

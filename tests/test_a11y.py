@@ -352,6 +352,9 @@ def _screens(p: Page, st):
     p.click("#incident-logs button", "Read the logs")
     p.settle("/Read from [0-9]+ event/.test(document.querySelector('#incident-reading')?.innerText ?? '')")
     yield "incident/reading"
+    p.goto("/incident")
+    p.settle("/Still to do/.test(document.querySelector('#incident-reading')?.innerText ?? '')")
+    yield "incident/respond"
 
     p.goto("/incident/kept")
     yield "incident/kept"
