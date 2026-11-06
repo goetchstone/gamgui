@@ -13,7 +13,7 @@
   <div>
     <p class="eyebrow text-brand-blue">Incident</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Secure a compromised account</h1>
-    <p class="text-brand-blueink mt-1 text-sm">Check what an attacker commonly changes, which changes nothing. Then pick what to undo, and run the lock and your picks from one preview. To take the email they sent out of every mailbox, use <a href="/phishing" class="underline">Phishing</a>.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Check what an attacker commonly changes, which changes nothing. Then pick what to undo, and run the lock and your picks from one preview. Not sure who's affected? <a href="/incident/logs" class="underline">Pull the logs</a>. To take the email they sent out of every mailbox, use <a href="/phishing" class="underline">Phishing</a>.</p>
   </div>
   <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3" hx-post="/incident/check" hx-target="#incident-check" hx-swap="innerHTML" hx-disabled-elt="find button"{% if start %} hx-trigger="load, submit"{% endif %}>
     <label class="block"><span class="text-sm text-brand-blueink">The account that was taken over</span>

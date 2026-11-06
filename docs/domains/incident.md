@@ -28,8 +28,20 @@ past fixes as a checklist when porting a slice.
 - **"Already done" belongs to one person**: after a run, what finished is switched off in the next check of that person alone (`incident_done`, added to by each run, so a second run's check doesn't switch the reset back on). Those ticks once carried to the next person typed in SwiftGamGui, whose plan then skipped the reset and the sign-out.
 - **The auto-reply's text is the attacker's**, as are subjects and filter words: autoescaped, and `Vacation.from_show_text` reads settings only above `Message:`.
 
+## The logs
+- **Each log is read whole, oldest first** (`pull.complete`). One read of the window first: most come back short of the cap. One at the cap is read a day at a time from the window's start, each day read back from its end until it's whole, an event read twice kept once. Bounded: 100 reads a day, 200 a log. Past either, a read that fails, or a day still at its cap, it stops at that day's start and says how far it read, with Read the Rest. The attack is the oldest part, and the newest is the easiest to read again.
+- **The Chrome and admin logs' reads for accounts** are low volume and read newest first, both ways at once: Chrome by the profile's account and by GAM's device match, the admin log by what was done to the account and what it did. One read failing fails the log in GAM's words, never a part passed as the whole.
+- **A window is fixed once, as times**, when the pull starts: GAM's `-72h` counts from each read and rounds to the minute, and a Gmail log queued behind others would drift past 30 days. Not for the Chrome and admin logs' reads for accounts, which use `-Nh` and `now`. Gmail reads at most 30 days, and the screen says so. Read the Rest on Gmail ends 30 days past where it stopped: moving the start up instead would skip the stretch between and claim the log whole (a fix SwiftGamGui still needs).
+- **A row whose address wasn't asked counts toward each account asked**, for whether a read reached its cap: an old name, or no `actor.email`, could be any of theirs. Otherwise 999 + 1 read as whole at a cap of 1000. An extra read, never a missed one (also still to fix in SwiftGamGui).
+- **A log stopped before anything of it stood isn't exported** as an empty file, and a part-read one is named `-partial`.
+- **A pull by address reads the Devices log's registrations for the accounts asked**: that log records no address, so filtering would drop it whole.
+- **One address that isn't a user fails the whole log in GAM**, so the route checks the accounts against the directory first.
+- **Parsing runs off the event loop** (`asyncio.to_thread` in `GAMConnector.activity`), and a report's columns are worked out once, not per row (`_Columns`): a pull is up to hundreds of reads of a thousand events each.
+- **A log that wasn't read is said, never an empty CSV** that would pass as no events. Export All's `about.txt` says the window, the accounts, the address and how far each log read.
+- **Not kept on disk yet:** a pull is held in memory until a kept incident saves it (E4).
+
 ## Not in this slice
-Logs, the log reader, a kept incident, where each account stands, who it reached, devices and scripts, and the report: back-port plan E2-E8.
+The log reader, a kept incident, where each account stands, who it reached, devices and scripts, and the report: back-port plan E2-E8.
 
 ## Testing / live-verification status
 Offline only here. In SwiftGamGui the lock steps (reset, sign-out, forwarding off, IMAP and POP off, clear recovery) are confirmed live. Deleting filters, send-as addresses and drafts, and the scheduled-send clean-up, are not, in either app: check them on a throwaway account before relying on them, and whether Gmail's API honours `in:scheduled` and that a delete stops the send.

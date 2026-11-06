@@ -232,6 +232,13 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Pull the incident logs
+1. Open **Incident**, then **Pull the logs**. Enter the people reported, or leave it empty for every account, and how far back to read.
+2. Leave the logs ticked, or open **Other logs** for more, and click **Pull logs**. It reads in the background and changes nothing, and each log says how far it has got.
+3. Open a log to see its newest events. Google's own warnings are marked. The sign-in log's addresses are listed flagged first: follow one to pull every account by it.
+4. A busy log read a day at a time may stop before the end of the window. It says how far it read, and **Read the Rest** goes on from there.
+5. Each log has a CSV, and **Export all** saves them with a note of what was pulled. A log that couldn't be read says why, and is never exported as empty.
+
 ## Secure a compromised account
 1. Open **Incident**, enter the address, and click **Check account**, or open a person's **Security** tab and follow **Secure this account**. It
    reads forwarding, filters, delegates, send-as addresses, the auto-reply, drafts and scheduled emails, recovery details and admin roles, and

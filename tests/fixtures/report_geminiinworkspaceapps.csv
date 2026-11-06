@@ -1,0 +1,3 @@
+name,action,actor.agentAttributionInfo.agentId,actor.agentAttributionInfo.agentName,actor.agentAttributionInfo.agentOwner.email,actor.agentAttributionInfo.agentType,actor.callerType,actor.email,actor.profileId,app_name,id.applicationName,id.customerId,id.time,id.uniqueQualifier,ipAddress,isAgenticAction,type
+feature_utilization,conversation,,,,,USER,carol@example.com,1003,gmail,geminiinworkspaceapps,C0demo,2026-10-19T14:24:00Z,-72001,198.51.100.23,,ai_usage_event
+feature_utilization,summarize,agent-77,Inbox Helper,dana@example.com,WORKSPACE_FLOW,USER,dana@example.com,1004,gmail,geminiinworkspaceapps,C0demo,2026-10-18T15:00:00Z,-72002,203.0.113.11,True,ai_usage_event

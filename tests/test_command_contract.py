@@ -37,7 +37,8 @@ needs_grammar = pytest.mark.skipif(
 )
 
 SEARCH_ADDRESS = "person@example.com"
-VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled"}
+VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled",
+                    "2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "198.51.100.23", "1000", "DEVICE_REGISTER_UNREGISTER_EVENT"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -56,6 +57,16 @@ ENUM_ARGS = {
     ("trash_messages", "ids"): (["F1"],),
     ("transfer_calendar_ownership", "calendar_ids"): (["c_x@group.calendar.google.com"],),
     ("delete_send_as", "address"): ("send.as@example.com",),
+    ("report_activity", "application"): GAMCommands.REPORT_APPLICATIONS,
+    ("report_activity", "users"): ((), (SEARCH_ADDRESS,)),
+    ("report_activity", "hours"): (72,),
+    ("report_activity", "start"): ("2026-10-19T00:00:00Z",),
+    ("report_activity", "end"): ("2026-10-20T00:00:00Z",),
+    ("report_activity", "ip"): ("", "198.51.100.23"),
+    ("report_activity", "events"): ((), ("DEVICE_REGISTER_UNREGISTER_EVENT",)),
+    ("report_activity", "max_activities"): (1000,),
+    ("report_activity", "chrome"): ("profile", "device"),
+    ("report_activity", "admin"): ("actor", "affected"),
     ("delete_messages", "ids"): (["M1"],),
     ("list_drafts", "most"): (5000,),
     ("search_scheduled", "most"): (500,),
@@ -122,7 +133,7 @@ def _grammar():
     def choices(n, seen=()):
         out, seen = set(), (*seen, n)
         for item in "|".join(rhs.get(n, ())).split("|"):
-            if re.fullmatch(r"[\w-]+", item):
+            if re.fullmatch(r"[\w+-]+", item):     # `google+`, among the activity logs
                 out.add(item)
             elif not (re.fullmatch(r"<[^<>]+>", item) and item not in seen and (sub := choices(item, seen))):
                 return None

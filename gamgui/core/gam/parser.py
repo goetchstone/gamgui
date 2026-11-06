@@ -48,8 +48,9 @@ def _field_limit_at_least(size: int) -> Iterator[None]:
                 csv.field_size_limit(_limit_base)
 
 
-def parse_records(stdout: str) -> List[Dict[str, Any]]:
-    """Parse GAM stdout into a list of record dicts. Never raises on shape; returns ``[]`` if empty."""
+def parse_records(stdout: str, json_column: bool = True) -> List[Dict[str, Any]]:
+    """Parse GAM stdout into a list of record dicts. Never raises on shape; returns ``[]`` if empty. ``json_column`` off is for a read
+    with no `formatjson`, whose columns are the data: a parameter named `JSON` is then one like any other."""
     text = (stdout or "").strip()
     if not text:
         return []
@@ -77,7 +78,7 @@ def parse_records(stdout: str) -> List[Dict[str, Any]]:
             return records
 
     # 3) CSV (possibly with an embedded JSON column).
-    return _parse_csv(text)
+    return _parse_csv(text, json_column)
 
 
 def parse_one(stdout: str) -> Dict[str, Any]:
@@ -104,7 +105,7 @@ def _coerce_to_records(val: Any) -> List[Dict[str, Any]]:
     return []
 
 
-def _parse_csv(text: str) -> List[Dict[str, Any]]:
+def _parse_csv(text: str, json_column: bool = True) -> List[Dict[str, Any]]:
     # newline="": the csv module does its own line handling, so a bare CR inside a cell is data, not an
     # error. And a cell may be as long as the output itself (a formatjson record, a long signature):
     # the module's 131,072-character limit is raised while this read lasts (_field_limit_at_least).
@@ -121,7 +122,7 @@ def _parse_csv(text: str) -> List[Dict[str, Any]]:
     # (often alongside a plain key column, e.g. `primaryEmail,JSON`). When present, that column
     # is the source of truth — parse it.
     fieldnames = [f for f in (reader.fieldnames or []) if f is not None]
-    if _JSON_COLUMN in fieldnames:
+    if json_column and _JSON_COLUMN in fieldnames:
         out: List[Dict[str, Any]] = []
         for row in rows:
             parsed = _try_json(row.get(_JSON_COLUMN) or "")

@@ -1,0 +1,3 @@
+name,actor.callerType,actor.email,actor.profileId,application_name,id.applicationName,id.customerId,id.time,id.uniqueQualifier,initiated_by,ipAddress,type
+login_success,USER,carol@example.com,1003,Payroll Portal,saml,C0demo,2026-10-19T14:16:20Z,-68001,idp,198.51.100.23,login
+login_success,USER,alice@example.com,1001,Payroll Portal,saml,C0demo,2026-10-18T16:02:00Z,-68002,idp,203.0.113.50,login

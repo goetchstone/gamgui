@@ -1,0 +1,6 @@
+name,APP_ID,USER_EMAIL,actor.callerType,actor.email,actor.profileId,id.applicationName,id.customerId,id.time,id.uniqueQualifier,ipAddress,type
+RESET_SIGNIN_COOKIES,,carol@example.com,USER,alice@example.com,1001,admin,C0demo,2026-10-19T15:05:20Z,-66001,203.0.113.50,USER_SETTINGS
+REVOKE_3LO_TOKEN,123456-abc.apps.googleusercontent.com,carol@example.com,USER,alice@example.com,1001,admin,C0demo,2026-10-19T15:05:15Z,-66002,203.0.113.50,USER_SETTINGS
+DELETE_2SV_SCRATCH_CODES,,carol@example.com,USER,alice@example.com,1001,admin,C0demo,2026-10-19T15:05:10Z,-66003,203.0.113.50,USER_SETTINGS
+CHANGE_PASSWORD,,carol@example.com,USER,alice@example.com,1001,admin,C0demo,2026-10-19T15:05:00Z,-66004,203.0.113.50,USER_SETTINGS
+CHANGE_PASSWORD,,bob@example.com,USER,alice@example.com,1001,admin,C0demo,2026-10-12T10:00:00Z,-66005,203.0.113.50,USER_SETTINGS
