@@ -453,7 +453,7 @@ def test_do_it_here_links_to_that_one_fix():
         return unescape(TEMPLATES.env.get_template("_incident_reading.html").render(reading=reading, part="respond", when=str, store_problems=[], marks=[], shows_query=str))
 
     assert "/incident?person=carol%40example.com&fix=clear_recovery" in link(reader.Draft("undo", account=CAROL, pick="clearRecovery"))
-    assert "Do It Here" not in link(reader.Draft("undo", account=CAROL, pick="computer")), "it would open the whole lock ticked, the opposite of what it says"
+    assert "fix=computer" in link(reader.Draft("undo", account=CAROL, pick="computer"))
     assert "/incident?person=carol%40example.com" in link(reader.secure_draft(CAROL))
 
 
@@ -670,7 +670,7 @@ def test_do_it_here_s_pick_never_reaches_the_form_a_person_checks_with(client, s
     page = client.get(f"/incident?person={CAROL}&fix=clear_recovery").text
     form = re.search(r'<form[^>]*hx-post="([^"]*)"', page[page.index('name="person"') - 400:]).group(1)
     assert form == "/incident/check"
-    assert 'hx-post="/incident/check?pick=clear_recovery"' in page and 'hx-trigger="load"' in page
+    assert 'hx-post="/incident/check?pick=clear_recovery' in page and 'hx-trigger="load"' in page
     page = _check(client, state, query="?pick=clear_recovery")
     assert _checked(page) == {"clear_recovery"} and "The rest of the lock is off" in page
     page = _check(client, state, person="alice@example.com", query=form[len("/incident/check"):])

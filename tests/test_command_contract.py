@@ -37,7 +37,8 @@ needs_grammar = pytest.mark.skipif(
 )
 
 SEARCH_ADDRESS = "person@example.com"
-VALIDATED_VALUES = {"c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled",
+DEVICE_USER = "devices/D1/deviceUsers/U1"
+VALIDATED_VALUES = {DEVICE_USER, "c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled",
                     "2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "198.51.100.23", "1000", "DEVICE_REGISTER_UNREGISTER_EVENT"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
@@ -76,6 +77,10 @@ ENUM_ARGS = {
     ("print_chrome_profiles", "user"): (SEARCH_ADDRESS,),
     ("print_mobile_devices", "user"): (SEARCH_ADDRESS,),
     ("print_devices", "user"): (SEARCH_ADDRESS,),
+    ("print_script_projects", "user"): (SEARCH_ADDRESS,),
+    ("print_user_tokens", "user"): (SEARCH_ADDRESS,),
+    ("block_device_user", "name"): (DEVICE_USER,),
+    ("delete_device_user", "name"): (DEVICE_USER,),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}

@@ -131,7 +131,8 @@ class AppState:
     incident_nobody_problem: str = ""
     incident_groups: object = None     # the members of the groups an email reached, on this connector (core/incident/groups.py)
     incident_groups_job: str = ""
-    incident_pick: object = None       # Do It Here: (the person, the one fix to pick) until their check is shown or another is asked for
+    incident_pick: object = None       # Do It Here: (the person, the one fix to pick, the computer's ID, when it registered) until another check is asked for
+    incident_lock_ran: bool = True     # the last run held the lock's reset or sign-out
     incident_check: object = None      # the last Check Account, on this connector
     incident_check_job: str = ""       # its job, which guards a second check
     incident_run_job: str = ""         # the last Secure run's job, which guards a check during it

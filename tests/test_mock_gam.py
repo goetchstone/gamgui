@@ -19,6 +19,8 @@ DWD = [scope for scope, _ in DWD_SCOPES]
 
 # Every write builder the app calls, with the options it can emit.
 WRITES = {
+    "block_device_user": [C.block_device_user("devices/0vmcarol01/deviceUsers/u1")],
+    "delete_device_user": [C.delete_device_user("devices/0vmcarol01/deviceUsers/u1")],
     "create_user": [C.create_user("new@example.com", "New", "Hire", "Temp-Pa55w0rd", org_unit="/Staff",
                                   notify="alice@example.com"),
                     C.create_user("new@example.com", "New", "Hire", "Temp-Pa55w0rd", change_password=False)],
@@ -98,6 +100,8 @@ READS = {
     "print_filelist": [C.print_filelist("alice@example.com", "name contains 'x'")],
     "report_users": [C.report_users("2026-06-16", ["accounts:used_quota_in_mb"])],
     "print_tokens": [C.print_tokens()],
+    "print_user_tokens": [C.print_user_tokens("carol@example.com")],
+    "print_script_projects": [C.print_script_projects("carol@example.com")],
     "print_owned_calendars": [C.print_owned_calendars("carol@example.com")],
     "print_filters": [C.print_filters("carol@example.com")],
     "print_forward": [C.print_forward("carol@example.com")],

@@ -86,6 +86,8 @@ CHANGE_WORDS = {
     "subscribe_calendar": "Add a calendar to their list",
     "delete_filters": "Remove filters that forward",
     "delete_messages": "Delete drafts or scheduled emails",
+    "block_device_user": "Block a computer",
+    "delete_device_user": "Take an account off a computer",
     "delete_send_as": "Remove a send-as address",
     "hide_from_directory": "Hide from the directory",
     "imap_off": "Turn off IMAP",

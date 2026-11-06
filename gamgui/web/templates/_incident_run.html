@@ -16,7 +16,7 @@
   {% if revoke_label in job.failed_items or revoke_label in job.skipped %}
   <p class="mt-3 text-xs"><strong>The attacker may still be signed in</strong>: “{{ revoke_label }}” didn't run to completion. Fix what it reports and run it again.</p>
   {% endif %}
-  <p class="mt-3 text-xs">{% if recheck %}The account is being checked again below, and what finished is switched off, so you can preview the rest. {% endif %}When it's secure, give {{ user }} a new password from their page, and <a href="/phishing" class="underline">take what they were sent out of every mailbox</a>.</p>
+  <p class="mt-3 text-xs">{% if recheck %}The account is being checked again below, and what finished is switched off, so you can preview the rest. {% endif %}{% if not lock_ran %}The lock wasn't part of this run: Respond's to-do says if it's still to do. {% endif %}When it's secure, give {{ user }} a new password from their page, and <a href="/phishing" class="underline">take what they were sent out of every mailbox</a>.</p>
 </div>
 {% if recheck %}<div hx-post="/incident/check" hx-vals='{"person": {{ user | tojson }}, "after_run": "1"}' hx-trigger="load" hx-target="#incident-check" hx-swap="innerHTML"></div>{% endif %}
 {% endif %}

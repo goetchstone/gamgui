@@ -875,6 +875,59 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "cros" ]; then
   exit 0
 fi
 
+# `<user> print filelist showmimetype gscript fields <DriveFieldNameList> formatjson` -> GAM's CSV, `Owner`, `id`, `name` and a
+# `JSON` column per file (printFileList, gam/__init__.py:61056-61700 at 7.48.30; the compromised-account check's Apps Script
+# projects): the projects in mock_gam/script_projects.tsv the user owns (an owner, a tab, the file as GAM's JSON prints it),
+# exit 0. GAM puts the MIME type into Drive's query beside its default `'me' in owners`, so only the user's own files of that
+# type, the bin's included (no excludetrashed). printFileList exits 60 whenever it printed no row (`if not csvPF.rows:
+# setSysExitRC(NO_ENTITIES_FOUND_RC)`), overwriting each failure's own code: none is "Got 0 Drive Files/Folders … for <u>…"
+# (written once files.list returned) and the titles alone; a refused token is its warning before any listing ("User: <u>, User
+# Print Failed: …"); Drive off is GAM_MOCK_STATE/nodrive/<user>, the listing begun and then userDriveServiceNotEnabledWarning;
+# GAM_MOCK_STATE/quiet/<user> a refresh error handleOAuthTokenError drops without a word (REFRESH_PERM_ERRORS); all 60. Only
+# this form: that MIME type, the app's fields (GAM fetches only those named; any other isn't modelled), formatjson; any other
+# option is refused as not modelled, and any other `print filelist` falls to the refusal below. Header order approximate.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ] \
+   && [ "$(printf '%s' "${5:-}" | tr '[:upper:]' '[:lower:]' | tr -d '_')" = showmimetype ]; then
+  user=$2; shift 4; mime=""; fields=""; fj=""
+  while [ $# -gt 0 ]; do
+    word=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '_')
+    case "$word" in
+      showmimetype) need_value $# "MimeTypeList"; mime=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]'); shift 2 ;;
+      fields) need_value $# "DriveFieldNameList"; fields=$2; shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) not_modelled "print filelist with $1" ;;
+    esac
+  done
+  [ "$mime" = gscript ] || not_modelled "print filelist other than the Apps Script projects (showmimetype gscript)"
+  [ -n "$fj" ] || not_modelled "print filelist without formatjson"
+  for field in $(printf '%s' "$fields" | tr ',' ' '); do
+    case "$field" in id|name|createdtime|modifiedtime|trashed|lastmodifyinguser) ;; *) not_modelled "print filelist field $field" ;; esac
+  done
+  for field in id name createdtime modifiedtime trashed lastmodifyinguser; do
+    case ",$fields," in *",$field,"*) ;; *) not_modelled "print filelist without field $field (the fixture holds it; GAM fetches only the fields named)" ;; esac
+  done
+  none="Owner,id,name,owners.emailAddress,JSON"
+  if ! known_user "$user"; then
+    printf 'User: %s, User Print Failed: invalid_grant: Invalid email or User ID\n' "$user" 1>&2; echo "$none"; exit 60
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then echo "$none"; exit 60; fi
+  query="'me' in owners and (mimeType = 'application/vnd.google-apps.script')"
+  printf 'Getting all Drive Files/Folders that match query (%s) for %s\n' "$query" "$user" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nodrive/$user" ]; then
+    printf 'User: %s, Drive Service/App not enabled\n' "$user" 1>&2; echo "$none"; exit 60
+  fi
+  owned=$(awk -F '\t' -v who="$user" '$1 == who { print substr($0, length($1) + 2) }' "$GAM_MOCK_FIXTURES/script_projects.tsv")
+  n=$(printf '%s' "$owned" | grep -c . || true)
+  if [ "$n" -eq 1 ]; then noun="Drive File/Folder"; else noun="Drive Files/Folders"; fi
+  printf '\rGot %s %s that matched query (%s) for %s...\r\n' "$n" "$noun" "$query" "$user" 1>&2
+  if [ "$n" -eq 0 ]; then echo "$none"; exit 60; fi
+  echo "Owner,id,name,JSON"
+  printf '%s\n' "$owned" | while IFS= read -r record; do
+    gam_row "$user" "$(json_text id "$record")" "$(json_text name "$record")" "$record"
+  done
+  exit 0
+fi
+
 # `gam user <email> print filelist [query <String>] fields <DriveFieldNameList> formatjson` -> GAM's CSV, `Owner`, `id`,
 # `name`, the flattened owners, and a `JSON` column per file (printFileList; Builder: Find Drive files). `owners` in the
 # JSON is Drive's list of objects. printFileList exits 60 when it printed no row; a refused token is its warning first.
@@ -2011,6 +2064,30 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
   exit 0
 fi
 
+# `gam user <u> print tokens` -> GAM's CSV (_printShowTokens), the grants in tokens.csv of that account; an account with none writes the
+# header and no row. An address that isn't a user is entityUnknownWarning: "User: <u>, Does not exist", 56; outside the domain "Service
+# not applicable", 73. GAM_MOCK_STATE/denied/tokens is ClientAPIAccessDeniedExit, 12. No option is modelled.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && { [ "${4:-}" = "tokens" ] || [ "${4:-}" = "token" ]; }; then
+  owner=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+  [ $# -eq 4 ] || not_modelled "print tokens with $5"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/tokens" ]; then
+    printf '\nERROR: Not Authorized to access this resource/api\n\nERROR: Reauthentication is needed, please run\n\ngam oauth create\n' 1>&2
+    exit 12
+  fi
+  head -n 1 "$GAM_MOCK_FIXTURES/tokens.csv"
+  if ! in_directory "$owner"; then
+    case "$owner" in
+      *@example.com) printf 'User: %s, Does not exist\n' "$owner" 1>&2; exit 56 ;;
+      *) printf 'User: %s, Service not applicable\n' "$owner" 1>&2; exit 73 ;;
+    esac
+  fi
+  printf 'Getting Access Tokens for %s\n' "$owner" 1>&2
+  tail -n +2 "$GAM_MOCK_FIXTURES/tokens.csv" | while IFS= read -r line; do
+    if [ "${line%%,*}" = "$owner" ]; then printf '%s\n' "$line"; fi
+  done
+  exit 0
+fi
+
 # `gam print tokens` -> GAM's CSV (_printShowTokens, gam/__init__.py:74077 at 7.50.00): tokens.csv's grants for every
 # account but the suspended ones (the default entity, ENTITY_ALL_USERS_NS), a row per grant, the scopes space-joined
 # (csv_output_field_delimiter's default). Each account gets its "Getting Access Tokens for" line on stderr, grants or
@@ -2147,6 +2224,54 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "mobile" ]; then
   exit 0
 fi
 
+# `gam block|delete deviceuser devices/<id>/deviceUsers/<id>` (doBlockCIDeviceUser, doDeleteCIDeviceUser:
+# _performCIDeviceUserAction, gam/__init__.py:32740-32790 at 7.48.30; the compromised-account plan's computer step): one
+# device user by its name, which GAM takes without `doit` (getCIDeviceUserEntity, DEVICE_USERNAME_PATTERN); a name not of
+# that form is invalidArgumentExit, exit 2. The service first, as `print devices` and before any argument (denied 12, a dead
+# key 12, noscope 73: buildGAPICIDeviceServiceObject before getString in getCIDeviceUserEntity). A device user in
+# mock_gam/ci_devices.json: "Device User: <name>, Blocked" (or "Deleted"), then the operation GAM shows, done; kept in
+# GAM_MOCK_STATE/deviceusers, so `print devices` shows it blocked, or the person gone from it. One deleted already, or not
+# in the fixture: the API's notFound, entityUnknownWarning, "Device User: <name>, Does not exist", exit 56.
+# GAM_MOCK_STATE/refused/deviceusers: the API's failedPrecondition, entityActionFailedWarning, exit 50 (Google's words
+# approximate). Not modelled: `doit`, a `query:`, the other actions (approve, wipe, cancelwipe), an operation not done at once.
+if { [ "${1:-}" = "block" ] || [ "${1:-}" = "delete" ]; } && [ "${2:-}" = "deviceuser" ]; then
+  verb=$1
+  denied='ERROR: API access Denied\nPlease make sure the Service Account Client ID: 1 is authorized for the appropriate API or scopes: Cloud Identity API - Devices\n\nRun: gam user admin@example.com update serviceaccount\n'
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/devices" ]; then printf "\n$denied" 1>&2; exit 12; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/badkey/devices" ]; then
+    printf "\nERROR: Authentication Token Error - invalid_grant: Invalid JWT Signature\n\n$denied" 1>&2; exit 12
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/noscope/devices" ]; then
+    printf 'User: admin@example.com, Cloud Identity API - Devices Service/App not enabled\n' 1>&2; exit 73
+  fi
+  # buildGAPICIDeviceServiceObject: `if not ci: sys.exit(GM.Globals[GM.SYSEXITRC])`, and handleOAuthTokenError drops a REFRESH_PERM_ERRORS refusal without a word or a code: exit 0, nothing printed.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/devices" ]; then exit 0; fi
+  [ $# -ge 3 ] || missing_arg "DeviceUserEntity"
+  [ $# -eq 3 ] || not_modelled "$verb deviceuser with $4"
+  name=$3
+  case "$name" in [Qq][Uu][Ee][Rr][Yy]:*|id|name) not_modelled "$verb deviceuser $name" ;; esac
+  printf '%s' "$name" | grep -Eq '^(devices/.+)/(deviceUsers/.+)$' || invalid_arg "Expected <devices/<String>/deviceUsers/<String>>"
+  sfile="${GAM_MOCK_STATE:-/nonexistent}/deviceusers/$(printf '%s' "$name" | tr '/' '_')"
+  if ! grep -qF "\"name\": \"$name\"" "$GAM_MOCK_FIXTURES/ci_devices.json" || [ "$(cat "$sfile" 2>/dev/null)" = DELETED ]; then
+    does_not_exist "Device User" "$name"
+  fi
+  case "$verb" in block) done_word=Blocked; failed_word="Block Failed" ;; *) done_word=Deleted; failed_word="Delete Failed" ;; esac
+  # Google's operation not done yet: entityActionPerformedMessage, Msg.ACTION_IN_PROGRESS, exit 0 (_performCIDeviceUserAction). It isn't done, whatever the word before it says.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/queued/deviceusers" ]; then
+    printf 'Device User: %s, %s, Action %s in progress\n  done: False\n' "$name" "$done_word" "$verb"
+    exit 0
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/refused/deviceusers" ]; then
+    printf 'Device User: %s, %s: Precondition check failed.\n' "$name" "$failed_word" 1>&2; exit 50
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    mkdir -p "$GAM_MOCK_STATE/deviceusers"
+    case "$verb" in block) echo BLOCKED > "$sfile" ;; *) echo DELETED > "$sfile" ;; esac
+  fi
+  printf 'Device User: %s, %s\n  done: True\n' "$name" "$done_word"
+  exit 0
+fi
+
 # `gam print devices query email:<address> fields <DeviceFieldNameList> userfields <DeviceUserFieldNameList> formatjson` ->
 # GAM's CSV, `name` and a `JSON` column per device (doPrintCIDevices, gam/__init__.py:32609-32780 at 7.48.30; the compromised-
 # account check's computers): the devices in mock_gam/ci_devices.json with a user the address starts, as Google's `email:`
@@ -2162,6 +2287,8 @@ fi
 # own fields only, as the fixture holds them (GAM fetches only the fields named). Not modelled: Google's search beyond a
 # user's prefix, the views (company, personal), and the other options.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "devices" ]; then
+  # The same silent exit as block and delete: the service is built before anything is read or printed, even the header a real none prints.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/devices" ]; then exit 0; fi
   denied='ERROR: API access Denied\nPlease make sure the Service Account Client ID: 1 is authorized for the appropriate API or scopes: Cloud Identity API - Devices\n\nRun: gam user admin@example.com update serviceaccount\n'
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/devices" ]; then printf "\n$denied" 1>&2; exit 12; fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/badkey/devices" ]; then

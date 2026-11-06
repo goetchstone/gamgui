@@ -12,6 +12,7 @@ from typing import FrozenSet, List, Sequence, Tuple
 
 from ..gam.commands import GAMCommands, is_one_address
 from ..lifecycle import STEP_NAMES, OffboardStep
+from ..person_reads import Computer
 from .check import Draft, Filter, ScheduledSend, scheduled_recipients
 
 SWITCHABLE: Tuple[str, ...] = ("password", "clear_recovery", "revoke", "forward", "imap_off", "pop_off")
@@ -39,7 +40,7 @@ def _named(subjects: Sequence[str]) -> str:
 
 def steps(user: str, switched_on: FrozenSet[str], *, filters: Sequence[Filter] = (), delegates: Sequence[str] = (),
           send_as: Sequence[str] = (), auto_reply_off: bool = False, scheduled: Sequence[ScheduledSend] = (),
-          drafts: Sequence[Draft] = (), recovery: Tuple[str, str] = ("", "")) -> List[OffboardStep]:
+          drafts: Sequence[Draft] = (), recovery: Tuple[str, str] = ("", ""), computers: Sequence[Tuple[Computer, str]] = ()) -> List[OffboardStep]:
     """Every step in run order, for ``user``, the account's primary address. ValueError when a pick can't be one argv element."""
     if not switched_on <= frozenset(SWITCHABLE):
         raise ValueError(f"only {', '.join(SWITCHABLE)} are switched")
@@ -93,6 +94,18 @@ def steps(user: str, switched_on: FrozenSet[str], *, filters: Sequence[Filter] =
     for address in send_as:
         add("send_as", f"Remove the send-as address {address}", f"Take {address} off {user}'s “Send mail as” list, so mail can't be sent from it as them.",
             lambda c, a=address: c.delete_send_as(user, a), GAMCommands.delete_send_as(user, address))
+    for computer, action in computers:      # block, or take the account off: a name that isn't one GAM can act on never gets here, the screen offering it no choice
+        name = computer.device_user
+        if action == "block":
+            add("computer", f"Block {computer.words}",
+                f"Block {user}'s sign-in on {computer.words}, so it can't reach their data. It stays listed as blocked, and approving it in the Admin console undoes it.",
+                lambda c, n=name: c.block_device_user(user, n), GAMCommands.block_device_user(name))
+        elif action == "delete":
+            add("computer", f"Take {user}'s account off {computer.words}",
+                f"Take {user}'s account off {computer.words} and revoke its access to their data. It shows again only if someone signs in on it again.",
+                lambda c, n=name: c.delete_device_user(user, n), GAMCommands.delete_device_user(name))
+        else:
+            raise ValueError("a computer is blocked, or the account taken off it")
     if auto_reply_off:
         add("auto_reply", "Turn off the auto-reply",
             f"Turn off {user}'s auto-reply, so nobody who writes to them gets its message. Its subject and text stay in Gmail's settings, off.",

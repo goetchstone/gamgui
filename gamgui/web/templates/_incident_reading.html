@@ -6,6 +6,7 @@
 {% macro draft_link(d) -%}
 {%- if d.kind == "secureAccount" -%}<a href="/incident?person={{ d.account | urlencode }}" class="underline">{{ d.title }}</a>
 {%- elif d.kind == "undo" and d.pick == "clearRecovery" -%}<a href="/incident?person={{ d.account | urlencode }}&amp;fix=clear_recovery" class="underline">{{ d.title }}</a>
+{%- elif d.kind == "undo" and d.pick == "computer" -%}<a href="/incident?person={{ d.account | urlencode }}&amp;fix=computer&amp;resource={{ d.resource_id | urlencode }}{% if d.registered_at %}&amp;registered={{ d.registered_at.isoformat() | urlencode }}{% endif %}" class="underline">{{ d.title }}</a>
 {%- elif d.kind == "pullEmail" -%}<a href="/phishing?message={{ d.message_id | urlencode }}" class="underline">{{ d.title }}</a>
 {%- endif -%}
 {%- endmacro %}

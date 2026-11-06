@@ -205,6 +205,10 @@ def grouped(events: Iterable[Event]) -> List[Tuple[str, List[Event]]]:
     return [(names[low], theirs) for low, theirs in groups.items()]
 
 
+def _is_computer(device: Event) -> bool:
+    return (device.parameters.get("DEVICE_TYPE") or "").upper() in ("WINDOWS", "MAC_OS", "LINUX", "CHROME_OS")
+
+
 def is_marked(event: Event) -> bool:
     """Google marked this one sign-in suspicious."""
     return (event.parameters.get("is_suspicious") or "").lower() in ("true", "1")
@@ -1551,8 +1555,10 @@ def read(events: Sequence[Event], context: Optional[Context] = None) -> Reading:
                 left.append(device)
         found.append(_Pending("deviceAtSuspectSignIn", f"{devices[:1].upper()}{devices[1:]} joined {account}'s account {when} its sign-in from {list_words(ips)}: likely the attacker's own. Check Account "
                               "lists it, to block or take the account off.", [account], ips, len(theirs), [secure_draft(account)],
-                              todo=[("deleteDevice", f"Block or take {account} off {device_words(d)} that joined at the attacker's sign-in: Do It Here, or the Admin console's Devices.",
-                                     [Draft("undo", account=account, pick="computer", resource_id=d.parameters.get("RESOURCE_ID") or "", registered_at=d.time)]) for d in left]))
+                              todo=[("deleteDevice", f"Block or take {account} off {device_words(d)} that joined at the attacker's sign-in: "
+                                     + ("Do It Here, or the Admin console's Devices." if _is_computer(d) else "the Admin console's Devices."),
+                                     # Check Account's list is computers only: a phone's item must never pick a computer by when it signed in.
+                                     [Draft("undo", account=account, pick="computer", resource_id=d.parameters.get("RESOURCE_ID") or "", registered_at=d.time)] if _is_computer(d) else []) for d in left]))
 
     # A failed sign-in from a suspect address: someone had that account's password, likely from the fake page.
     inside = {e.who.lower() for e in entered}

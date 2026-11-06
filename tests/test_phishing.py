@@ -102,7 +102,7 @@ def test_only_a_reviewed_read_may_use_the_any_exit_door():
             for call in ast.walk(fn):
                 if isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "run_any_exit":
                     callers.add(fn.name)
-    assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy"}
+    assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy", "script_projects"}
 
 
 # --- MessageCopies ------------------------------------------------------------------------------------------------------
