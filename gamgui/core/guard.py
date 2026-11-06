@@ -4,7 +4,8 @@
 a Confirm click; bulk (>= ``DEFAULT_BULK_THRESHOLD``) → a Confirm click; destructive *and* bulk →
 the operator types "confirm"; and, for a route that opts in with ``typed_count_above``, more targets
 than that → the operator types how many. An account delete — any preview whose argv is
-``GAMCommands.delete_user`` — also needs its exact address typed, on every route that deletes one.
+``GAMCommands.delete_user`` — also needs its exact address typed, on every route that deletes one, and so
+does anything a route names with ``typed_address`` (securing a compromised account).
 It is pure, and a template renders its decision.
 
 :func:`enforce` is the server-side half, and the one that counts: a mutating route calls it with the
@@ -86,6 +87,7 @@ def evaluate(
     bulk_threshold: int = DEFAULT_BULK_THRESHOLD,
     hard_cap: int = DEFAULT_HARD_CAP,
     typed_count_above: Optional[int] = None,
+    typed_address: Optional[str] = None,
 ) -> GuardDecision:
     """Decide the confirmation policy for a planned set of changes."""
     if not previews:
@@ -134,7 +136,7 @@ def evaluate(
         summary=summary,
         warnings=warnings,
         requires_typed_count=typed_count_above is not None and count > typed_count_above,
-        typed_emails=list(dict.fromkeys(a for a in map(deleted_account, previews) if a)),
+        typed_emails=list(dict.fromkeys([*(a for a in map(deleted_account, previews) if a), *([typed_address] if typed_address else [])])),
     )
 
 
@@ -146,15 +148,16 @@ def changes(targets: Iterable[str], risk: RiskLevel, summary: str) -> List[Chang
 
 
 def enforce(previews: Sequence[ChangePreview], form: Mapping[str, Any], *,
-            confirm_step: bool = False, typed_count_above: Optional[int] = None) -> Optional[str]:
+            confirm_step: bool = False, typed_count_above: Optional[int] = None, typed_address: Optional[str] = None) -> Optional[str]:
     """Why ``form`` may not run ``previews`` (an operator-facing message), or None when it may.
 
     ``confirm_step`` is for a route whose UI always previews first (a bulk job, a multi-step
     routine): it needs ``confirmed=1`` whatever the count or risk. ``typed_count_above`` also asks,
     above that many targets, for the count typed — the count the server resolved *now*, so a scope
     that grew since the preview is refused rather than run on the operator's older number.
+    ``typed_address`` asks for that address typed, as an account delete does.
     """
-    decision = evaluate(previews, typed_count_above=typed_count_above)
+    decision = evaluate(previews, typed_count_above=typed_count_above, typed_address=typed_address)
     if decision.requires_typed_confirmation:
         if str(form.get(TYPED_FIELD) or "").strip().lower() != TYPED_WORD:
             return "Type confirm to run this destructive bulk change."

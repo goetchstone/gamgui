@@ -54,6 +54,7 @@ SCREENS = {
     "Audit external sharing": ["builder.html", "_builder_*.html", "_read_output.html", "_records_*.html"],
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],
+    "Secure a compromised account": ["incident.html", "_incident_*.html", "_job_*.html", "user_detail.html"],
     "Take a phishing email out of every mailbox": ["phishing.html", "_phishing_*.html"],
     "Jobs and Stop": ["job.html", "_job*.html"],
     "Read the audit log": ["audit.html", "_audit_rows.html"],

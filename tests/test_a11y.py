@@ -335,6 +335,15 @@ def _screens(p: Page, st):
            "document.querySelector('#job-panel [data-announce]')")
     yield "jobs/page"                              # the run's own panel, on a page of its own
 
+    p.goto("/incident")
+    p.fill("input[name=person]", "carol@example.com")
+    p.click("button", "Check account")
+    p.settle("/Preview the steps/.test(document.querySelector('#incident-check')?.innerText ?? '')")
+    yield "incident/checked"
+    p.click("#incident-check button", "Preview the steps")
+    p.settle("document.querySelector('#incident-typed')")
+    yield "incident/confirm"
+
     p.goto("/phishing")
     p.fill("textarea[name=messages]", "CAPh1sh+Notice=0001@mail.example.com")
     p.click("button", "Find copies")
@@ -466,7 +475,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
 RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/signatures", "/calendars",
-             "/builder", "/onboard", "/lifecycle", "/phishing", "/reports", "/audit", "/setup")
+             "/builder", "/onboard", "/lifecycle", "/incident", "/phishing", "/reports", "/audit", "/setup")
 
 
 @pytest.mark.a11y

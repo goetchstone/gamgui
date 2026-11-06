@@ -103,7 +103,7 @@ class Vacation:
         subject = ""
         dates = {"Start Date:": "", "End Date:": ""}
         msg_lines: List[str] = []
-        in_message = False
+        in_message = seen_enabled = False
         # "\n" only: splitlines() also breaks on U+2028, a form feed and more, so a subject holding one could set a
         # field, and an attacker's auto-reply could read as off (failure log 2026-11-05).
         for line in (text or "").split("\n"):
@@ -117,7 +117,8 @@ class Vacation:
                 msg_lines.append(s)
                 continue
             if s.startswith("Enabled:"):
-                enabled = "true" in s.lower()
+                if not seen_enabled:    # GAM prints it first: a subject holding a line like it sets nothing
+                    enabled, seen_enabled = "true" in s.lower(), True
             elif s.startswith("Contacts Only:"):
                 contacts = "true" in s.lower()
             elif s.startswith("Domain Only:"):

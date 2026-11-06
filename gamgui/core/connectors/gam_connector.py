@@ -11,7 +11,7 @@ import asyncio
 import functools
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, MessageId, Phone, build_user_query, cut_off_account
@@ -30,6 +30,19 @@ from ..calendar_index import IndexedCalendar
 from ..connected_apps import AppsRead, read_from
 from ..gam.parser import parse_one, parse_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
+from ..incident.check import (
+    ACCOUNT_FIELDS,
+    DRAFT_CAP,
+    SCHEDULED_CAP,
+    Account,
+    AdminRole,
+    Draft,
+    Filter,
+    Forwarding,
+    ForwardingAddress,
+    ScheduledSend,
+    SendAs,
+)
 from ..phones import phones_from
 from ..person_reads import (
     ChromeProfile,
@@ -117,6 +130,8 @@ def _require_read(cmd) -> None:
 logger = logging.getLogger(__name__)
 
 ACCOUNT_ID_FIELDS = ("primaryEmail", "id")
+MESSAGES_TIMEOUT = 600.0    # thousands of drafts listed or deleted meet Gmail's per-user quota
+UNANSWERED = "GAM returned nothing for this mailbox, so it may not have been read."
 
 
 def _password_forms(password: str) -> List[str]:
@@ -561,6 +576,71 @@ class GAMConnector(Connector):
     async def vault_holds(self, email: str) -> List[Dict[str, Any]]:
         return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_vault_holds(email)))
 
+    # --- what Check Account reads (core/incident) --------------------------------------
+    async def account_to_check(self, email: str) -> Account:
+        return Account.from_record(parse_one(await self.runner.run_authenticated(self.domain, GAMCommands.info_user(email, fields=ACCOUNT_FIELDS))))
+
+    async def filters_of(self, email: str) -> List[Filter]:
+        return [Filter.from_record(r) for r in await self.user_filters(email)]
+
+    async def forwarding_of(self, email: str) -> Optional[Forwarding]:
+        return Forwarding.from_records(parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_forward(email))))
+
+    async def forwarding_addresses_of(self, email: str) -> List[ForwardingAddress]:
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_forwarding_addresses(email))
+        return [ForwardingAddress.from_record(r) for r in parse_records(out)]
+
+    async def send_as_of(self, email: str) -> List[SendAs]:
+        """Gmail always lists the primary, so an empty list is GAM skipping a refused token without a word, exit 0 (handleOAuthTokenError)."""
+        rows = parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_send_as(email)))
+        if not rows:
+            raise Incomplete(UNANSWERED)
+        return [SendAs.from_record(r) for r in rows]
+
+    async def auto_reply_of(self, email: str) -> Vacation:
+        """As ``get_vacation``, for a check: GAM's silence is unknown, never an auto-reply that's off."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.show_vacation(email))
+        if "Enabled:" not in out:
+            raise Incomplete(UNANSWERED)
+        return Vacation.from_show_text(out)
+
+    async def admin_roles_of(self, email: str) -> List[AdminRole]:
+        return [AdminRole.from_record(r) for r in parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_admins(email)))]
+
+    @staticmethod
+    async def _listed(read: Awaitable[str]) -> List[Dict[str, Any]]:
+        """One mailbox's listing. Only GAM's "none found" (60) means none: a refused token GAM skips without a word leaves 0 and no row."""
+        try:
+            out = await read
+        except GAMError as exc:
+            if exc.exit_code == 60:
+                return []
+            raise
+        records = parse_records(out)
+        if not records:
+            raise Incomplete(UNANSWERED)
+        return records
+
+    async def drafts_of(self, email: str) -> List[Draft]:
+        read = self.runner.run_authenticated(self.domain, GAMCommands.list_drafts(email, DRAFT_CAP), timeout=MESSAGES_TIMEOUT)
+        return [Draft.from_record(r) for r in await self._listed(read)]
+
+    async def scheduled_sends_of(self, email: str) -> List[ScheduledSend]:
+        read = self.runner.run_authenticated(self.domain, GAMCommands.search_scheduled(email, SCHEDULED_CAP), timeout=MESSAGES_TIMEOUT)
+        return [ScheduledSend.from_record(r) for r in await self._listed(read)]
+
+    async def delete_send_as(self, email: str, address: str) -> ChangeResult:
+        return await self._run_write("delete_send_as", email, GAMCommands.delete_send_as(email, address), RiskLevel.DESTRUCTIVE)
+
+    async def delete_messages(self, email: str, ids: Sequence[str]) -> ChangeResult:
+        def short_of(out: str) -> str:
+            # GAM skips a batch on serviceNotAvailable without a word and exits 0, and a scheduled email in it still goes out.
+            deleted = sum(", Deleted" in line for line in out.split("\n"))
+            return "" if deleted >= len(ids) else f"GAM deleted {deleted} of {len(ids)} messages and said nothing about the rest: check the account again."
+
+        return await self._run_write("delete_messages", email, GAMCommands.delete_messages(email, ids), RiskLevel.DESTRUCTIVE,
+                                     timeout=MESSAGES_TIMEOUT, verify=short_of)
+
     async def user_phones(self, email: str) -> List[Phone]:
         """The person's phones as Google has them now: a change sends them all back."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.info_user(email, fields=["primaryEmail", "phones"]))
@@ -825,6 +905,7 @@ class GAMConnector(Connector):
         audit_argv: Optional[List[str]] = None,
         secrets: Sequence[str] = (),
         timeout: Optional[float] = None,
+        verify: Optional[Callable[[str], str]] = None,
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
         a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)
@@ -837,7 +918,8 @@ class GAMConnector(Connector):
         neighbouring token can shift it; the positional masks in audit/errors are the second layer.
         ``timeout`` overrides the runner's default — a domain-wide (``all users``) call needs longer.
         ``about`` is what else the write concerned, recorded in the audit ``extra`` under the key that names
-        it (``group``, ``scope``, ``event``, ``command``…) — once filed as ``group`` whatever it was."""
+        it (``group``, ``scope``, ``event``, ``command``…) — once filed as ``group`` whatever it was.
+        ``verify`` reads the output of a run that exited 0, for a command GAM can leave undone without a word: what it says is the failure."""
         named = {k: v for k, v in (about or {}).items() if v}
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
@@ -881,6 +963,9 @@ class GAMConnector(Connector):
             remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
             return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation,
                                 kind=exc.kind if isinstance(exc, GAMError) else None)
+        if verify is not None and (short := redact_secrets(verify(out), secrets)):
+            self.audit.record(action, target=target, argv=shown, ok=False, extra={**named, "error": short, "tolerated": False}, secrets=secrets)
+            return ChangeResult(preview=preview, ok=False, detail=short, remediation=short)
         unrecorded = ""
         try:
             self.audit.record(

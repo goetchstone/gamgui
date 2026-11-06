@@ -299,6 +299,9 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
   print_formatjson primaryEmail print_users.json
   exit 0
 fi
+# GAM skips an account whose token refresh is refused for good without a word, exit 0 (handleOAuthTokenError's softErrors,
+# API.REFRESH_PERM_ERRORS): each `print` read is then its titles or nothing. $GAM_MOCK_STATE/silent_token/<user>.
+if [ "${1:-}" = "user" ] && [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/silent_token/$(lower "${2:-}")" ]; then exit 0; fi
 # `gam info user <addr>` -> THAT user's record, keyed on the address like GAM. An address that isn't in
 # the directory fails the way GAM does — returning Alice for anyone was the same lie as the
 # group-members bug in the failure log.
@@ -317,6 +320,7 @@ if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   fi
   case "$addr" in
     alice@example.com|a.anders@example.com|alice@alias.example.net) cat "$GAM_MOCK_FIXTURES/info_user.json" ;;
+    carol@example.com) cat "$GAM_MOCK_FIXTURES/info_user_carol.json" ;;   # her recovery details (Check Account)
     bob@example.com)   cat "$GAM_MOCK_FIXTURES/info_user_suspended.json" ;;
     admin@example.com) printf '{"id": "100000000000000000009", "primaryEmail": "admin@example.com", "suspended": false}\n' ;;
     # A failure trigger, an account `create user` made, or a group's member is an account too, with an ID of its own.
@@ -511,7 +515,86 @@ fi
 # `newer_than:<N>d|h`, a known lie: every fixture message is newer (their dates are fixed). Any other term, or a message
 # whose headers the fixtures don't hold, is refused as not modelled, never answered more kindly than Gmail.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ] && [ "${5:-}" = "query" ] \
-    && case "${6:-}" in rfc822msgid:*) true ;; *) false ;; esac; then
+   && [ "${7:-}" = "max_to_print" ] && [ "${9:-}" = "headers" ] && [ "${10:-}" = "subject" ]; then
+  # Check Account's listing of drafts (GamCommands.list_drafts), as printShowMessagesThreads runs it, from messages.csv's DRAFT label:
+  # a token for the user; showlabels reads the labels first, so Gmail off is exit 73; Spam and Trash aren't listed without
+  # includespamtrash, so one in $GAM_MOCK_STATE/trashed/<id> is left out; none is exit 60 with the header line alone; at most
+  # max_to_print (0 is no limit). Only that one label term and that one header.
+  user=$2; query=$6; max=$8
+  [ "$#" -eq 12 ] && [ "${11}" = showlabels ] && [ "${12}" = showdate ] || not_modelled "a listing other than the check's"
+  case "$query" in in:drafts) want=DRAFT ;; *) not_modelled "a listing of $query" ;; esac
+  case "$max" in ''|*[!0-9]*) usage_error "Invalid argument: Expected <integer x>=0>" ;; esac
+  columns="User threadId id Subject Date LabelsCount Labels"
+  if ! known_user "$user"; then gam_row $columns; token_refused "$user" Print; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; gam_row $columns; exit 73
+  fi
+  printf 'Getting all Messages that match query ((%s)) for %s\n' "$query" "$user" 1>&2
+  gam_row $columns
+  n=0
+  while IFS=, read -r owner id message tags; do
+    [ "$owner" = "$user" ] || continue
+    case " $tags " in *" $want "*) ;; *) continue ;; esac
+    if [ -n "${GAM_MOCK_STATE:-}" ] && { [ -e "$GAM_MOCK_STATE/trashed/$id" ] || [ -e "$GAM_MOCK_STATE/deleted/$id" ]; }; then continue; fi
+    [ "$max" -eq 0 ] || [ "$n" -lt "$max" ] || break
+    data="$GAM_MOCK_FIXTURES/message_headers/$id"
+    [ -f "$data" ] || not_modelled "message $id's headers"
+    field() { sed -n "s/^$1: //p" "$data" | head -n 1; }
+    set -- $tags
+    gam_row "$user" "$(field Gmail-ThreadId)" "$id" "$(field Subject)" "$(field Gmail-InternalDate)" "$#" "$tags"
+    n=$((n + 1))
+  done < "$GAM_MOCK_FIXTURES/messages.csv"
+  if [ "$n" -eq 0 ]; then printf '\rGot 0 Messages that matched query ((%s)) for %s...\r\n' "$query" "$user" 1>&2; exit 60; fi
+  exit 0
+fi
+
+# `gam user <u> delete messages ids <MessageIDEntity>` (_processMessagesThreads with ids: no doit, no count check). A token for the
+# user; Gmail off exit 73; "User: <u>, Delete N Messages"; then batchDelete 50 at a time: each "  User: <u>, Message: <id>, Deleted
+# (j/N)", or a batch holding an ID the mailbox doesn't have failing whole, exit 50, the other batches done. With GAM_MOCK_STATE a
+# deleted message is $GAM_MOCK_STATE/deleted/<id>. Only a list of ASCII letters, digits, `-`, `_` and commas is modelled.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "delete" ] && [ "${4:-}" = "messages" ] && [ "${5:-}" = "ids" ]; then
+  user=$2
+  [ $# -ge 6 ] || missing_arg "MessageIDEntity"
+  [ $# -eq 6 ] || invalid_arg "$7"
+  case "$6" in *[!A-Za-z0-9_,-]*) not_modelled "a message ID list like $6" ;; esac
+  case "$(printf '%s' "$6" | tr '[:upper:]' '[:lower:]' | tr -d '_-')" in csvkmd|csvsubkey|csv|csvfile|file|csvdata) not_modelled "delete messages ids from $6" ;; esac
+  known_user "$user" || token_refused "$user" Delete
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
+  fi
+  set -f; ids=$(printf '%s' "$6" | tr ',' ' '); set +f
+  n=$(printf '%s\n' $ids | grep -c . || true); failed=""
+  if [ "$n" -eq 0 ]; then printf 'User: %s, Messages: 0, Not Deleted: No Messages matched\n' "$user" 1>&2; exit 60; fi
+  if [ "$n" -eq 1 ]; then noun=Message; else noun=Messages; fi
+  printf 'User: %s, Delete %s %s\n' "$user" "$n" "$noun"
+  have() { grep -q "^$user,$1," "$GAM_MOCK_FIXTURES/messages.csv" && ! { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/deleted/$1" ]; }; }
+  done_count=0
+  set -- $ids
+  while [ $# -gt 0 ]; do
+    batch=""; k=0
+    while [ $# -gt 0 ] && [ "$k" -lt 50 ]; do batch="$batch $1"; k=$((k + 1)); shift; done
+    bad=""
+    for id in $batch; do have "$id" || bad=1; done
+    if [ -n "$bad" ]; then
+      shown=$(printf '%s\n' $batch | head -n 5 | paste -sd, -); [ "$k" -gt 5 ] && shown="$shown,..."
+      printf '  User: %s, Message: %s, Delete Failed: Invalid message id(s) (%s-%s/%s)\n' "$user" "$shown" "$((done_count + 1))" \
+        "$((done_count + k))" "$n" 1>&2
+      failed=1; done_count=$((done_count + k)); continue
+    fi
+    for id in $batch; do
+      done_count=$((done_count + 1)); of=""; [ "$n" -gt 1 ] && of=" ($done_count/$n)"
+      if [ -n "${GAM_MOCK_STATE:-}" ]; then mkdir -p "$GAM_MOCK_STATE/deleted"; : > "$GAM_MOCK_STATE/deleted/$id"; fi
+      # GAM skips a batch on serviceNotAvailable without a word, exit 0. $GAM_MOCK_STATE/gmail_unavailable.
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/gmail_unavailable" ]; then rm -f "$GAM_MOCK_STATE/deleted/$id"; continue; fi
+      printf '  User: %s, Message: %s, Deleted%s\n' "$user" "$id" "$of"
+    done
+  done
+  [ -z "$failed" ] || exit 50
+  exit 0
+fi
+
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "messages" ] && [ "${5:-}" = "query" ] \
+    && case "${6:-}" in rfc822msgid:*|in:scheduled) true ;; *) false ;; esac; then
   user=$2; query=$6
   shift 6
   spamtrash=""; all=""; labels=""; dates=""; most=0
@@ -711,6 +794,92 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "show" ] && { [ "${4:-}" = "backupcodes
   [ $# -eq 4 ] || invalid_arg "$5"
   check_exists "User" "$2"
   printf 'User: %s, Backup Verification Codes (2)\n  1: 11112222\n  2: 33334444\n' "$2"
+  exit 0
+fi
+
+# `gam user <u> print forward` (printShowForward): `User,forwardEnabled,forwardTo,disposition`, the address and disposition only
+# while on. carol@ forwards to her own address; with GAM_MOCK_STATE, `forward` below keeps what it set.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forward" ]; then
+  user=$(lower "$2")
+  [ $# -eq 4 ] || not_modelled "print forward with $5"
+  titles='User,forwardEnabled,forwardTo,disposition'
+  need_user "$user" Print
+  printf 'Getting Forward Enabled for %s\n' "$user" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; printf '%s\n' "$titles"; exit 73
+  fi
+  printf '%s\n' "$titles"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/forward/$user" ]; then
+    printf '%s,%s\n' "$user" "$(cat "$GAM_MOCK_STATE/forward/$user")"
+  else
+    case "$user" in
+      carol@example.com) printf '%s,True,carol.home@example.org,leaveInInbox\n' "$user" ;;
+      *) printf '%s,False,,\n' "$user" ;;
+    esac
+  fi
+  exit 0
+fi
+
+# `gam user <u> print sendas verifyonly` (printShowSendAs): a row per address Gmail lists, the primary first, each signature a
+# True/False (verifyonly). Column order approximate; the app reads by name. carol@ can also send as an outside address; with
+# GAM_MOCK_STATE, one `delete sendas` removed is left out.
+sendas_deleted() { [ -n "${GAM_MOCK_STATE:-}" ] && grep -qixF -- "$2" "$GAM_MOCK_STATE/sendas_deleted/$1" 2>/dev/null; }
+sendas_of() {  # <user>: each address the user can send as, beyond the primary, one per line
+  case "$1" in carol@example.com) printf 'billing.desk@example.net\n' ;; esac
+}
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "sendas" ]; then
+  user=$(lower "$2")
+  [ "$#" -eq 5 ] && [ "$5" = "verifyonly" ] || not_modelled "print sendas with ${5:-no options}"
+  titles='User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature,treatAsAlias,verificationStatus'
+  need_user "$user" Print
+  printf 'Getting SendAs Addresses for %s\n' "$user" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; printf '%s\n' "$titles"; exit 73
+  fi
+  printf '%s\n%s,,True,True,,%s,False,,\n' "$titles" "$user" "$user"
+  sendas_of "$user" | while IFS= read -r address; do
+    sendas_deleted "$user" "$address" || printf '%s,Billing Desk,False,False,,%s,False,False,accepted\n' "$user" "$address"
+  done
+  exit 0
+fi
+
+# `gam user <u> delete sendas <EmailAddressEntity>` (deleteInfoSendAs): "User: <u>, Delete 1 SendAs Address", then the address
+# indented, "Deleted"; one Gmail doesn't list fails notFound, the primary cannotDeletePrimarySendAs (exit 50; the API's words
+# approximate). Only one plain address is modelled: GAM splits on commas and whitespace, and reads a file for a list selector.
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "delete" ] && [ "${4:-}" = "sendas" ]; then
+  user=$(lower "$2")
+  [ $# -ge 5 ] || missing_arg "EmailAddressEntity"
+  [ $# -eq 5 ] || invalid_arg "$6"
+  case "$5" in *@*) ;; *) not_modelled "delete sendas $5" ;; esac
+  case "$5" in *[,[:space:]]*) not_modelled "a send-as list like $5" ;; esac
+  address=$(lower "$5")
+  need_user "$user" Delete
+  printf 'User: %s, Delete 1 SendAs Address\n' "$user"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    printf '  User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
+  fi
+  if [ "$address" = "$user" ]; then
+    printf '  User: %s, SendAs Address: %s, Delete Failed: Cannot delete the primary send-as address\n' "$user" "$address" 1>&2; exit 50
+  fi
+  if sendas_deleted "$user" "$address" || ! sendas_of "$user" | grep -qixF -- "$address"; then
+    printf '  User: %s, SendAs Address: %s, Delete Failed: Not Found\n' "$user" "$address" 1>&2; exit 50
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then mkdir -p "$GAM_MOCK_STATE/sendas_deleted"; printf '%s\n' "$address" >> "$GAM_MOCK_STATE/sendas_deleted/$user"; fi
+  printf '  User: %s, SendAs Address: %s, Deleted\n' "$user" "$address"
+  exit 0
+fi
+
+# `gam print admins user <u>` (doPrintShowAdmins): "Getting all Admin Role Assignments" then PRINT_ADMIN_TITLES and a row per role
+# assigned to the person directly. alice@ is the super admin (_SEED_ADMIN_ROLE is that role's name); others hold none. An address
+# that isn't a user is userNotFound: entityUnknownWarning, exit 56.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "admins" ]; then
+  [ "${3:-}" = "user" ] && [ $# -eq 4 ] || not_modelled "print admins ${3:-} ${5:-}"
+  user=$(lower "$4")
+  printf 'Getting all Admin Role Assignments\n' 1>&2
+  in_directory "$user" || does_not_exist "Administrator" "$4"
+  printf 'roleAssignmentId,roleId,role,assignedTo,assignedToUser,assignedToGroup,assignedToServiceAccount,assignedToUnknown,'
+  printf 'scopeType,orgUnitId,orgUnit,expirationDetails.expireTime\n'
+  case "$user" in alice@example.com) printf '9170001,9170000,_SEED_ADMIN_ROLE,1001,alice@example.com,,,False,CUSTOMER,,,\n' ;; esac
   exit 0
 fi
 
@@ -1315,6 +1484,13 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "forward" ]; then
   check_exists "User" "$2"
   # FWDFAIL: a user without Gmail — GAM's userServiceNotEnabledWarning, SERVICE_NOT_APPLICABLE_RC (73).
   case "$2" in *FWDFAIL*) printf 'User: %s, Gmail Service/App not enabled\n' "$2" 1>&2; exit 73 ;; esac
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then   # what `print forward` reads next
+    mkdir -p "$GAM_MOCK_STATE/forward"
+    case "$4" in
+      true|on|yes|enabled|1) printf 'True,%s,%s' "$6" "$5" ;;
+      *) printf 'False,,' ;;
+    esac > "$GAM_MOCK_STATE/forward/$(lower "$2")"
+  fi
   echo "User: $2, Forward: Updated"
   exit 0
 fi
