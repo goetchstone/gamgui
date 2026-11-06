@@ -11,6 +11,7 @@ import asyncio
 import functools
 import logging
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
@@ -27,7 +28,7 @@ from ..gam.models import (
     Vacation,
 )
 from ..calendar_index import IndexedCalendar
-from ..connected_apps import AppsRead, read_from
+from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
 from ..gam.parser import parse_one, parse_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
 from ..incident.check import (
@@ -48,10 +49,13 @@ from ..incident.logs import Row as LogRow
 from ..incident.logs import rows_from as log_rows_from
 from ..phones import phones_from
 from ..person_reads import (
+    DEVICE_WRITE_NOTE,
     ChromeProfile,
     Computer,
     MobileDevice,
+    ScriptProject,
     chrome_profiles_from,
+    script_projects_from,
     computers_from,
     mobile_devices_from,
 )
@@ -186,6 +190,25 @@ def _watched_runbook(build):
     return wrapper
 
 
+def device_user_done(name: str) -> Callable[[str], str]:
+    """A block or removal GAM exited 0 for, and whether it did it. GAM builds the service first and exits 0 with no word if a refreshed token was refused, and exits 0 too while Google's operation is still going
+    (_performCIDeviceUserAction): neither is done, and a step that says so isn't a false "secured"."""
+    def said(out: str) -> str:
+        if f"Device User: {name}," not in out:
+            return "GAM exited without saying it did this, so it may not have happened. Check the account again."
+        if "in progress" in out:
+            return "Google took this but hasn't finished it. Check the account again before counting on it."
+        return ""
+    return said
+
+
+def _says_the_scope(result: ChangeResult) -> ChangeResult:
+    """Listing computers works with the devices scope's `.readonly` form, so a refusal here has its own fix."""
+    if result.ok or result.kind not in (GAMErrorKind.SERVICE_NOT_ENABLED, GAMErrorKind.SCOPE_MISSING):
+        return result
+    return replace(result, detail=f"{DEVICE_WRITE_NOTE} {result.detail}".strip(), remediation=f"{DEVICE_WRITE_NOTE} {result.remediation}".strip())
+
+
 class GAMConnector(Connector):
     id = ConnectorID.GOOGLE_WORKSPACE
     capabilities = {Capability.DIRECTORY, Capability.GROUPS, Capability.MAIL}
@@ -318,8 +341,26 @@ class GAMConnector(Connector):
             await self.runner.run_authenticated(self.domain, GAMCommands.print_mobile_devices(email))), email)
 
     async def computers(self, email: str) -> List[Computer]:
-        return computers_from(parse_records(
-            await self.runner.run_authenticated(self.domain, GAMCommands.print_devices(email))), email)
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_devices(email))
+        # GAM builds the service first, and exits 0 with no word if a refreshed token was refused: a real none still prints its header. Never a false all-clear on an attacker's computer.
+        if not out.strip():
+            raise Incomplete("GAM exited without an answer, so whether a computer is signed in can't be told. Its sign-in may have been refused: check the service account on Setup.")
+        return computers_from(parse_records(out), email)
+
+    async def apps_of(self, email: str) -> List[ConnectedApp]:
+        """One person's connected apps, grouped: who may read what. Revoking them is the lock's sign-out."""
+        return apps_from(grants_from(parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_user_tokens(email)))))
+
+    async def script_projects(self, email: str) -> List[ScriptProject]:
+        argv = GAMCommands.print_script_projects(email)
+        res = await self.runner.run_any_exit(self.domain, argv)
+        return script_projects_from(res.returncode, res.stdout, res.stderr, argv, email)
+
+    async def block_device_user(self, email: str, name: str) -> ChangeResult:
+        return _says_the_scope(await self._run_write("block_device_user", email, GAMCommands.block_device_user(name), RiskLevel.LOW, verify=device_user_done(name)))
+
+    async def delete_device_user(self, email: str, name: str) -> ChangeResult:
+        return _says_the_scope(await self._run_write("delete_device_user", email, GAMCommands.delete_device_user(name), RiskLevel.DESTRUCTIVE, verify=device_user_done(name)))
 
     async def connected_apps(self) -> AppsRead:
         """Every account's connected apps and AI agents, suspended accounts aside. One Directory API call per

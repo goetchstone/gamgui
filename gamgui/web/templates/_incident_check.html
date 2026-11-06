@@ -38,12 +38,49 @@
   </div>
 
   <fieldset class="{{ card }} space-y-2"><legend class="{{ heading }}">The lock</legend>
-    {% if pick %}<p class="text-sm text-amber-800">Only {{ names[pick] }} is picked, as the to-do item asked. The rest of the lock is off: tick what else you want.</p>{% endif %}
+    {% if pick == "computer" %}<p class="text-sm text-amber-800 break-words">{% if picked_computer %}Only blocking {{ picked_computer.words }} is picked, as the to-do item asked.{% if picked_by_time %} It was matched by when it first signed in, so check it's the right one.{% endif %}{% elif check.computers.problem %}The computers couldn't be read, so the to-do item's can't be picked.{% else %}The to-do item's computer couldn't be matched to one still signed in below: pick by hand, if it's there.{% endif %} The lock is off: tick what else you want.</p>
+    {% elif pick %}<p class="text-sm text-amber-800">Only {{ names[pick] }} is picked, as the to-do item asked. The rest of the lock is off: tick what else you want.</p>{% endif %}
     {% for key in switchable %}
     <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="switch" value="{{ key }}" class="mt-1"{% if key == pick or (not pick and key in on_by_default and key not in check.done) %} checked{% endif %} />
       <span><span class="text-brand-black">{{ names[key] }}</span>{% if key in check.done %} <span class="text-brand-grayink">(done in an earlier run)</span>{% endif %}<br><span class="text-xs text-brand-blueink">{{ notes[key] }}</span></span></label>
     {% endfor %}
   </fieldset>
+
+  <fieldset class="{{ card }} space-y-3"><legend class="{{ heading }}">Computers signed in with the account</legend>
+    {{ unread(check.computers, "the computers") }}
+    {% if check.computers.value is not none and not check.computers.problem and not check.computers.value %}<p class="text-sm text-brand-grayink">None that Google's endpoint management knows.</p>{% endif %}
+    {% for c in check.computers.value or [] %}
+    <div class="text-sm">
+      <p class="break-words text-brand-black">{{ c.words }}{% if c.looks_virtual %} <span class="text-amber-800">a virtual machine</span>{% endif %}{% if c.reports_compromise %} <span class="text-amber-800">reports it's compromised</span>{% endif %}{% if c.state %} <span class="text-brand-grayink">({{ c.state }})</span>{% endif %}</p>
+      <p class="text-xs text-brand-blueink">{% if c.first_signed_in %}First signed in {{ c.first_signed_in }}. {% endif %}{% if c.last_synced %}Last synced {{ c.last_synced }}. {% endif %}{% if c.ownership %}Ownership: {{ c.ownership }}. {% endif %}{% if c.serial_number %}Serial {{ c.serial_number }}.{% endif %}</p>
+      {% if c.is_active and c.device_user %}
+      {% set chosen = "block" if picked_computer and picked_computer.device_user == c.device_user else "keep" %}
+      <div role="radiogroup" aria-label="What to do with {{ c.words }}" class="mt-1 flex flex-wrap gap-4 text-xs text-brand-black">
+        <label class="inline-flex items-center gap-1"><input type="radio" name="computer:{{ c.device_user }}" value="keep"{% if chosen == "keep" %} checked{% endif %} />Keep it</label>
+        <label class="inline-flex items-center gap-1"><input type="radio" name="computer:{{ c.device_user }}" value="block"{% if chosen == "block" %} checked{% endif %} />Block it</label>
+        <label class="inline-flex items-center gap-1"><input type="radio" name="computer:{{ c.device_user }}" value="delete" />Take the account off it</label>
+      </div>
+      {% elif c.is_active %}<p class="text-xs text-brand-grayink">GAM can't name its sign-in: use the Admin console's Devices.</p>{% endif %}
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <div class="{{ card }} space-y-3">
+    <h3 class="{{ heading }}">Phones and tablets</h3>
+    {{ unread(check.phones, "the phones") }}
+    {% if check.phones.value is not none and not check.phones.problem and not check.phones.value %}<p class="text-sm text-brand-grayink">None syncing.</p>{% endif %}
+    <ul class="space-y-1 text-sm text-brand-black">{% for p in check.phones.value or [] %}<li class="break-words">{{ p.words }}{% if p.reports_compromise %} <span class="text-amber-800">reports it's rooted or jailbroken</span>{% endif %}</li>{% endfor %}</ul>
+    <p class="text-xs text-brand-grayink">The reset and the sign-out cut a phone's sync off. To wipe the account from one, use the Admin console's Devices.</p>
+    <h3 class="{{ heading }}">Apps with access</h3>
+    {{ unread(check.apps, "the connected apps") }}
+    {% if check.apps.value is not none and not check.apps.problem and not check.apps.value %}<p class="text-sm text-brand-grayink">None.</p>{% endif %}
+    <ul class="space-y-1 text-sm text-brand-black">{% for a in check.apps.value or [] %}<li class="break-words">{{ a.name }}{% if a.looks_like_ai %} <span class="text-amber-800">an AI assistant or agent by its name</span>{% endif %}{% if a.access %} <span class="text-xs text-brand-blueink">{{ a.access | join(", ") }}</span>{% endif %}</li>{% endfor %}</ul>
+    <h3 class="{{ heading }}">Apps Script projects</h3>
+    {{ unread(check.scripts, "the Apps Script projects") }}
+    {% if check.scripts.value is not none and not check.scripts.problem and not check.scripts.value %}<p class="text-sm text-brand-grayink">None standalone in their Drive. One bound inside a Sheet or Doc doesn't show here: once authorized it's a connected app, often named “Untitled project”.</p>{% endif %}
+    <ul class="space-y-1 text-sm text-brand-black">{% for s in check.scripts.value or [] %}<li class="break-words">{{ s.name or "Untitled" }} <span class="text-xs text-brand-blueink">{% if s.created %}made {{ s.created }}{% endif %}{% if s.modified %}, changed {{ s.modified }}{% endif %}{% if s.last_changed_by %} by {{ s.last_changed_by }}{% endif %}{% if s.in_trash %}, in the bin{% endif %}</span></li>{% endfor %}</ul>
+    {% if check.scripts.value %}<p class="text-xs text-brand-grayink">A script someone authorized keeps acting for them on its triggers. The sign-out revokes its access. Open one at script.google.com; delete one they don't recognise from their Drive.</p>{% endif %}
+  </div>
 
   <fieldset class="{{ card }} space-y-3"><legend class="{{ heading }}">What to undo: nothing is ticked until you tick it</legend>
     {% if check.scheduled.problem %}{{ unread(check.scheduled, "scheduled emails") }}{% elif check.scheduled.value %}

@@ -89,6 +89,7 @@ CHROME_PROFILE_FIELDS = ("displayname,useremail,lastactivitytime,firstenrollment
 MOBILE_FIELDS = "resourceid,email,model,os,type,status,firstsync,lastsync,devicecompromisedstatus"
 DEVICE_FIELDS = ("devicetype,model,manufacturer,osversion,hostname,serialnumber,ownertype,managementstate,"
                  "compromisedstate,createtime,lastsynctime")
+SCRIPT_FIELDS = "id,name,createdtime,modifiedtime,trashed,lastmodifyinguser"
 DEVICE_USER_FIELDS = "name,useremail,createtime,firstsynctime,lastsynctime,managementstate"
 
 # GAM's phone types (`phone [type assistant|…|work_pager|(custom <String>)]`). One outside them GAM keeps as a custom type
@@ -118,6 +119,14 @@ def is_report_time(when: str) -> bool:
         return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", when)) and bool(datetime.strptime(when, "%Y-%m-%dT%H:%M:%SZ"))
     except ValueError:
         return False
+
+
+def is_device_user_name(name: str) -> bool:
+    """A device user's name as Google gives it, held to Google's ID characters: never `query:`, `id`, a list, the API's `-` wildcard (`devices/-/deviceUsers/-` is every one) or anything GAM reads as more
+    than the one name."""
+    parts = (name or "").split("/")
+    return (len(parts) == 4 and parts[0] == "devices" and parts[2] == "deviceUsers"
+            and all(1 <= len(part) <= 256 and part != "-" and all(c.isascii() and (c.isalnum() or c in "-_") for c in part) for part in (parts[1], parts[3])))
 
 
 def is_one_address(address: str) -> bool:
@@ -419,6 +428,37 @@ class GAMCommands:
         # it exit 73, and a scope list without the API exit 12. CSV `name,JSON`. SwiftGamGui's printDevices.
         return ["print", "devices", "query", f"email:{filter_address(user)}", "fields", DEVICE_FIELDS,
                 "userfields", DEVICE_USER_FIELDS, "formatjson"]
+
+    @staticmethod
+    def print_script_projects(user: str) -> List[str]:
+        # The person's own standalone Apps Script projects: Drive files of that type, the bin's included. A script someone authorized keeps acting for
+        # them on its triggers. GAM has no Apps Script commands, so nothing lists a project's triggers. printFileList exits 60 whenever it printed no
+        # row, overwriting a failure's own code, so "none" is read only on GAM's word (person_reads.script_projects_from). SwiftGamGui's printScriptProjects.
+        if not is_one_address(user):
+            raise ValueError(f"“{user}” isn't one email address")
+        return ["user", user, "print", "filelist", "showmimetype", "gscript", "fields", SCRIPT_FIELDS, "formatjson"]
+
+    @staticmethod
+    def print_user_tokens(user: str) -> List[str]:
+        # One account's OAuth grants. CSV `user,clientId,displayText,anonymous,nativeApp,userKey,scopes`; not a user is exit 56.
+        if not is_one_address(user):
+            raise ValueError(f"“{user}” isn't one email address")
+        return ["user", user, "print", "tokens"]
+
+    @staticmethod
+    def block_device_user(name: str) -> List[str]:
+        # One account's sign-in on a computer, blocked in Google's endpoint management: it can't reach the account's data, and stays listed as blocked
+        # (approving it undoes it). GAM acts on a name without `doit`, which is for a query. Needs the devices scope itself: `.readonly` reads but can't block.
+        if not is_device_user_name(name):
+            raise ValueError("a computer's sign-in is devices/<id>/deviceUsers/<id>")
+        return ["block", "deviceuser", name]
+
+    @staticmethod
+    def delete_device_user(name: str) -> List[str]:
+        # One account's sign-in on a computer, deleted: the account is taken off it and its access to the account's data revoked. It shows again only if someone signs in on it again.
+        if not is_device_user_name(name):
+            raise ValueError("a computer's sign-in is devices/<id>/deviceUsers/<id>")
+        return ["delete", "deviceuser", name]
 
     @staticmethod
     def print_tokens() -> List[str]:

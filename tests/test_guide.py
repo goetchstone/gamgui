@@ -55,6 +55,7 @@ SCREENS = {
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],
     "Respond to an incident": ["_incident_nav.html", "_incident_logs.html", "_incident_reading.html"],
+    "See what was left on the account": ["incident.html", "_incident_nav.html", "_incident_check.html"],
     "See who it reached and where it started": ["_incident_nav.html", "_incident_reach.html", "_incident_wayin.html"],
     "Keep an incident": ["incident.html", "incident_kept.html", "_incident_kept.html", "_incident_logs.html"],
     "Pull the incident logs": ["incident.html", "incident_logs.html", "_incident_logs.html"],

@@ -27,7 +27,7 @@
     <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Check account</button>
   </form>
   {#- Do It Here's own check, apart from the form: anything asked for by hand after it posts no pick. -#}
-  {% if start and check_pick %}<div hx-post="/incident/check?pick={{ check_pick | urlencode }}" hx-vals='{"person": {{ person | tojson }} }' hx-trigger="load" hx-target="#incident-check" hx-swap="innerHTML"></div>{% endif %}
+  {% if start and check_pick %}<div hx-post="/incident/check?{{ check_pick }}" hx-vals='{"person": {{ person | tojson }} }' hx-trigger="load" hx-target="#incident-check" hx-swap="innerHTML"></div>{% endif %}
   <div id="incident-check">{% if not start %}{% include "_incident_check.html" %}{% endif %}</div>
   {#- Outside the check, which a run's end reads again: its result stays on screen. -#}
   <div id="incident-plan"></div>

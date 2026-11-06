@@ -89,6 +89,7 @@ with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
+- **What was left on the account** — computers, phones, apps and Apps Script projects in Check Account, with a computer blocked or the account taken off it from the same preview as the lock.
 - **Who it reached and where it started** — every address an attacker's email went to, who bounced and who's still to warn, with a CSV, read from the Gmail log; and the emails from outside before the attack, for you to say which started it.
 - **Kept incidents** — an incident's details, notes and every pull of the logs, kept on this Mac in `0600` files, so it opens again after a restart without reading Google.
 - **Incident logs** — pull every activity log an incident needs, by account and by the attacker's address, each read whole, oldest first, with CSV exports. **Read the logs** then says where each account stands, what's still to do and what the logs show, by rules in code.
@@ -195,6 +196,7 @@ its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
 | Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
 | Offboarding's added steps: clear recovery, hide from the directory, IMAP off, POP off | Lifecycle | argv-identical to SwiftGamGui's confirmed runs (2026-10-16) |
 | Offboarding's added steps: hand over secondary calendars, remove filters that forward | Lifecycle | not yet — not live in either app |
+| Block a computer, or take an account off it | Incident | not yet — not live in either app |
 | Secure an account: reset, sign-out, forwarding, IMAP and POP off, clear recovery | Incident | argv-identical to SwiftGamGui's confirmed runs |
 | Secure an account: delete filters, send-as addresses, drafts and scheduled emails | Incident | not yet — not live in either app |
 | Trash an email's copies, by Message-ID | Phishing | argv-identical to SwiftGamGui's confirmed runs (2026-10-19, 2026-10-23) |

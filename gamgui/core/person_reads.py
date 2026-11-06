@@ -7,10 +7,12 @@ saved passwords. Ported from SwiftGamGui's ``GamEngine/ChromeProfiles.swift`` an
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from .gam.errors import GAMError, GAMErrorKind
+from .gam.commands import is_device_user_name
+from .gam.errors import GAMError, GAMErrorKind, classify_stderr
+from .gam.parser import parse_records
 
 _NEVER = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -32,6 +34,8 @@ DELEGATION_NOTE = ("Listing computers needs the service account's domain-wide de
                    "https://www.googleapis.com/auth/cloud-identity.devices, or its .readonly form if this domain's service "
                    "account was set up read-only for Cloud Identity Devices (Admin console: Security › Access and data control "
                    "› API controls › Domain-wide delegation).")
+DEVICE_WRITE_NOTE = ("Blocking a computer or taking an account off it needs the full https://www.googleapis.com/auth/cloud-identity.devices scope in the domain-wide delegation: "
+                     "its .readonly form lists computers but can't change them.")
 SCOPE_LIST_NOTE = ("This domain's service-account file carries GAM's own list of APIs, and Cloud Identity Devices isn't on it, "
                    "so GAM never asks Google for the scope: delegating it alone won't help. Set the service account up again "
                    "with Cloud Identity Devices among its APIs (or with no list, so GAM uses its defaults), delegate the scope, "
@@ -164,6 +168,9 @@ class Computer:
     first_signed_in: str
     last_synced: str
     reports_compromise: bool
+    device_user: str = ""       # the person's own sign-in on it, what a block or a removal names: "" when it isn't one GAM can act on, so it's listed and can't be picked
+    device_id: str = ""         # devices/<id>
+    first_signed_at: Optional[datetime] = None
 
     @property
     def looks_virtual(self) -> bool:
@@ -182,11 +189,9 @@ def _computer(record: Mapping[str, Any], owner: str) -> Optional[Computer]:
     prefix, and a phone or tablet is the phones list's."""
     kind = _COMPUTER_KINDS.get(_text(record, "deviceType"), "")
     users = record.get("users")
-    mine: Optional[Dict[str, Any]] = None
-    for user in users if isinstance(users, list) else []:
-        if isinstance(user, dict) and _text(user, "userEmail").lower() == owner.lower():
-            mine = user
-            break
+    rows = [u for u in (users if isinstance(users, list) else []) if isinstance(u, dict) and _text(u, "userEmail").lower() == owner.lower()]
+    # A row still signed in first: one wiped before it mustn't hide a live sign-in.
+    mine: Optional[Dict[str, Any]] = next((u for u in rows if _text(u, "managementState") not in _NOT_SIGNED_IN), rows[0] if rows else None)
     if not kind or mine is None:
         return None
     state = _text(mine, "managementState") or _text(record, "managementState")
@@ -204,6 +209,9 @@ def _computer(record: Mapping[str, Any], owner: str) -> Optional[Computer]:
         first_signed_in=_shown(_text(mine, "createTime") or _text(mine, "firstSyncTime")),
         last_synced=_shown(_text(mine, "lastSyncTime") or _text(record, "lastSyncTime")),
         reports_compromise=_text(record, "compromisedState") == "COMPROMISED",
+        device_user=_text(mine, "name") if is_device_user_name(_text(mine, "name")) else "",
+        device_id=_text(record, "name"),
+        first_signed_at=_when(_text(mine, "createTime")),   # what a to-do item is matched by: never firstSyncTime, which Google moves at each registration, so an old computer looks new
     )
 
 
@@ -218,3 +226,47 @@ def computer_note(error: GAMError) -> str:
         said = error.stderr or ""
         return SCOPE_LIST_NOTE if "API access Denied" in said and "Authentication Token Error" not in said else ""
     return DELEGATION_NOTE if error.exit_code == 73 or error.kind is GAMErrorKind.SCOPE_MISSING else ""
+
+
+@dataclass(frozen=True)
+class ScriptProject:
+    """A standalone Apps Script project the person owns, which keeps acting for them on its triggers for as long as its access lasts. One bound inside a Sheet or Doc isn't a Drive file, so it never shows
+    here: once authorized it's a connected app, often named "Untitled project"."""
+
+    id: str
+    name: str
+    created: str
+    created_at: Optional[datetime]
+    modified: str
+    modified_at: Optional[datetime]
+    last_changed_by: str
+    in_trash: bool
+
+    def is_recent(self, now: datetime) -> bool:
+        return any(at is not None and now - at <= RECENT_SCRIPT for at in (self.created_at, self.modified_at))
+
+
+RECENT_SCRIPT = timedelta(days=14)
+NO_ENTITIES_FOUND_RC = 60
+_GOT_NO_FILES = "Got 0 Drive Files/Folders "
+
+
+def _script(record: Mapping[str, Any]) -> ScriptProject:
+    by = record.get("lastModifyingUser")
+    changed = (_text(by, "emailAddress") or _text(by, "displayName")) if isinstance(by, dict) else ""
+    created, modified = _text(record, "createdTime"), _text(record, "modifiedTime")
+    return ScriptProject(_text(record, "id"), _text(record, "name"), _shown(created), _when(created), _shown(modified), _when(modified), changed, _text(record, "trashed").lower() == "true")
+
+
+def script_projects_from(returncode: int, stdout: str, stderr: str, argv: Sequence[str], user: str) -> List[ScriptProject]:
+    """The person's projects, the latest changed first. printFileList exits 60 whenever it printed no row, which overwrites a failure's own code (Drive off, a refused token, a refresh error it drops without
+    a word). So 60 is "none" only on GAM's word, once Drive answered, and with no other line: anything else raises, and a failure is never a false all-clear."""
+    records = parse_records(stdout) if returncode == 0 else []
+    if returncode == 0:
+        projects = [_script(r) for r in records]
+        return sorted(projects, key=lambda p: p.modified_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    lines = [line.strip() for line in stderr.replace("\r", "\n").split("\n") if line.strip()]
+    answered = any(line.startswith(_GOT_NO_FILES) and line.lower().endswith(f" for {user.lower()}...") for line in lines)
+    if returncode == NO_ENTITIES_FOUND_RC and answered and all(line.startswith(("Getting all Drive Files/Folders ", _GOT_NO_FILES)) for line in lines):
+        return []
+    raise GAMError(classify_stderr(stderr), returncode, stderr, list(argv))

@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Generic, Iterable, List, Mapping, Optional, Sequence, Tuple, TypeVar
 
+from ..connected_apps import ConnectedApp, Reach
 from ..gam.models import Vacation
+from ..person_reads import Computer, MobileDevice, ScriptProject
 from ..phishing import addresses_in
 
 T = TypeVar("T")
@@ -302,6 +305,10 @@ class Check:
     scheduled: Read[List[ScheduledSend]] = field(default_factory=Read)
     drafts: Read[List[Draft]] = field(default_factory=Read)
     auto_reply: Read[Vacation] = field(default_factory=Read)
+    apps: Read[List[ConnectedApp]] = field(default_factory=Read)
+    phones: Read[List[MobileDevice]] = field(default_factory=Read)
+    computers: Read[List[Computer]] = field(default_factory=Read)
+    scripts: Read[List[ScriptProject]] = field(default_factory=Read)
     findings: List[str] = field(default_factory=list)
     cut_off: str = ""       # why nothing here can run: this is the admin GamGUI signs in as
     done: frozenset = frozenset()       # the switched steps the last run of this person finished
@@ -319,7 +326,9 @@ class Check:
 def findings(account: Account, *, forwarding: Optional[Forwarding] = None, filters: Optional[Sequence[Filter]] = None,
              delegates: Optional[Sequence[str]] = None, send_as: Optional[Sequence[SendAs]] = None,
              roles: Optional[Sequence[AdminRole]] = None, scheduled: Optional[Sequence[ScheduledSend]] = None,
-             drafts: Optional[Sequence[Draft]] = None, auto_reply: Optional[Vacation] = None) -> List[str]:
+             drafts: Optional[Sequence[Draft]] = None, auto_reply: Optional[Vacation] = None, apps: Optional[Sequence[ConnectedApp]] = None,
+             phones: Optional[Sequence[MobileDevice]] = None, computers: Optional[Sequence[Computer]] = None, scripts: Optional[Sequence[ScriptProject]] = None,
+             now: Optional[datetime] = None) -> List[str]:
     """What the check found worth saying, before the lists, in the order to deal with them. None is a read that failed: it's
     said beside its list, not here."""
     said: List[str] = []
@@ -348,6 +357,29 @@ def findings(account: Account, *, forwarding: Optional[Forwarding] = None, filte
     if auto_reply and auto_reply.enabled:
         said.append(f"An auto-reply is on (“{auto_reply.subject}”): an attacker's sends their message, a link say, to everyone who writes. "
                     f"Tick it to turn it off unless it's {user}'s own.")
+    if apps:
+        ai, broad = [a.name for a in apps if a.looks_like_ai], [a.name for a in apps if a.reach == Reach.BROAD and not a.looks_like_ai]
+        notes = [*([f"broad: {', '.join(broad)}"] if broad else []), *([f"an AI assistant or agent by its name: {', '.join(ai)}"] if ai else [])]
+        said.append(f"{'1 app has' if len(apps) == 1 else f'{len(apps)} apps have'} access to {user}'s account" + (f" ({'; '.join(notes)})" if notes else "")
+                    + f". The sign-out revokes them all; ask {user} which they use before they grant them again.")
+    if phones:
+        said.append(f"{'A phone or tablet syncs' if len(phones) == 1 else f'{len(phones)} phones or tablets sync'} {user}'s account: one they don't own may be the attacker's. "
+                    "The reset and the sign-out cut its sync off; to wipe the account from it, use the Admin console's Devices."
+                    + (" One reports it's rooted or jailbroken." if any(p.reports_compromise for p in phones) else ""))
+    active = [c for c in computers or () if c.is_active]    # one already blocked or wiped needs nothing more, and is said as such
+    if active:
+        virtual, stopped = sum(1 for c in active if c.looks_virtual), len(computers or ()) - len(active)
+        machines = "" if not virtual else ", and it's a virtual machine" if len(active) == 1 else f", {virtual} of them {'a virtual machine' if virtual == 1 else 'virtual machines'}"
+        said.append(f"{'A computer is' if len(active) == 1 else f'{len(active)} computers are'} signed in with {user}'s account{machines}: one they don't use may be the attacker's. "
+                    "The sign-out ends its session; block it or take the account off it below."
+                    + (" One reports it's compromised." if any(c.reports_compromise for c in active) else "")
+                    + (f" {stopped} more {'is' if stopped == 1 else 'are'} already blocked or wiped." if stopped else ""))
+    recent = [s for s in scripts or () if s.is_recent(now or datetime.now(timezone.utc))]
+    if recent:
+        names = ", ".join(f"“{s.name or 'Untitled'}”" for s in recent)
+        said.append(f"{'An Apps Script project' if len(recent) == 1 else f'{len(recent)} Apps Script projects'} in {user}'s Drive {'was' if len(recent) == 1 else 'were'} made or changed in the last "
+                    f"two weeks ({names}): a script someone authorized keeps acting for them on its triggers. The sign-out revokes its access; ask {user} whether they wrote "
+                    + ("it, and delete it from their Drive if not." if len(recent) == 1 else "them, and delete any they didn't from their Drive."))
     if drafts:
         count = f"at least {DRAFT_CAP}" if len(drafts) >= DRAFT_CAP else str(len(drafts))
         said.append(f"{user} has {count} draft{'' if len(drafts) == 1 else 's'}: an attacker's leftover drafts can still be sent by anyone "
@@ -365,3 +397,18 @@ def findings(account: Account, *, forwarding: Optional[Forwarding] = None, filte
     elif account.is_delegated_admin or roles:
         said.append(f"{user} holds an admin role: check the Admin console's audit log for what it was used for.")
     return said
+
+
+def pick_computer(computers: Sequence[Computer], resource_id: str, registered_at: Optional[datetime]) -> Optional[Computer]:
+    """The computer a to-do item is about. The Devices log's ID as Google's device ID; one found that way but no longer signed in picks nothing. With no ID match, the computer first signed in within two
+    minutes of the registration, the nearest. None when nothing matches: the computers then say so, to pick by hand."""
+    pickable = [c for c in computers if c.is_active and c.device_user]
+    if resource_id:
+        named = next((c for c in computers if c.device_id == f"devices/{resource_id.removeprefix('devices/')}"), None)
+        if named is not None:
+            return named if named in pickable else None
+    if registered_at is None:
+        return None
+    near = [(abs((c.first_signed_at - registered_at).total_seconds()), i) for i, c in enumerate(pickable) if c.first_signed_at]
+    near = [pair for pair in near if pair[0] <= 120]
+    return pickable[min(near)[1]] if near else None

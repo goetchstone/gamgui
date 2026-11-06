@@ -89,6 +89,7 @@ FREE_TEXT = (
 )
 
 _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Example-1.com"])
+_DEVICE_USER = st.sampled_from(["devices/0vmcarol01/deviceUsers/u1", "devices/a-b_C/deviceUsers/D-1_e"])
 
 # Every other builder with a str parameter: addresses, calendar/event ids, scopes, aliases, dates.
 IDENTIFIERS = (
@@ -120,6 +121,10 @@ IDENTIFIERS = (
     Spec("print_chrome_profiles", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_mobile_devices", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_devices", (), (), {"user": _SEARCH_ADDRESS}),
+    Spec("print_script_projects", (), (), {"user": _SEARCH_ADDRESS}),
+    Spec("print_user_tokens", (), (), {"user": _SEARCH_ADDRESS}),
+    Spec("block_device_user", (), (), {"name": _DEVICE_USER}),
+    Spec("delete_device_user", (), (), {"name": _DEVICE_USER}),
     Spec("check_svcacct", ("admin",), (), {"scopes": st.just(("https://mail.google.com/",))}),
     Spec("report_users", ("date",), (), {"params": st.just(("accounts:used_quota_in_mb",))}),
     Spec("info_user", ("email",)),

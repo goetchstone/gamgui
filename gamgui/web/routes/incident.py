@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Annotated, FrozenSet, List, Tuple
+from typing import Annotated, FrozenSet, List, Tuple, Optional
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -18,7 +19,9 @@ from ...core import guard, lifecycle
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.incident import reads, secure
-from ...core.incident.check import DRAFT_CAP, SCHEDULED_CAP, Account, Check, Draft, drafts_matching
+from ...core.incident.check import DRAFT_CAP, SCHEDULED_CAP, Account, Check, Draft, drafts_matching, pick_computer
+from ...core.incident.logs import parse_time
+from ...core.person_reads import Computer
 from ...core.onboarding import looks_like_email
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
@@ -48,7 +51,7 @@ def _on_incident(request: Request) -> bool:
 
 
 def _context(st, job=None, on_screen: bool = True) -> dict:
-    return {"job": job, "check": st.incident_check, "shown": _SHOWN, "pick": _pick_for(st), "switchable": secure.SWITCHABLE, "on_by_default": secure.ON_BY_DEFAULT,
+    return {"job": job, "check": st.incident_check, "shown": _SHOWN, "pick": _pick_for(st), "picked_computer": _picked_computer(st), "picked_by_time": _picked_by_time(st), "switchable": secure.SWITCHABLE, "on_by_default": secure.ON_BY_DEFAULT,
             "notes": secure.NOTES, "names": lifecycle.STEP_NAMES, "on_screen": on_screen, "draft_cap": DRAFT_CAP, "scheduled_cap": SCHEDULED_CAP}
 
 
@@ -63,8 +66,25 @@ def _pick_for(st) -> str:
     return pick[1] if held is not None and pick and pick[0] in (held.asked.lower(), held.account.primary_email.lower()) else ""
 
 
+_FIXES = frozenset({*secure.SWITCHABLE, "computer"})
+
+
+def _picked_by_time(st) -> bool:
+    """It was matched by when it first signed in, not by its ID: a guess the operator should look at."""
+    computer = _picked_computer(st)
+    return computer is not None and computer.device_id != f"devices/{st.incident_pick[2].removeprefix('devices/')}"
+
+
+def _picked_computer(st) -> Optional[Computer]:
+    """The computer Do It Here asked for on the check on screen, if it's one that can still be picked."""
+    if _pick_for(st) != "computer":
+        return None
+    _, _, resource, registered = st.incident_pick
+    return pick_computer(st.incident_check.computers.value or [], resource, parse_time(registered) if registered else None)
+
+
 @router.get("", response_class=HTMLResponse)
-async def page(request: Request, person: str = "", fix: str = "") -> HTMLResponse:
+async def page(request: Request, person: str = "", fix: str = "", resource: str = "", registered: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     reopen_remembered(st)
     if st.incident_groups is not None:      # opening the screen again tries the group reads that failed
@@ -74,10 +94,10 @@ async def page(request: Request, person: str = "", fix: str = "") -> HTMLRespons
     # From a person's page: their check, read now unless it's the one on screen.
     start = bool(person) and not (held is not None and person.lower() in (held.asked.lower(), held.account.primary_email.lower()))
     # Do It Here: this one fix picked and the lock left off, the lock being a to-do item of its own. Anything else asked for drops it.
-    pick = fix if person and fix in secure.SWITCHABLE and not _running(st, st.incident_run_job) else ""
-    st.incident_pick = (person.lower(), pick) if pick and not start else None
+    pick = fix if person and fix in _FIXES and not _running(st, st.incident_run_job) else ""
+    st.incident_pick = (person.lower(), pick, resource, registered) if pick and not start else None
     return TEMPLATES.TemplateResponse(request, "incident.html", {
-        "connected": st.connector is not None, "person": person, "start": start, "check_pick": pick if start else "", "here": "/incident", "open_incident": open_incident_record(st),
+        "connected": st.connector is not None, "person": person, "start": start, "check_pick": urlencode({"pick": pick, "resource": resource, "registered": registered}) if pick and start else "", "here": "/incident", "open_incident": open_incident_record(st),
         "has_pull": (st.incident_pull is not None and st.incident_pull.ended) or _running(st, st.incident_open_job) is not None,
         **_context(st, _running(st, st.incident_check_job))})
 
@@ -100,10 +120,10 @@ async def _read(job, st, conn, person: str) -> None:
 
 
 @router.post("/check", response_class=HTMLResponse)
-async def check_account(request: Request, person: Annotated[str, Form()] = "", after_run: Annotated[str, Form()] = "", pick: str = "") -> HTMLResponse:
+async def check_account(request: Request, person: Annotated[str, Form()] = "", after_run: Annotated[str, Form()] = "", pick: str = "", resource: str = "", registered: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
     # A check by hand, another person's, or a run going on drops it: the screen's own form posts no pick.
-    st.incident_pick = (person.strip().lower(), pick) if pick in secure.SWITCHABLE and person.strip() and not _running(st, st.incident_run_job) else None
+    st.incident_pick = (person.strip().lower(), pick, resource, registered) if pick in _FIXES and person.strip() and not _running(st, st.incident_run_job) else None
     conn = st.connector
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
@@ -171,7 +191,9 @@ async def secure_preview(request: Request) -> HTMLResponse:
             delegates=[d for d in check.delegates.value or [] if d in picked_delegates],
             send_as=[s.address for s in check.other_send_as if s.address in picked_send_as],
             auto_reply_off=bool(form.get("auto_reply")) and bool(check.auto_reply.value and check.auto_reply.value.enabled),
-            scheduled=scheduled, drafts=drafts, recovery=(check.account.recovery_email, check.account.recovery_phone))
+            scheduled=scheduled, drafts=drafts, recovery=(check.account.recovery_email, check.account.recovery_phone),
+            computers=[(c, str(form.get(f"computer:{c.device_user}"))) for c in check.computers.value or []     # what the check listed, whatever was posted
+                       if c.is_active and c.device_user and form.get(f"computer:{c.device_user}") in ("block", "delete")])
     except ValueError as exc:
         return error_partial(request, f"Couldn't plan this: {exc}. Remove it in the Admin console or Gmail's settings instead.")
     if not steps:
@@ -246,7 +268,8 @@ async def secure_apply(request: Request) -> HTMLResponse:
     except OSError as exc:
         return error_partial(request, f"The audit log couldn't record this ({exc.strerror or type(exc).__name__}), so nothing ran.")
     st.incident_check = None          # its lists are from before the run: it's read again when the run ends
-    job = start_job(st.jobs, len(held.steps), kind="incident_secure", title=f"Securing {held.user}")
+    st.incident_lock_ran = any(s.key in ("password", "revoke") for s in held.steps)
+    job = start_job(st.jobs, len(held.steps), kind="incident_secure", title=f"Securing {held.user}" if st.incident_lock_ran else f"A fix on {held.user}")
     job.about = held.user
     st.incident_run_job = job.id
     job.task = asyncio.create_task(_secure(job, st, conn, held))
@@ -255,7 +278,7 @@ async def secure_apply(request: Request) -> HTMLResponse:
 
 def _run_context(request: Request, st, job) -> dict:
     revoke = lifecycle.STEP_NAMES["revoke"]
-    return {"job": job, "user": job.about, "revoke_label": revoke, "recheck": _on_incident(request)}
+    return {"job": job, "user": job.about, "revoke_label": revoke, "recheck": _on_incident(request), "lock_ran": st.incident_lock_ran}
 
 
 @router.get("/secure/status", response_class=HTMLResponse)

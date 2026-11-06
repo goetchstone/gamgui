@@ -237,6 +237,11 @@ that list says which and how to add it, and the others still read. Not yet verif
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.
 3. **Done** lists what this app or the logs show finished. **Mark done** is for what no log can show: it asks how it was done, and stays with the incident. It isn't offered for a lock, recovery details or a read, which the logs or this app show.
 
+## See what was left on the account
+1. **Check account** on **Respond** also lists the computers and phones signed in with the account, the apps with access, and the Apps Script projects in their Drive. A script someone authorized keeps acting for them on its triggers.
+2. For each computer, pick **Keep it**, **Block it** or **Take the account off it**. It runs from the same preview as the lock. Blocking can be undone in the Admin console.
+3. Listing computers needs the devices scope in Setup's delegation. Without it the check says how to add it, and reads the rest as usual. Blocking one needs the full scope: its read-only form lists them but can't change them.
+
 ## See who it reached and where it started
 1. On **Respond**, each email the attacker sent has its own list, from the Gmail log: who received it, what bounced, and who's still to warn. Pulling the email from every mailbox doesn't change this list, which is what makes it the record.
 2. **Pick the warning** when you've sent one: only emails sent after it are offered, and it counts only for those the log shows it reaching. **Every address it went to** lists them, and **Export as CSV** saves them all. A group it went to is read for its members, so each counts as themselves.
