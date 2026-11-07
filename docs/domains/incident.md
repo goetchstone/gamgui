@@ -1,9 +1,6 @@
 # Incident
 
-**One line:** `/incident` works a compromised account: Check Account reads what an attacker commonly changes and changes nothing, the operator
-switches steps and ticks what to undo, and one preview runs it with the person's address typed. Ported from SwiftGamGui, whose
-`docs/domains/compromised-account.md` holds GAM's behaviour for each command and the history behind each rule. Treat that runbook's list of
-past fixes as a checklist when porting a slice.
+**One line:** the incident screens, Incidents, Investigate, Respond and Report, work a compromised account from first report to the review: pull and read the logs, see where each account stands, lock it and undo what the attacker left from one preview with the person's address typed, see who their emails reached, and export a report with the evidence. Ported from SwiftGamGui, whose `docs/domains/compromised-account.md` holds GAM's behaviour for each command and the history behind each rule. Treat that runbook's list of past fixes as a checklist when changing a slice.
 
 **Owns invariants:** #1 (a delegate or send-as address is one plain address, a list of IDs is `id_list`'s), #2 (one held preview, read fresh before the first write).
 
@@ -103,8 +100,8 @@ The reader works both out (`Reach`, `WayIn`); `_incident_reach.html` and `_incid
 - **Bounded**: 200 incidents, 500 notes each, 100 saved reads each, 256 MB a file, 1 GB an export, 1 MB an `about.txt` and 3 million events a saved read (a zip of a few MB can unpack to that many rows, about 310 bytes each held).
 - **The open incident's ID**, never its contents, is remembered in a file beside them, so it opens again after a restart.
 
-## Not in this slice
- a kept incident, where each account stands, who it reached, devices and scripts, and the report: back-port plan E2-E8.
-
 ## Testing / live-verification status
-Offline only here. In SwiftGamGui the lock steps (reset, sign-out, forwarding off, IMAP and POP off, clear recovery) are confirmed live. Deleting filters, send-as addresses and drafts, and the scheduled-send clean-up, are not, in either app: check them on a throwaway account before relying on them, and whether Gmail's API honours `in:scheduled` and that a delete stops the send.
+Offline only here. In SwiftGamGui the lock steps (reset, sign-out, forwarding off, IMAP and POP off, clear recovery) are confirmed live. Deleting filters, send-as addresses and drafts, the scheduled-send clean-up, and blocking a computer or taking an account off it are not, in either app: check them on a throwaway account before relying on them. The full list of what's owed is [the plan's](../plans/2026-10-30-backport-swiftgamgui.md#live-checks-owed).
+
+## The shape the reviews kept finding
+Each slice went through an adversarial review, and each found the same harm: **something reads finished, whole or proven when it isn't.** Look for it first when changing anything here: a read that failed or stopped short reading as none; a narrow read standing in for a wide one; a pick or a form applying to the wrong person or incident; a stale reading; a file with the name of the whole thing. GAM exiting 0 isn't its word that it did it.

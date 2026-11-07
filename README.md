@@ -6,12 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > [!IMPORTANT]
-> **GamGUI is being brought to feature parity with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**,
-> its native SwiftUI rewrite, which runs the same `gam` commands, held to them by tests
-> ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). Until then each has things the other lacks. Only
-> in SwiftGamGui for now: incident response. Only here:
-> sharing a calendar with a group, deleting a calendar or an event, a signature for many people at
-> once, and deleting a leaver's account.
+> **GamGUI has every feature of [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**, its native SwiftUI
+> rewrite, which runs the same `gam` commands, held to them by tests
+> ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). The exceptions are Apple-only: Siri and App Intents,
+> the on-device model and Touch ID. Only here: sharing a calendar with a group, deleting a calendar or an event, a
+> signature for many people at once, and deleting a leaver's account.
 
 A free, local, open-source **macOS app for [GAM7](https://github.com/GAM-team/GAM)**, the Google
 Workspace admin command line. The recurring admin chores get a screen, the big changes show a
@@ -72,8 +71,9 @@ Details in [Build from source](#build-from-source).
 
 ## Status
 
-In use against live Google Workspace tenants, kept current with GAM, and being brought to feature parity
-with [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). Working today:
+In use against live Google Workspace tenants, kept current with GAM, and at feature parity with
+[SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). The incident screens are new and have only run offline: see
+[Live verification status](#live-verification-status). Working today:
 
 - **Setup wizard** — either **import an existing GAM install** (it auto-detects `$GAMCFGDIR`,
   `~/.gam`, and its own setup dir, shows which credential files each one holds, and moves them into

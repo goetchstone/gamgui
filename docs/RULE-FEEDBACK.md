@@ -218,6 +218,13 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   captured one when it can't be reproduced on demand, and when neither is possible, report it as unproven.
 - **Enforcement home if changed:** skill (`post-failure` step 2, on what counts as a reproduction).
 
+## 2026-11-06 — The tests can't see "reads finished when it isn't"
+- **What happened:** every incident slice passed its suite, its a11y walk and a look in the browser, and every one then failed adversarial review the same way: a block GAM never did read as done, a computers read that never ran read as "None", a narrow read made a whole log read complete, a report read as whole with its Gmail log unread. The ports had the spec's tests, and in several the spec had the gap too.
+- **Invariant in force:** none numbered. CLAUDE.md's "the mock lies" is the nearest: here the mock had no silent exit 0, and the tests asked only what the original's tests asked.
+- **Why it didn't hold:** a green test says the thing works when it works. Nothing asks what the screen says when a read fails, stops short, or answers for less than it seems to.
+- **Would a rule have caught it?** Yes, if a slice's tests must cover each read's failure and partial cases on the screen, and if a mock must model GAM's exit 0 without doing it. It was a review with GAM's source that found them, not a rule, and it cost about 200k tokens a slice.
+- **Enforcement home if changed:** skill (`pre-commit`, for any read or report that can stand as the record), or a tripwire on `verify=` for writes GAM can leave undone.
+
 ## 2026-11-05 — A port can drop what the original already fixed
 - **What happened:** the phishing port from SwiftGamGui left out three things that app's runbook lists as fixed: showing what a
   Message-ID matched before trashing (F5), showing lines GAM said that no reader knows (P5), and saying suspended accounts aren't

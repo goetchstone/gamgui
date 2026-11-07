@@ -9,11 +9,12 @@ The organizing constraint: every mutation must keep going through the same choke
 `_run_write()` (`guard.evaluate()` only draws the Confirm button). A feature that needs a way
 around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## First — feature parity with SwiftGamGui
+## First — prove the parity work on a real domain
 
-The operator's goal since 2026-11-05: everything SwiftGamGui has beyond GamGUI, in the order of
-[the plan](docs/plans/2026-10-30-backport-swiftgamgui.md). The items below come after it, unless the plan already
-covers them (the compromised-account playbook is its Phase E; offboarding's added steps its C3).
+Feature parity with SwiftGamGui landed on 2026-11-06 ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). All of it
+has run offline only. What's owed is the live checks, each on a throwaway account with the operator's yes for each
+write: [the plan's list](docs/plans/2026-10-30-backport-swiftgamgui.md#live-checks-owed). The same plan lists what this
+work found that SwiftGamGui should take back.
 
 ## Next — small, and each closes a real daily gap
 
