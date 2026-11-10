@@ -34,6 +34,23 @@ def test_select_asset_picks_the_highest_macos_build():
     assert name == "gam-7.47.02-macos26.5-arm64.tar.xz" and url == "u26"
 
 
+def test_select_asset_skips_a_build_for_a_newer_macos_than_the_cap():
+    # 7.51.00's arm64 builds: macos27.0 won't start on CI's macOS 26 runners, so 26.7 is the pick.
+    release = {"assets": [
+        {"name": f"gam-7.51.00-macos{v}-arm64.tar.xz", "browser_download_url": v}
+        for v in ("15.8", "26.7", "27.0")
+    ]}
+    assert bump.MACOS_MAX == 26
+    assert bump.select_asset(release, "arm64") == ("gam-7.51.00-macos26.7-arm64.tar.xz", "26.7")
+    with pytest.raises(SystemExit, match="macOS 26 or older"):
+        bump.select_asset({"assets": release["assets"][2:]}, "arm64")
+
+
+def test_fetch_gam_caps_at_the_same_macos():
+    m = re.search(r"^GAM_MACOS_MAX=(\d+)$", (ROOT / "scripts" / "fetch_gam.sh").read_text(), re.M)
+    assert m and int(m[1]) == bump.MACOS_MAX
+
+
 def test_select_asset_is_arch_specific():
     release = {"assets": [
         {"name": "gam-7.47.02-macos26.5-arm64.tar.xz", "browser_download_url": "arm"},

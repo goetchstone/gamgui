@@ -47,6 +47,10 @@ REPO = "GAM-team/GAM"
 # fails closed and a human looks.
 SIGNER_WORKFLOW = f"{REPO}/.github/workflows/build.yml"
 SOURCE_REF = "refs/heads/main"
+# The newest macOS major whose GAM build we take. A build's libpython won't load on an older macOS
+# than its asset name says, so this follows CI's macos-latest (26.7 when GAM first shipped a macos27
+# build): raise it, here and in fetch_gam.sh, once that image runs the next major.
+MACOS_MAX = 26
 CHECKSUMS = ROOT / "scripts" / "gam_checksums.txt"
 FETCH = ROOT / "scripts" / "fetch_gam.sh"
 COMMANDS_PY = ROOT / "gamgui" / "core" / "gam" / "commands.py"
@@ -59,19 +63,20 @@ ROADMAP = ROOT / "ROADMAP.md"
 # --- pure text transforms (unit-tested; no network) ----------------------------------------------
 
 def select_asset(release: dict, arch: str) -> "tuple[str, str]":
-    """`(asset_name, download_url)` for the macOS asset, mirroring fetch_gam.sh: highest ``macosNN``.
+    """`(asset_name, download_url)` for the macOS asset, mirroring fetch_gam.sh: the highest
+    ``macosNN.N`` build whose major is at most ``MACOS_MAX``.
 
-    A release ships several ``macosNN`` builds; both this and fetch_gam.sh pick the highest, so the
+    A release ships several ``macosNN.N`` builds; both this and fetch_gam.sh pick the same one, so the
     pin is deterministic per release rather than per whichever runner or Mac did the bump.
     """
     cands = []
     for a in release.get("assets", []):
         name = a["name"]
-        if "macos" in name and arch in name and name.endswith(".tar.xz"):
-            m = re.search(r"macos(\d+)", name)
-            cands.append((int(m.group(1)) if m else 0, name, a["browser_download_url"]))
+        m = re.search(r"macos(\d+)(?:\.(\d+))?", name)
+        if m and arch in name and name.endswith(".tar.xz") and int(m[1]) <= MACOS_MAX:
+            cands.append(((int(m[1]), int(m[2] or 0)), name, a["browser_download_url"]))
     if not cands:
-        raise SystemExit(f"no macOS/{arch} .tar.xz asset in the release")
+        raise SystemExit(f"no macOS {MACOS_MAX} or older/{arch} .tar.xz asset in the release")
     cands.sort()
     _, name, url = cands[-1]
     return name, url

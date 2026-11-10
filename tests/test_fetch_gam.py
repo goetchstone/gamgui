@@ -10,7 +10,9 @@ gamgui/resources/gam7.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import io
+import json
 import os
 import platform
 import re
@@ -160,6 +162,24 @@ def test_checksum_mismatch_always_refuses(tmp_path, args):
     assert r.returncode == 1, r.stdout + r.stderr
     assert "checksum mismatch" in r.stderr
     assert not _dest(root).exists()
+
+
+def test_picks_the_same_build_as_bump_gam_and_none_past_the_cap(tmp_path):
+    # Both scripts choose the asset, so they must agree: 26.10 sorts above 26.9, and the macos27 build
+    # (which GAM 7.51.00 added, and whose libpython won't load on CI's macOS 26) is never the pick.
+    names = [f"gam-9.99.99-macos{v}-{_ARCH}.tar.xz" for v in ("15.7", "26.9", "26.10", "27.0")]
+    release = {"tag_name": "v9.99.99",
+               "assets": [{"name": n, "browser_download_url": f"https://example.invalid/{n}"} for n in names]}
+    root, _sha = _make_root(tmp_path, pinned=None)
+    (tmp_path / "release.json").write_text(json.dumps(release))
+    r = _run(root, tmp_path)
+
+    assert f"==> Selected: {names[2]} " in r.stdout, r.stdout + r.stderr
+    assert r.returncode == 1 and "no pinned checksum" in r.stderr
+    spec = importlib.util.spec_from_file_location("bump_gam", REPO_ROOT / "scripts" / "bump_gam.py")
+    bump = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bump)
+    assert bump.select_asset(release, _ARCH)[0] == names[2]
 
 
 def test_unknown_flag_still_rejected(tmp_path):
