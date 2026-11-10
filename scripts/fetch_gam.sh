@@ -13,7 +13,9 @@ REPO="GAM-team/GAM"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/gamgui/resources/gam7"
 # Pinned for reproducible builds. Override with `--tag latest` to grab the newest release.
-TAG="v7.50.00"
+TAG="v7.51.00"
+# The newest macOS major whose build we take; bump_gam.py's MACOS_MAX says why, and must match.
+GAM_MACOS_MAX=26
 # Installing an asset we have no pinned hash for is opt-in: see the checksum gate below.
 ALLOW_UNPINNED=0
 
@@ -53,19 +55,20 @@ curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
   -H "Accept: application/vnd.github+json" ${GH_API_AUTH[@]+"${GH_API_AUTH[@]}"} "$API" -o "$TMP/release.json"
 
 # Parse the release JSON from the file (no stdin, so a heredoc script is safe here). Print one
-# line: "<tag> <asset-name> <download-url>". Prefer the highest macosNN build if several match.
-PICK="$(python3 - "$TMP/release.json" "$ARCH" <<'PY'
+# line: "<tag> <asset-name> <download-url>". Prefer the highest macosNN.N build at or under
+# GAM_MACOS_MAX if several match (the same pick as bump_gam.py's select_asset).
+PICK="$(python3 - "$TMP/release.json" "$ARCH" "$GAM_MACOS_MAX" <<'PY'
 import json, re, sys
 data = json.load(open(sys.argv[1]))
-arch = sys.argv[2]
+arch, cap = sys.argv[2], int(sys.argv[3])
 cands = []
 for a in data.get("assets", []):
     n = a["name"]
-    if "macos" in n and arch in n and n.endswith(".tar.xz"):
-        m = re.search(r"macos(\d+)", n)
-        cands.append((int(m.group(1)) if m else 0, n, a["browser_download_url"]))
+    m = re.search(r"macos(\d+)(?:\.(\d+))?", n)
+    if m and arch in n and n.endswith(".tar.xz") and int(m[1]) <= cap:
+        cands.append(((int(m[1]), int(m[2] or 0)), n, a["browser_download_url"]))
 if not cands:
-    sys.exit("no matching macOS asset found in release")
+    sys.exit(f"no macOS {cap} or older asset for {arch} found in release")
 cands.sort()
 _, name, url = cands[-1]
 print(data.get("tag_name", ""), name, url)
