@@ -171,9 +171,9 @@ means the operation has succeeded at least once against a production Google Work
 yet** means unproven: the offline suite shows the command matches GAM's grammar and the mock accepts
 it, nothing more — run it once on a **throwaway** user, group or calendar before you rely on it. All
 reads are confirmed but those new since (a read-only pass over the parsers ships as `scripts/acceptance.py`; last run
-2026-10-08 on GAM 7.48.22, all eight checks passing). Reports' connected apps (`print
-tokens`) and a person's Security tab (Chrome profiles, phones, computers) are new to both apps, not yet run live, and added to
-that pass since. Three reads the pass doesn't
+2026-11-10 on GAM 7.51.00, all twelve checks passing). That run was the first live one for Reports' connected
+apps (`print tokens`) and a person's Security tab (Chrome profiles, phones, computers): their output parsed, but it has
+not yet been compared with the Admin console. Three reads the pass doesn't
 run were last confirmed separately: setup's scoped `check serviceaccount scopes …` (2026-10-02, GAM
 7.48.14), and `print domains` for the Builder's External-only filter and reading the connected admin and
 its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
