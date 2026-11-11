@@ -49,6 +49,13 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _owner_address(value: Any) -> str:
+    """A class's owner's address as `owneremail` gives it, or "" when GAM couldn't look the owner up: it then writes "Unknown
+    user" (_convertCourseUserIdToEmailName), which is never an address. The owner is still known by `ownerId`."""
+    text = _text(value).lower()
+    return text if "@" in text else ""
+
+
 @dataclass(frozen=True)
 class Course:
     id: str
@@ -74,7 +81,7 @@ class Course:
             return None
         return cls(id=course_id, name=_text(rec.get("name")), section=_text(rec.get("section")),
                    room=_text(rec.get("room")), state=_text(rec.get("courseState")),
-                   owner_id=_text(rec.get("ownerId")), owner_email=_text(rec.get("ownerEmail")).lower(),
+                   owner_id=_text(rec.get("ownerId")), owner_email=_owner_address(rec.get("ownerEmail")),
                    created=_text(rec.get("creationTime")), updated=_text(rec.get("updateTime")),
                    link=_text(rec.get("alternateLink")))
 
