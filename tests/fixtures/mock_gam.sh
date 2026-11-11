@@ -372,6 +372,10 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
   done
   for id in $missing; do printf 'Course: %s, Does not exist\n' "$id" 1>&2; done
   printf 'id,JSON\n'
+  # An owner GAM can't look up with `owneremail` (a deleted account; $GAM_MOCK_STATE/ownergone/<owner id>): its address is
+  # "Unknown user", one warning per distinct owner (_convertCourseUserIdToEmailName → entityDoesNotHaveItemWarning,
+  # entities Course and Owner ID), every class still printed, and exit ENTITY_DOES_NOT_EXIST_RC (56). Read from 7.51.00.
+  owners_gone=""
   while IFS= read -r record || [ -n "$record" ]; do
     [ -n "$record" ] || continue
     id=$(json_text id "$record")
@@ -382,10 +386,16 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
       state=$(lower "$(json_text courseState "$record")")
       case ",$states," in *",$state,"*) ;; *) continue ;; esac
     fi
+    owner_id=$(json_text ownerId "$record")
+    if [ "$owneremail" = 1 ] && [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/ownergone/$owner_id" ]; then
+      record=$(printf '%s' "$record" | sed 's/"ownerEmail": "[^"]*"/"ownerEmail": "Unknown user"/')
+      case " $owners_gone " in *" $owner_id "*) ;; *)
+        printf 'Course: %s, Owner ID: %s, Does not exist\n' "$id" "$owner_id" 1>&2; owners_gone="$owners_gone $owner_id" ;; esac
+    fi
     [ "$owneremail" = 1 ] || record=$(printf '%s' "$record" | sed 's/"ownerEmail": "[^"]*", //')
     gam_row "$id" "$record"
   done < "$GAM_MOCK_FIXTURES/courses.json"
-  [ -z "$missing" ] || exit 56
+  [ -z "$missing$owners_gone" ] || exit 56
   exit 0
 fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "course-participants" ]; then

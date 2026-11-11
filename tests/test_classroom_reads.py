@@ -176,3 +176,35 @@ def test_the_classroom_scopes_are_gams_client_scopes_and_read_only_will_do():
 
 def test_gams_no_scopes_message_is_a_missing_scope():
     assert classify_stderr("ERROR: There are no scopes authorized for the API(s): Classroom API") is GAMErrorKind.SCOPE_MISSING
+
+
+# --- an owner GAM can't look up (failure log 2026-11-11; found by the SwiftGamGui port's review) ------------------------
+ADMIN_ID = "100000000000000000009"     # owns World History 2025 in the fixtures
+
+
+async def test_a_deleted_owner_never_hides_the_classes(connector, gam_state):
+    # GAM prints every class, the owner's address as "Unknown user", warns and exits 56: one owner hid every class.
+    (gam_state / "ownergone").mkdir()
+    (gam_state / "ownergone" / ADMIN_ID).touch()
+    courses = await connector.list_courses(student="carol@example.com")
+    assert [c.name for c in courses] == ["Biology", 'Chemistry, "Honors"', "World History 2025"]
+    history = courses[-1]
+    assert history.owner_email == "" and history.owner_id == ADMIN_ID          # never "unknown user" as an address
+
+
+async def test_a_deleted_owner_never_reads_as_the_leaver_owning_nothing(connector, gam_state):
+    # courses_owned_by read NOT_FOUND as "owns none", and exit 56 classified as NOT_FOUND.
+    (gam_state / "ownergone").mkdir()
+    (gam_state / "ownergone" / ADMIN_ID).touch()
+    assert {c.name for c in await connector.courses_owned_by("alice@example.com")} == {
+        "Algebra", "Biology", 'Chemistry, "Honors"'}
+    assert (await connector.get_course("500000000004")).owner_id == ADMIN_ID
+
+
+def test_only_an_unknown_owner_warning_lets_the_table_stand():
+    from gamgui.core.gam.errors import only_unknown_owners
+    warn = "Course: 500000000004, Owner ID: 100000000000000000009, Does not exist"
+    assert only_unknown_owners(warn) and only_unknown_owners(f"Getting all Courses that match query ()\n{warn} (1/2)\n")
+    assert not only_unknown_owners("")
+    assert not only_unknown_owners(f"{warn}\nTeacher: nobody@example.com, Does not exist")
+    assert not only_unknown_owners("Course: 999, Does not exist")
