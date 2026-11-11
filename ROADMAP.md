@@ -16,6 +16,9 @@ has run offline only. What's owed is the live checks, each on a throwaway accoun
 write: [the plan's list](docs/plans/2026-10-30-backport-swiftgamgui.md#live-checks-owed). The same plan lists what this
 work found that SwiftGamGui should take back.
 
+Everything below is planned, in both apps, in [Finish the roadmap](docs/plans/2026-11-07-finish-the-roadmap.md): the
+order, the decisions each item needs, and a status table to mark as items land.
+
 ## Next — small, and each closes a real daily gap
 
 - **Make the report buckets actionable.** `/reports` already computes the worklists that matter
@@ -41,9 +44,6 @@ work found that SwiftGamGui should take back.
   the paid seat assigned. That is money, every month, silently.
 - **Group settings** — posting permissions, moderation, who can join, external senders. The Groups
   screen manages membership only, while the actual tickets are settings.
-- **Compromised-account playbook.** A password reset is the reflex and is not enough: attackers
-  persist via forwarding rules, filters, delegates and app passwords. One screen that surfaces what
-  was changed and reverses it.
 - **Delegate & forwarding review, domain-wide.** "Who can read whose mailbox, and whose mail is
   leaving the building?" is answerable today only one user at a time, so nobody audits it.
 - **Shared drives** — inventory, membership, and the orphaned-drive check before deleting a
@@ -68,8 +68,6 @@ work found that SwiftGamGui should take back.
   what powers the live ✓/✗ feed — but a genuine whole-domain push would be minutes instead of hours
   via `gam all users` or a `gam csv` batch. Worth adding as an *opt-in alternative*, not a
   replacement.
-- **A second connector** (Mosyle MDM, Apple Business Manager, PBXact) plus cross-system person
-  lifecycle — the original reason the connector protocol exists.
 - **Notarization**, if the app is ever to be handed to another Mac. Needs an Apple Developer ID.
 
 ## Deliberate trade-offs
