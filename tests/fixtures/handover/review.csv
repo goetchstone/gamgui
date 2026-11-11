@@ -1,0 +1,14 @@
+change,class,alias,person,current,new
+Teachers to remove,Chemistry,d:gg-C2,cy@x.com,,
+Students to remove,Chemistry,d:gg-C2,di@x.com,,
+Classes to create,"Physics, ""Lab""",d:gg-C3,ann@x.com,,"Physics, ""Lab"" · Fall 2026"
+Classes to create,'=Study hall,d:gg-C4,ann@x.com,,'=Study hall
+Classes to rename,Biology,d:gg-C1,,Bio · Fall,Biology · Fall 2026
+Teachers to add,"Physics, ""Lab""",d:gg-C3,ben@x.com,,
+Students to add,"Physics, ""Lab""",d:gg-C3,cy@x.com,,
+Owners to change,Biology,d:gg-C1,ben@x.com,ann@x.com,ben@x.com
+Teachers to remove,Biology,d:gg-C1,ann@x.com,,
+Students to add,Biology,d:gg-C1,ann@x.com,,
+Classes to rename,Art,d:gg-C5,,Art · Spring,Art
+Students to remove,Biology,d:gg-C1,ed@x.com,,
+Classes to archive,Old class,d:gg-OLD,,Active,

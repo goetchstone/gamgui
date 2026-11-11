@@ -33,6 +33,27 @@
     {% endif %}{% endfor %}
   </div>
   <div id="roster-changes">{% include "_roster_changes.html" %}</div>
+  {# Hand it over (plan C4): files someone runs with GAM outside GamGUI. Said before the link, plainly. #}
+  <div class="rounded-lg border border-brand-gray/40 bg-paper px-3 py-3 text-sm">
+    <h4 class="eyebrow text-brand-grayink">Hand it over</h4>
+    {% if plan.incomplete %}
+    <p class="mt-1 text-brand-blueink">Not while part of Classroom couldn't be read. Compare again first.</p>
+    {% else %}
+    <p class="mt-1 text-brand-blueink">GamGUI doesn't make these changes. The download holds the review sheet and a numbered CSV
+      per kind of change, with the <code>gam csv</code> line that runs each, in order. Whoever runs them does so
+      <strong class="text-brand-black">outside GamGUI's preview, confirmation and audit log</strong>, and these commands
+      haven't been checked on a real school domain: try them on a test class first.</p>
+    <p class="mt-2 flex flex-wrap items-center gap-3">
+      <a href="/classroom/import/handover.zip" download
+         class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink">Download the hand-over (ZIP)</a>
+      {% if plan.flags %}
+      <a href="/classroom/import/handover.zip?{% for k in plan.flags %}include={{ k | urlencode }}{{ '&' if not loop.last }}{% endfor %}" download
+         class="text-xs font-medium text-amber-800 underline">Download including what's held back</a>
+      {% endif %}
+    </p>
+    {% if plan.flags %}<p class="mt-1 text-[11px] text-brand-grayink">The first download leaves out what the risk check held back.</p>{% endif %}
+    {% endif %}
+  </div>
   {% endif %}
   <p class="text-[11px] text-brand-grayink">GamGUI changes nothing in Classroom. Only classes GamGUI's alias marks are compared; {{ "{:,}".format(plan.unmanaged_ignored) }} other class{{ "es" if plan.unmanaged_ignored != 1 }} in Classroom {{ "are" if plan.unmanaged_ignored != 1 else "is" }} left alone.</p>
 </div>

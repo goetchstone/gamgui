@@ -146,8 +146,9 @@ guard; only its read side is adapted here.
   class unread). GAM prints `[]` when an alias read fails, so a SIS class whose name and section match a class without
   GamGUI's alias is never created (noted). The directory is read fresh and only limits who is *added*: someone the SIS lists
   is never removed for it. A teacher ↔ student swap removes before it adds (`Change.swap`: Classroom refuses to add someone
-  already in the class). After an owner change the former owner is removed; a class whose owner wasn't read gets no
-  teacher removals and no owner change (noted). The headline never says "already matches" when the list is incomplete or
+  already in the class). After an owner change the former owner is removed, and if the SIS now has them as a student their
+  add waits for that removal (`Change.late`; Classroom won't remove an owner). A class whose owner wasn't read gets no
+  teacher removals and no owner change (noted), and a SIS student who stays a teacher there isn't added (noted). The headline never says "already matches" when the list is incomplete or
   has notes.
 - **Risk** (`LIMITS`): a removal or archive kind past both a count and a share of what's there now is flagged with why;
   C4 leaves a flagged kind out of the hand-over unless ticked.
@@ -160,6 +161,33 @@ guard; only its read side is adapted here.
   one at a time, kept in memory per domain *and* per kept roster (a new upload, a purge or a tenant switch drops it). The
   panel shows the summary sentence (destructive parts first), the flags, the notes, a chip per kind, and the list searched
   and paged server-side (`/classroom/import/changes`). Failures are fixed sentences (`routes/classroom._why`).
+
+## Hand it over (C4)
+- **`core/roster_handover.py`** is pure: a `ChangeList` → `README.txt`, `review.csv` and a numbered CSV per kind (`STEPS`),
+  each with its `gam csv <file> noescapechar true gam …` line. Nothing runs GAM. **The files are run outside GamGUI**: no
+  preview, guard or audit log covers them, and the screen and README say so before the download.
+- **Run order** is the file numbers: a role swap's removals (01, 02), create (03, with and without a section), rename (04),
+  add teachers (05), add students (06), owners (07), remove teachers (08), add as students the former owners removed in 08
+  (09), remove students (10), archive (11). Classroom won't remove a class's owner, so an outgoing owner who becomes a
+  student is never a swap: the planner marks their student add `late` (step 09). A class is named by its alias
+  (`<CourseID> ::= d:<CourseAlias>`), so a class created in 03 is found by later steps.
+- **Values reach GAM whole:** each command uses only `~field` as a whole argument (grammar 1430), never `~~field~~`.
+  `noescapechar true` because GAM reads its CSVs with a backslash escape by default; the files are plain CSV (quotes doubled,
+  no escape, CRLF). **The GAM files keep values exact; only `review.csv` is formula-safe** (`csv_safe`), so the README says
+  never to open and save the numbered files in a spreadsheet. A create with no section gets its own file; a rename always
+  sends `section`, because GAM reads it with no minimum length and an empty one clears it (else a term dropped in the SIS
+  would be renamed again on every compare). The README's lines are `shlex.join`ed: an unquoted `~field` is a home-folder
+  lookup in zsh, macOS's shell, and the line fails before GAM starts.
+- **What's handed over:** every change but a flagged kind not ticked, and what needs one (`kept_changes`: an add or owner
+  change of someone whose removal from that class is held back would fail; the README counts them); an incomplete list hands nothing
+  over (`HandoverError`). `GET /classroom/import/handover.zip[?include=<flagged kind>…]` (a `download` link; a non-flagged
+  `include` changes nothing); the ZIP's entries are dated with the compare's time, so one compare gives one set of bytes.
+  Audited as `roster_handover` (counts and included flagged kinds; never rows).
+- **The fixture is the contract with SwiftGamGui:** `tests/fixtures/handover/` holds the bytes for one list of every kind;
+  `test_the_files_match_the_fixture_byte_for_byte` fails on any change (regenerate with `HANDOVER_UPDATE=1`, deliberately),
+  and `test_each_command_is_one_the_grammar_has` lines each command up with `GamCommands.txt`.
+- **Not checked live, and can't be here:** every command in the hand-over (`create course … state active`, `update course
+  … owner`, add/remove, archive). The README tells whoever runs them to try a test class first.
 
 ## Gotchas / mock-lies traps
 - **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`
