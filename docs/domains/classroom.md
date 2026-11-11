@@ -69,6 +69,20 @@ guard; only its read side is adapted here.
 - Errors in words (`_why`): a missing scope points at Setup, an address Classroom doesn't know is named, and an
   `Incomplete` says its own sentence.
 
+## Beside the people screens (C1.4–C1.6)
+- **`classroom_readable(vault, domain)`** (`core/setup.py`) reads the admin token's recorded scopes: False on a token known
+  to lack Classroom's (a domain that doesn't use it), None when they can't be read. Only False skips a read; None tries.
+- **A person's classes** (`/classroom/person`): a "Classroom" card on a user's Overview, left off when
+  `classroom_readable` is False, reads nothing until **Show their classes** — then what they teach (owned ones marked) and
+  what they're in, `PERSON_STATES` (archived too), each linking to its class card. One cause for both reads is said once.
+- **Offboarding** (`routes/lifecycle.py` `offboard_preview`, `_offboard_preview.html`): the classes the leaver owns
+  (`GAMConnector.courses_owned_by`: every state, since a declined or suspended class is lost too; Classroom not knowing
+  them as a teacher, exit 56, is none, not a failure) are named with a note that GamGUI doesn't change Classroom, and **Download the list
+  (CSV)** (`/classroom/owned.csv`, `csv_safe`, a `download` link). A failed read is said, never taken as none; a token
+  known to lack the scopes reads nothing and says nothing. It's a warning, not a step: no Classroom write exists.
+- **Who can create classes** (`/classroom/creators`): the group named "Classroom Teachers" (or `classroom_teachers@…`)
+  from the cached group list, linking to Groups; the Admin console's Classroom settings say which group it really is.
+
 ## Gotchas / mock-lies traps
 - **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`
   column, or a cell that isn't a list, is `Roster.unreadable`, never an empty class. GAM prints its CSV header even when nothing

@@ -189,6 +189,11 @@ yet* verified live.
 it, or a teacher's full address and press Enter (or **Find**) to read every class they have, archived ones too. Pick a
 class to see its owner, its teachers and its students, each linked to their page on **Users**.
 
+A person's page on **Users** has a Classroom card on its Overview: **Show their classes** lists what they teach and
+what they're in. Offboarding someone who owns classes names them in the preview, with **Download the list (CSV)** for
+whoever gives them a new owner in Classroom before the account is deleted. Under the class finder, **Who can create
+classes** names the Classroom Teachers group; add staff to it on **Groups**.
+
 GamGUI only reads Classroom: it changes nothing there. Classroom is only on Google Workspace for Education domains, and
 GamGUI reads it with the admin's own sign-in, so if the page says it can't read Classroom, **Setup** names the
 "Classroom API" scopes to tick in `gam oauth create`. Classroom support hasn't been checked on a real school domain yet.

@@ -21,6 +21,17 @@ CLASSROOM_SCOPES = (
      "See each person's address"),
 )
 
+# The states a person's classes are read in: last year's archived ones too (a deleted owner loses those as well), never
+# declined or suspended ones.
+PERSON_STATES = ("active", "provisioned", "archived")
+
+
+def owned_by(courses: Iterable["Course"], email: str) -> List["Course"]:
+    """The classes ``email`` owns, from a read with `owneremail` (a class can have several teachers, one owner)."""
+    who = email.strip().lower()
+    return [c for c in courses if c.owner_email == who]
+
+
 # The Classroom API's course states, as it spells them; the screen says them in words.
 STATE_WORDS = {"ACTIVE": "Active", "ARCHIVED": "Archived", "PROVISIONED": "Not yet accepted", "DECLINED": "Declined",
                "SUSPENDED": "Suspended", "COURSE_STATE_UNSPECIFIED": "Unknown"}

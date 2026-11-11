@@ -24,6 +24,7 @@ from ...core import bulk, guard, person_reads
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError, GAMErrorKind
+from ...core.setup import classroom_readable
 from ...core.lifecycle import autoreply_html, autoreply_text
 from ...core.onboarding import generate_temp_password, looks_like_email
 from ...core.phones import plan_phone_change, shown_phone
@@ -203,7 +204,9 @@ async def user_detail(request: Request, email: str, back: str = "", refresh: int
     return TEMPLATES.TemplateResponse(
         request, "user_detail.html",
         {"user": user, "email": user.primary_email, "suspended": user.suspended, "list_url": _list_url_from(back),
-         "refresh_url": refresh_url, **age},
+         "refresh_url": refresh_url,
+         # Classroom (school domains): the Classes card is left off when the admin token is known not to read Classroom.
+         "classroom": classroom_readable(st.vault, st.audit_domain) is not False, **age},
     )
 
 

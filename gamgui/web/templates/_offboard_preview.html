@@ -7,6 +7,21 @@
     </ul>
   </div>
   {% endif %}
+  {# Classroom (plan 2026-11-11 C1.5): GamGUI changes nothing there, so the classes the leaver owns are named, not moved. #}
+  {% if classes and (classes.owned or classes.error) %}
+  <div class="mt-2 rounded-lg border border-amber-400 bg-amber-50/60 px-3 py-2 text-sm text-amber-900" role="note">
+    {% if classes.error %}
+    <p>Couldn't read the Classroom classes {{ user }} owns ({{ classes.error }}). Check Classroom before the account is deleted: classes it owns are lost with it.</p>
+    {% else %}
+    <p>{{ user }} owns {{ classes.owned | length }} Classroom class{{ "es" if classes.owned | length != 1 }}. GamGUI doesn't change Classroom: give each a new owner there before the account is deleted, or the class is lost with it.</p>
+    <ul class="mt-1 list-disc pl-5">
+      {% for c in classes.owned[:10] %}<li>{{ c.name or c.id }}{% if c.section %} · {{ c.section }}{% endif %} <span class="text-xs">({{ c.state_words }})</span></li>{% endfor %}
+    </ul>
+    {% if classes.owned | length > 10 %}<p class="text-xs">… and {{ classes.owned | length - 10 }} more.</p>{% endif %}
+    <a href="/classroom/owned.csv?email={{ user | urlencode }}" download class="mt-1 inline-block text-xs font-medium underline">Download the list (CSV)</a>
+    {% endif %}
+  </div>
+  {% endif %}
   <p class="mt-1 text-xs text-brand-blueink">Each step shows the exact <code>gam</code> command it will run, in order. Run executes exactly these; if you change the form, preview again.</p>
   <ol class="mt-3 space-y-2 text-sm list-decimal list-inside">
     {% for s in steps %}

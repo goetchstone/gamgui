@@ -1,0 +1,27 @@
+{#- A person's classes (plan 2026-11-11 C1.4), loaded on their Users page only when asked. Read only. -#}
+{% if error %}
+<div>{% with ok=False, message=error %}{% include "_action_result.html" %}{% endwith %}</div>
+{% else %}
+<div class="grid gap-4 sm:grid-cols-2" tabindex="-1" data-focus>
+  {% for label, key, rows, err in (("Teaches", "teaches", teaches, teaches_error), ("In", "attends", attends, attends_error)) %}
+  <div class="min-w-0">
+    <h3 class="eyebrow text-brand-grayink">{{ label }}{% if not err %} · {{ rows | length }}{% endif %}</h3>
+    {% if err %}
+    <p class="mt-1 text-xs text-amber-800">Couldn't read: {{ err }}</p>
+    {% elif rows %}
+    <ul class="mt-1 divide-y divide-brand-gray/20 text-sm">
+      {% for c in rows[:50] %}
+      <li class="truncate py-1">
+        <a href="/classroom?course={{ c.id | urlencode }}" class="text-brand-black hover:underline">{{ c.name or c.id }}</a>
+        <span class="text-[11px] text-brand-grayink">{% if c.section %}{{ c.section }} · {% endif %}{{ c.state_words }}{% if key == "teaches" and c.owner_email == email | lower %} · owner{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if rows | length > 50 %}<p class="mt-1 text-[11px] text-brand-grayink">Showing 50 of {{ rows | length }}.</p>{% endif %}
+    {% else %}
+    <p class="mt-1 text-sm text-brand-grayink">None.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

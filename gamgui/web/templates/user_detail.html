@@ -78,6 +78,16 @@
           {% with phone=user.phone, saved=False %}{% include "_phone_form.html" %}{% endwith %}
         </div>
       </div>
+      {% if classroom %}
+      <div class="{{ card }}">
+        <h2 class="eyebrow text-brand-grayink">Classroom</h2>
+        <p class="text-xs text-brand-blueink mt-1">School domains only. Read live from Classroom, only when you ask.</p>
+        <div id="user-classes" class="mt-3">
+          <button type="button" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-sm font-medium text-brand-blueink hover:bg-paper"
+                  hx-get="/classroom/person?email={{ email | urlencode }}" hx-target="#user-classes" hx-swap="innerHTML">Show their classes</button>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
 

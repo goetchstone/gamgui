@@ -1,0 +1,12 @@
+{#- Who can create classes (plan 2026-11-11 C1.6), read only: the Classroom Teachers group, changed on Groups. -#}
+<h2 class="eyebrow text-brand-grayink">Who can create classes</h2>
+{% if error %}
+<p class="mt-1 text-xs text-amber-800">{{ error }}</p>
+{% elif group %}
+<p class="mt-1 text-sm text-brand-blueink">
+  Members of <a href="/groups?group={{ group.email | urlencode }}" class="font-medium text-brand-black hover:underline">{{ group.name or group.email }}</a>{% if group.members_count is not none %} ({{ group.members_count }} direct member{{ "s" if group.members_count != 1 }}){% endif %}.
+  To let a department create classes, add its staff group there.</p>
+{% else %}
+<p class="mt-1 text-sm text-brand-blueink">No “Classroom Teachers” group found. Classroom's settings in the Admin console say
+  which group may create classes; open it on Groups to add staff.</p>
+{% endif %}
