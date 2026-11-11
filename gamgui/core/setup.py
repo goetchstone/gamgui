@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlencode
 
 from .audit import AuditLog
+from .classroom import CLASSROOM_SCOPES, classroom_scopes_missing
 from .gam.commands import EXPECTED_GAM_VERSION, GAMCommands
 from .gam.errors import GAMError
 from .gam.runner import GAMRunner
@@ -761,6 +762,10 @@ class SetupService:
             "scopes_csv": ",".join(scopes),
             "auth_url": dwd_auth_url(client_id, scopes, domain),
             "user_security": (USER_SECURITY_SCOPE in granted) if isinstance(granted, list) else None,
+            # Classroom reads use the admin token too (GAM's client-access "Classroom API - …" scopes). Optional: only a school
+            # domain has Classroom, so nothing else waits on it. None when the token's scopes can't be read.
+            "classroom_missing": classroom_scopes_missing(granted),
+            "classroom_why": {name: why for _, name, why in CLASSROOM_SCOPES},
         }
 
     # --- fresh-setup guidance ----------------------------------------------------------

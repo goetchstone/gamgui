@@ -428,6 +428,24 @@ def test_dwd_details_reads_the_sign_out_scope_off_the_admin_token(tmp_path, oaut
     assert _svc(vault, tmp_path).dwd_details("ex.com")["user_security"] is expected
 
 
+@pytest.mark.parametrize(
+    ("scopes", "expected"),
+    [
+        ([], ["Classroom API - Courses", "Classroom API - Rosters", "Classroom API - Profile Emails"]),
+        (["https://www.googleapis.com/auth/classroom.courses.readonly",
+          "https://www.googleapis.com/auth/classroom.rosters.readonly"], ["Classroom API - Profile Emails"]),
+        (["https://www.googleapis.com/auth/classroom.courses", "https://www.googleapis.com/auth/classroom.rosters",
+          "https://www.googleapis.com/auth/classroom.profile.emails"], []),
+        (None, None),   # no scopes recorded: unknown, not "missing"
+    ],
+)
+def test_dwd_details_reads_the_classroom_scopes_off_the_admin_token(tmp_path, scopes, expected):
+    # GAM reads Classroom with the admin token, so these are client scopes picked in `gam oauth create`, not delegation.
+    vault = SecretsVault(InMemoryBackend())
+    vault.set("ex.com", "oauth2", json.dumps({"token": "t"} if scopes is None else {"scopes": scopes}))
+    assert _svc(vault, tmp_path).dwd_details("ex.com")["classroom_missing"] == expected
+
+
 def test_setup_commands_shape(tmp_path):
     info = _svc(SecretsVault(InMemoryBackend()), tmp_path).setup_commands("admin@ex.com")
     cmds = info["commands"]

@@ -1,6 +1,6 @@
 # Plan: Google Classroom and SIS rostering, in both apps — reads and planning only
 
-**Status: NOT STARTED, 2026-11-11. Nothing here is built.** Written at GamGUI `0a4dd66` for a reader with no session
+**Status: IN PROGRESS — C1.1 and C1.2 built in GamGUI (read only); the rest open.** Written at GamGUI `0a4dd66` for a reader with no session
 context. `CLAUDE.md` is auto-loaded. Before any item, read that app's runbook for the area (`docs/domains/` in each repo).
 When a PR closes an item, mark it under "Status by item" in the same PR.
 
@@ -168,7 +168,8 @@ After C4 a district can plan an import from OneRoster 1.1 and run it with GAM. A
 |---|---|---|
 | E1, E2 | decided: offline, no writes | same |
 | E3, E4 | defaults stand | defaults stand |
-| C1.1 to C1.6 | open | open |
+| C1.1, C1.2 | done (scopes in Setup, reads and mock) | open |
+| C1.3 to C1.6 | open | open |
 | C2.1 to C2.5 | open | open |
 | C3.1 to C3.4 | open | open |
 | C4.1 to C4.4 | open | open |

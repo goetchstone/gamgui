@@ -121,6 +121,10 @@ IDENTIFIERS = (
     Spec("print_chrome_profiles", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_mobile_devices", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_devices", (), (), {"user": _SEARCH_ADDRESS}),
+    # Classroom reads: a teacher or student is one plain address or none, a course ID digits only (is_course_id).
+    Spec("print_courses", (), (), {"teacher": st.one_of(st.just(""), _SEARCH_ADDRESS),
+                                   "student": st.one_of(st.just(""), _SEARCH_ADDRESS)}),
+    Spec("print_course_participants", (), (), {"course_id": st.sampled_from(["1", "500000000002"])}),
     Spec("print_script_projects", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_user_tokens", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("block_device_user", (), (), {"name": _DEVICE_USER}),
