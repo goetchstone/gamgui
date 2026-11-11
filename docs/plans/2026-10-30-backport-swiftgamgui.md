@@ -157,6 +157,7 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
 
   **Applied:** `core/connected_apps.py`, Reports' panel, the read as a background job kept in memory. Not yet live in
   either app; `scripts/acceptance.py` runs it. The CSV's shape and the default entity were read in GAM's source at 7.50.00.
+  **2026-11-10:** `scripts/acceptance.py` ran it live on GAM 7.51.00 and its output parsed.
 - **B2. Reports: drill-downs.** Each directory count opens the people behind it (`DirectoryReport.swift`), and
   storage and mail usage get their list (`UsageReport.swift`, compared against `/reports/usage`).
   **Nothing to port (corrected 2026-11-05):** GamGUI already has both, with the same nine reports and the top 25. Swift's
@@ -172,6 +173,8 @@ by reading GAM's source and never seen live; say so in the failure-log entry.
 
   **Applied:** a Security tab on a person's page, `core/person_reads.py`. The devices scope is offered in Setup's delegation
   step but not required by its verify, so no install has to re-authorize unless it wants that list. Not yet live in either app.
+  **2026-11-10:** all three reads ran live in `scripts/acceptance.py` on GAM 7.51.00 and parsed; not yet checked
+  against the Admin console.
   The phones read adds `listlimit 0`: Swift's `printMobileDevices` lacks it, so its list can miss a shared device's second owner.
 
 ### Phase C — Small writes
@@ -334,7 +337,7 @@ README's Status, including what is only in which app; a "Live verification statu
 All of Phases B to E has run offline only. Each write needs the operator's yes for that one action, on a throwaway account.
 
 - **Writes:** a temporary password; changing or removing a signature's phone; handing over secondary calendars and removing forwarding filters at offboarding; trashing a copy in Spam; deleting filters, send-as addresses, drafts and scheduled emails from an account, including whether Gmail honours `in:scheduled` and whether a delete stops the send; blocking a computer, and taking an account off one.
-- **Reads, the operator's say:** `scripts/acceptance.py` (last run 2026-10-08); each person's Security tab and Check Account against the Admin console; a real incident's logs, Read the logs, each account's status, Who it reached against a list made by hand, Where it started's sender fields; `RESOURCE_ID` as Google's device ID; a Receive row's actor and IP; a group it went to read by its members; a domain alias in `nonEditableAliases`.
+- **Reads, the operator's say:** `scripts/acceptance.py` (last run 2026-11-10, GAM 7.51.00, all twelve checks passing); each person's Security tab and Check Account against the Admin console; a real incident's logs, Read the logs, each account's status, Who it reached against a list made by hand, Where it started's sender fields; `RESOURCE_ID` as Google's device ID; a Receive row's actor and IP; a group it went to read by its members; a domain alias in `nonEditableAliases`.
 - **On this Mac:** the report's PDF and Markdown read in order; `shasum -a 256` of an evidence file against `evidence-sha256.txt`; an export saved from the app window, through its two steps; an incident open again after a relaunch.
 - **Setup:** the computers need the devices scope, and blocking needs its full form, so an existing install re-authorizes the delegation.
 
