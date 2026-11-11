@@ -130,6 +130,37 @@ guard; only its read side is adapted here.
   the spool, not before: a huge upload costs temp disk until the request ends. Bounding it earlier needs a multipart
   parser of our own; not done.
 
+## Compare with Classroom (C3)
+- **`core/roster_plan.py`** is pure: `plan(snapshot, classes, directory, unread)` → `ChangeList` (changes in run order,
+  counts, flags, notes, `summary()`). No GAM, nothing written; GamGUI never applies it.
+- **GamGUI's classes are the ones carrying its alias**, `d:gg-<sourcedId>` (`alias_for`: the SIS ID when plain, else a
+  hash). Only those are compared, updated or archived; a hand-made class is never touched, and is counted as left alone.
+  GAM may print an alias with or without its `d:` scope; both are read.
+- **Kinds, in the order GAM must run them:** create (owned by the primary teacher, else the first teacher by address; a
+  class with no teacher is noted), rename (name or section), add teacher, add student, owner (after the teacher is added),
+  remove teacher (never the owner), remove student, archive (a GamGUI class the SIS no longer has, not already archived).
+  A class the SIS has that Classroom archived is noted, never planned. With the directory read, someone without a
+  Workspace account is noted, not added.
+- **What a review proved, and the rule each fix keeps** (failure-log 2026-11-11): GAM prints `JSON-aliases` as objects,
+  `[{"alias": "d:gg-C1"}]`, and the mock once printed strings (`_aliases` reads the objects; an item it can't read makes the
+  class unread). GAM prints `[]` when an alias read fails, so a SIS class whose name and section match a class without
+  GamGUI's alias is never created (noted). The directory is read fresh and only limits who is *added*: someone the SIS lists
+  is never removed for it. A teacher ↔ student swap removes before it adds (`Change.swap`: Classroom refuses to add someone
+  already in the class). After an owner change the former owner is removed; a class whose owner wasn't read gets no
+  teacher removals and no owner change (noted). The headline never says "already matches" when the list is incomplete or
+  has notes.
+- **Risk** (`LIMITS`): a removal or archive kind past both a count and a share of what's there now is flagged with why;
+  C4 leaves a flagged kind out of the hand-over unless ticked.
+- **The read** (`GAMConnector.classroom_state`): two GAM runs whose shapes were read from the build — `print courses states
+  active,provisioned,archived aliases … formatjson` (a `JSON-aliases` column after `JSON`) and `print course-participants
+  states … show all formatjson` (one row per class). Archived classes are read so a GamGUI class Classroom archived is never
+  planned as new. `managed_from` pairs them by course ID; a class whose aliases or roster can't be read whole is listed as
+  unread, and any unread class makes the list **incomplete** (said; C4 hands nothing over).
+- **The screen:** **Compare with Classroom** on the import page starts a job (`roster_compare`, unstoppable: two reads),
+  one at a time, kept in memory per domain *and* per kept roster (a new upload, a purge or a tenant switch drops it). The
+  panel shows the summary sentence (destructive parts first), the flags, the notes, a chip per kind, and the list searched
+  and paged server-side (`/classroom/import/changes`). Failures are fixed sentences (`routes/classroom._why`).
+
 ## Gotchas / mock-lies traps
 - **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`
   column, or a cell that isn't a list, is `Roster.unreadable`, never an empty class. GAM prints its CSV header even when nothing

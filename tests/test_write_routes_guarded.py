@@ -77,6 +77,7 @@ LOCAL_ONLY = {
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
     # A SIS roster export read and kept on this Mac, or deleted from it (plan 2026-11-11 C2). Nothing reaches Google.
     "/classroom/import/upload", "/classroom/import/purge",
+    "/classroom/import/compare",   # reads Classroom only: the change list is never applied (plan 2026-11-11 E2)
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe

@@ -133,7 +133,9 @@ READS = {
     "print_group_members": [C.print_group_members("sales@example.com")],
     "print_groups_member": [C.print_groups_member("alice@example.com")],
     "print_courses": [C.print_courses(teacher="alice@example.com", states=["active", "provisioned"]),
-                      C.print_courses(course_ids=["500000000002"])],
+                      C.print_courses(course_ids=["500000000002"]),
+                      C.print_courses(states=["active", "provisioned", "archived"], aliases=True)],
+    "print_all_course_participants": [C.print_all_course_participants(["active", "provisioned", "archived"])],
     "print_course_participants": [C.print_course_participants("500000000002")],
 }
 

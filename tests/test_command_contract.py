@@ -88,6 +88,7 @@ ENUM_ARGS = {
     ("print_courses", "states"): ((), ("active",), ("active", "provisioned"), ("active", "provisioned", "archived")),
     ("print_courses", "course_ids"): ((), ["500000000002"], ["500000000002", "500000000002"]),
     ("print_course_participants", "course_id"): ("500000000002",),
+    ("print_all_course_participants", "states"): (("active",), ("active", "provisioned", "archived")),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
@@ -105,6 +106,8 @@ def _refused_on_purpose(name: str, args: dict) -> bool:
     """A combination the builder raises on: it can never be sent, so it has no shape."""
     if name == "print_courses":   # classes by ID take no teacher, student or state filter
         return bool(args["course_ids"]) and bool(args["teacher"] or args["student"] or args["states"])
+    if name == "print_all_course_participants":   # a states list is required
+        return not args["states"]
     return name == "report_activity" and args["application"] == "chrome" and len(args["users"]) > 1
 
 

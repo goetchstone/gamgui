@@ -29,6 +29,7 @@ from ..gam.models import (
 )
 from ..calendar_index import IndexedCalendar
 from ..classroom import Course, Roster, courses_from, owned_by, roster_from
+from ..roster_plan import Managed, managed_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
 from ..gam.parser import parse_one, parse_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
@@ -361,6 +362,17 @@ class GAMConnector(Connector):
         spares GAM a Directory read per owner (the course index, C1.3)."""
         argv = GAMCommands.print_courses(teacher=teacher, student=student, states=states, owner_email=owner_email)
         return courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
+
+    async def classroom_state(self) -> Tuple[List[Managed], List[str]]:
+        """Every class in Classroom with its aliases and its people, for the roster compare (plan 2026-11-11 C3): two GAM
+        runs, each a verified shape, active, not-yet-accepted and archived classes alike (an archived class GamGUI made is
+        still its alias). Returns the classes and the IDs of any that couldn't be read whole."""
+        states = ("active", "provisioned", "archived")
+        courses = parse_records(_classroom_table(await self.runner.run_authenticated(
+            self.domain, GAMCommands.print_courses(states=states, aliases=True), timeout=DOMAIN_WIDE_TIMEOUT)))
+        people = parse_records(_classroom_table(await self.runner.run_authenticated(
+            self.domain, GAMCommands.print_all_course_participants(states), timeout=DOMAIN_WIDE_TIMEOUT)))
+        return managed_from(courses, people)
 
     async def courses_owned_by(self, email: str) -> List[Course]:
         """The classes ``email`` owns, in every state: what deleting the account would lose (a declined or suspended class

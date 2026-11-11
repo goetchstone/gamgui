@@ -326,7 +326,7 @@ course_has() {  # <course id> <teachers|students> <address>
 }
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
   shift 2
-  ids=""; teacher=""; student=""; states=""; owneremail=0; fj=0
+  ids=""; teacher=""; student=""; states=""; owneremail=0; fj=0; aliases=0
   while [ $# -gt 0 ]; do
     case "$1" in
       course|class) need_value $# "CourseEntity"; [ -n "$2" ] || empty_arg "CourseEntity"; ids="$ids $2"; shift 2 ;;
@@ -345,6 +345,12 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
         fi
         states=$(lower "$2"); shift 2 ;;
       owneremail) owneremail=1; shift ;;
+      # One courses.aliases.list per class; with formatjson a JSON-aliases column holding the API's items as they come,
+      # each an OBJECT: [{"alias": "d:gg-C1"}] (doPrintCourses dumps them raw; only the non-JSON branch reads ['alias']).
+      # This mock first printed bare strings, and the planner read them as strings: on a real domain every GamGUI class
+      # would have looked hand-made (review, 2026-11-11). course_aliases.tsv holds the objects as GAM prints them.
+      alias|aliases) aliases=1; shift ;;
+      aliasesincolumns) not_modelled "print courses aliasesincolumns" ;;
       fields)
         need_value $# "CourseFieldNameList"; [ -n "$2" ] || empty_arg "CourseFieldNameList"
         for f in $(printf '%s' "$2" | tr ',' ' '); do
@@ -371,7 +377,7 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
     grep -qF "\"id\": \"$id\"" "$GAM_MOCK_FIXTURES/courses.json" || missing="$missing $id"
   done
   for id in $missing; do printf 'Course: %s, Does not exist\n' "$id" 1>&2; done
-  printf 'id,JSON\n'
+  if [ "$aliases" = 1 ]; then printf 'id,JSON,JSON-aliases\n'; else printf 'id,JSON\n'; fi
   while IFS= read -r record || [ -n "$record" ]; do
     [ -n "$record" ] || continue
     id=$(json_text id "$record")
@@ -383,18 +389,31 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
       case ",$states," in *",$state,"*) ;; *) continue ;; esac
     fi
     [ "$owneremail" = 1 ] || record=$(printf '%s' "$record" | sed 's/"ownerEmail": "[^"]*", //')
-    gam_row "$id" "$record"
+    if [ "$aliases" = 1 ]; then
+      gam_row "$id" "$record" "$(grep "^$id$(printf '\t')" "$GAM_MOCK_FIXTURES/course_aliases.tsv" | cut -f 2)"
+    else
+      gam_row "$id" "$record"
+    fi
   done < "$GAM_MOCK_FIXTURES/courses.json"
   [ -z "$missing" ] || exit 56
   exit 0
 fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "course-participants" ]; then
   shift 2
-  ids=""; show=all; fj=0
+  ids=""; show=all; fj=0; states=""
   while [ $# -gt 0 ]; do
     case "$1" in
       course|class) need_value $# "CourseEntity"; [ -n "$2" ] || empty_arg "CourseEntity"; ids="$ids $2"; shift 2 ;;
-      teacher|student|states) not_modelled "print course-participants by $1" ;;
+      teacher|student) not_modelled "print course-participants by $1" ;;
+      states)   # every class in these states, one row each (<CourseStateList>: `all` only on its own)
+        need_value $# "CourseStateList"; [ -n "$2" ] || empty_arg "CourseStateList"
+        if [ "$(lower "$2")" != all ]; then
+          for s in $(printf '%s' "$2" | tr ',' ' '); do
+            case "$(lower "$s")" in active|archived|provisioned|declined|suspended) ;;
+              *) invalid_choice "$s" "active|archived|provisioned|declined|suspended" ;; esac
+          done
+        fi
+        states=$(lower "$2"); shift 2 ;;
       show)
         need_value $# "all|students|teachers"
         case "$2" in all|students|teachers) show=$2 ;; *) invalid_choice "$2" "all|students|teachers" ;; esac
@@ -404,8 +423,17 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "course-participants" ]; then
     esac
   done
   [ "$fj" = 1 ] || not_modelled "print course-participants without formatjson"
-  [ -n "$ids" ] || not_modelled "print course-participants of every class"
+  [ -z "$ids" ] || [ -z "$states" ] || not_modelled "print course-participants by ID and by states at once"
+  [ -n "$ids$states" ] || not_modelled "print course-participants of every class in every state"
   classroom_token
+  if [ -n "$states" ]; then     # the classes in those states, in courses.json's order
+    while IFS= read -r record || [ -n "$record" ]; do
+      [ -n "$record" ] || continue
+      state=$(lower "$(json_text courseState "$record")")
+      [ "$states" = all ] || case ",$states," in *",$state,"*) ;; *) continue ;; esac
+      ids="$ids $(json_text id "$record")"
+    done < "$GAM_MOCK_FIXTURES/courses.json"
+  fi
   missing=""
   for id in $ids; do
     case "$id" in *[!0-9]*) missing="$missing $id"; continue ;; esac
