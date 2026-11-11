@@ -24,6 +24,10 @@ guard; only its read side is adapted here.
 - `gamgui/core/gam/commands.py`: `print_courses` (by teacher, student, states, or course IDs) and
   `print_course_participants`; `COURSE_FIELDS`, `COURSE_STATES`, `is_course_id`.
 - `gamgui/core/connectors/gam_connector.py`: `list_courses`, `get_course`, `course_roster`.
+- `gamgui/web/routes/classroom.py`, `classroom.html`, `_classroom_results.html`, `_classroom_card.html`: the screen
+  (C1.3). GET routes only: `test_the_screen_posts_nothing` reads the flattened OpenAPI paths and fails on a POST.
+- `AppState.courses` / `course_cache` (`web/server.py`): the index, every active and not-yet-accepted class from one
+  read without `owneremail`; a tenant switch drops it.
 - `tests/fixtures/courses.json`, `tests/fixtures/course_participants.tsv`: four classes around the directory fixture's
   people (Alice teaches, Carol is a student, suspended Bob is in one class).
 
@@ -44,6 +48,26 @@ guard; only its read side is adapted here.
 - **Never the join code.** `COURSE_FIELDS` leaves out `enrollmentcode`, which lets anyone with it join the class.
 - **`owneremail` costs a Directory read per owner.** `print_courses(owner_email=False)` leaves it off; the course index
   (C1.3) does, and names owners from the directory cache by `ownerId`.
+
+## The screen (C1.3)
+- **One search box.** Text searches the cached index (name, section, room), paged server-side (`PAGE_SIZE`). An address
+  is a live read of that teacher's classes, archived ones too (`TEACHER_STATES`), and only when asked: typing sends
+  `live=0` and the box says "Press Enter"; Enter, Find or a pager click reads. A read per typing pause would have been
+  a GAM call per keystroke pause.
+- **Owners come from the directory as cached** (`UserCache.cached`, never a fetch): a cold cache leaves the owner
+  column blank rather than costing a full `print users`. One class's card reads its owner with `owneremail`.
+- **The card** reads the class and its roster side by side; a roster that failed or came back short says so above the
+  lists, and each side lists at most `ROSTER_SHOWN` with the count past it (#9).
+- **The list loads after the page** (`hx-trigger="load"`): a cold index is a domain-wide read, so `/classroom` itself
+  makes no `gam` call. A deep link's card (`?course=`) is still read with the page.
+- **A failed index read is said again, not re-run,** for `INDEX_RETRY` (60 s; `AppState.course_index_failed`): on a
+  domain without Classroom each typing pause once ran a read that could only fail. Try again (Refresh) reads at once,
+  and a tenant switch clears it.
+- **The open class stays marked** (`aria-current`): `classroom.js` moves it on a click and keeps `#class-selected`,
+  which every search and pager request sends as `selected`.
+- **Google's `alternateLink`** is linked only when it starts `https://classroom.google.com/`.
+- Errors in words (`_why`): a missing scope points at Setup, an address Classroom doesn't know is named, and an
+  `Incomplete` says its own sentence.
 
 ## Gotchas / mock-lies traps
 - **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`

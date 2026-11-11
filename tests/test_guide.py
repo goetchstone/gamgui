@@ -51,6 +51,7 @@ SCREENS = {
     "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html"],
     "Roll out a signature": ["signatures.html", "_sig_*.html", "_job_*.html"],
     "Share a calendar": ["calendars.html", "_calendar*.html", "user_detail.html"],
+    "Find a class (school domains)": ["classroom.html", "_classroom_*.html", "index.html", "setup.html", "users.html"],
     "Audit external sharing": ["builder.html", "_builder_*.html", "_read_output.html", "_records_*.html"],
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],

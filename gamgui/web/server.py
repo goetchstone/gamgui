@@ -104,6 +104,8 @@ class AppState:
     token: str = ""
     user_cache: UserCache = field(default_factory=UserCache)
     group_cache: UserCache = field(default_factory=UserCache)  # cached `gam print groups` for the pickers
+    course_cache: UserCache = field(default_factory=UserCache)  # cached Classroom classes, for the Classes finder
+    course_index_failed: Optional[tuple] = None  # (clock.now(), what to say) of the last failed index read: not re-run per keystroke
     jobs: dict = field(default_factory=dict)  # id -> web.jobs.Job, for polled progress on long batch ops
     previews: Previews = field(default_factory=Previews)  # per flow: single-use token -> what a preview showed
     calendar_index: Optional[CalendarIndex] = None  # persistent calendar name-search index (derived data)
@@ -179,6 +181,8 @@ class AppState:
         self.audit_domain = connector.domain
         self.invalidate_users()
         self.invalidate_groups()
+        self.course_cache.invalidate()
+        self.course_index_failed = None
         self.gam_version_held = None   # setup re-reads the version on the next Home
         self.connected_apps = None     # read with the connector being replaced
         self.connected_apps_job_id = ""
@@ -266,6 +270,18 @@ class AppState:
 
     def invalidate_groups(self) -> None:
         self.group_cache.invalidate()
+
+    async def courses(self, force: bool = False, stale_ok: bool = False) -> list:
+        """The cached Classroom index: every active or not-yet-accepted class, from one `gam print courses` without
+        `owneremail` (that costs a Directory read per owner; the Classes finder names owners from the directory cache).
+        ``stale_ok`` as for ``users``. Read only: GamGUI never writes to Classroom."""
+        conn = self.connector
+        if conn is None:
+            return []
+
+        async def fetch() -> list:
+            return await conn.list_courses(states=("active", "provisioned"), owner_email=False)
+        return await self.course_cache.get(fetch, force=force, stale_ok=stale_ok)
 
     async def tenant_domains(self) -> tuple:
         """The domains an internal address ends in: the primary, secondaries and domain aliases, from one
@@ -451,6 +467,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.audit import router as audit_router
     from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
+    from .routes.classroom import router as classroom_router
     from .routes.groups import router as groups_router
     from .routes.home import router as home_router
     from .routes.jobs import router as jobs_router
@@ -478,6 +495,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(groups_router)
     app.include_router(signatures_router)
     app.include_router(calendars_router)
+    app.include_router(classroom_router)
     app.include_router(lifecycle_router)
     app.include_router(onboarding_router)
     app.include_router(builder_router)

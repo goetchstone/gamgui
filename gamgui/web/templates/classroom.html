@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Classroom — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-blue">School domains · read only</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Classroom</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Find a class by its name, or every class a teacher has by their address, and see who is in it.
+      GamGUI only reads Classroom, and its Classroom support hasn't been checked on a real school domain yet.</p>
+  </div>
+
+  <div class="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      {# No hx-disabled-elt: a read is harmless twice, and the field inside would inherit "find button", find nothing and
+         throw (web-screens-jobs runbook, "No double submits"). #}
+      <form hx-get="/classroom/search" hx-target="#class-results" hx-swap="innerHTML" hx-include="#class-selected" role="search">
+        <label for="class-q" class="eyebrow text-brand-grayink">Find a class</label>
+        <div class="mt-2 flex gap-2">
+          <input id="class-q" type="search" name="q" value="{{ q }}" autocomplete="off" placeholder="Class name, or a teacher's address"
+                 class="min-w-0 flex-1 rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+                 hx-get="/classroom/search" hx-trigger="input changed delay:250ms" hx-target="#class-results" hx-swap="innerHTML"
+                 hx-include="#class-selected" hx-vals='{"live": "0"}' />
+          <button type="submit" class="rounded-lg border border-brand-gray/60 px-3 py-2 text-sm font-medium text-brand-blueink hover:bg-paper">Find</button>
+        </div>
+      </form>
+      <input type="hidden" id="class-selected" name="selected" value="{{ selected }}" />
+      {# The list loads after the page: a cold index is a domain-wide read, and the page shouldn't wait on it. #}
+      <div id="class-results" class="mt-3" hx-get="/classroom/search" hx-trigger="load" hx-include="#class-q,#class-selected"
+           hx-swap="innerHTML">
+        <p class="text-sm text-brand-grayink">Reading classes…</p>
+      </div>
+    </div>
+
+    <section id="class-card" aria-label="Class" class="min-w-0 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      {% if card is defined %}{% include "_classroom_card.html" %}
+      {% else %}<p class="text-sm text-brand-grayink">Pick a class to see its teachers and students.</p>{% endif %}
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% if connected %}<script src="/static/classroom.js"></script>{% endif %}{% endblock %}
