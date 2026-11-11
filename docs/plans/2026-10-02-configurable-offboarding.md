@@ -1,6 +1,7 @@
 # Plan: configurable offboarding
 
-**Status: IN PROGRESS — P1.1 applied; P1.2–P1.5 and P2 open.** Written 2026-10-02 at `b00a140` for a reader with no session
+**Status: IN PROGRESS — P1.1 applied; P1.2 closed (templates replaced it); P1.3–P1.5 and P2 open.** The rest is
+item 3.4 of `2026-11-07-finish-the-roadmap.md`. Written 2026-10-02 at `b00a140` for a reader with no session
 context. `CLAUDE.md` is auto-loaded; read `docs/domains/lifecycle-offboarding.md` before any item.
 When a PR closes an item, mark it here in the same PR.
 
@@ -106,4 +107,5 @@ checked out in Google.
 ## Status by item
 
 - **P1.1** — applied (this PR: "Doesn't apply" per optional step, the pinned default, `offboard_plan`).
-- P1.2–P1.5, P2 — open.
+- **P1.2** — closed, not built: saved templates (#89) remember an offboarding's choices by name.
+- P1.3–P1.5, P2 — open.
