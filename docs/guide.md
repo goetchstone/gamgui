@@ -183,6 +183,16 @@ count, and the job lists anyone it couldn't add. To share one person's own calen
 **After:** ask one recipient to confirm they see it. Sharing with a group and unsharing are *not
 yet* verified live.
 
+## Find a class (school domains)
+
+**Classroom** lists the active classes and those a teacher hasn't accepted yet. Type part of a class's name to narrow
+it, or a teacher's full address and press Enter (or **Find**) to read every class they have, archived ones too. Pick a
+class to see its owner, its teachers and its students, each linked to their page on **Users**.
+
+GamGUI only reads Classroom: it changes nothing there. Classroom is only on Google Workspace for Education domains, and
+GamGUI reads it with the admin's own sign-in, so if the page says it can't read Classroom, **Setup** names the
+"Classroom API" scopes to tick in `gam oauth create`. Classroom support hasn't been checked on a real school domain yet.
+
 ## Audit external sharing
 
 The **Builder** runs any of GAM's read commands and shows the result as a table. To look for

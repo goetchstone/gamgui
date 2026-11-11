@@ -85,7 +85,7 @@ ENUM_ARGS = {
     # Classroom reads (plan 2026-11-11 C1): a course ID is digits only, a teacher or student one address.
     ("print_courses", "teacher"): ("", SEARCH_ADDRESS),
     ("print_courses", "student"): ("", SEARCH_ADDRESS),
-    ("print_courses", "states"): ((), ("active",), ("active", "provisioned")),
+    ("print_courses", "states"): ((), ("active",), ("active", "provisioned"), ("active", "provisioned", "archived")),
     ("print_courses", "course_ids"): ((), ["500000000002"], ["500000000002", "500000000002"]),
     ("print_course_participants", "course_id"): ("500000000002",),
 }

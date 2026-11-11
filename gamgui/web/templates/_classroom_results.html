@@ -1,0 +1,49 @@
+{% if error %}
+<div>{% with ok=False, message=error %}{% include "_action_result.html" %}{% endwith %}</div>
+{% if retry is defined and retry %}
+<button type="button" class="mt-2 text-xs text-brand-blueink underline hover:text-brand-black"
+        hx-get="/classroom/search?refresh=1&amp;q={{ q | urlencode }}" hx-target="#class-results" hx-swap="innerHTML">Try again</button>
+{% endif %}
+{% elif waiting %}
+<p class="text-sm text-brand-grayink">Press Enter to read {{ q }}'s classes from Classroom.</p>
+{% else %}
+{% set shown = courses | length %}
+<p class="mb-1 text-xs text-brand-grayink">
+  {% if by_teacher %}{{ total }} class{{ "es" if total != 1 }} {{ q }} teaches, archived ones included
+  {% elif q %}{{ total }} open class{{ "es" if total != 1 }} match “{{ q }}”
+  {% else %}{{ total }} open class{{ "es" if total != 1 }}, active or not yet accepted{% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + shown }}{% endif %}
+</p>
+{% if courses %}
+<ul class="max-h-[calc(100vh-24rem)] min-h-[6rem] divide-y divide-brand-gray/20 overflow-y-auto text-sm" aria-label="Classes">
+  {% for c, owner in courses %}
+  <li>
+    <button type="button" data-course="{{ c.id }}"{% if selected and selected == c.id %} aria-current="true"{% endif %}
+            class="block w-full rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left hover:bg-paper aria-[current=true]:border-brand-blue aria-[current=true]:bg-paper"
+            hx-get="/classroom/class?id={{ c.id | urlencode }}" hx-target="#class-card" hx-swap="innerHTML">
+      <span class="block truncate text-brand-black">{{ c.name or c.id }}{% if c.section %} <span class="text-brand-grayink">· {{ c.section }}</span>{% endif %}</span>
+      <span class="block truncate text-[11px] text-brand-grayink">{{ c.state_words }}{% if owner %} · {{ owner }}{% endif %}</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% if pages > 1 %}
+<nav class="mt-2 flex items-center justify-end gap-2 text-xs" aria-label="Class pages">
+  <span class="text-brand-grayink">Page {{ page }} of {{ pages }}</span>
+  {% for label, to in (("Previous", page - 1), ("Next", page + 1)) %}
+  <button type="button" {% if to < 1 or to > pages %}disabled{% endif %}
+          class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
+          hx-get="/classroom/search?q={{ q | urlencode }}&amp;page={{ to }}" hx-include="#class-selected" hx-target="#class-results" hx-swap="innerHTML">{{ label }}</button>
+  {% endfor %}
+</nav>
+{% endif %}
+{% elif q %}
+<p class="text-sm text-brand-grayink">{% if by_teacher %}{{ q }} has no classes.{% else %}No open class matches “{{ q }}”. To find an archived one, type its teacher's address.{% endif %}</p>
+{% else %}
+<p class="text-sm text-brand-grayink">No open classes yet.</p>
+{% endif %}
+{% if as_of is defined %}
+<p class="mt-1 text-[11px] text-brand-grayink">Classes {% include "_as_of.html" %} ·
+  <button type="button" title="Reload from Google" class="underline hover:text-brand-black"
+          hx-get="/classroom/search?refresh=1&amp;q={{ q | urlencode }}" hx-include="#class-selected" hx-target="#class-results" hx-swap="innerHTML">Refresh</button></p>
+{% endif %}
+{% endif %}

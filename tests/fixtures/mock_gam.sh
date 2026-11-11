@@ -319,6 +319,7 @@ course_participants_row() {  # <course id>: its row, the ID matched whole (a sub
   case "$1" in ''|*[!0-9]*) return 0 ;; esac
   grep "^$1$(printf '\t')" "$GAM_MOCK_FIXTURES/course_participants.tsv" | head -1
 }
+classroom_knows() { known_user "$1" || grep -qF "\"emailAddress\": \"$1\"" "$GAM_MOCK_FIXTURES/course_participants.tsv"; }
 course_has() {  # <course id> <teachers|students> <address>
   cp_column=3; [ "$2" = students ] && cp_column=4
   course_participants_row "$1" | cut -f "$cp_column" | grep -qF "\"emailAddress\": \"$3\""
@@ -360,9 +361,10 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
   [ "$fj" = 1 ] || not_modelled "print courses without formatjson"
   [ -z "$ids" ] || [ -z "$teacher$student$states" ] || not_modelled "print courses by ID and by a filter at once"
   classroom_token
-  # A person Classroom doesn't know: entityUnknownWarning → "<Teacher|Student>: <x>, Does not exist", and no table.
-  [ -z "$teacher" ] || known_user "$teacher" || does_not_exist "Teacher" "$teacher"
-  [ -z "$student" ] || known_user "$student" || does_not_exist "Student" "$student"
+  # A person Classroom doesn't know: entityUnknownWarning → "<Teacher|Student>: <x>, Does not exist", and no table. Classroom
+  # knows a domain account, and anyone it lists in a class.
+  [ -z "$teacher" ] || classroom_knows "$teacher" || does_not_exist "Teacher" "$teacher"
+  [ -z "$student" ] || classroom_knows "$student" || does_not_exist "Student" "$student"
   missing=""
   for id in $ids; do
     case "$id" in *[!0-9]*) missing="$missing $id"; continue ;; esac

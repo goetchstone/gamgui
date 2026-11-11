@@ -1,0 +1,54 @@
+{% if card.error %}
+<div>{% with ok=False, message=card.error %}{% include "_action_result.html" %}{% endwith %}</div>
+{% else %}
+{% set c = card.course %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-grayink">{{ c.state_words }}</p>
+    <h2 class="font-serif text-xl text-brand-black" tabindex="-1" data-focus>{{ c.name or c.id }}</h2>
+    <dl class="mt-2 grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+      {% if c.section %}<dt class="text-brand-grayink">Section</dt><dd class="text-brand-black">{{ c.section }}</dd>{% endif %}
+      {% if c.room %}<dt class="text-brand-grayink">Room</dt><dd class="text-brand-black">{{ c.room }}</dd>{% endif %}
+      <dt class="text-brand-grayink">Owner</dt>
+      <dd class="truncate text-brand-black">{% if card.owner %}<a href="/users/detail?email={{ card.owner | urlencode }}" class="hover:underline">{{ card.owner }}</a>{% else %}<span class="text-brand-grayink">Not named</span>{% endif %}</dd>
+      <dt class="text-brand-grayink">Class ID</dt><dd class="font-mono text-xs text-brand-black">{{ c.id }}</dd>
+      {# Google's alternateLink, linked only as Classroom's own https address: data from Google never becomes another scheme. #}
+      {% if c.link.startswith("https://classroom.google.com/") %}<dt class="text-brand-grayink">In Classroom</dt>
+      <dd><a href="{{ c.link }}" target="_blank" rel="noopener" class="text-brand-blueink hover:underline">Open the class ↗</a></dd>{% endif %}
+    </dl>
+  </div>
+
+  {% if card.roster_error %}
+  <div>{% with ok=False, message="Couldn't read who is in this class. " ~ card.roster_error %}{% include "_action_result.html" %}{% endwith %}</div>
+  {% elif card.roster %}
+  {% set r = card.roster %}
+  {% if r.unreadable %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">Part of this roster couldn't be read ({{ r.unreadable | join(", ") }}), so the lists below may be short. Open the class again.</p>
+  {% endif %}
+  {% if r.emails_hidden %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">Classroom left some addresses out: the admin token lacks the "Classroom API - Profile Emails" scope (Setup names it).</p>
+  {% endif %}
+  <div class="grid gap-4 md:grid-cols-2">
+    {% for label, people in (("Teachers", r.teachers), ("Students", r.students)) %}
+    <div class="min-w-0">
+      <h3 class="eyebrow text-brand-grayink">{{ label }} · {{ people | length }}</h3>
+      {% if people %}
+      <ul class="mt-1 max-h-[calc(100vh-28rem)] divide-y divide-brand-gray/20 overflow-y-auto text-sm">
+        {% for p in people[:card.shown] %}
+        <li class="truncate py-1">
+          {% if p.email %}<a href="/users/detail?email={{ p.email | urlencode }}" class="text-brand-black hover:underline">{{ p.name or p.email }}</a>
+          {% if p.name %}<span class="text-[11px] text-brand-grayink">{{ p.email }}</span>{% endif %}
+          {% else %}<span class="text-brand-black">{{ p.name or "Someone" }}</span> <span class="text-[11px] text-brand-grayink">(no address shown)</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if people | length > card.shown %}<p class="mt-1 text-[11px] text-brand-grayink">Showing {{ card.shown }} of {{ people | length }}.</p>{% endif %}
+      {% else %}
+      <p class="mt-1 text-sm text-brand-grayink">None.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
