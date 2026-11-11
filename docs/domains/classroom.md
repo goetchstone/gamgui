@@ -42,10 +42,12 @@ guard; only its read side is adapted here.
 - **Not found.** A teacher, student or course Classroom doesn't know is a per-entity warning, `<Entity>: <x>, Does not
   exist`, and exit `ENTITY_DOES_NOT_EXIST_RC` (56): `NOT_FOUND`.
 - **Never the join code.** `COURSE_FIELDS` leaves out `enrollmentcode`, which lets anyone with it join the class.
+- **`owneremail` costs a Directory read per owner.** `print_courses(owner_email=False)` leaves it off; the course index
+  (C1.3) does, and names owners from the directory cache by `ownerId`.
 
 ## Gotchas / mock-lies traps
-- **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, or a `JSON-`
-  cell that isn't a list, is `Roster.unreadable`, never an empty class. GAM prints its CSV header even when nothing
+- **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`
+  column, or a cell that isn't a list, is `Roster.unreadable`, never an empty class. GAM prints its CSV header even when nothing
   matches, so an answer with no table at all raises `Incomplete` (`_classroom_table`), never "no classes"; `get_course`
   raises it too when the class's record is missing, never "no such class". Someone listed without an address sets
   `Roster.emails_hidden`: Classroom leaves addresses out without the "Profile Emails" scope.

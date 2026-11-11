@@ -93,13 +93,16 @@ _ONE_ACCOUNT_WARNING_RCS = (56, 73)
 PER_USER_RCS = (0, 50, 51, 60, 73)   # phishing.PER_USER_EXIT_CODES: read the lines; any other, the read says so
 
 
-def _classroom_table(out: str) -> str:
-    """A Classroom read's CSV, whose header GAM prints even when no class matches. With no table at all GAM answered nothing,
-    which must never read as "no classes" (the same rule as `computers`)."""
+def _answered(out: str, what: str, check: str) -> str:
+    """A read whose CSV header GAM prints even when nothing matches. With no output at all GAM answered nothing (a refused
+    token refresh exits 0 without a word), which must never read as none: the read raises Incomplete instead."""
     if not out.strip():
-        raise Incomplete("GAM exited without an answer, so the classes can't be told. Its sign-in may have been refused: "
-                         "check the admin token on Setup.")
+        raise Incomplete(f"GAM exited without an answer, so {what} can't be told. Its sign-in may have been refused: {check}")
     return out
+
+
+def _classroom_table(out: str) -> str:
+    return _answered(out, "the classes", "check the admin token on Setup.")
 
 
 def _csv_from(out: str) -> str:
@@ -351,10 +354,12 @@ class GAMConnector(Connector):
             await self.runner.run_authenticated(self.domain, GAMCommands.print_mobile_devices(email))), email)
 
     # --- Classroom, read only (plan 2026-11-11 C1) ------------------------------------
-    async def list_courses(self, teacher: str = "", student: str = "", states: Sequence[str] = ()) -> List[Course]:
+    async def list_courses(self, teacher: str = "", student: str = "", states: Sequence[str] = (),
+                           owner_email: bool = True) -> List[Course]:
         """Classes a teacher or student is in, or every class, in the given states. Raises as any read does: a person
-        Classroom doesn't know is NOT_FOUND, an admin token without the Classroom scopes SCOPE_MISSING."""
-        argv = GAMCommands.print_courses(teacher=teacher, student=student, states=states)
+        Classroom doesn't know is NOT_FOUND, an admin token without the Classroom scopes SCOPE_MISSING. `owner_email` off
+        spares GAM a Directory read per owner (the course index, C1.3)."""
+        argv = GAMCommands.print_courses(teacher=teacher, student=student, states=states, owner_email=owner_email)
         return courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
 
     async def get_course(self, course_id: str) -> Course:
@@ -375,8 +380,7 @@ class GAMConnector(Connector):
     async def computers(self, email: str) -> List[Computer]:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_devices(email))
         # GAM builds the service first, and exits 0 with no word if a refreshed token was refused: a real none still prints its header. Never a false all-clear on an attacker's computer.
-        if not out.strip():
-            raise Incomplete("GAM exited without an answer, so whether a computer is signed in can't be told. Its sign-in may have been refused: check the service account on Setup.")
+        out = _answered(out, "whether a computer is signed in", "check the service account on Setup.")
         return computers_from(parse_records(out), email)
 
     async def apps_of(self, email: str) -> List[ConnectedApp]:

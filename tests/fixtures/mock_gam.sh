@@ -315,7 +315,10 @@ classroom_token() {
   # GAM answering nothing at all, exit 0 (as a refused token refresh does elsewhere): the app must not read it as no classes.
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/classroom_silent" ]; then exit 0; fi
 }
-course_participants_row() { grep -F "$(printf '%s\t' "$1")" "$GAM_MOCK_FIXTURES/course_participants.tsv" | head -1; }
+course_participants_row() {  # <course id>: its row, the ID matched whole (a substring once answered course 1 with 500000000001)
+  case "$1" in ''|*[!0-9]*) return 0 ;; esac
+  grep "^$1$(printf '\t')" "$GAM_MOCK_FIXTURES/course_participants.tsv" | head -1
+}
 course_has() {  # <course id> <teachers|students> <address>
   cp_column=3; [ "$2" = students ] && cp_column=4
   course_participants_row "$1" | cut -f "$cp_column" | grep -qF "\"emailAddress\": \"$3\""

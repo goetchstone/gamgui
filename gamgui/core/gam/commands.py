@@ -950,9 +950,10 @@ class GAMCommands:
     # ENTITY_DOES_NOT_EXIST_RC (56). Read from the 7.51.00 build's doPrintCourses, doPrintCourseParticipants and _getCoursesInfo.
     @staticmethod
     def print_courses(teacher: str = "", student: str = "", states: Sequence[str] = (),
-                      course_ids: Sequence[str] = ()) -> List[str]:
+                      course_ids: Sequence[str] = (), owner_email: bool = True) -> List[str]:
         """Classes, read only: by ID, or every class a teacher or a student is in, or every class, in the given states. CSV
-        `id,JSON` (grammar 3328)."""
+        `id,JSON` (grammar 3328). `owner_email` has GAM look up each distinct owner's address, one Directory read per owner:
+        off for a domain-wide read, whose owners the directory cache already names by `ownerId`."""
         argv = ["print", "courses"]
         if isinstance(course_ids, str) or isinstance(states, str):
             raise TypeError("course_ids and states are lists: a bare string would be read one character at a time")
@@ -973,7 +974,7 @@ class GAMCommands:
             if bad:
                 raise ValueError(f"Not a Classroom state: {', '.join(bad)}")
             argv += ["states", ",".join(dict.fromkeys(states))]
-        return argv + ["owneremail", "fields", COURSE_FIELDS, "formatjson"]
+        return argv + (["owneremail"] if owner_email else []) + ["fields", COURSE_FIELDS, "formatjson"]
 
     @staticmethod
     def print_course_participants(course_id: str) -> List[str]:

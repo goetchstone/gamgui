@@ -112,6 +112,34 @@ async def test_gam_answering_nothing_is_never_no_classes(connector, gam_state):
             await read()
 
 
+async def test_the_mock_never_answers_a_short_course_id_with_a_longer_ones_roster(connector):
+    # "1" once matched "500000000001\t" and came back as Biology's roster: GAM says the class doesn't exist.
+    with pytest.raises(GAMError) as err:
+        await connector.course_roster("1")
+    assert err.value.exit_code == 56
+
+
+@pytest.mark.hand_built_argv   # on purpose: argv no builder sends, to hold the mock to the grammar's refusal
+@pytest.mark.parametrize("states", ["all,active", "active,bogus"])
+async def test_the_mock_takes_all_only_on_its_own_as_the_grammar_does(runner, domain, states):
+    argv = ["print", "courses", "states", states, "formatjson"]
+    with pytest.raises(GAMError) as err:
+        await runner.run_authenticated(domain, argv)
+    assert err.value.exit_code == 2      # GAM's usage error
+    assert await runner.run_authenticated(domain, ["print", "courses", "states", "all", "formatjson"])
+
+
+async def test_without_owner_email_gam_names_no_owner_address(connector):
+    assert "owneremail" not in C.print_courses(owner_email=False)
+    courses = await connector.list_courses(teacher="alice@example.com", owner_email=False)
+    assert courses and {c.owner_email for c in courses} == {""} and {c.owner_id for c in courses} == {"100000000000000000001"}
+
+
+def test_a_missing_roster_column_is_unreadable_not_an_empty_side():
+    roster = roster_from([{"courseId": "1", "courseName": "X", "JSON-teachers": "[]"}], "1")
+    assert roster.students == [] and roster.unreadable == ["JSON-students"]
+
+
 def test_a_bare_string_is_never_split_into_one_class_a_character():
     with pytest.raises(TypeError):
         C.print_courses(course_ids="123")

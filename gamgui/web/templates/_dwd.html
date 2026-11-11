@@ -60,7 +60,7 @@
     </p>
     <p class="text-xs mt-1 text-brand-grayink">
       {% if dwd.classroom_missing is none %}Classroom (school domains only) reads with the admin token's "Classroom API" scopes, chosen in <code>gam oauth create</code>.
-      {% elif dwd.classroom_missing %}Classroom is optional, for school domains. To use it, re-run <code>gam oauth create</code>, tick {% for name in dwd.classroom_missing %}"{{ name }}"{{ ", " if not loop.last }}{% endfor %} (read only is enough), then import again.
+      {% elif dwd.classroom_missing %}Classroom is optional, for school domains. To use it, re-run <code>gam oauth create</code>, tick {% for name in dwd.classroom_missing %}"{{ name }}" ({{ dwd.classroom_why[name] | lower }}){{ ", " if not loop.last }}{% endfor %}, read only is enough,, then import again.
       {% else %}The admin token can read Classroom.{% endif %}
     </p>
   </div>

@@ -99,7 +99,10 @@ class Roster:
 
 
 def _people(cell: Any, role: str, column: str, roster: Roster) -> List[Participant]:
-    if cell in (None, ""):
+    if cell is None:            # the column itself is missing: GAM printed something else, so this side is unknown
+        roster.unreadable.append(column)
+        return []
+    if cell == "":
         return []
     try:
         items = json.loads(cell) if isinstance(cell, str) else cell
