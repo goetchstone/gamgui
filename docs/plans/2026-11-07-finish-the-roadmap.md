@@ -64,8 +64,9 @@ Each has a default. Work follows the default unless the operator says otherwise,
 - **D1. How literally "all the features".** Default: literally. Swift's "not planned unless asked" entries that GamGUI has
   are now asked: the Calendars set, many at once and sequences. **Sheet export reverses a decision** (Swift design doc §1,
   "`todrive` is a write"), so it's named here. Default: port it through ChangeCore as the write it is, as GamGUI does.
-  Things neither app has stay out: scheduled runs, other languages, Classroom, removing limited Drive access, a plain-language
-  finder, auto-update, saved reads.
+  Things neither app has stay out: scheduled runs, other languages, removing limited Drive access, a plain-language
+  finder, auto-update, saved reads. Classroom came in on 2026-11-11 (the operator) and has its own plan,
+  `2026-11-11-classroom-and-rostering.md`.
 - **D2. Close Out, in both apps.** Default: yes, one section of the Offboard screen, not a new sidebar entry: after the
   transfer finishes, groups, org unit, suspend or archive, licence, aliases, then the delete. This changes
   `2026-10-02-configurable-offboarding.md`'s "Not planned", and that plan says so in 4.5's PR. The offboarding routine itself stays

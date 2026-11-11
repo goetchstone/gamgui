@@ -51,6 +51,10 @@ order, the decisions each item needs, and a status table to mark as items land.
   Builder recipe — a read that counts what will move (internal) and what must be copied (external),
   then `move drivefile … retainsourcefolders duplicatefolders merge` and `copy drivefile … recursive
   copysubfilesownedby others duplicatefolders merge` (GAM has no dry run for either).
+- **Google Classroom and SIS rostering**, for schools on Workspace for Education: find a class by name
+  or teacher, change one roster, hand classes over at offboarding, and import rosters from a student
+  information system (OneRoster first, then other exports). Adapted from a community fork onto this
+  app's preview-and-confirm path. [The plan](docs/plans/2026-11-11-classroom-and-rostering.md).
 
 ## Later
 
