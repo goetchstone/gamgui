@@ -288,6 +288,9 @@ def _screens(p: Page, st):
     p.goto("/classroom?course=500000000002", "/Carol Clark/.test(document.body.innerText)")
     yield "classroom"                                       # read only: the class finder and a class's card (plan 2026-11-11 C1.3)
 
+    p.goto("/classroom/import", "/what to export/i.test(document.body.innerText)")   # innerText is styled: uppercase
+    yield "classroom/import"                                # the roster upload, nothing kept yet (plan 2026-11-11 C2.2)
+
     p.goto("/signatures")
     p.c.js("(() => { const s = document.querySelector('select[name=scope_type]'); s.value = 'company';"
            " s.dispatchEvent(new Event('change', {bubbles: true})); })()")
@@ -511,7 +514,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
-RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/classroom", "/signatures", "/calendars",
+RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/classroom", "/classroom/import", "/signatures", "/calendars",
              "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/incident/report", "/phishing", "/reports", "/audit", "/setup")
 
 

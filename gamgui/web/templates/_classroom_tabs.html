@@ -1,0 +1,10 @@
+{#- The Classroom screen's two pages, as links (not ARIA tabs: each is its own page). -#}
+<nav aria-label="Classroom" class="flex gap-4 border-b border-brand-gray/30 text-sm">
+  {% for href, label in (("/classroom", "Classes"), ("/classroom/import", "Plan an import")) %}
+  {% if here == href %}
+  <a href="{{ href }}" aria-current="page" class="-mb-px border-b-2 border-brand-blue px-1 pb-2 font-medium text-brand-black">{{ label }}</a>
+  {% else %}
+  <a href="{{ href }}" class="-mb-px border-b-2 border-transparent px-1 pb-2 text-brand-blueink hover:text-brand-black">{{ label }}</a>
+  {% endif %}
+  {% endfor %}
+</nav>

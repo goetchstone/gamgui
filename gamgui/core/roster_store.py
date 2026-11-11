@@ -20,7 +20,7 @@ import stat
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .paths import app_data_dir
 from .roster import Class, Course, Enrollment, Issue, Person, School, Snapshot, Term
@@ -234,6 +234,24 @@ class RosterStore:
             raise StoreError(f"Couldn't read the kept roster ({exc}).") from exc
         finally:
             con.close()
+
+    def issues(self, domain: str) -> Optional[Tuple[Dict[str, int], List[Issue]]]:
+        """The kept roster's issue counts and kept rows, without the rest of it: what the import page shows on every view
+        (loading every person and enrolment to show them cost seconds on a district's roster). None when there's none."""
+        with _LOCK:
+            if self._meta(domain) is None:
+                return None
+            con = self._open(domain)
+            if con is None:
+                return None
+            try:
+                counts = dict(con.execute("SELECT code, count FROM issue_counts"))
+                rows = [Issue(*r) for r in con.execute("SELECT code, file, row, source_id, detail FROM issues")]
+                return counts, rows
+            except (sqlite3.Error, TypeError) as exc:
+                raise StoreError(f"Couldn't read the kept roster ({exc}).") from exc
+            finally:
+                con.close()
 
     def purge(self, domain: str) -> bool:
         """Delete the domain's kept roster, and any half-written save of it. True when there was one."""

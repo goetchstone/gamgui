@@ -168,9 +168,13 @@ def test_a_tenant_switch_drops_the_class_index(client):
 
 
 def test_the_screen_posts_nothing(client):
-    # Read only (the plan's E2): no route under /classroom accepts a POST, so none can write.
-    # The OpenAPI schema is FastAPI's flattened view of every route (app.routes nests included routers).
+    # Read only (the plan's E2): no route under /classroom writes to Google. The only POSTs are the import's two, which keep
+    # or delete a roster on this Mac and call no GAM (LOCAL_ONLY in test_write_routes_guarded; test_roster_web checks the
+    # argv log). The OpenAPI schema is FastAPI's flattened view of every route (app.routes nests included routers).
     paths = {p: ops for p, ops in client.app.openapi()["paths"].items() if p.startswith("/classroom")}
     assert set(paths) == {"/classroom", "/classroom/search", "/classroom/class", "/classroom/person", "/classroom/owned.csv",
-                          "/classroom/creators"}   # the scan sees the screen
-    assert all(set(ops) == {"get"} for ops in paths.values())
+                          "/classroom/creators", "/classroom/import", "/classroom/import/upload", "/classroom/import/purge",
+                          "/classroom/import/issues.csv"}   # the scan sees the screen
+    posts = {p for p, ops in paths.items() if set(ops) != {"get"}}
+    assert posts == {"/classroom/import/upload", "/classroom/import/purge"}
+    assert all(set(paths[p]) == {"post"} for p in posts)

@@ -44,7 +44,7 @@ def test_the_attachment_routes_are_the_ones_we_think():
     assert _attachment_paths() == {"/audit/export.csv", "/builder/export.csv", "/onboard/bulk/template.csv",
                                    "/phishing/copies.csv", "/phishing/recipients.csv",
                                    "/incident/logs/log.csv", "/incident/logs/export.zip", "/incident/logs/reach.csv", "/incident/logs/got-it.csv",
-                                   "/incident/report/list.csv", "/incident/report/export.zip", "/classroom/owned.csv"}
+                                   "/incident/report/list.csv", "/incident/report/export.zip", "/classroom/owned.csv", "/classroom/import/issues.csv"}
 
 
 def test_every_link_to_a_download_route_carries_the_download_attribute():

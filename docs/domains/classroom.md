@@ -116,6 +116,20 @@ guard; only its read side is adapted here.
   closed** (`_expired`): unreadable dates, an import dated in the future, or a stored expiry past `imported + KEEP_DAYS` all
   delete it. Every failure of a save is a `StoreError`, and its temp file goes.
 
+## The import screen (C2.2, C2.4)
+- **`web/routes/roster.py`**, `/classroom/import`, the second tab (`_classroom_tabs.html`: links, not ARIA tabs, since each
+  is its own page). One file input takes a ZIP or a folder's CSVs; beside it, what to export. `POST /upload` reads the
+  picked files bounded together by `UPLOAD_CAP` (`max_files=MEMBERS_CAP`), runs `read_upload` and `RosterStore.save` off
+  the event loop, and audits `roster_import` (label, hash, counts, issue counts; never rows). A `PackageError` is said
+  under the picker and nothing is kept; the last good roster stays. `POST /purge` deletes it and audits `roster_purge`.
+  Both are `LOCAL_ONLY` (no GAM; `tests/test_roster_web.py` checks the argv log) and named in `AUDITED_OUTSIDE_CONNECTOR`.
+- **The page reads only metadata and issues** (`RosterStore.issues`), never the people: loading them all to show counts
+  cost seconds on a district. Each kind shows `ISSUES_SHOWN` (20) rows; the **Issues CSV** has every row kept (the reader
+  keeps `ISSUE_SAMPLE`, 1,000, per kind; the count is whole), formula-safe.
+- **Starlette spools each file part to a private temp file before the route sees it**, so `UPLOAD_CAP` is applied after
+  the spool, not before: a huge upload costs temp disk until the request ends. Bounding it earlier needs a multipart
+  parser of our own; not done.
+
 ## Gotchas / mock-lies traps
 - **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`
   column, or a cell that isn't a list, is `Roster.unreadable`, never an empty class. GAM prints its CSV header even when nothing
