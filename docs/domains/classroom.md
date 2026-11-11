@@ -83,6 +83,39 @@ guard; only its read side is adapted here.
 - **Who can create classes** (`/classroom/creators`): the group named "Classroom Teachers" (or `classroom_teachers@…`)
   from the cached group list, linking to Groups; the Admin console's Classroom settings say which group it really is.
 
+## The roster upload (C2.1, C2.3, C2.5; the screen follows)
+- **`core/roster.py`** reads an upload into one `Snapshot` (schools, terms, courses, classes, people, enrolments) that
+  every SIS reader fills; this one reads OneRoster 1.1 CSV, as a ZIP or as loose CSVs (a folder's files).
+  `read_upload([(name, bytes), …])` is the entry point.
+- **Hostile until read** (SECURITY.md): never extracted; a member is matched by base name against `KNOWN`, and a link,
+  encrypted member, `..`, absolute name, backslash, NUL, nested folders, an unknown file or a name twice (any case)
+  refuses the package. One enclosing folder (Finder's Compress) and macOS's `__MACOSX/`, `.DS_Store` and `._*` are fine.
+  Every size is counted while unpacking (`_bounded`), never taken from a header; members, ratio, rows, fields and the total
+  are capped (`*_CAP`).
+- **What an adversarial run broke, and the rule each fix keeps** (2026-11-11; `tests/test_roster.py`, "found by the
+  adversarial run"): `zipfile` walks a central directory's bytes whatever its entry count says, so its size is read from the
+  end record first (`CENTRAL_DIRECTORY_CAP`); a constructor error of any type is "not a ZIP"; a row is built from the
+  columns used (`USED`) and the header is capped and refused with a name twice, or a wide header made reading quadratic;
+  the manifest has a byte cap; a physical line is capped before the csv module splits it (`_lines`); optional files are
+  named but never unpacked; an address with a control or invisible character is refused, never cleaned (cleaning could
+  make another valid address), while other fields drop theirs (`_clean`); an issue names the line its record starts on.
+  `zipfile` cuts a name at a NUL, so a NUL can't be refused, which is safe only because no name is ever a path.
+- **Memory.** Each file is decoded as it's read (`_Lines`) and dropped once parsed, which took a crafted 62 MB package
+  within every cap from 5.3 GB to 2.4 GB peak. What's left is the snapshot as objects (that package held 1.3M classes and
+  1.8M people, far past any district). If that ever matters, write rows straight into SQLite instead of building objects.
+- **The csv module's field limit is never set here.** It's process-wide and the GAM parser raises it for other reads
+  (`parser.field_limit_at_least`), so lowering it in a thread could break one; each cell's length is checked instead.
+- **Package mistakes refuse with their fix** (`PackageError`): not a ZIP, OneRoster 1.2, a delta export, a missing file,
+  the wrong columns, not UTF-8. **Row problems are `Issue`s** counted by kind (`ISSUE_WORDS`: cause and fix) with a sample
+  of `ISSUE_SAMPLE` each: a teacher or student without an address, two sharing one, an enrolment naming someone or a class
+  that isn't there, rows marked to be deleted.
+- **`core/roster_store.py`** keeps one snapshot per domain: SQLite, named by a hash of the domain, `0600` in a `0700`
+  folder refused if it's a link, written under `.saving-…` and renamed in. Kept `KEEP_DAYS` (14); the next look past that
+  deletes it; `purge` deletes it at once. **Both sweep every half-written `.saving-*` copy of that domain's file**, whichever
+  process left it (a quit between commit and rename once left a whole snapshot that Purge never saw). **Expiry fails
+  closed** (`_expired`): unreadable dates, an import dated in the future, or a stored expiry past `imported + KEEP_DAYS` all
+  delete it. Every failure of a save is a `StoreError`, and its temp file goes.
+
 ## Gotchas / mock-lies traps
 - **A shortfall never reads as complete.** GAM prints a class's row even when it's empty, so a missing row, a missing `JSON-`
   column, or a cell that isn't a list, is `Roster.unreadable`, never an empty class. GAM prints its CSV header even when nothing

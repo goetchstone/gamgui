@@ -171,7 +171,8 @@ After C4 a district can plan an import from OneRoster 1.1 and run it with GAM. A
 | C1.1, C1.2 | done (scopes in Setup, reads and mock) | open |
 | C1.3 | done (the Classroom screen) | open |
 | C1.4 to C1.6 | done (a person's classes, the offboarding warning, who can create classes) | open |
-| C2.1 to C2.5 | open | open |
+| C2.1, C2.3, C2.5 | reader and store done; the screen (C2.2, C2.4) next | open |
+| C2.2, C2.4 | open | open |
 | C3.1 to C3.4 | open | open |
 | C4.1 to C4.4 | open | open |
 | C5.1 to C5.3 | open | open |
