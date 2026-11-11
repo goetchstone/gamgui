@@ -28,7 +28,7 @@ from ..gam.models import (
     Vacation,
 )
 from ..calendar_index import IndexedCalendar
-from ..classroom import Course, Roster, courses_from, roster_from
+from ..classroom import Course, Roster, courses_from, owned_by, roster_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
 from ..gam.parser import parse_one, parse_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
@@ -361,6 +361,16 @@ class GAMConnector(Connector):
         spares GAM a Directory read per owner (the course index, C1.3)."""
         argv = GAMCommands.print_courses(teacher=teacher, student=student, states=states, owner_email=owner_email)
         return courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
+
+    async def courses_owned_by(self, email: str) -> List[Course]:
+        """The classes ``email`` owns, in every state: what deleting the account would lose (a declined or suspended class
+        too). Classroom answering that it doesn't know them as a teacher means they own none; anything else raises."""
+        try:
+            return owned_by(await self.list_courses(teacher=email), email)
+        except GAMError as exc:
+            if exc.kind is GAMErrorKind.NOT_FOUND:   # an account Classroom has never seen owns no class
+                return []
+            raise
 
     async def get_course(self, course_id: str) -> Course:
         """One class by its ID. A class that doesn't exist raises NOT_FOUND; one GAM answered without a record for it raises

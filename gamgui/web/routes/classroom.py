@@ -10,13 +10,17 @@ school domain (the operator has none), and the page says so once.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 from typing import Any, Dict, List, Sequence, Union
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from ...core import clock
-from ...core.classroom import Course, Roster
+from ...core.classroom import PERSON_STATES, Course, Roster
+from ...core.csv_safe import csv_safe
+from ...core.setup import classroom_readable
 from ...core.gam.commands import is_course_id, is_one_address
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.phishing import Incomplete
@@ -25,7 +29,7 @@ from ._common import NOT_CONNECTED, app_state, as_of, friendly
 
 PAGE_SIZE = 25          # classes per page of results; the list scrolls inside the fixed window
 ROSTER_SHOWN = 200      # people listed per side of a class card, with a count past it (#9)
-TEACHER_STATES = ("active", "provisioned", "archived")   # a teacher's classes: last year's too
+TEACHER_STATES = PERSON_STATES   # a teacher's classes: last year's too
 # A failed index read is said again, not re-run, for this long: on a domain without Classroom each typing pause once ran
 # a domain-wide read that could only fail. Refresh tries at once.
 INDEX_RETRY = 60.0
@@ -37,13 +41,16 @@ _CARD = "_classroom_card.html"
 router = APIRouter(prefix="/classroom")
 
 
+_NO_SCOPES = ("The admin token can't read Classroom. On Setup, the delegation step names the Classroom scopes to tick in "
+              "`gam oauth create`. Classroom is only on school (Workspace for Education) domains.")
+
+
 def _why(exc: Exception, about: str = "") -> str:
     """A failed Classroom read in words. A missing scope points at Setup; an address Classroom doesn't know is named."""
     if isinstance(exc, Incomplete):
         return str(exc)
     if isinstance(exc, GAMError) and exc.kind is GAMErrorKind.SCOPE_MISSING:
-        return ("The admin token can't read Classroom. On Setup, the delegation step names the Classroom scopes to tick in "
-                "`gam oauth create`. Classroom is only on school (Workspace for Education) domains.")
+        return _NO_SCOPES
     if isinstance(exc, GAMError) and exc.kind is GAMErrorKind.NOT_FOUND and about:
         return f"Classroom doesn't know {about}."
     return "Couldn't read Classroom. " + friendly(exc)
@@ -164,3 +171,86 @@ async def card(request: Request, id: str = "") -> HTMLResponse:
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _CARD, {"card": {"error": NOT_CONNECTED}})
     return TEMPLATES.TemplateResponse(request, _CARD, {"card": await _card(st, id.strip())})
+
+
+# --- a person's classes (C1.4) and the classes they own (C1.5) ------------------------------------------------------
+async def _person(st, email: str) -> dict:
+    """What a person teaches and what they're enrolled in, each a live read in the states a person's classes are read in."""
+    ctx: dict = {"email": email, "teaches": [], "attends": [], "error": "", "teaches_error": "", "attends_error": ""}
+    if not is_one_address(email):
+        ctx["error"] = "That isn't one address."
+        return ctx
+    if classroom_readable(st.vault, st.audit_domain) is False:   # known to lack the scopes: a read that could only fail
+        ctx["error"] = _NO_SCOPES
+        return ctx
+    reads: Sequence[Any] = await asyncio.gather(st.connector.list_courses(teacher=email, states=PERSON_STATES),
+                                                st.connector.list_courses(student=email, states=PERSON_STATES),
+                                                return_exceptions=True)
+    for key, read in zip(("teaches", "attends"), reads, strict=True):
+        if isinstance(read, BaseException):
+            if not isinstance(read, Exception):
+                raise read
+            ctx[f"{key}_error"] = _why(read, email)
+        else:
+            ctx[key] = read
+    if ctx["teaches_error"] and ctx["teaches_error"] == ctx["attends_error"]:   # one cause: say it once
+        ctx["error"], ctx["teaches_error"], ctx["attends_error"] = ctx["teaches_error"], "", ""
+    return ctx
+
+
+@router.get("/person", response_class=HTMLResponse)
+async def person(request: Request, email: str = "") -> HTMLResponse:
+    """A person's classes, for their page on Users: loaded only when asked, each linking to its class card."""
+    st = app_state(request)
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, "_classroom_person.html", {"error": NOT_CONNECTED})
+    return TEMPLATES.TemplateResponse(request, "_classroom_person.html", await _person(st, email.strip()))
+
+
+@router.get("/owned.csv")
+async def owned_csv(request: Request, email: str = "") -> Response:
+    """The classes someone owns, as a spreadsheet to hand to whoever gives them a new owner (offboarding, C1.5). Read live,
+    formula-safe (`csv_safe`). GamGUI changes nothing in Classroom."""
+    st = app_state(request)
+    email = email.strip()
+    if st.connector is None or not is_one_address(email):
+        return Response("Not one address, or not connected.\n", status_code=400, media_type="text/plain")
+    try:
+        owned = await st.connector.courses_owned_by(email)
+    except Exception as exc:  # noqa: BLE001 — said in words, as a plain-text answer
+        return Response(_why(exc, email) + "\n", status_code=502, media_type="text/plain")
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["courseId", "name", "section", "state", "owner", "link"])
+    for c in owned:
+        writer.writerow([csv_safe(v) for v in (c.id, c.name, c.section, c.state_words, c.owner_email, c.link)])
+    # The header carries only filename-safe characters: an address's local part may hold `\`, `;` or `/`.
+    local = "".join(ch for ch in email.split("@")[0] if ch.isascii() and (ch.isalnum() or ch in "._-")) or "person"
+    name = f"classes-owned-by-{local}.csv"
+    return Response(out.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+# --- who can create classes (C1.6) ----------------------------------------------------------------------------------
+TEACHER_GROUP_NAME = "Classroom Teachers"   # the group Classroom's settings name for teachers, by default
+
+
+@router.get("/creators", response_class=HTMLResponse)
+async def creators(request: Request) -> HTMLResponse:
+    """Who can create classes, read only: the Classroom Teachers group from the cached group list, linking to Groups,
+    where adding a staff group is the existing, proven write. GamGUI reconciles nothing (the fork's scheduler is gone)."""
+    st = app_state(request)
+    ctx: dict = {"group": None, "error": ""}
+    if st.connector is None:
+        ctx["error"] = NOT_CONNECTED
+    elif classroom_readable(st.vault, st.audit_domain) is False:   # a domain that doesn't use Classroom: no group read
+        return HTMLResponse("")
+    else:
+        try:
+            groups = await st.groups(stale_ok=True)
+        except Exception as exc:  # noqa: BLE001
+            ctx["error"] = "Couldn't list groups. " + friendly(exc)
+        else:
+            ctx["group"] = next((g for g in groups if g.name.strip().lower() == TEACHER_GROUP_NAME.lower()
+                                 or g.email.split("@")[0].lower() == "classroom_teachers"), None)
+    return TEMPLATES.TemplateResponse(request, "_classroom_creators.html", ctx)

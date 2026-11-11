@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import date
-from typing import Annotated, FrozenSet, List, Tuple
+from typing import Annotated, FrozenSet, List, Optional, Tuple
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -19,6 +19,7 @@ from ...core import guard, lifecycle
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError
+from ...core.setup import classroom_readable
 from ...core.offboard_templates import OffboardTemplate, OffboardTemplateStore
 from ..jobs import start_job
 from ..server import TEMPLATES
@@ -279,6 +280,15 @@ async def offboard_preview(
             check.warnings.append(warning)
     except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
         check.warnings.append(lifecycle.vault_holds_unread(user, _why(exc), transfer_runs))
+    # Classroom (plan 2026-11-11 C1.5): the classes the leaver owns are lost with the account, and GamGUI changes nothing in
+    # Classroom, so the preview names them and hands over a list. Skipped only on an admin token known not to read
+    # Classroom (a domain that doesn't use it); any other failed read is said, never taken as "none".
+    classes: Optional[dict] = None
+    if classroom_readable(st.vault, st.audit_domain) is not False:
+        try:
+            classes = {"owned": await conn.courses_owned_by(user), "error": ""}
+        except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
+            classes = {"owned": [], "error": _why(exc)}
     filters: List[lifecycle.ForwardingFilter] = []
     filters_read = False
     if "forwarding_filters" in added and "forwarding_filters" not in done:
@@ -321,7 +331,7 @@ async def offboard_preview(
         {"steps": steps, "done": done, "na": na, "costs": lifecycle.NOT_APPLICABLE_COST,
          "run_count": len(to_run), "user": user, "manager": manager,
          "days": days_i, "warnings": check.warnings, "token": token,
-         "ar_subject": ar_subject, "ar_message": ar_message, "typed": typed},
+         "ar_subject": ar_subject, "ar_message": ar_message, "typed": typed, "classes": classes},
     )
 
 

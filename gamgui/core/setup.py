@@ -754,7 +754,7 @@ class SetupService:
         client_id = str(_json_field(self.vault.get(domain, "oauth2service"), "client_id") or "")
         offered = (*DWD_SCOPES, DEVICES_SCOPE)
         scopes = [s for s, _ in offered]
-        granted = _json_field(self.vault.get(domain, "oauth2"), "scopes")
+        granted = admin_token_scopes(self.vault, domain)
         return {
             "client_id": client_id,
             "admin_console_url": ADMIN_CONSOLE_DWD_URL,
@@ -841,6 +841,18 @@ def _check_result(out: str, exited_ok: bool = True) -> VerifyResult:
         summary = "Domain-Wide Delegation isn't authorized yet — use the link below, then verify again."
     return VerifyResult(ok=ok, summary=summary, lines=lines, raw=out,
                         auth_url=("" if ok else _extract_auth_url(out)))
+
+
+def admin_token_scopes(vault: SecretsVault, domain: str) -> object:
+    """The scopes the admin token (`oauth2.txt`) records it was granted: a list, or ``None`` when they can't be read."""
+    return _json_field(vault.get(domain, "oauth2"), "scopes")
+
+
+def classroom_readable(vault: SecretsVault, domain: str) -> Optional[bool]:
+    """Whether the admin token holds the Classroom scopes GAM reads Classroom with: False on a token known to lack them (a
+    domain that doesn't use Classroom), None when its scopes can't be read. A False skips a read that could only fail."""
+    missing = classroom_scopes_missing(admin_token_scopes(vault, domain))
+    return None if missing is None else not missing
 
 
 def _json_field(raw: Optional[str], key: str) -> object:

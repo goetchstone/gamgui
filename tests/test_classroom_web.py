@@ -171,5 +171,6 @@ def test_the_screen_posts_nothing(client):
     # Read only (the plan's E2): no route under /classroom accepts a POST, so none can write.
     # The OpenAPI schema is FastAPI's flattened view of every route (app.routes nests included routers).
     paths = {p: ops for p, ops in client.app.openapi()["paths"].items() if p.startswith("/classroom")}
-    assert set(paths) == {"/classroom", "/classroom/search", "/classroom/class"}   # the scan sees the screen
+    assert set(paths) == {"/classroom", "/classroom/search", "/classroom/class", "/classroom/person", "/classroom/owned.csv",
+                          "/classroom/creators"}   # the scan sees the screen
     assert all(set(ops) == {"get"} for ops in paths.values())
