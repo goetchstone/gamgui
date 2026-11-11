@@ -80,6 +80,9 @@ def test_import_shows_the_scopes_and_the_prefilled_link_up_front(ctx):
     assert "&amp;clientIdToAdd=CID.apps&amp;overwriteClientId=true&amp;dn=ex.com" in r.text
     assert "Directory API - User Security" in r.text     # the admin token lacks the sign-out scope
     assert "text-amber-700" in r.text
+    # Classroom is optional (school domains): named as GAM's `oauth create` names it, never as a delegation scope to add.
+    assert '"Classroom API - Courses", "Classroom API - Rosters", "Classroom API - Profile Emails"' in r.text
+    assert "classroom" not in r.text.split("clientScopeToAdd=", 1)[1].split('"', 1)[0]
 
 
 def test_import_requires_fields(ctx):

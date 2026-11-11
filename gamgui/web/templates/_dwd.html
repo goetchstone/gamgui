@@ -58,6 +58,11 @@
       {% elif dwd.user_security %}The admin token has <code>admin.directory.user.security</code> (offboarding's sign-out).
       {% else %}Offboarding's sign-out uses the admin token's "Directory API - User Security" scope (chosen in <code>gam oauth create</code>), not delegation.{% endif %}
     </p>
+    <p class="text-xs mt-1 text-brand-grayink">
+      {% if dwd.classroom_missing is none %}Classroom (school domains only) reads with the admin token's "Classroom API" scopes, chosen in <code>gam oauth create</code>.
+      {% elif dwd.classroom_missing %}Classroom is optional, for school domains. To use it, re-run <code>gam oauth create</code>, tick {% for name in dwd.classroom_missing %}"{{ name }}"{{ ", " if not loop.last }}{% endfor %} (read only is enough), then import again.
+      {% else %}The admin token can read Classroom.{% endif %}
+    </p>
   </div>
 
   <div class="border-t border-brand-gray/30 pt-5">

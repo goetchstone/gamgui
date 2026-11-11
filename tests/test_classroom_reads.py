@@ -1,0 +1,150 @@
+"""Google Classroom reads (plan 2026-11-11 C1.1–C1.2): the argv, the mock answering as the vendored build prints, the parse,
+and the admin token's Classroom scopes. Read only: GamGUI never writes to Classroom (the plan's E2)."""
+from __future__ import annotations
+
+import pytest
+
+from gamgui.core.classroom import CLASSROOM_SCOPES, classroom_scopes_missing, roster_from
+from gamgui.core.gam.commands import COURSE_FIELDS, GAMCommands as C, is_course_id
+from gamgui.core.gam.errors import GAMError, GAMErrorKind, classify_stderr
+from gamgui.core.phishing import Incomplete
+
+CHEM = "500000000002"
+
+
+# --- argv ---------------------------------------------------------------------------------------
+def test_print_courses_by_teacher_and_states_is_the_grammars_shape():
+    assert C.print_courses(teacher="ann@example.com", states=["active", "provisioned"]) == [
+        "print", "courses", "teacher", "ann@example.com", "states", "active,provisioned",
+        "owneremail", "fields", COURSE_FIELDS, "formatjson"]
+
+
+def test_print_courses_by_id_and_the_roster_read():
+    assert C.print_courses(course_ids=[CHEM]) == ["print", "courses", "course", CHEM, "owneremail", "fields",
+                                                  COURSE_FIELDS, "formatjson"]
+    assert C.print_course_participants(CHEM) == ["print", "course-participants", "course", CHEM, "show", "all",
+                                                 "formatjson"]
+
+
+def test_a_class_is_never_read_with_its_join_code():
+    assert "enrollmentcode" not in COURSE_FIELDS
+
+
+@pytest.mark.parametrize("bad", ["", "1,2", "d:alias", "12 34", "-1", "１２", "1" * 31])
+def test_a_course_id_is_digits_only(bad):
+    assert not is_course_id(bad)
+    with pytest.raises(ValueError):
+        C.print_course_participants(bad)
+    with pytest.raises(ValueError):
+        C.print_courses(course_ids=[bad])
+
+
+@pytest.mark.parametrize("bad", ["a@x.com,b@x.com", "a@x.com b@x.com", "Ann <a@x.com>", "id:123", "ann"])
+def test_a_teacher_or_student_is_one_address(bad):
+    with pytest.raises(ValueError):
+        C.print_courses(teacher=bad)
+    with pytest.raises(ValueError):
+        C.print_courses(student=bad)
+
+
+def test_a_state_is_one_of_the_grammars_and_an_id_read_takes_no_filter():
+    with pytest.raises(ValueError):
+        C.print_courses(states=["active", "all,archived"])
+    with pytest.raises(ValueError):
+        C.print_courses(course_ids=[CHEM], teacher="ann@example.com")
+
+
+# --- through the strict mock --------------------------------------------------------------------
+async def test_a_teachers_classes_in_the_states_asked(connector):
+    courses = await connector.list_courses(teacher="alice@example.com", states=["active", "provisioned"])
+    assert [(c.name, c.state) for c in courses] == [
+        ("Algebra", "PROVISIONED"), ("Biology", "ACTIVE"), ('Chemistry, "Honors"', "ACTIVE")]
+    assert {c.owner_email for c in courses} == {"alice@example.com"}
+
+
+async def test_a_students_classes_include_an_archived_one_when_no_state_is_asked(connector):
+    names = [c.name for c in await connector.list_courses(student="carol@example.com")]
+    assert names == ["Biology", 'Chemistry, "Honors"', "World History 2025"]
+
+
+async def test_one_class_by_id_reads_its_quoted_name_back(connector):
+    course = await connector.get_course(CHEM)
+    assert course is not None
+    assert (course.name, course.section, course.room, course.state_words) == (
+        'Chemistry, "Honors"', "Period 4", "C3", "Active")
+
+
+async def test_a_class_or_teacher_classroom_does_not_know_is_not_found(connector):
+    for read in (lambda: connector.get_course("999999"), lambda: connector.course_roster("999999"),
+                 lambda: connector.list_courses(teacher="nobody@example.com")):
+        with pytest.raises(GAMError) as err:
+            await read()
+        assert err.value.kind is GAMErrorKind.NOT_FOUND
+        assert err.value.exit_code == 56
+
+
+async def test_an_admin_token_without_classroom_scopes_says_so(connector, gam_state):
+    (gam_state / "noclassroom").touch()
+    with pytest.raises(GAMError) as err:
+        await connector.list_courses(teacher="alice@example.com")
+    assert err.value.kind is GAMErrorKind.SCOPE_MISSING
+    assert err.value.exit_code == 15
+
+
+async def test_a_roster_has_its_teachers_and_students(connector):
+    roster = await connector.course_roster(CHEM)
+    assert roster.course_name == 'Chemistry, "Honors"'
+    assert [(p.email, p.name) for p in roster.teachers] == [("alice@example.com", "Alice Anders")]
+    assert [p.email for p in roster.students] == ["bob@example.com", "carol@example.com"]
+    assert not roster.unreadable
+
+
+async def test_an_empty_class_reads_as_empty_not_unreadable(connector):
+    roster = await connector.course_roster("500000000003")
+    assert roster.students == [] and len(roster.teachers) == 1 and not roster.unreadable
+
+
+async def test_gam_answering_nothing_is_never_no_classes(connector, gam_state):
+    (gam_state / "classroom_silent").touch()
+    for read in (lambda: connector.list_courses(teacher="alice@example.com"), lambda: connector.get_course(CHEM),
+                 lambda: connector.course_roster(CHEM)):
+        with pytest.raises(Incomplete):
+            await read()
+
+
+def test_a_bare_string_is_never_split_into_one_class_a_character():
+    with pytest.raises(TypeError):
+        C.print_courses(course_ids="123")
+    with pytest.raises(TypeError):
+        C.print_courses(states="active")
+
+
+# --- the parse never reads a shortfall as complete ----------------------------------------------
+def test_a_person_listed_without_an_address_says_addresses_are_hidden():
+    cell = '[{"userId": "9", "profile": {"id": "9", "name": {"fullName": "No Mail"}}}]'
+    roster = roster_from([{"courseId": "1", "courseName": "X", "JSON-teachers": cell, "JSON-students": "[]"}], "1")
+    assert roster.emails_hidden and roster.teachers[0].name == "No Mail"
+    assert not roster_from([{"courseId": "1", "courseName": "X", "JSON-teachers": "[]", "JSON-students": "[]"}],
+                           "1").emails_hidden
+
+
+def test_a_roster_cell_that_isnt_a_list_is_unreadable_not_empty():
+    roster = roster_from([{"courseId": "1", "courseName": "X", "JSON-teachers": "[]", "JSON-students": "{oops"}], "1")
+    assert roster.unreadable == ["JSON-students"]
+
+
+def test_a_missing_row_is_unreadable_not_an_empty_class():
+    assert roster_from([], "1").unreadable == ["the class's row"]
+
+
+# --- the admin token's scopes -------------------------------------------------------------------
+def test_the_classroom_scopes_are_gams_client_scopes_and_read_only_will_do():
+    full = [scope for scope, _, _ in CLASSROOM_SCOPES]
+    assert classroom_scopes_missing(full) == []
+    assert classroom_scopes_missing([f"{s}.readonly" if "profile" not in s else s for s in full]) == []
+    assert classroom_scopes_missing([]) == [name for _, name, _ in CLASSROOM_SCOPES]
+    assert classroom_scopes_missing(None) is None
+
+
+def test_gams_no_scopes_message_is_a_missing_scope():
+    assert classify_stderr("ERROR: There are no scopes authorized for the API(s): Classroom API") is GAMErrorKind.SCOPE_MISSING

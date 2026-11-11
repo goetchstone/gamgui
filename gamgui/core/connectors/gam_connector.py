@@ -28,6 +28,7 @@ from ..gam.models import (
     Vacation,
 )
 from ..calendar_index import IndexedCalendar
+from ..classroom import Course, Roster, courses_from, roster_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
 from ..gam.parser import parse_one, parse_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
@@ -90,6 +91,15 @@ SWEEP_TOLERATED = (GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAM
 # ENTITY_DOES_NOT_EXIST_RC and SERVICE_NOT_APPLICABLE_RC: entityUnknownWarning, a warning in a per-account loop.
 _ONE_ACCOUNT_WARNING_RCS = (56, 73)
 PER_USER_RCS = (0, 50, 51, 60, 73)   # phishing.PER_USER_EXIT_CODES: read the lines; any other, the read says so
+
+
+def _classroom_table(out: str) -> str:
+    """A Classroom read's CSV, whose header GAM prints even when no class matches. With no table at all GAM answered nothing,
+    which must never read as "no classes" (the same rule as `computers`)."""
+    if not out.strip():
+        raise Incomplete("GAM exited without an answer, so the classes can't be told. Its sign-in may have been refused: "
+                         "check the admin token on Setup.")
+    return out
 
 
 def _csv_from(out: str) -> str:
@@ -339,6 +349,28 @@ class GAMConnector(Connector):
     async def mobile_devices(self, email: str) -> List[MobileDevice]:
         return mobile_devices_from(parse_records(
             await self.runner.run_authenticated(self.domain, GAMCommands.print_mobile_devices(email))), email)
+
+    # --- Classroom, read only (plan 2026-11-11 C1) ------------------------------------
+    async def list_courses(self, teacher: str = "", student: str = "", states: Sequence[str] = ()) -> List[Course]:
+        """Classes a teacher or student is in, or every class, in the given states. Raises as any read does: a person
+        Classroom doesn't know is NOT_FOUND, an admin token without the Classroom scopes SCOPE_MISSING."""
+        argv = GAMCommands.print_courses(teacher=teacher, student=student, states=states)
+        return courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
+
+    async def get_course(self, course_id: str) -> Course:
+        """One class by its ID. A class that doesn't exist raises NOT_FOUND; one GAM answered without a record for it raises
+        Incomplete, never reads as "no such class"."""
+        argv = GAMCommands.print_courses(course_ids=[course_id])
+        found = [c for c in courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
+                 if c.id == course_id]
+        if not found:
+            raise Incomplete("GAM answered without this class's record, so it can't be shown. Try again.")
+        return found[0]
+
+    async def course_roster(self, course_id: str) -> Roster:
+        """One class's teachers and students. A roster GAM printed in a shape this can't read says so (``unreadable``)."""
+        argv = GAMCommands.print_course_participants(course_id)
+        return roster_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))), course_id)
 
     async def computers(self, email: str) -> List[Computer]:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_devices(email))

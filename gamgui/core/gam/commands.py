@@ -92,6 +92,17 @@ DEVICE_FIELDS = ("devicetype,model,manufacturer,osversion,hostname,serialnumber,
 SCRIPT_FIELDS = "id,name,createdtime,modifiedtime,trashed,lastmodifyinguser"
 DEVICE_USER_FIELDS = "name,useremail,createtime,firstsynctime,lastsynctime,managementstate"
 
+# Google Classroom, read only (plan 2026-11-11 C1). A class's fields, never its enrollment code, which lets anyone join it.
+COURSE_FIELDS = "id,name,section,room,coursestate,ownerid,creationtime,updatetime,alternatelink"
+# The grammar's <CourseState>. A states filter holds one or more of them.
+COURSE_STATES = ("active", "archived", "provisioned", "declined", "suspended")
+
+
+def is_course_id(value: str) -> bool:
+    """A Classroom course ID as Google gives it: digits only. GAM reads a comma as a list and `d:` as an alias, so nothing else is
+    one course."""
+    return bool(value) and value.isascii() and value.isdigit() and len(value) <= 30
+
 # GAM's phone types (`phone [type assistant|…|work_pager|(custom <String>)]`). One outside them GAM keeps as a custom type
 # of that name, so a phone goes back only with one of these, `custom` with its name, or no type.
 PHONE_TYPES = frozenset({"assistant", "callback", "car", "company_main", "grand_central", "home", "home_fax", "isdn", "main",
@@ -932,6 +943,45 @@ class GAMCommands:
     def show_vacation(email: str) -> List[str]:
         # `show vacation` does NOT support formatjson — returns parseable text.
         return ["user", email, "show", "vacation"]
+
+    # --- classroom (read only) --------------------------------------------------------
+    # GAM reads Classroom with the ADMIN token (buildGAPIObject(CLASSROOM)), so its scopes are picked in `gam oauth create`, not
+    # delegated: without them GAM exits NO_SCOPES_FOR_API_RC (15). A teacher, student or course it can't find is a warning and
+    # ENTITY_DOES_NOT_EXIST_RC (56). Read from the 7.51.00 build's doPrintCourses, doPrintCourseParticipants and _getCoursesInfo.
+    @staticmethod
+    def print_courses(teacher: str = "", student: str = "", states: Sequence[str] = (),
+                      course_ids: Sequence[str] = ()) -> List[str]:
+        """Classes, read only: by ID, or every class a teacher or a student is in, or every class, in the given states. CSV
+        `id,JSON` (grammar 3328)."""
+        argv = ["print", "courses"]
+        if isinstance(course_ids, str) or isinstance(states, str):
+            raise TypeError("course_ids and states are lists: a bare string would be read one character at a time")
+        if course_ids:
+            if teacher or student or states:
+                raise ValueError("Classes by ID take no teacher, student or state filter")
+            for course_id in course_ids:
+                if not is_course_id(course_id):
+                    raise ValueError(f"Not a Classroom course ID: {course_id!r}")
+                argv += ["course", course_id]
+        for keyword, address in (("teacher", teacher), ("student", student)):
+            if address:
+                if not is_one_address(address):
+                    raise ValueError(f"Not one address: {address!r}")
+                argv += [keyword, address]
+        if states:
+            bad = [s for s in states if s not in COURSE_STATES]
+            if bad:
+                raise ValueError(f"Not a Classroom state: {', '.join(bad)}")
+            argv += ["states", ",".join(dict.fromkeys(states))]
+        return argv + ["owneremail", "fields", COURSE_FIELDS, "formatjson"]
+
+    @staticmethod
+    def print_course_participants(course_id: str) -> List[str]:
+        """One class's teachers and students. CSV `courseId,courseName,JSON-teachers,JSON-students`: one row per class, each
+        `JSON-` cell a list of people (grammar 3339)."""
+        if not is_course_id(course_id):
+            raise ValueError(f"Not a Classroom course ID: {course_id!r}")
+        return ["print", "course-participants", "course", course_id, "show", "all", "formatjson"]
 
     # --- groups -----------------------------------------------------------------------
     @staticmethod

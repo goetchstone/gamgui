@@ -299,6 +299,131 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
   print_formatjson primaryEmail print_users.json
   exit 0
 fi
+
+# Google Classroom, read only (plan 2026-11-11 C1), as the vendored 7.51.00 build's doPrintCourses, doPrintCourseParticipants
+# and _getCoursesInfo print it — read from the build, never seen on a tenant (the operator has no Education domain).
+# GAM reads Classroom with the ADMIN token (buildGAPIObject): one without a Classroom scope exits NO_SCOPES_FOR_API_RC (15),
+# modelled by $GAM_MOCK_STATE/noclassroom. A course, teacher or student Classroom can't find is a per-entity warning and
+# ENTITY_DOES_NOT_EXIST_RC (56). `print courses … formatjson` is `id,JSON`, the record's keys sorted; `print
+# course-participants … formatjson` one row per class, `courseId,courseName` then a `JSON-teachers` and/or `JSON-students`
+# list. Data: courses.json (one record a line, ownerEmail in each) and course_participants.tsv (id, name, teachers, students).
+classroom_token() {
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/noclassroom" ]; then
+    printf '\nERROR: There are no scopes authorized for the API(s): Classroom API\n' 1>&2
+    exit 15
+  fi
+  # GAM answering nothing at all, exit 0 (as a refused token refresh does elsewhere): the app must not read it as no classes.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/classroom_silent" ]; then exit 0; fi
+}
+course_participants_row() { grep -F "$(printf '%s\t' "$1")" "$GAM_MOCK_FIXTURES/course_participants.tsv" | head -1; }
+course_has() {  # <course id> <teachers|students> <address>
+  cp_column=3; [ "$2" = students ] && cp_column=4
+  course_participants_row "$1" | cut -f "$cp_column" | grep -qF "\"emailAddress\": \"$3\""
+}
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "courses" ]; then
+  shift 2
+  ids=""; teacher=""; student=""; states=""; owneremail=0; fj=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      course|class) need_value $# "CourseEntity"; [ -n "$2" ] || empty_arg "CourseEntity"; ids="$ids $2"; shift 2 ;;
+      teacher|student)
+        need_value $# "UserItem"; [ -n "$2" ] || empty_arg "UserItem"
+        if [ "$1" = teacher ]; then teacher=$(lower "$2"); else student=$(lower "$2"); fi
+        shift 2 ;;
+      states)
+        need_value $# "CourseStateList"; [ -n "$2" ] || empty_arg "CourseStateList"
+        # <CourseStateList> ::= all|"<CourseState>(,<CourseState>)*": `all` only on its own.
+        if [ "$(lower "$2")" != all ]; then
+          for s in $(printf '%s' "$2" | tr ',' ' '); do
+            case "$(lower "$s")" in active|archived|provisioned|declined|suspended) ;;
+              *) invalid_choice "$s" "active|archived|provisioned|declined|suspended" ;; esac
+          done
+        fi
+        states=$(lower "$2"); shift 2 ;;
+      owneremail) owneremail=1; shift ;;
+      fields)
+        need_value $# "CourseFieldNameList"; [ -n "$2" ] || empty_arg "CourseFieldNameList"
+        for f in $(printf '%s' "$2" | tr ',' ' '); do
+          case "$(lower "$f")" in
+            aliases|alternatelink|calendarid|coursegroupemail|coursematerialsets|coursestate|creationtime|description|descriptionheading|heading|enrollmentcode|gradebooksettings|guardiansenabled|id|levels|name|owneremail|ownerid|ownername|room|section|subject|students|teacherfolder|teachergroupemail|teachers|updatetime) ;;
+            *) invalid_choice "$f" "CourseFieldName" ;;
+          esac
+        done
+        shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  [ "$fj" = 1 ] || not_modelled "print courses without formatjson"
+  [ -z "$ids" ] || [ -z "$teacher$student$states" ] || not_modelled "print courses by ID and by a filter at once"
+  classroom_token
+  # A person Classroom doesn't know: entityUnknownWarning → "<Teacher|Student>: <x>, Does not exist", and no table.
+  [ -z "$teacher" ] || known_user "$teacher" || does_not_exist "Teacher" "$teacher"
+  [ -z "$student" ] || known_user "$student" || does_not_exist "Student" "$student"
+  missing=""
+  for id in $ids; do
+    case "$id" in *[!0-9]*) missing="$missing $id"; continue ;; esac
+    grep -qF "\"id\": \"$id\"" "$GAM_MOCK_FIXTURES/courses.json" || missing="$missing $id"
+  done
+  for id in $missing; do printf 'Course: %s, Does not exist\n' "$id" 1>&2; done
+  printf 'id,JSON\n'
+  while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    id=$(json_text id "$record")
+    if [ -n "$ids" ]; then case " $ids " in *" $id "*) ;; *) continue ;; esac; fi
+    [ -z "$teacher" ] || course_has "$id" teachers "$teacher" || continue
+    [ -z "$student" ] || course_has "$id" students "$student" || continue
+    if [ -n "$states" ] && [ "$states" != all ]; then
+      state=$(lower "$(json_text courseState "$record")")
+      case ",$states," in *",$state,"*) ;; *) continue ;; esac
+    fi
+    [ "$owneremail" = 1 ] || record=$(printf '%s' "$record" | sed 's/"ownerEmail": "[^"]*", //')
+    gam_row "$id" "$record"
+  done < "$GAM_MOCK_FIXTURES/courses.json"
+  [ -z "$missing" ] || exit 56
+  exit 0
+fi
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "course-participants" ]; then
+  shift 2
+  ids=""; show=all; fj=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      course|class) need_value $# "CourseEntity"; [ -n "$2" ] || empty_arg "CourseEntity"; ids="$ids $2"; shift 2 ;;
+      teacher|student|states) not_modelled "print course-participants by $1" ;;
+      show)
+        need_value $# "all|students|teachers"
+        case "$2" in all|students|teachers) show=$2 ;; *) invalid_choice "$2" "all|students|teachers" ;; esac
+        shift 2 ;;
+      formatjson) fj=1; shift ;;
+      *) invalid_arg "$1" ;;
+    esac
+  done
+  [ "$fj" = 1 ] || not_modelled "print course-participants without formatjson"
+  [ -n "$ids" ] || not_modelled "print course-participants of every class"
+  classroom_token
+  missing=""
+  for id in $ids; do
+    case "$id" in *[!0-9]*) missing="$missing $id"; continue ;; esac
+    [ -n "$(course_participants_row "$id")" ] || missing="$missing $id"
+  done
+  for id in $missing; do printf 'Course: %s, Does not exist\n' "$id" 1>&2; done
+  case "$show" in
+    all) printf 'courseId,courseName,JSON-teachers,JSON-students\n' ;;
+    teachers) printf 'courseId,courseName,JSON-teachers\n' ;;
+    students) printf 'courseId,courseName,JSON-students\n' ;;
+  esac
+  for id in $ids; do
+    row=$(course_participants_row "$id"); [ -n "$row" ] || continue
+    name=$(printf '%s' "$row" | cut -f 2); teachers=$(printf '%s' "$row" | cut -f 3); students=$(printf '%s' "$row" | cut -f 4)
+    case "$show" in
+      all) gam_row "$id" "$name" "$teachers" "$students" ;;
+      teachers) gam_row "$id" "$name" "$teachers" ;;
+      students) gam_row "$id" "$name" "$students" ;;
+    esac
+  done
+  [ -z "$missing" ] || exit 56
+  exit 0
+fi
 # GAM skips an account whose token refresh is refused for good without a word, exit 0 (handleOAuthTokenError's softErrors,
 # API.REFRESH_PERM_ERRORS): each `print` read is then its titles or nothing. $GAM_MOCK_STATE/silent_token/<user>.
 if [ "${1:-}" = "user" ] && [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/silent_token/$(lower "${2:-}")" ]; then exit 0; fi

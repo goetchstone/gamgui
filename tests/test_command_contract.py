@@ -39,7 +39,8 @@ needs_grammar = pytest.mark.skipif(
 SEARCH_ADDRESS = "person@example.com"
 DEVICE_USER = "devices/D1/deviceUsers/U1"
 VALIDATED_VALUES = {DEVICE_USER, "c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled",
-                    "2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "198.51.100.23", "1000", "DEVICE_REGISTER_UNREGISTER_EVENT"}
+                    "2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "198.51.100.23", "1000", "DEVICE_REGISTER_UNREGISTER_EVENT",
+                    "500000000002"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -81,6 +82,12 @@ ENUM_ARGS = {
     ("print_user_tokens", "user"): (SEARCH_ADDRESS,),
     ("block_device_user", "name"): (DEVICE_USER,),
     ("delete_device_user", "name"): (DEVICE_USER,),
+    # Classroom reads (plan 2026-11-11 C1): a course ID is digits only, a teacher or student one address.
+    ("print_courses", "teacher"): ("", SEARCH_ADDRESS),
+    ("print_courses", "student"): ("", SEARCH_ADDRESS),
+    ("print_courses", "states"): ((), ("active",), ("active", "provisioned")),
+    ("print_courses", "course_ids"): ((), ["500000000002"], ["500000000002", "500000000002"]),
+    ("print_course_participants", "course_id"): ("500000000002",),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
@@ -96,6 +103,8 @@ def _value(tok: str) -> bool:
 
 def _refused_on_purpose(name: str, args: dict) -> bool:
     """A combination the builder raises on: it can never be sent, so it has no shape."""
+    if name == "print_courses":   # classes by ID take no teacher, student or state filter
+        return bool(args["course_ids"]) and bool(args["teacher"] or args["student"] or args["states"])
     return name == "report_activity" and args["application"] == "chrome" and len(args["users"]) > 1
 
 

@@ -176,7 +176,9 @@ apps (`print tokens`) and a person's Security tab (Chrome profiles, phones, comp
 not yet been compared with the Admin console. Three reads the pass doesn't
 run were last confirmed separately: setup's scoped `check serviceaccount scopes …` (2026-10-02, GAM
 7.48.14), and `print domains` for the Builder's External-only filter and reading the connected admin and
-its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11).
+its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11). The Google Classroom reads (`print courses`, `print
+course-participants`) have **never run live**: their output shapes were read from the vendored GAM build, and the
+maintainer has no Workspace for Education domain to check them on. GamGUI doesn't write to Classroom at all.
 
 | Write | Where | Live |
 |---|---|---|

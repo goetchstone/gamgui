@@ -132,6 +132,9 @@ READS = {
     "print_domains": [C.print_domains()],
     "print_group_members": [C.print_group_members("sales@example.com")],
     "print_groups_member": [C.print_groups_member("alice@example.com")],
+    "print_courses": [C.print_courses(teacher="alice@example.com", states=["active", "provisioned"]),
+                      C.print_courses(course_ids=["500000000002"])],
+    "print_course_participants": [C.print_course_participants("500000000002")],
 }
 
 # Not a command: the `todrive` argv suffix a Builder read's export appends (export_to_sheet).

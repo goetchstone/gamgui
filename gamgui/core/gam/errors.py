@@ -103,6 +103,9 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
                 re.I), GAMErrorKind.NOT_FOUND),
     (re.compile(r"invalid_grant|token has been expired or revoked", re.I), GAMErrorKind.AUTH_EXPIRED),
     (re.compile(r"insufficient.*scope|access_denied.*scope|not authorized to access", re.I), GAMErrorKind.SCOPE_MISSING),
+    # The admin token holds no scope for the API at all (buildGAPIObject → Msg.NO_SCOPES_FOR_API, exit NO_SCOPES_FOR_API_RC 15):
+    # "There are no scopes authorized for the API(s): Classroom API". Picked again in `gam oauth create`.
+    (re.compile(r"no scopes authorized for the API", re.I), GAMErrorKind.SCOPE_MISSING),
     (re.compile(r"rate.?limit|quota|userRateLimitExceeded|too many requests|\b429\b", re.I), GAMErrorKind.RATE_LIMITED),
     # A missing/unreadable credentials file is setup, not a missing user — before the not-found pattern,
     # whose "not found"/"Does not exist" it also says. GAM's shapes: "Client OAuth2 File: <dir>/oauth2.txt,
