@@ -28,6 +28,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ..core.calendar_index import CalendarIndex, default_index_path
 from ..core.connectors.gam_connector import GAMConnector
 from ..core.gam.runner import GAMRunner
+from ..core.roster_store import RosterStore
 from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
 from ..core.usercache import UserCache
@@ -120,6 +121,7 @@ class AppState:
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     offboard_templates: object = None  # saved offboarding routines (lazy-loaded by the lifecycle route)
     incident_store: object = None      # the incidents kept here (lazy: routes/_common.incident_store)
+    roster_store: Optional[RosterStore] = None   # the SIS roster kept per domain (Classroom import, plan 2026-11-11 C2)
     incident_store_problem: str = ""
     incident_open: str = ""            # the open incident's ID, on this connector
     incident_open_job: str = ""        # the job reading its saved logs

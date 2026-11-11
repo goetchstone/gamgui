@@ -32,9 +32,9 @@ ENROLLMENTS = [("sourcedId", "status", "classSourcedId", "schoolSourcedId", "use
 
 
 def _csv(rows) -> bytes:
-    out = io.StringIO()
-    csv.writer(out).writerows(rows)
-    return out.getvalue().encode()
+    """Rows as CSV, every field quoted, written by hand: Python 3.10's csv writer refuses a NUL ("need to escape"), and
+    these tests send one on purpose."""
+    return "".join(",".join('"' + str(v).replace('"', '""') + '"' for v in row) + "\r\n" for row in rows).encode()
 
 
 def _files(**override) -> dict:
