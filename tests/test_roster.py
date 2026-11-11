@@ -260,7 +260,7 @@ def test_a_row_wider_than_its_header_is_refused():
     _refused(list(_files(**{"users.csv": _csv(USERS) + b"U9,,student,x,A,B,c@example.com,1,2,3\n"}).items()), "fields; its header")
 
 
-@pytest.mark.parametrize("email", ["a\x00@example.com", "b\x1b[31m@example.com", "a\u200b@example.com", "a\x07@example.com",
+@pytest.mark.parametrize("email", ["b\x1b[31m@example.com", "a\u200b@example.com", "a\x07@example.com",
                                    "é@example.com"])
 def test_an_address_with_a_control_or_invisible_character_is_refused_not_kept(email):
     users = USERS[:3] + [("U9", "", "student", "", "X", "Y", email)]
@@ -269,9 +269,17 @@ def test_an_address_with_a_control_or_invisible_character_is_refused_not_kept(em
 
 
 def test_control_characters_are_dropped_from_names():
-    users = USERS[:3] + [("U9", "", "student", "", "Al\x00ex", "Ki\x1bm", "u9@example.com")]
+    users = USERS[:3] + [("U9", "", "student", "", "Al\x07ex", "Ki\x1bm", "u9@example.com")]
     person = read_upload(list(_files(**{"users.csv": users}).items())).people["U9"]
     assert (person.given, person.family) == ("Alex", "Kim")
+
+
+@pytest.mark.parametrize("where", ["email", "name"])
+def test_a_nul_refuses_the_package_on_every_python(where):
+    # Python 3.10's csv module refuses a NUL and later ones read it: the reader refuses it first, the same on all of them.
+    row = ("U9", "", "student", "", "X", "Y", "a\x00@example.com") if where == "email" else \
+          ("U9", "", "student", "", "Al\x00ex", "Y", "u9@example.com")
+    _refused(list(_files(**{"users.csv": USERS[:3] + [row]}).items()), "holds a NUL character")
 
 
 def test_an_issue_names_the_line_its_record_starts_on():

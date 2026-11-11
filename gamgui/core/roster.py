@@ -342,6 +342,7 @@ class _Lines:
         self.name = name
         self.stream = io.TextIOWrapper(io.BytesIO(body), encoding="utf-8-sig", newline="")
         self.since = 0
+        self.stream_line = 0
 
     def __iter__(self) -> "_Lines":
         return self
@@ -355,6 +356,12 @@ class _Lines:
             raise StopIteration
         if len(line) > LINE_CAP:
             raise PackageError(f"{self.name} has a line longer than {LINE_CAP >> 20} MB. That isn't a normal export.")
+        if "\x00" in line:
+            # The same answer on every Python: 3.10's csv module refuses a NUL ("line contains NUL") and later ones read it,
+            # so a NUL in an address was a whole-package refusal on one and a row issue on another. No export holds one.
+            raise PackageError(f"{self.name} holds a NUL character on or after line {self.stream_line + 1}. That isn't "
+                               "a normal export: export the roster again.")
+        self.stream_line += line.count("\n") or 1
         self.since += len(line)
         if self.since > LINE_CAP:
             raise PackageError(f"{self.name} has a record longer than {LINE_CAP >> 20} MB. That isn't a normal export.")
