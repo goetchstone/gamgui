@@ -48,7 +48,10 @@ _NO_SCOPES = ("The admin token can't read Classroom. On Setup, the delegation st
 def _why(exc: Exception, about: str = "") -> str:
     """A failed Classroom read in words. A missing scope points at Setup; an address Classroom doesn't know is named."""
     if isinstance(exc, Incomplete):
-        return str(exc)
+        # Fixed words, never the exception's own text: nothing an exception carries reaches a response (CodeQL
+        # py/stack-trace-exposure flagged the CSV route's plain-text answer).
+        return ("GAM answered without the classes, so they can't be told. Its sign-in may have been refused: check the "
+                "admin token on Setup, then try again.")
     if isinstance(exc, GAMError) and exc.kind is GAMErrorKind.SCOPE_MISSING:
         return _NO_SCOPES
     if isinstance(exc, GAMError) and exc.kind is GAMErrorKind.NOT_FOUND and about:
