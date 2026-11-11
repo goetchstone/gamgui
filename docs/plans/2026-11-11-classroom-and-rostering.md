@@ -45,10 +45,11 @@ Checked 2026-11-11 by reading the fork with git only. None of its code was run. 
 
 Each has a default. Work follows the default unless the operator says otherwise.
 
-- **E1. A Workspace for Education tenant.** Classroom exists only there. **The operator has none (2026-11-11).** So every
-  item is built and tested offline only: each README row stays "not yet", and no Classroom write is relied on until a live
-  check on an Education domain runs it. That makes the mock handlers (C1.2) the main defence, so each must refuse what GAM
-  refuses, checked against the grammar and GAM's source at the pin. The live checks below wait for a tenant.
+- **E1. A Workspace for Education tenant.** Classroom exists only there. **The operator has none and cannot live-check
+  Classroom (2026-11-11).** So every item is built and tested offline only: each README row stays "not yet", and the
+  screens say plainly that Classroom changes have not been confirmed on a real domain. The mock handlers (C1.2) are the
+  main defence, so each must refuse what GAM refuses, checked against the grammar and GAM's source at the pin. The live
+  checks below can only be run by someone else who has an Education domain; until then they stay listed, not run.
 - **E2. Import speed.** Each change through `_run_write`, as a BatchJob, is the default: per-write audit, Stop and retry
   for free. A district's first import can be tens of thousands of changes. If it measures too slow live, a faster path is
   its own design (every argv held in the preview, audited per line), never the fork's batch file.
@@ -173,7 +174,7 @@ alone. After C4 a district can roster from OneRoster 1.1. After C5.3 almost any 
 
 | Item | GamGUI | Swift |
 |---|---|---|
-| E1 | no Education tenant: offline only | same |
+| E1 | no Education tenant, no live checks possible: offline only | same |
 | E2 to E5 | defaults stand | defaults stand |
 | C1.1 to C1.4 | open | open |
 | C2.1 to C2.5 | open | open |
