@@ -93,6 +93,14 @@ guarding them:
   run. `style-src` still allows inline styles — signature HTML is styled inline, as email HTML must
   be, and its preview is a sandboxed `srcdoc` frame that inherits the page's policy — and `img-src`
   allows any `https:` image, for the logos in those signatures.
+- **A student roster upload is read as hostile, and kept briefly.** On a school domain the operator can upload a SIS
+  export (OneRoster 1.1). `core/roster.py` never extracts it and never treats a name inside it as a path: a member is
+  matched by its base name against OneRoster's own, and a link, an encrypted member, `..`, an absolute name, a backslash,
+  a NUL or nested folders refuse the package. Sizes are counted while unpacking, never taken from the archive's headers,
+  and members, rows, fields and the unpacked total are all capped. What it read (names and addresses of teachers and
+  students, and who is in which class) is kept by `core/roster_store.py` as one SQLite file per domain, `0600` in a
+  `0700` folder under the app's data folder, for 14 days, and deleted on **Purge**. Deleting a file on an SSD doesn't
+  overwrite it; FileVault is what protects it at rest. GamGUI never sends it anywhere and never writes to Classroom.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed. `scripts/bump_gam.py` writes a new pin only after
   `gh attestation verify` shows the asset was built by GAM-team/GAM's release workflow
