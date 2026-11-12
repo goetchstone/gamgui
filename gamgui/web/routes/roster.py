@@ -12,6 +12,7 @@ import asyncio
 import csv
 import hashlib
 import io
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Request
@@ -20,13 +21,18 @@ from starlette.datastructures import UploadFile
 
 from ...core.csv_safe import csv_safe
 from ...core.roster import ISSUE_WORDS, MEMBERS_CAP, UPLOAD_CAP, Issue, PackageError, read_upload
+from ...core.roster_plan import KINDS, plan
 from ...core.roster_store import KEEP_DAYS, RosterStore, StoreError
+from ..jobs import start_job
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, app_state
+from .classroom import _why as explain
 
 ISSUES_SHOWN = 20         # rows shown per kind of issue; the Issues CSV has the rest that were kept
 _PAGE = "classroom_import.html"
 _KEPT = "_roster_kept.html"
+_PLAN = "_roster_plan.html"
+_CHANGES = "_roster_changes.html"
 
 router = APIRouter(prefix="/classroom/import")
 
@@ -159,3 +165,105 @@ async def issues_csv(request: Request) -> Response:
                                                    i.detail, kind["count"])])
     return Response(out.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": 'attachment; filename="roster-issues.csv"'})
+
+
+# --- compare with Classroom (C3) ------------------------------------------------------------------------------------
+CHANGES_PAGE = 50         # changes per page of the change list
+
+
+def _plan_for(st) -> Optional[Dict[str, Any]]:
+    """The last compare, if it's this domain's and of the roster kept now (a new upload or a purge drops it)."""
+    held = st.roster_compare
+    if not held or held.get("domain") != st.audit_domain:
+        return None
+    try:
+        meta = roster_store(st).meta(st.audit_domain)
+    except StoreError:
+        return None
+    return held if meta is not None and meta.get("sha256") == held.get("sha256") else None
+
+
+async def _compare(job, st, domain: str) -> None:
+    """Background: read Classroom (two GAM runs), plan against the kept roster, and hold the change list. Read only."""
+    try:
+        job.current = "Reading every class in Classroom, with its people…"
+        store = roster_store(st)
+        meta = await asyncio.to_thread(store.meta, domain)
+        snap = await asyncio.to_thread(store.load, domain)
+        if meta is None or snap is None:
+            job.error = "No roster is kept to compare. Read the export again."
+            return
+        classes, unread = await st.connector.classroom_state()
+        directory: Optional[set] = None
+        try:
+            directory = {u.primary_email.lower() for u in await st.users()}   # fresh: it decides what is added
+        except Exception:  # noqa: BLE001 — without the directory, addresses aren't checked (the plan says so)
+            directory = None
+        out = await asyncio.to_thread(plan, snap, classes, directory, len(unread))
+        if directory is None:
+            out.notes.append("The directory couldn't be read, so addresses weren't checked against Workspace accounts.")
+        st.roster_compare = {"domain": domain, "sha256": meta.get("sha256"), "when": clock_text(), "plan": out}
+        job.applied = len(out.changes)
+    except Exception as exc:  # noqa: BLE001 — said in fixed words: an exception's own text never reaches a page
+        job.error = explain(exc)
+    finally:
+        job.finish()
+
+
+def clock_text() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _changes_ctx(held: Dict[str, Any], kind: str = "", q: str = "", page: int = 1) -> Dict[str, Any]:
+    out = held["plan"]
+    rows = [c for c in out.changes if (not kind or c.kind == kind)]
+    ql = q.strip().lower()
+    if ql:
+        rows = [c for c in rows if ql in c.title.lower() or ql in c.person or ql in c.alias.lower()]
+    pages = max(1, -(-len(rows) // CHANGES_PAGE))
+    page = min(max(1, page), pages)
+    start = (page - 1) * CHANGES_PAGE
+    return {"plan": out, "when": held["when"], "kinds": KINDS, "words": dict(KINDS), "kind": kind, "q": q.strip(),
+            "rows": rows[start:start + CHANGES_PAGE], "total": len(rows), "page": page, "pages": pages, "start": start}
+
+
+@router.post("/compare", response_class=HTMLResponse)
+async def compare(request: Request) -> HTMLResponse:
+    """Compare the kept roster with Classroom, as a job (a district's read takes minutes). One at a time. Reads only."""
+    st = app_state(request)
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _PLAN, {"error": NOT_CONNECTED})
+    running = st.jobs.get(st.roster_compare_job)
+    if running is not None and not running.finished:
+        return TEMPLATES.TemplateResponse(request, _PLAN, {"job": running})
+    job = start_job(st.jobs, 0, kind="roster_compare", title="Compare the roster with Classroom")
+    st.roster_compare_job = job.id
+    job.task = asyncio.create_task(_compare(job, st, st.audit_domain))
+    return TEMPLATES.TemplateResponse(request, _PLAN, {"job": job})
+
+
+@router.get("/compare/status", response_class=HTMLResponse)
+async def compare_status(request: Request, job: str = "") -> HTMLResponse:
+    """The compare's panel: a sentence while it reads, then the change list (or why not)."""
+    st = app_state(request)
+    j = st.jobs.get(job) if job else None
+    if j is not None and not j.finished:
+        return TEMPLATES.TemplateResponse(request, _PLAN, {"job": j})
+    if j is not None and j.error:
+        return TEMPLATES.TemplateResponse(request, _PLAN, {"job": j, "error": j.error})
+    held = _plan_for(st)
+    if held is None:
+        return TEMPLATES.TemplateResponse(request, _PLAN, {})
+    return TEMPLATES.TemplateResponse(request, _PLAN, {"job": j, **_changes_ctx(held)})
+
+
+@router.get("/changes", response_class=HTMLResponse)
+async def changes(request: Request, kind: str = "", q: str = "", page: str = "1") -> HTMLResponse:
+    """One page of the change list, by kind and search (server-side)."""
+    st = app_state(request)
+    held = _plan_for(st) if st.connector is not None else None
+    if held is None:
+        return TEMPLATES.TemplateResponse(request, _CHANGES, {"rows": [], "total": 0, "gone": True})
+    kind = kind if kind in dict(KINDS) else ""
+    return TEMPLATES.TemplateResponse(request, _CHANGES,
+                                      _changes_ctx(held, kind, q, int(page) if page.isdigit() else 1))

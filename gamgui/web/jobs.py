@@ -33,6 +33,7 @@ PANELS = {
     "offboard": "/lifecycle/offboard/status",
     "subscribe": "/calendars/share/status",
     "index": "/calendars/index/status",
+    "roster_compare": "/classroom/import/compare/status",
     "connected_apps": "/reports/connected-apps",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",
@@ -45,7 +46,7 @@ PANELS = {
     "onboard": "/onboard/bulk/status",
     "finish": "/onboard/finish/status",   # steps retried until Google has set a new account up
 }
-UNSTOPPABLE = {"index", "connected_apps", "incident_check", "incident_open", "incident_groups"}   # reads at once, not a loop: there is no "between targets"
+UNSTOPPABLE = {"index", "roster_compare", "connected_apps", "incident_check", "incident_open", "incident_groups"}   # reads at once, not a loop: there is no "between targets"
 CONFIRM_STOP = {"offboard", "incident_secure"}      # a stop leaves the leaver half offboarded, or the attacker half locked out: ask first
 ONE_STEP = "change"              # a change made from a screen's button, not a loop: no panel of its own, and no Stop
 

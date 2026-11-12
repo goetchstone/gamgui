@@ -126,3 +126,67 @@ def test_the_upload_takes_no_more_files_than_a_zip_may_hold(client, monkeypatch)
     r = _upload(client, *many)
     assert "couldn&#39;t be read" in r.text or "isn&#39;t a OneRoster file" in r.text
     assert not _store(client).path(DOMAIN).exists()
+
+
+# --- compare with Classroom (C3), end to end through the strict mock ----------------------------------------------------
+# The mock's Classroom (tests/fixtures/courses.json, course_aliases.tsv): Biology (gg-C1: alice teaches, carol), Chemistry
+# (gg-C2 and a hand-made alias: alice; bob and carol), Algebra (no GamGUI alias: hand-made), World History (gg-OLD, archived).
+SIS_CLASSES = [("sourcedId", "status", "title", "courseSourcedId", "schoolSourcedId", "termSourcedIds"),
+               ("C1", "", "Biology", "CO1", "S1", "T1"), ("C2", "", 'Chemistry, "Honors"', "CO1", "S1", "T1"),
+               ("C3", "", "Physics", "CO1", "S1", "T1")]
+SIS_USERS = [("sourcedId", "status", "role", "email", "givenName", "familyName"),
+             ("U1", "", "teacher", "alice@example.com", "Alice", "Anders"),
+             ("U2", "", "student", "carol@example.com", "Carol", "Clark")]
+SIS_ENROLL = [("sourcedId", "status", "classSourcedId", "userSourcedId", "role", "primary"),
+              ("E1", "", "C1", "U1", "teacher", "true"), ("E2", "", "C1", "U2", "student", ""),
+              ("E3", "", "C2", "U1", "teacher", "true"), ("E4", "", "C2", "U2", "student", ""),
+              ("E5", "", "C3", "U1", "teacher", "true"), ("E6", "", "C3", "U2", "student", "")]
+
+
+def _compared(client):
+    from .helpers import wait_for_job
+    _upload(client, *_files(**{"classes.csv": SIS_CLASSES, "users.csv": SIS_USERS, "enrollments.csv": SIS_ENROLL}).items())
+    r = client.post("/classroom/import/compare")
+    assert "Reading every class in Classroom" in r.text
+    wait_for_job(client, client.app.state.gamgui.jobs[client.app.state.gamgui.roster_compare_job])
+    return client.get("/classroom/import/compare/status", params={"job": client.app.state.gamgui.roster_compare_job})
+
+
+def test_compare_reads_classroom_and_plans_only_gamgui_classes(client, gam_calls):
+    r = _compared(client)
+    plan = client.app.state.gamgui.roster_compare["plan"]
+    kinds = sorted((c.kind, c.title, c.person) for c in plan.changes)
+    assert ("create", "Physics", "alice@example.com") in kinds and ("add_student", "Physics", "carol@example.com") in kinds
+    assert ("remove_student", 'Chemistry, "Honors"', "bob@example.com") in kinds
+    assert not [c for c in plan.changes if c.title == "Algebra"]              # hand-made: never compared
+    assert not [c for c in plan.changes if c.kind == "archive"]               # gg-OLD is already archived
+    assert plan.unmanaged_ignored == 1 and not plan.incomplete
+    assert "Would remove 1 person; would create 1 class, add 1 person and rename 2 classes." in r.text and "Change list" in r.text
+    writes = [a for a in gam_calls() if a[:2] not in (["print", "courses"], ["print", "course-participants"], ["print", "users"])]
+    assert writes == [], writes                                               # reads only
+
+
+def test_the_change_list_filters_and_searches_server_side(client):
+    _compared(client)
+    r = client.get("/classroom/import/changes", params={"kind": "remove_student"})
+    assert "bob@example.com" in r.text and "Physics" not in r.text
+    r = client.get("/classroom/import/changes", params={"q": "physics"})
+    assert "Physics" in r.text and "bob@example.com" not in r.text
+
+
+def test_a_new_roster_drops_the_old_compare(client):
+    _compared(client)
+    _upload(client, ("export.zip", _zip(_files())))
+    assert "Compare with Classroom" in client.get("/classroom/import/compare/status").text
+    assert client.get("/classroom/import/changes").text.count("Compare again") == 1
+
+
+def test_a_compare_that_cant_read_classroom_says_so_in_fixed_words(client, gam_state):
+    from .helpers import wait_for_job
+    _upload(client, ("export.zip", _zip(_files())))
+    (gam_state / "noclassroom").touch()
+    client.post("/classroom/import/compare")
+    st = client.app.state.gamgui
+    wait_for_job(client, st.jobs[st.roster_compare_job])
+    r = client.get("/classroom/import/compare/status", params={"job": st.roster_compare_job})
+    assert "Couldn&#39;t compare with Classroom" in r.text and "can&#39;t read Classroom" in r.text and "Try again" in r.text

@@ -1,0 +1,44 @@
+{#- One page of the change list, by kind and search (server-side, plan 2026-11-11 C3.1). -#}
+{% if gone is defined and gone %}
+<p class="text-sm text-brand-grayink">The compare is gone (a new roster, or another domain). Compare again.</p>
+{% else %}
+<form class="mb-2" hx-get="/classroom/import/changes" hx-target="#roster-changes" hx-swap="innerHTML" role="search">
+  <input type="hidden" name="kind" value="{{ kind }}" />
+  <label for="change-q" class="sr-only">Search the change list</label>
+  <input id="change-q" type="search" name="q" value="{{ q }}" placeholder="Class, teacher or student" autocomplete="off"
+         hx-get="/classroom/import/changes" hx-trigger="input changed delay:250ms" hx-target="#roster-changes" hx-include="closest form"
+         class="w-full rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+</form>
+<p class="mb-1 text-xs text-brand-grayink">{% if kind %}{{ words[kind] }}: {% endif %}{{ "{:,}".format(total) }} change{{ "s" if total != 1 }}{% if q %} matching “{{ q }}”{% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + rows | length }}{% endif %}</p>
+{% if rows %}
+<div class="max-h-[calc(100vh-34rem)] min-h-[8rem] overflow-y-auto rounded-xl border border-brand-gray/30">
+  <table class="w-full text-sm">
+    <caption class="sr-only">Changes{% if kind %}: {{ words[kind] }}{% endif %}</caption>
+    <thead class="sticky top-0 bg-paper text-left text-xs text-brand-grayink">
+      <tr><th scope="col" class="px-3 py-1.5 font-medium">Change</th><th scope="col" class="px-3 py-1.5 font-medium">Class</th><th scope="col" class="px-3 py-1.5 font-medium">Person or detail</th></tr>
+    </thead>
+    <tbody class="divide-y divide-brand-gray/20">
+      {% for c in rows %}
+      <tr>
+        <td class="whitespace-nowrap px-3 py-1.5 {{ 'text-amber-800' if c.kind in plan.flags else 'text-brand-blueink' }}">{{ words[c.kind] }}</td>
+        <td class="max-w-0 truncate px-3 py-1.5 text-brand-black" title="{{ c.alias }}">{{ c.title }}</td>
+        <td class="max-w-0 truncate px-3 py-1.5 text-brand-blueink">{% if c.kind == "create" %}{{ c.after }}, owned by {{ c.person }}{% elif c.before or c.after %}{{ c.before or "—" }} → {{ c.after or "—" }}{% else %}{{ c.person }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if pages > 1 %}
+<nav class="mt-2 flex items-center justify-end gap-2 text-xs" aria-label="Change list pages">
+  <span class="text-brand-grayink">Page {{ page }} of {{ pages }}</span>
+  {% for label, to in (("Previous", page - 1), ("Next", page + 1)) %}
+  <button type="button" {% if to < 1 or to > pages %}disabled{% endif %}
+          class="rounded border border-brand-gray/40 px-2 py-1 text-brand-blueink hover:bg-paper disabled:opacity-30"
+          hx-get="/classroom/import/changes?kind={{ kind | urlencode }}&amp;q={{ q | urlencode }}&amp;page={{ to }}" hx-target="#roster-changes" hx-swap="innerHTML">{{ label }}</button>
+  {% endfor %}
+</nav>
+{% endif %}
+{% else %}
+<p class="text-sm text-brand-grayink">None{% if q %} match “{{ q }}”{% endif %}.</p>
+{% endif %}
+{% endif %}

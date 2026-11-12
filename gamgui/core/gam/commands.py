@@ -950,7 +950,7 @@ class GAMCommands:
     # ENTITY_DOES_NOT_EXIST_RC (56). Read from the 7.51.00 build's doPrintCourses, doPrintCourseParticipants and _getCoursesInfo.
     @staticmethod
     def print_courses(teacher: str = "", student: str = "", states: Sequence[str] = (),
-                      course_ids: Sequence[str] = (), owner_email: bool = True) -> List[str]:
+                      course_ids: Sequence[str] = (), owner_email: bool = True, aliases: bool = False) -> List[str]:
         """Classes, read only: by ID, or every class a teacher or a student is in, or every class, in the given states. CSV
         `id,JSON` (grammar 3328). `owner_email` has GAM look up each distinct owner's address, one Directory read per owner:
         off for a domain-wide read, whose owners the directory cache already names by `ownerId`."""
@@ -974,7 +974,20 @@ class GAMCommands:
             if bad:
                 raise ValueError(f"Not a Classroom state: {', '.join(bad)}")
             argv += ["states", ",".join(dict.fromkeys(states))]
-        return argv + (["owneremail"] if owner_email else []) + ["fields", COURSE_FIELDS, "formatjson"]
+        # `aliases` adds a `JSON-aliases` column (a JSON list) after `JSON`: one Classroom call per class, in GAM's run.
+        return (argv + (["owneremail"] if owner_email else []) + (["aliases"] if aliases else [])
+                + ["fields", COURSE_FIELDS, "formatjson"])
+
+    @staticmethod
+    def print_all_course_participants(states: Sequence[str]) -> List[str]:
+        """Every class's teachers and students in the given states, one GAM run: the same rows as one class's
+        (`courseId,courseName,JSON-teachers,JSON-students`), one per class (grammar 3339)."""
+        if isinstance(states, str) or not states:
+            raise ValueError("A states list is needed: every class's people, in some states")
+        bad = [s for s in states if s not in COURSE_STATES]
+        if bad:
+            raise ValueError(f"Not a Classroom state: {', '.join(bad)}")
+        return ["print", "course-participants", "states", ",".join(dict.fromkeys(states)), "show", "all", "formatjson"]
 
     @staticmethod
     def print_course_participants(course_id: str) -> List[str]:

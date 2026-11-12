@@ -49,6 +49,8 @@
     {% endif %}
   </div>
 
+  <div id="roster-plan" class="border-t border-brand-gray/30 pt-3" hx-get="/classroom/import/compare/status" hx-trigger="load" hx-swap="innerHTML"></div>
+
   <form hx-post="/classroom/import/purge" hx-target="#roster-kept" hx-swap="innerHTML" hx-disabled-elt="find button"
         hx-confirm="Delete the kept roster from this Mac now?">
     <button type="submit" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs font-medium text-brand-blueink hover:bg-red-50 hover:text-red-800">Purge it now</button>

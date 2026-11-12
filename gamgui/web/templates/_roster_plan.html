@@ -1,0 +1,43 @@
+{#- The compare with Classroom (plan 2026-11-11 C3): running, failed, or the change list. Read only: nothing here changes
+    Classroom, and GamGUI never will (the list is handed over as files in C4). -#}
+{% if job is defined and job and not job.finished %}
+<div class="flex items-center gap-2 text-sm text-brand-grayink" hx-get="/classroom/import/compare/status?job={{ job.id }}"
+     hx-trigger="load delay:1500ms" hx-target="#roster-plan" hx-swap="innerHTML" data-announce="{{ job.id }}">
+  <span class="spinner"></span> Reading every class in Classroom, with its people… this can take minutes on a district. You can keep working.
+</div>
+{% elif error is defined and error %}
+<div>{% with ok=False, message="Couldn't compare with Classroom. " ~ error %}{% include "_action_result.html" %}{% endwith %}</div>
+<button type="button" hx-post="/classroom/import/compare" hx-target="#roster-plan" hx-swap="innerHTML" hx-disabled-elt="this"
+        class="mt-2 rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs font-medium text-brand-blueink hover:bg-paper">Try again</button>
+{% elif plan is defined %}
+<div class="space-y-3">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h3 class="eyebrow text-brand-grayink">Change list · compared {{ when }}</h3>
+    <button type="button" hx-post="/classroom/import/compare" hx-target="#roster-plan" hx-swap="innerHTML" hx-disabled-elt="this"
+            class="text-xs font-medium text-brand-blueink underline hover:text-brand-black">Compare again</button>
+  </div>
+  <p class="text-sm font-medium text-brand-black" tabindex="-1" data-focus{% if job is defined and job %} data-announce="{{ job.id }}"{% endif %}>{{ plan.summary() }}</p>
+  {% for kind, why in plan.flags.items() %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"><span class="font-medium">{{ words[kind] }} held back.</span> {{ why }}</p>
+  {% endfor %}
+  {% for note in plan.notes %}
+  <p class="rounded-lg border border-brand-gray/40 bg-paper px-3 py-2 text-xs text-brand-blueink">{{ note }}</p>
+  {% endfor %}
+  {% if plan.changes %}
+  <div class="flex flex-wrap gap-1.5 text-xs" role="group" aria-label="Show one kind of change">
+    <button type="button" hx-get="/classroom/import/changes" hx-target="#roster-changes" hx-swap="innerHTML"
+            class="rounded-full border border-brand-gray/50 px-2.5 py-0.5 text-brand-blueink hover:bg-paper">All · {{ "{:,}".format(plan.changes | length) }}</button>
+    {% for k, label in kinds %}{% if plan.counts.get(k) %}
+    <button type="button" hx-get="/classroom/import/changes?kind={{ k }}" hx-target="#roster-changes" hx-swap="innerHTML"
+            class="rounded-full border px-2.5 py-0.5 hover:bg-paper {{ 'border-amber-400 text-amber-800' if k in plan.flags else 'border-brand-gray/50 text-brand-blueink' }}">{{ label }} · {{ "{:,}".format(plan.counts[k]) }}</button>
+    {% endif %}{% endfor %}
+  </div>
+  <div id="roster-changes">{% include "_roster_changes.html" %}</div>
+  {% endif %}
+  <p class="text-[11px] text-brand-grayink">GamGUI changes nothing in Classroom. Only classes GamGUI's alias marks are compared; {{ "{:,}".format(plan.unmanaged_ignored) }} other class{{ "es" if plan.unmanaged_ignored != 1 }} in Classroom {{ "are" if plan.unmanaged_ignored != 1 else "is" }} left alone.</p>
+</div>
+{% else %}
+<button type="button" hx-post="/classroom/import/compare" hx-target="#roster-plan" hx-swap="innerHTML" hx-disabled-elt="this"
+        class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink">Compare with Classroom</button>
+<p class="mt-1 text-[11px] text-brand-grayink">Reads Classroom only. The change list says what would make Classroom match this roster.</p>
+{% endif %}

@@ -200,6 +200,12 @@ refused under the picker with what to export instead, and nothing is kept. One i
 **Problems to fix in your SIS**, each kind with its cause and fix; **Issues CSV** gives your SIS team the rows. The
 roster is read on this Mac and kept here for 14 days; **Purge it now** deletes it sooner.
 
+**Compare with Classroom** reads Classroom (it can take minutes on a district; you can keep working) and lists what would
+make Classroom match the roster: classes to create, rename or archive, teachers and students to add or remove, and owners
+to change, with the size in one sentence, destructive parts first. Big removals or archives are held back with the reason.
+Only classes GamGUI's own alias marks are compared; classes made by hand in Classroom are left alone. **Compare again**
+re-reads Classroom.
+
 GamGUI only reads Classroom: it changes nothing there. Classroom is only on Google Workspace for Education domains, and
 GamGUI reads it with the admin's own sign-in, so if the page says it can't read Classroom, **Setup** names the
 "Classroom API" scopes to tick in `gam oauth create`. Classroom support hasn't been checked on a real school domain yet.
