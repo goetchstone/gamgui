@@ -175,7 +175,7 @@ def test_the_screen_posts_nothing(client):
     assert set(paths) == {"/classroom", "/classroom/search", "/classroom/class", "/classroom/person", "/classroom/owned.csv",
                           "/classroom/creators", "/classroom/import", "/classroom/import/upload", "/classroom/import/purge",
                           "/classroom/import/issues.csv", "/classroom/import/compare", "/classroom/import/compare/status",
-                          "/classroom/import/changes"}   # the scan sees the screen
+                          "/classroom/import/changes", "/classroom/import/handover.zip"}   # the scan sees the screen
     posts = {p for p, ops in paths.items() if set(ops) != {"get"}}
     assert posts == {"/classroom/import/upload", "/classroom/import/purge", "/classroom/import/compare"}
     assert all(set(paths[p]) == {"post"} for p in posts)

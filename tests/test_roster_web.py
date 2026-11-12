@@ -190,3 +190,52 @@ def test_a_compare_that_cant_read_classroom_says_so_in_fixed_words(client, gam_s
     wait_for_job(client, st.jobs[st.roster_compare_job])
     r = client.get("/classroom/import/compare/status", params={"job": st.roster_compare_job})
     assert "Couldn&#39;t compare with Classroom" in r.text and "can&#39;t read Classroom" in r.text and "Try again" in r.text
+
+
+# --- hand it over (C4) ---------------------------------------------------------------------------------------------------
+def test_the_hand_over_is_a_zip_of_files_audited_without_rows(client, gam_calls):
+    import zipfile
+    _compared(client)
+    page = client.get("/classroom/import/compare/status", params={"job": client.app.state.gamgui.roster_compare_job})
+    assert "outside GamGUI&#39;s preview, confirmation and audit log" in page.text or \
+        "outside GamGUI's preview, confirmation and audit log" in page.text
+    assert '<a href="/classroom/import/handover.zip" download' in page.text
+    before = len([a for a in gam_calls()])
+    r = client.get("/classroom/import/handover.zip")
+    assert r.headers["content-type"] == "application/zip"
+    assert r.headers["content-disposition"].startswith('attachment; filename="classroom-changes-example.com-')
+    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    assert {"README.txt", "review.csv", "03-create-classes.csv", "06-add-students.csv", "10-remove-students.csv"} <= set(names)
+    assert len(gam_calls()) == before                                   # no GAM: it hands over, it never runs
+    record = [e for e in client.app.state.gamgui.connector.audit.tail() if e["action"] == "roster_handover"][-1]
+    assert record["extra"]["counts"]["create"] == 1 and "bob@example.com" not in str(record)
+
+
+def test_the_same_compare_hands_over_the_same_bytes(client):
+    _compared(client)
+    assert client.get("/classroom/import/handover.zip").content == client.get("/classroom/import/handover.zip").content
+
+
+def test_a_flagged_kind_needs_its_own_link(client, monkeypatch):
+    monkeypatch.setattr("gamgui.core.roster_plan.LIMITS", {"remove_student": (0, 0.0), "remove_teacher": (99, 1.0),
+                                                           "archive": (99, 1.0)})
+    import zipfile
+    _compared(client)
+    left = zipfile.ZipFile(io.BytesIO(client.get("/classroom/import/handover.zip").content)).namelist()
+    assert "10-remove-students.csv" not in left
+    with_it = client.get("/classroom/import/handover.zip", params={"include": "remove_student"}).content
+    assert "10-remove-students.csv" in zipfile.ZipFile(io.BytesIO(with_it)).namelist()
+    bogus = client.get("/classroom/import/handover.zip", params={"include": "archive"}).content   # not flagged: no effect
+    assert zipfile.ZipFile(io.BytesIO(bogus)).namelist() == left
+
+
+def test_no_compare_or_an_incomplete_one_hands_nothing_over(client):
+    assert client.get("/classroom/import/handover.zip").status_code == 400
+    _compared(client)
+    client.app.state.gamgui.roster_compare["plan"].incomplete = True
+    r = client.get("/classroom/import/handover.zip")
+    assert r.status_code == 400 and "incomplete" in r.text
+    client.app.state.gamgui.roster_compare["plan"].incomplete = False
+    client.app.state.gamgui.roster_compare["plan"].changes = []
+    r = client.get("/classroom/import/handover.zip")
+    assert r.status_code == 400 and r.text == "There's nothing to hand over.\n"

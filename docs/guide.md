@@ -206,6 +206,11 @@ to change, with the size in one sentence, destructive parts first. Big removals 
 Only classes GamGUI's own alias marks are compared; classes made by hand in Classroom are left alone. **Compare again**
 re-reads Classroom.
 
+**Download the hand-over (ZIP)** gives your SIS or IT team the change list as files: a review sheet, and a numbered CSV per
+kind of change with the GAM command that runs it, in order. GamGUI doesn't make the changes. Whoever runs the files does so
+outside GamGUI's preview, confirmation and audit log, so they should read the review sheet first and try a test class.
+What the risk check held back is left out unless you use **Download including what's held back**.
+
 GamGUI only reads Classroom: it changes nothing there. Classroom is only on Google Workspace for Education domains, and
 GamGUI reads it with the admin's own sign-in, so if the page says it can't read Classroom, **Setup** names the
 "Classroom API" scopes to tick in `gam oauth create`. Classroom support hasn't been checked on a real school domain yet.

@@ -100,7 +100,9 @@ guarding them:
   and members, rows, fields and the unpacked total are all capped. What it read (names and addresses of teachers and
   students, and who is in which class) is kept by `core/roster_store.py` as one SQLite file per domain, `0600` in a
   `0700` folder under the app's data folder, for 14 days, and deleted on **Purge**. Deleting a file on an SSD doesn't
-  overwrite it; FileVault is what protects it at rest. GamGUI never sends it anywhere and never writes to Classroom.
+  overwrite it; FileVault is what protects it at rest. GamGUI never sends it anywhere and never writes to Classroom. The change list it hands over (a ZIP the operator
+  downloads) holds the same people's addresses, and the GAM files in it run outside GamGUI's guard and audit log; the page
+  says so before the download.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed. `scripts/bump_gam.py` writes a new pin only after
   `gh attestation verify` shows the asset was built by GAM-team/GAM's release workflow

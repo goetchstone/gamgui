@@ -224,3 +224,28 @@ def test_the_summary_says_destructive_parts_first():
     out = plan(snap, [gone])
     assert out.summary() == "Would archive 1 class; would create 1 class and add 1 person."
     assert plan(_snap([], PEOPLE, []), []).summary() == "Classroom already matches the roster: nothing to change."
+
+
+def test_an_outgoing_owner_who_becomes_a_student_is_moved_after_the_owner_change():
+    # Classroom won't remove a class's owner: the removal and the student add wait for the owner change (review of C4).
+    snap = _snap([("C1", "Biology")], PEOPLE + [("U9", "student", "ann@x.com")],
+                 [("C1", "U2", "teacher", True), ("C1", "U9", "student", False)])
+    out = plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])])
+    assert _kinds(out) == [("add_teacher", "ben@x.com"), ("owner", "ben@x.com"), ("remove_teacher", "ann@x.com"),
+                           ("add_student", "ann@x.com")]
+    removal, add = out.changes[2], out.changes[3]
+    assert not removal.swap and add.late
+
+
+def test_a_student_who_stays_a_teacher_here_is_noted_not_added():
+    # The owner can't be removed while the SIS has no teacher with an account to hand the class to.
+    snap = _snap([("C1", "Biology")], [("U9", "student", "ann@x.com")], [("C1", "U9", "student", False)])
+    out = plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])])
+    assert _kinds(out) == [] and any("still a teacher in Classroom" in n for n in out.notes)
+
+
+def test_a_rename_that_drops_the_section_carries_an_empty_one():
+    snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U1", "teacher", True)])
+    snap.classes["C1"] = snap.classes["C1"].__class__("C1", "Biology", "CO1", "S1", ())
+    out = plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])])
+    assert [(c.kind, c.name, c.section, c.after) for c in out.changes] == [("rename", "Biology", "", "Biology")]

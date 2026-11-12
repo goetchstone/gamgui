@@ -12,15 +12,18 @@ import asyncio
 import csv
 import hashlib
 import io
+import zipfile
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
 from ...core.csv_safe import csv_safe
 from ...core.roster import ISSUE_WORDS, MEMBERS_CAP, UPLOAD_CAP, Issue, PackageError, read_upload
+from ...core.roster_handover import IncompleteList, NothingToHandOver, kept_changes
+from ...core.roster_handover import build as handover_files
 from ...core.roster_plan import KINDS, plan
 from ...core.roster_store import KEEP_DAYS, RosterStore, StoreError
 from ..jobs import start_job
@@ -267,3 +270,45 @@ async def changes(request: Request, kind: str = "", q: str = "", page: str = "1"
     kind = kind if kind in dict(KINDS) else ""
     return TEMPLATES.TemplateResponse(request, _CHANGES,
                                       _changes_ctx(held, kind, q, int(page) if page.isdigit() else 1))
+
+
+# --- hand the change list over (C4) ---------------------------------------------------------------------------------
+def _zip_name(domain: str, when: str) -> str:
+    stamp = "".join(ch for ch in when if ch.isdigit())[:12]
+    safe = "".join(ch for ch in domain if ch.isascii() and (ch.isalnum() or ch in ".-")) or "domain"
+    return f"classroom-changes-{safe}-{stamp}.zip"
+
+
+@router.get("/handover.zip")
+async def handover(request: Request, include: Annotated[Optional[List[str]], Query()] = None) -> Response:
+    """The change list as files someone runs with GAM outside GamGUI (plan C4): README.txt, review.csv and a numbered CSV
+    per kind. ``include`` names flagged kinds the operator chose to include; the rest of a flagged kind stays out. An
+    incomplete list hands nothing over. Audited: what was handed over, never the rows."""
+    st = app_state(request)
+    held = _plan_for(st) if st.connector is not None else None
+    if held is None:
+        return Response("There's no change list to hand over. Compare with Classroom first.\n", status_code=400,
+                        media_type="text/plain")
+    chosen = [k for k in (include or []) if k in held["plan"].flags]
+    try:
+        files = handover_files(held["plan"], st.audit_domain, held["when"], chosen)
+    except IncompleteList:     # each kind's fixed words, never the exception's own text (CodeQL py/stack-trace-exposure)
+        return Response(IncompleteList.MESSAGE + "\n", status_code=400, media_type="text/plain")
+    except NothingToHandOver:
+        return Response(NothingToHandOver.MESSAGE + "\n", status_code=400, media_type="text/plain")
+    stamp = datetime.strptime(held["when"], "%Y-%m-%d %H:%M UTC").timetuple()[:6]
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(files):
+            info = zipfile.ZipInfo(name, date_time=stamp)         # the compare's time: one compare, one set of bytes
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            archive.writestr(info, files[name])
+    kept = kept_changes(held["plan"], chosen)
+    counts: Dict[str, int] = {}
+    for change in kept:
+        counts[change.kind] = counts.get(change.kind, 0) + 1
+    st.connector.audit.record("roster_handover", connector="local", target=st.audit_domain, ok=True,
+                              extra={"compared": held["when"], "counts": counts, "included_flagged": chosen})
+    return Response(out.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{_zip_name(st.audit_domain, held["when"])}"'})

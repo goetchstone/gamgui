@@ -479,6 +479,8 @@ AUDITED_OUTSIDE_CONNECTOR = {
     ("gamgui/web/routes/roster.py", "upload"): "`roster_import`: a SIS roster (student data) kept on this Mac — counts, "
                                                "never rows",
     ("gamgui/web/routes/roster.py", "purge"): "`roster_purge`: the kept roster deleted from this Mac",
+    ("gamgui/web/routes/roster.py", "handover"): "`roster_handover`: the change list handed over as files run outside "
+                                                 "GamGUI — counts, never rows",
 }
 
 
