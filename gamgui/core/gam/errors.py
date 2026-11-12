@@ -192,6 +192,19 @@ def _error_lines(stderr: str) -> List[Tuple[GAMErrorKind, str]]:
             and not _FRAMING_LINE.match(line)]
 
 
+# `print courses … owneremail` when a class's owner can't be looked up (a deleted account): GAM writes the owner as
+# "Unknown user", warns once per such owner (_convertCourseUserIdToEmailName → entityDoesNotHaveItemWarning: entities
+# Course and Owner ID), sets ENTITY_DOES_NOT_EXIST_RC (56) and still prints every class. Read from the 7.51.00 build.
+_UNKNOWN_OWNER_LINE = re.compile(r"Course: [^,]+, Owner ID: [^,]+, Does not exist(?: \(\d+/\d+\))?")
+
+
+def only_unknown_owners(stderr: str) -> bool:
+    """True when every line GAM reported is an unknown-owner warning (and there is at least one): the table it printed is
+    whole, only those owners' addresses are missing. Anything else on stderr means the read failed as usual."""
+    lines = [line for _, line in _error_lines(stderr)]
+    return bool(lines) and all(_UNKNOWN_OWNER_LINE.fullmatch(line) for line in lines)
+
+
 def _worst(kinds: Iterable[GAMErrorKind]) -> GAMErrorKind:
     return min(kinds, key=_SEVERITY.index, default=GAMErrorKind.UNKNOWN)
 
