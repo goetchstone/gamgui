@@ -49,6 +49,22 @@ def test_load_catalog_has_buildable_and_browse():
     assert cat.by_id("build.delete_user").risk == RiskLevel.DESTRUCTIVE
 
 
+def test_runnable_gam_version_can_never_self_update():
+    """GAM 7.52.00 added `gam version [... (update [quiet])]`, which downloads the latest release
+    and installs it over the running binary: an unpinned, unattested GAM (invariant 7). `version`
+    is a read verb, so the line is auto-promoted; it stays safe only because the read builder
+    drops optional groups. Hold it to exactly `gam version`, whatever a slot is given."""
+    cat = load_catalog()
+    lines = [c for c in cat.commands if c.verb == "version"]
+    assert any("update" in c.raw_syntax.split() or "(update" in c.raw_syntax for c in lines)
+    runnable = [c for c in lines if c.buildable]
+    assert runnable                         # else this guards nothing; revisit if it goes browse-only
+    for c in runnable:
+        assert not c.slots
+        assert c.build({}) == ["version"]
+        assert c.build({"a0": "update", "a1": "update"}) == ["version"]
+
+
 def test_new_curated_commands_build_correct_argv():
     cat = load_catalog()
 
