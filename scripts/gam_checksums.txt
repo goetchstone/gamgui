@@ -3,4 +3,4 @@
 # install on mismatch (catches a tampered / MITM'd / unexpected binary). Tracked in git so the pin
 # is reviewable. Update DELIBERATELY when bumping EXPECTED_GAM_VERSION (record the new asset's hash).
 # Format: <sha256>  <asset-filename>
-a1d6018e7cb81854dd97145741c35521c50bd824f7d6e3e36554300bc2e58052  gam-7.51.00-macos26.7-arm64.tar.xz
+2d9c3dd13669fbf2967cfc0ab4f4b3e7a5a13e59ce976908771951cf178c3360  gam-7.52.01-macos26.7-arm64.tar.xz
