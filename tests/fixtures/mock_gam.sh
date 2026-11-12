@@ -221,7 +221,7 @@ acl_notify_tail() {
 
 case "${1:-}" in
   version)
-    echo "GAM 7.51.00 - mock"
+    echo "GAM 7.52.01 - mock"
     exit 0
     ;;
 esac
