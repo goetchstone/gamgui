@@ -16,7 +16,7 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Seq
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, MessageId, Phone, build_user_query, cut_off_account
-from ..gam.errors import GAMError, GAMErrorKind
+from ..gam.errors import GAMError, GAMErrorKind, only_unknown_owners
 from ..gam.models import (
     CalendarACL,
     CalendarEvent,
@@ -360,7 +360,17 @@ class GAMConnector(Connector):
         Classroom doesn't know is NOT_FOUND, an admin token without the Classroom scopes SCOPE_MISSING. `owner_email` off
         spares GAM a Directory read per owner (the course index, C1.3)."""
         argv = GAMCommands.print_courses(teacher=teacher, student=student, states=states, owner_email=owner_email)
-        return courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
+        return courses_from(parse_records(await self._courses_read(argv)))
+
+    async def _courses_read(self, argv: List[str]) -> str:
+        """A `print courses` read's table. With `owneremail`, a class whose owner GAM can't look up (a deleted account) makes
+        GAM warn and exit ENTITY_DOES_NOT_EXIST_RC (56) after printing every class: read as an error, one deleted owner hid
+        every class, and the offboarding read said the leaver owned none (failure log 2026-11-11). Exit 56 is accepted only
+        when every line GAM reported is that warning and a table came back; anything else raises as any read does."""
+        res = await self.runner.run_any_exit(self.domain, argv)
+        if res.returncode == 0 or (res.returncode == 56 and only_unknown_owners(res.stderr) and res.stdout.strip()):
+            return _classroom_table(res.stdout)
+        raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
 
     async def courses_owned_by(self, email: str) -> List[Course]:
         """The classes ``email`` owns, in every state: what deleting the account would lose (a declined or suspended class
@@ -376,8 +386,7 @@ class GAMConnector(Connector):
         """One class by its ID. A class that doesn't exist raises NOT_FOUND; one GAM answered without a record for it raises
         Incomplete, never reads as "no such class"."""
         argv = GAMCommands.print_courses(course_ids=[course_id])
-        found = [c for c in courses_from(parse_records(_classroom_table(await self.runner.run_authenticated(self.domain, argv))))
-                 if c.id == course_id]
+        found = [c for c in courses_from(parse_records(await self._courses_read(argv))) if c.id == course_id]
         if not found:
             raise Incomplete("GAM answered without this class's record, so it can't be shown. Try again.")
         return found[0]

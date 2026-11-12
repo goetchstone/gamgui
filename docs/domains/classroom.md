@@ -141,6 +141,14 @@ guard; only its read side is adapted here.
 - **The mock refuses what it doesn't model.** `print courses` without `formatjson`, by ID and by a filter at once, and
   `print course-participants` by teacher or for every class are `not_modelled`, not answered in a guessed shape. Its
   state and field names are the grammar's (`<CourseState>`, `<CourseFieldName>`).
+- **An owner GAM can't look up** (a deleted account) with `owneremail`: GAM prints every class, the address as "Unknown user",
+  warns "Course: <id>, Owner ID: <id>, Does not exist" and exits 56. `_courses_read` accepts that exit only when every
+  reported line is that warning (`errors.only_unknown_owners`); "Unknown user" is never kept as an address. Failure log
+  2026-11-11; found by the SwiftGamGui port. The mock models it with `$GAM_MOCK_STATE/ownergone/<owner id>`.
+- **Silent `[]` from GAM:** `_getCourseAliasesMembers` swallows notFound and serviceNotAvailable on a class's aliases *and*
+  on a roster side, printing `[]` with exit 0. A failed roster side reads as an empty one; nothing in the output tells them
+  apart. The roster compare's duplicate-create guard covers the alias case; the roster case is unguarded (not modelled).
+- **An address outside GAM's domain** answers exit 73, "Service not applicable", which neither app's mock models.
 - `$GAM_MOCK_STATE/noclassroom` models an admin token without Classroom scopes, `classroom_silent` GAM answering nothing
   (exit 0). A states list takes `all` only on its own, as the grammar's `<CourseStateList>` does.
 
