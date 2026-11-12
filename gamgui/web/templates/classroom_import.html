@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Plan a Classroom import — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <p class="eyebrow text-brand-blue">School domains · read only</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Classroom</h1>
+  </div>
+  {% with here="/classroom/import" %}{% include "_classroom_tabs.html" %}{% endwith %}
+
+  <div class="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
+    <div class="space-y-4">
+      <form class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm"
+            hx-post="/classroom/import/upload" hx-encoding="multipart/form-data" hx-target="#roster-kept" hx-swap="innerHTML"
+            hx-disabled-elt="find button">
+        <label for="roster-files" class="eyebrow text-brand-grayink">Your SIS's roster export</label>
+        <p class="mt-1 text-xs text-brand-blueink">Its ZIP, or every CSV file in its folder.</p>
+        <input id="roster-files" type="file" name="files" multiple accept=".zip,.csv" required
+               class="mt-2 block w-full text-sm text-ink" />
+        <button type="submit" class="mt-3 rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink">Read the export</button>
+        <p class="mt-2 text-[11px] text-brand-grayink">Read on this Mac and kept here for {{ keep_days }} days. Nothing is sent to Google.</p>
+      </form>
+
+      <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+        <h2 class="eyebrow text-brand-grayink">What to export</h2>
+        <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-brand-blueink">
+          <li><strong class="text-brand-black">OneRoster 1.1</strong>, as <strong class="text-brand-black">CSV</strong>, a
+            <strong class="text-brand-black">full (bulk)</strong> export: not 1.2, not an API, not changes only.</li>
+          <li>It holds manifest.csv, orgs.csv, academicSessions.csv, courses.csv, classes.csv, users.csv and enrollments.csv.</li>
+          <li>SIS products usually keep it under their data-sharing, rostering or OneRoster export settings.</li>
+          <li>Each teacher and student needs their Google Workspace address in users.csv's email column.</li>
+        </ul>
+      </div>
+    </div>
+
+    <section id="roster-kept" aria-label="The kept roster" class="min-w-0 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      {% include "_roster_kept.html" %}
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -16,6 +16,7 @@
     <p class="text-brand-blueink mt-1 text-sm">Find a class by its name, or every class a teacher has by their address, and see who is in it.
       GamGUI only reads Classroom, and its Classroom support hasn't been checked on a real school domain yet.</p>
   </div>
+  {% with here="/classroom" %}{% include "_classroom_tabs.html" %}{% endwith %}
 
   <div class="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
     <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">

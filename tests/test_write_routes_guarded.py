@@ -75,6 +75,8 @@ LOCAL_ONLY = {
     "/incident/logs/theirs", "/incident/logs/unmark", "/incident/logs/tick", "/incident/logs/untick", "/incident/logs/again", "/incident/logs/warning", "/incident/logs/unwarning", "/incident/logs/phish", "/incident/report/review", "/incident/report/export",
     "/phishing/find", "/phishing/recipients",      # two reads, and one: GAM's dry run changes nothing without doit
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
+    # A SIS roster export read and kept on this Mac, or deleted from it (plan 2026-11-11 C2). Nothing reaches Google.
+    "/classroom/import/upload", "/classroom/import/purge",
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe

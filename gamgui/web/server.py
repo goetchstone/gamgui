@@ -470,6 +470,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
     from .routes.classroom import router as classroom_router
+    from .routes.roster import router as roster_router
     from .routes.groups import router as groups_router
     from .routes.home import router as home_router
     from .routes.jobs import router as jobs_router
@@ -498,6 +499,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(signatures_router)
     app.include_router(calendars_router)
     app.include_router(classroom_router)
+    app.include_router(roster_router)
     app.include_router(lifecycle_router)
     app.include_router(onboarding_router)
     app.include_router(builder_router)

@@ -194,6 +194,12 @@ what they're in. Offboarding someone who owns classes names them in the preview,
 whoever gives them a new owner in Classroom before the account is deleted. Under the class finder, **Who can create
 classes** names the Classroom Teachers group; add staff to it on **Groups**.
 
+**Plan an import** reads your student information system's roster export. Export **OneRoster 1.1** as CSV, a full
+(bulk) export, then choose its ZIP, or every CSV in its folder, and click **Read the export**. A file it can't use is
+refused under the picker with what to export instead, and nothing is kept. One it can read shows its counts and the
+**Problems to fix in your SIS**, each kind with its cause and fix; **Issues CSV** gives your SIS team the rows. The
+roster is read on this Mac and kept here for 14 days; **Purge it now** deletes it sooner.
+
 GamGUI only reads Classroom: it changes nothing there. Classroom is only on Google Workspace for Education domains, and
 GamGUI reads it with the admin's own sign-in, so if the page says it can't read Classroom, **Setup** names the
 "Classroom API" scopes to tick in `gam oauth create`. Classroom support hasn't been checked on a real school domain yet.

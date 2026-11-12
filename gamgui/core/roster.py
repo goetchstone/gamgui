@@ -42,7 +42,7 @@ COLUMNS_CAP = 256                    # columns in a file's header (OneRoster's h
 LINE_CAP = 2 * 1024 * 1024           # one physical line, before the csv module splits it into fields
 ROWS_CAP = 2_000_000                 # rows in one file
 FIELD_CAP = 64 * 1024                # one field
-ISSUE_SAMPLE = 20                    # rows kept per kind of issue; the count is always whole
+ISSUE_SAMPLE = 1000                  # rows kept per kind of issue (the Issues CSV); the count is always whole
 
 # OneRoster 1.1 CSV, as 1EdTech names its files. A rostering package needs the first six (and the manifest).
 REQUIRED = ("orgs.csv", "academicSessions.csv", "courses.csv", "classes.csv", "users.csv", "enrollments.csv")

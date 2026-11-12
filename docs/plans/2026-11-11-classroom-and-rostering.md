@@ -1,6 +1,6 @@
 # Plan: Google Classroom and SIS rostering, in both apps — reads and planning only
 
-**Status: IN PROGRESS — Phase C1 built in GamGUI (read only); C2 to C5 open.** Written at GamGUI `0a4dd66` for a reader with no session
+**Status: IN PROGRESS — Phases C1 and C2 built in GamGUI (read only); C3 to C5 open.** Written at GamGUI `0a4dd66` for a reader with no session
 context. `CLAUDE.md` is auto-loaded. Before any item, read that app's runbook for the area (`docs/domains/` in each repo).
 When a PR closes an item, mark it under "Status by item" in the same PR.
 
@@ -171,8 +171,7 @@ After C4 a district can plan an import from OneRoster 1.1 and run it with GAM. A
 | C1.1, C1.2 | done (scopes in Setup, reads and mock) | open |
 | C1.3 | done (the Classroom screen) | open |
 | C1.4 to C1.6 | done (a person's classes, the offboarding warning, who can create classes) | open |
-| C2.1, C2.3, C2.5 | reader and store done; the screen (C2.2, C2.4) next | open |
-| C2.2, C2.4 | open | open |
+| C2.1 to C2.5 | done (the reader, the store, and the Plan an import screen) | open |
 | C3.1 to C3.4 | open | open |
 | C4.1 to C4.4 | open | open |
 | C5.1 to C5.3 | open | open |

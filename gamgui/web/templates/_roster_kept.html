@@ -1,0 +1,60 @@
+{#- The kept roster (plan 2026-11-11 C2.4): its counts, its days, and its issues by kind, for the SIS team. -#}
+{% if upload_error is defined and upload_error %}
+<div class="mb-3">{% with ok=False, message=upload_error %}{% include "_action_result.html" %}{% endwith %}</div>
+{% endif %}
+{% if purged is defined %}
+<p class="mb-3 text-sm text-brand-blueink" tabindex="-1" data-focus>{% if purged %}The kept roster was deleted from this Mac.{% else %}There was no roster kept to delete.{% endif %}</p>
+{% endif %}
+{% if store_error %}
+<div>{% with ok=False, message=store_error %}{% include "_action_result.html" %}{% endwith %}</div>
+{% elif meta %}
+{% set c = meta.counts %}
+<div class="space-y-4">
+  <div>
+    <h2 class="font-serif text-xl text-brand-black"{% if just_read is defined %} tabindex="-1" data-focus{% endif %}>{{ "Read" if just_read is defined else "Kept" }}: {{ meta.label }}</h2>
+    <p class="text-xs text-brand-grayink">{{ meta.source }} · read {{ meta.imported_at | replace("T", " ") | replace("Z", " UTC") }} · deleted from this Mac on {{ meta.expires_at[:10] }}</p>
+  </div>
+  <dl class="grid grid-cols-3 gap-3 text-sm sm:grid-cols-7">
+    {% for key, label in (("schools", "Schools"), ("terms", "Terms"), ("courses", "Courses"), ("classes", "Classes"), ("teachers", "Teachers"), ("students", "Students"), ("enrollments", "Enrolments")) %}
+    <div class="rounded-lg bg-paper px-2.5 py-2"><dt class="text-[11px] text-brand-grayink">{{ label }}</dt><dd class="font-medium text-brand-black">{{ "{:,}".format(c[key]) }}</dd></div>
+    {% endfor %}
+  </dl>
+  {% if meta.others %}<p class="text-xs text-brand-grayink">{{ "{:,}".format(meta.others) }} people in other roles (aides, guardians…) are counted but not rostered.</p>{% endif %}
+
+  <div>
+    <div class="flex items-baseline justify-between gap-3">
+      <h3 class="eyebrow text-brand-grayink">Problems to fix in your SIS</h3>
+      {% if issues %}<a href="/classroom/import/issues.csv" download class="text-xs font-medium text-brand-blueink underline hover:text-brand-black">Issues CSV</a>{% endif %}
+    </div>
+    {% if issues %}
+    <div class="mt-2 max-h-[calc(100vh-30rem)] space-y-2 overflow-y-auto pr-1">
+      {% for kind in issues %}
+      <details class="rounded-lg border border-brand-gray/30 px-3 py-2">
+        <summary class="cursor-pointer text-sm"><span class="font-medium text-brand-black">{{ "{:,}".format(kind.count) }}</span>
+          <span class="text-brand-blueink">— {{ kind.cause }}</span></summary>
+        <p class="mt-1 text-xs text-brand-blueink"><span class="font-medium">Fix:</span> {{ kind.fix }}</p>
+        <table class="mt-2 w-full text-xs">
+          <caption class="sr-only">{{ kind.cause }}</caption>
+          <thead class="text-left text-brand-grayink"><tr><th scope="col" class="py-1 pr-2 font-medium">File</th><th scope="col" class="py-1 pr-2 font-medium">Line</th><th scope="col" class="py-1 pr-2 font-medium">sourcedId</th><th scope="col" class="py-1 font-medium">Detail</th></tr></thead>
+          <tbody class="divide-y divide-brand-gray/20">
+            {% for i in kind.rows %}<tr><td class="py-1 pr-2">{{ i.file }}</td><td class="py-1 pr-2">{{ i.row }}</td><td class="py-1 pr-2 font-mono">{{ i.source_id }}</td><td class="max-w-0 truncate py-1">{{ i.detail }}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+        {% if kind.count > kind.rows | length %}<p class="mt-1 text-[11px] text-brand-grayink">Showing {{ kind.rows | length }} of {{ "{:,}".format(kind.count) }}; the Issues CSV has more.</p>{% endif %}
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="mt-1 text-sm text-brand-blueink">None. Every class, person and enrolment read cleanly.</p>
+    {% endif %}
+  </div>
+
+  <form hx-post="/classroom/import/purge" hx-target="#roster-kept" hx-swap="innerHTML" hx-disabled-elt="find button"
+        hx-confirm="Delete the kept roster from this Mac now?">
+    <button type="submit" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs font-medium text-brand-blueink hover:bg-red-50 hover:text-red-800">Purge it now</button>
+    <span class="ml-2 text-[11px] text-brand-grayink">Otherwise it's deleted after {{ keep_days }} days.</span>
+  </form>
+</div>
+{% else %}
+<p class="text-sm text-brand-grayink">No roster is kept on this Mac. Choose your SIS's export to read it.</p>
+{% endif %}
