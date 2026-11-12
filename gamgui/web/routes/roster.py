@@ -30,7 +30,7 @@ from ...core.roster import (ISSUE_WORDS, MEMBERS_CAP, UPLOAD_CAP, Issue, NeedsMa
                             read_upload)
 from ...core.roster_mapped import FIELDS, ColumnMap, guess, preview, read_mapped
 from ...core.roster_maps import MapStore
-from ...core.roster_handover import HandoverError, kept_changes
+from ...core.roster_handover import IncompleteList, NothingToHandOver, kept_changes
 from ...core.roster_handover import build as handover_files
 from ...core.roster_plan import KINDS, plan
 from ...core.roster_store import KEEP_DAYS, RosterStore, StoreError
@@ -446,8 +446,10 @@ async def handover(request: Request, include: Annotated[Optional[List[str]], Que
     chosen = [k for k in (include or []) if k in held["plan"].flags]
     try:
         files = handover_files(held["plan"], st.audit_domain, held["when"], chosen)
-    except HandoverError as exc:
-        return Response(str(exc) + "\n", status_code=400, media_type="text/plain")
+    except IncompleteList:     # each kind's fixed words, never the exception's own text (CodeQL py/stack-trace-exposure)
+        return Response(IncompleteList.MESSAGE + "\n", status_code=400, media_type="text/plain")
+    except NothingToHandOver:
+        return Response(NothingToHandOver.MESSAGE + "\n", status_code=400, media_type="text/plain")
     stamp = datetime.strptime(held["when"], "%Y-%m-%d %H:%M UTC").timetuple()[:6]
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:

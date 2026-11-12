@@ -235,6 +235,10 @@ def test_no_compare_or_an_incomplete_one_hands_nothing_over(client):
     client.app.state.gamgui.roster_compare["plan"].incomplete = True
     r = client.get("/classroom/import/handover.zip")
     assert r.status_code == 400 and "incomplete" in r.text
+    client.app.state.gamgui.roster_compare["plan"].incomplete = False
+    client.app.state.gamgui.roster_compare["plan"].changes = []
+    r = client.get("/classroom/import/handover.zip")
+    assert r.status_code == 400 and r.text == "There's nothing to hand over.\n"
 
 
 # --- a spreadsheet mapped by its columns (plan C5.3) ---------------------------------------------------------------------
