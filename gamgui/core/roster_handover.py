@@ -86,7 +86,21 @@ STEPS: Tuple[Step, ...] = (
 
 
 class HandoverError(Exception):
-    """The change list can't be handed over. ``str()`` says why."""
+    """The change list can't be handed over. Each kind's ``MESSAGE`` says why, in words fixed here, so a route answers
+    with the class's message and never the exception's own text (CodeQL py/stack-trace-exposure)."""
+    MESSAGE = "This change list can't be handed over."
+
+    def __init__(self) -> None:
+        super().__init__(self.MESSAGE)
+
+
+class IncompleteList(HandoverError):
+    MESSAGE = ("Part of Classroom couldn't be read, so this change list may be incomplete and isn't handed over. "
+               "Compare again.")
+
+
+class NothingToHandOver(HandoverError):
+    MESSAGE = "There's nothing to hand over."
 
 
 def _plain_csv(rows: Iterable[Sequence[str]]) -> bytes:
@@ -131,11 +145,10 @@ def build(plan: ChangeList, domain: str, when: str, include_flagged: Iterable[st
     """The files, by name: README.txt, review.csv, and each step's CSV that has rows. Raises ``HandoverError`` for an
     incomplete list, or when nothing is left to hand over."""
     if plan.incomplete:
-        raise HandoverError("Part of Classroom couldn't be read, so this change list may be incomplete and isn't handed "
-                            "over. Compare again.")
+        raise IncompleteList()
     changes, dependent = _split(plan, include_flagged)
     if not changes:
-        raise HandoverError("There's nothing to hand over.")
+        raise NothingToHandOver()
     words = dict(KINDS)
     files: Dict[str, bytes] = {}
     review: List[Tuple[str, ...]] = [("change", "class", "alias", "person", "current", "new")]
