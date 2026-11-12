@@ -85,8 +85,9 @@ guard; only its read side is adapted here.
 
 ## The roster upload (C2.1, C2.3, C2.5; the screen follows)
 - **`core/roster.py`** reads an upload into one `Snapshot` (schools, terms, courses, classes, people, enrolments) that
-  every SIS reader fills; this one reads OneRoster 1.1 CSV, as a ZIP or as loose CSVs (a folder's files).
-  `read_upload([(name, bytes), …])` is the entry point.
+  every SIS reader fills, as a ZIP or as loose CSVs (a folder's files). `read_upload([(name, bytes), …])` is the entry
+  point: it tells the export by its file names alone (`detect`, `zip_names`: nothing unpacked) and reads OneRoster 1.1 or
+  1.2 itself, Clever with `roster_clever`, and raises `NeedsMap` for one CSV that is neither (C5).
 - **Hostile until read** (SECURITY.md): never extracted; a member is matched by base name against `KNOWN`, and a link,
   encrypted member, `..`, absolute name, backslash, NUL, nested folders, an unknown file or a name twice (any case)
   refuses the package. One enclosing folder (Finder's Compress) and macOS's `__MACOSX/`, `.DS_Store` and `._*` are fine.
@@ -105,7 +106,8 @@ guard; only its read side is adapted here.
   1.8M people, far past any district). If that ever matters, write rows straight into SQLite instead of building objects.
 - **The csv module's field limit is never set here.** It's process-wide and the GAM parser raises it for other reads
   (`parser.field_limit_at_least`), so lowering it in a thread could break one; each cell's length is checked instead.
-- **Package mistakes refuse with their fix** (`PackageError`): not a ZIP, OneRoster 1.2, a delta export, a missing file,
+- **Package mistakes refuse with their fix** (`PackageError`): not a ZIP, an export it doesn't know, a delta export, a
+  missing file,
   the wrong columns, not UTF-8. **Row problems are `Issue`s** counted by kind (`ISSUE_WORDS`: cause and fix) with a sample
   of `ISSUE_SAMPLE` each: a teacher or student without an address, two sharing one, an enrolment naming someone or a class
   that isn't there, rows marked to be deleted.
@@ -115,6 +117,47 @@ guard; only its read side is adapted here.
   process left it (a quit between commit and rename once left a whole snapshot that Purge never saw). **Expiry fails
   closed** (`_expired`): unreadable dates, an import dated in the future, or a stored expiry past `imported + KEEP_DAYS` all
   delete it. Every failure of a save is a `StoreError`, and its temp file goes.
+
+## More than one SIS (C5.1 to C5.3)
+- **Every reader goes through the same bounds.** `Layout` names an export's files and the ones never unpacked; the
+  container code (`files_from_zip`, `files_from_csvs`) takes one, and every row is read by `_rows(name, body, required,
+  used, fold_case=, layout=, raw=)`, which builds a row from the `used` columns alone. That is what keeps passwords out:
+  **Clever's `Username`/`Password`/`Contact_*`, OneRoster 1.2's `userProfiles.csv` (per-app passwords) and `users.csv`
+  `password` are never read into anything**; `staff.csv`, `administrators.csv`, `userProfiles.csv` are named, never
+  unpacked. Issue words are format-neutral (`ISSUE_WORDS`), since an issue's `file` names the file.
+- **Detection by name:** OneRoster's manifest and camelCase files, or Clever's schools, students, teachers and sections;
+  `enrollments.csv` is in both and decides nothing; both kinds at once is refused. **One picked CSV is always a spreadsheet
+  to map, whatever its name** (neither export is one file, and a SIS report is often called `students.csv`); anything else
+  is "isn't an export GamGUI knows", with what to export.
+- **OneRoster 1.2** (`oneroster.version` "1.2", or a revision like "1.2.1"): `users.csv` has no `role`, so `roles.csv` is
+  required (the 1.2 binding's Appendix A rostering set) and read first (`_roles_12`). A person is counted under their
+  primary role's teacher or student, else a secondary one's; aides, guardians and `ext:` roles aren't rostered. An
+  enrolment's role must be one of the person's roster roles, else `role_mismatch`. Everything else is 1.1's reading.
+- **Clever** (`core/roster_clever.py`, SFTP CSV spec v2.2.0): headers matched ignoring case only. People are
+  `student:<id>` and `teacher:<id>` (separate ID spaces). A student repeats once per guardian contact: the first row is
+  kept, a different address is a `conflict`. A section's `Teacher_id` is its primary teacher, `Teacher_2_id`..`Teacher_10_id`
+  co-teachers; `enrollments.csv` is students only. Courses (`course:<Course_number>`) and terms
+  (`term:<name>|<start>|<end>`, MM/DD/YYYY to ISO when strict) are built from section columns. Title: `Name`, else
+  `Course_name` with its period. Fixture: `tests/fixtures/roster/clever/` (the Swift port reads the same files).
+- **A spreadsheet of any other shape** (`core/roster_mapped.py`, C5.3, the operator chose **one flat file**: a row per
+  person in a class). `ColumnMap` maps six fields (class ID, class name, email and role needed; section, primary teacher
+  optional) and the role words; `guess(header)` fills it on first sight; `preview` reads three rows and stops;
+  `read_mapped` reads the rest (person ID = address; conflicts first-kept; an unrecognized role word is `unknown_role`).
+  Maps are saved by name in `roster-maps.json` (`core/roster_maps.py`: column names and words only, `0600`/`0700`, moved
+  aside when unreadable).
+- **The map step on the screen:** a spreadsheet isn't read on upload. It's held in memory (`AppState.roster_pending`:
+  name, bytes, header, domain; never on disk), and `_roster_map.html` shows the columns, the map (a saved one that fits the
+  header, else a guess) and three rows read with it. `POST /map/preview` on every change, `/map/read` reads and keeps it
+  like an export (audited with which fields were mapped, never the column names: they're the sheet's text), `/map/delete` deletes a saved map, `/map/cancel` drops the file. A
+  new upload (read or refused), Purge, a read, a cancel or a tenant switch drops what's held, and one held for another
+  domain is never read; a read is kept under the domain it was picked on, or not at all (`_keep`'s `domain`). A saved map
+  is loaded only when its own select fired (`HX-Trigger-Name`), since every control posts the whole form.
+- **What the adversarial run of C5 found (2026-11-12), and the rule each fix keeps:** an address is checked as given, then
+  lowercased, in every reader (U+212A KELVIN SIGN lowercases to an ASCII `k`); the mapped reader cleans every field but the
+  address by field, since one column may be mapped as the address and a class; `header_of` refuses a first line holding an
+  address (a sheet without its header would save a student's address as a column name) or a column name past
+  `HEADER_CELL_CAP`; a 1.2 enrolment of someone with no roster role in roles.csv is a `role_mismatch` naming roles.csv; a
+  person who teaches one class and studies in another counts as a teacher; the Issues CSV's ID column is `ID`.
 
 ## The import screen (C2.2, C2.4)
 - **`web/routes/roster.py`**, `/classroom/import`, the second tab (`_classroom_tabs.html`: links, not ARIA tabs, since each

@@ -1,6 +1,6 @@
 # Plan: Google Classroom and SIS rostering, in both apps — reads and planning only
 
-**Status: IN PROGRESS — Phases C1 to C4 built in GamGUI (read only); C5 open.** Written at GamGUI `0a4dd66` for a reader with no session
+**Status: IN PROGRESS — Phases C1 to C5.3 built in GamGUI (read only); C5.4 later; the Swift port open.** Written at GamGUI `0a4dd66` for a reader with no session
 context. `CLAUDE.md` is auto-loaded. Before any item, read that app's runbook for the area (`docs/domains/` in each repo).
 When a PR closes an item, mark it under "Status by item" in the same PR.
 
@@ -133,8 +133,10 @@ snapshot changes.
 
 - **C5.1 OneRoster 1.2 CSV.** The fork refuses it. Same files plus `roles.csv` and changed columns.
 - **C5.2 Clever's CSV** (schools, students, teachers, sections, enrollments).
-- **C5.3 Any spreadsheet, with a column map.** For a SIS that exports neither: one CSV per kind, the operator maps columns
-  once, saved by name like offboarding templates. The screen shows three mapped rows before anything else runs.
+- **C5.3 Any spreadsheet, with a column map.** For a SIS that exports neither: **one flat CSV, a row per person in a class**
+  (the operator chose this over one CSV per kind, 2026-11-11: it's what schedule reports and hand-made sheets look like,
+  and six fields map in one step). The operator maps columns once, saved by name like offboarding templates. The screen
+  shows three mapped rows before anything else runs.
 - **C5.4 Later: pulling from an API** (OneRoster REST, Clever, ClassLink). A SIS credential in the Keychain, read-only, and
   its own short design first.
 
@@ -174,5 +176,5 @@ After C4 a district can plan an import from OneRoster 1.1 and run it with GAM. A
 | C2.1 to C2.5 | done (the reader, the store, and the Plan an import screen) | open |
 | C3.1 to C3.4 | done (the planner, the Classroom read, the change list; C3.4's "changed since" moves to C4's re-read) | open |
 | C4.1 to C4.4 | done (review sheet, GAM files in run order, the screen's statement, Compare again) | open |
-| C5.1 to C5.3 | open | open |
+| C5.1 to C5.3 | done (OneRoster 1.2 via roles.csv, Clever CSV, one flat spreadsheet with a saved column map) | open |
 | C5.4 | later | later |

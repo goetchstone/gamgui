@@ -1,8 +1,10 @@
 """Read a student information system's roster export into one snapshot (plan 2026-11-11, C2.1 and C2.3).
 
 The snapshot is one model every reader fills (schools, terms, courses, classes, people, enrolments), so nothing after it
-knows which SIS or format it came from. This module reads OneRoster 1.1 CSV, as a ZIP or as its loose CSV files; plan C5
-adds other readers that fill the same `Snapshot`.
+knows which SIS or format it came from. This module reads an upload (a ZIP, or loose CSV files), tells which export it
+is by its file names, and reads OneRoster 1.1 and 1.2 CSV itself. Clever's CSV is `roster_clever`; a spreadsheet of any
+other shape is read with the operator's column map by `roster_mapped` (plan C5). Every reader fills the same `Snapshot`,
+through the same bounded row reader (`_rows`).
 
 An upload is hostile until read: it comes from outside the app and lands in student data. So:
 
@@ -14,8 +16,10 @@ An upload is hostile until read: it comes from outside the app and lands in stud
   whatever its header says; the members together, the ratio of a member's size to its compressed size, the number of
   members, rows, fields and line lengths are all capped.
 - **Text is strict UTF-8** (a leading byte-order mark is dropped). Anything else refuses the file by name.
-- **A package-level mistake refuses the whole package with its fix** (`PackageError`): not a ZIP, OneRoster 1.2, a delta
-  export, a file missing or with the wrong columns. Row-level problems are kept as `Issue`s for the SIS team.
+- **A package-level mistake refuses the whole package with its fix** (`PackageError`): not a ZIP, an unknown export, a
+  delta export, a file missing or with the wrong columns. Row-level problems are kept as `Issue`s for the SIS team.
+- **A file the reader doesn't use is named, never unpacked** (OneRoster 1.2's `userProfiles.csv` and Clever's files hold
+  passwords): only the columns a reader uses are ever built from a row.
 
 The reader holds no state and writes nothing: `roster_store` keeps a snapshot, `0600`, for a stated number of days.
 """
@@ -28,7 +32,7 @@ import stat
 import unicodedata
 import zipfile
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Collection, Dict, FrozenSet, Generator, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 # --- caps (#9) -------------------------------------------------------------------------------------------------------
 UPLOAD_CAP = 200 * 1024 * 1024       # the bytes picked, a ZIP or the CSVs together
@@ -42,18 +46,22 @@ COLUMNS_CAP = 256                    # columns in a file's header (OneRoster's h
 LINE_CAP = 2 * 1024 * 1024           # one physical line, before the csv module splits it into fields
 ROWS_CAP = 2_000_000                 # rows in one file
 FIELD_CAP = 64 * 1024                # one field
+HEADER_CELL_CAP = 200                # a column name a column map can hold (roster_mapped keeps 200 characters)
 ISSUE_SAMPLE = 1000                  # rows kept per kind of issue (the Issues CSV); the count is always whole
 
-# OneRoster 1.1 CSV, as 1EdTech names its files. A rostering package needs the first six (and the manifest).
+# OneRoster CSV, as 1EdTech names its files. A rostering package needs the first six (and the manifest); 1.2 also needs
+# roles.csv (its users.csv has no role: 1.2 binding, Appendix A).
 REQUIRED = ("orgs.csv", "academicSessions.csv", "courses.csv", "classes.csv", "users.csv", "enrollments.csv")
+ROLES = "roles.csv"
 OPTIONAL = ("demographics.csv", "lineItems.csv", "categories.csv", "results.csv", "resources.csv", "classResources.csv",
-            "courseResources.csv", "userResources.csv")
+            "courseResources.csv", "userResources.csv", "userProfiles.csv", "scoreScales.csv", "lineItemScoreScales.csv",
+            "resultScoreScales.csv", "lineItemLearningObjectiveIds.csv", "resultLearningObjectiveIds.csv")
 MANIFEST = "manifest.csv"
-KNOWN = {name.lower(): name for name in (MANIFEST, *REQUIRED, *OPTIONAL)}
+KNOWN = {name.lower(): name for name in (MANIFEST, *REQUIRED, ROLES, *OPTIONAL)}
 # What macOS adds to a ZIP it makes: never ours, never read.
 _MAC_LITTER = ("__MACOSX/", ".DS_Store", "._")
 
-COLUMNS = {     # the columns each file must have for this reader; others are allowed and ignored
+COLUMNS = {     # the columns each OneRoster 1.1 file must have for this reader; others are allowed and ignored
     "orgs.csv": ("sourcedId", "status", "name", "type"),
     "academicSessions.csv": ("sourcedId", "status", "title", "type", "startDate", "endDate"),
     "courses.csv": ("sourcedId", "status", "title", "orgSourcedId"),
@@ -71,12 +79,38 @@ USED = {
     "users.csv": ("sourcedId", "status", "role", "email", "givenName", "familyName"),
     "enrollments.csv": ("sourcedId", "status", "classSourcedId", "userSourcedId", "role", "primary"),
 }
+# OneRoster 1.2: users.csv lost `role` (and `orgSourcedIds`) to roles.csv; every other file read keeps its 1.1 columns.
+COLUMNS_12 = {**COLUMNS, "users.csv": ("sourcedId", "status", "email", "givenName", "familyName"),
+              ROLES: ("sourcedId", "status", "userSourcedId", "roleType", "role")}
+USED_12 = {**USED, "users.csv": ("sourcedId", "status", "email", "givenName", "familyName"),
+           ROLES: ("sourcedId", "status", "userSourcedId", "roleType", "role")}
 ROSTERED_ROLES = ("teacher", "student")      # the people a class's roster holds; others are counted, not rostered
 _ZIP_MAGIC = (b"PK\x03\x04", b"PK\x05\x06")   # a ZIP's first member, or an empty ZIP's end record
 
 
 class PackageError(Exception):
     """The upload can't be read as a roster at all. ``str()`` says what's wrong and how to fix it, in words."""
+
+
+class NeedsMap(Exception):
+    """One CSV that isn't a known export: a spreadsheet the operator maps by its columns (`roster_mapped`). Holds the file
+    as picked; nothing about it has been trusted yet."""
+
+    def __init__(self, name: str, body: bytes) -> None:
+        super().__init__("This spreadsheet needs a column map.")
+        self.name, self.body = name, body
+
+
+@dataclass(frozen=True)
+class Layout:
+    """An export's files: the ones it may hold, by lowercased name, and the ones it holds that no reader uses (named and
+    checked, never unpacked: each could hold its whole cap, and some hold passwords)."""
+    label: str                          # "OneRoster", in "isn't a OneRoster file"
+    known: Dict[str, str]
+    skip: FrozenSet[str] = frozenset()
+
+
+ONEROSTER = Layout("OneRoster", KNOWN, frozenset(OPTIONAL))
 
 
 # --- the snapshot ----------------------------------------------------------------------------------------------------
@@ -143,21 +177,26 @@ class Issue:
 # Each kind of issue: what it means and what to change, in the SIS team's words.
 ISSUE_WORDS: Dict[str, Tuple[str, str]] = {
     "skipped": ("Marked to be deleted in the export, so left out.", "Nothing to do, unless it should still be there."),
-    "no_id": ("A row has no sourcedId.", "Every row needs the SIS's ID in sourcedId."),
-    "duplicate_id": ("Two rows share one sourcedId; the first is kept.", "Each sourcedId must be unique in its file."),
+    "no_id": ("A row has no ID.", "Every row needs the SIS's ID for it (sourcedId, or the file's _id column)."),
+    "duplicate_id": ("Two rows share one ID; the first is kept.", "Each ID must be unique in its file."),
     "no_email": ("A teacher or student has no email address.",
-                 "Give them their Google Workspace address in users.csv's email column."),
+                 "Give them their Google Workspace address in the export's email column."),
     "bad_email": ("An email address isn't one address.", "Fix the email column: one plain address, no spaces."),
     "duplicate_email": ("Two people share one email address; the first is kept.", "Each person needs their own address."),
-    "unknown_class": ("An enrolment names a class that isn't in classes.csv.",
+    "unknown_class": ("An enrolment names a class that isn't in the export.",
                       "Include the class, or drop the enrolment."),
-    "unknown_person": ("An enrolment names a person who isn't in users.csv (or has no address).",
+    "unknown_person": ("An enrolment names a person who isn't in the export (or has no address).",
                        "Include the person with their address, or drop the enrolment."),
-    "role_mismatch": ("An enrolment's role isn't the person's role in users.csv.", "Make the two roles agree."),
-    "unknown_course": ("A class names a course that isn't in courses.csv.", "Include the course."),
-    "unknown_school": ("A class names a school that isn't in orgs.csv.", "Include the school."),
-    "unknown_term": ("A class names a term that isn't in academicSessions.csv.", "Include the term."),
+    "role_mismatch": ("An enrolment's role isn't a role the person has in the export.", "Make the roles agree."),
+    "unknown_course": ("A class names a course that isn't in the export.", "Include the course."),
+    "unknown_school": ("A class names a school that isn't in the export.", "Include the school."),
+    "unknown_term": ("A class names a term that isn't in the export.", "Include the term."),
     "no_title": ("A class or course has no title.", "Give it a title; it becomes the class's name in Classroom."),
+    "conflict": ("Rows for one ID disagree (a name, a title or an address); the first is kept.", "Make the rows agree."),
+    "duplicate_row": ("The same person is listed in the same class twice; the first is kept.",
+                      "Nothing to do, unless the two rows should differ."),
+    "unknown_role": ("A row's role isn't one of the words the column map gives for a teacher or a student.",
+                     "Add the word to the map, or fix the role in the spreadsheet."),
 }
 
 
@@ -241,18 +280,33 @@ def _refuse_a_huge_directory(data: bytes) -> None:
     if not record:
         return
     if record[size_at] > CENTRAL_DIRECTORY_CAP or record[entries_at] > MEMBERS_CAP:
-        raise PackageError("The ZIP lists far more entries than a OneRoster export holds. Check it's the right file.")
+        raise PackageError("The ZIP lists far more entries than a roster export holds. Check it's the right file.")
 
 
-def files_from_zip(data: bytes) -> Dict[str, bytes]:
-    """The roster files in a ZIP, by their OneRoster name. Unknown files are refused, never ignored: a roster package holds
-    only roster files, and a stray one usually means the wrong export. Optional OneRoster files are named-checked but never
-    unpacked: this reader doesn't use them, and each could hold its whole cap."""
+def _open_zip(data: bytes) -> zipfile.ZipFile:
     _refuse_a_huge_directory(data)
     try:
-        archive = zipfile.ZipFile(io.BytesIO(data))
+        return zipfile.ZipFile(io.BytesIO(data))
     except Exception as exc:  # noqa: BLE001 — BadZipFile, ValueError, OSError, NotImplementedError (an unknown version), …
         raise PackageError("That isn't a ZIP file. Choose the ZIP your SIS exported, or its CSV files.") from exc
+
+
+def zip_names(data: bytes) -> List[str]:
+    """The base names of a ZIP's files, lowercased, read from its directory alone (nothing unpacked): enough to tell which
+    export it is (`detect`). Every name is checked as `files_from_zip` checks it."""
+    with _open_zip(data) as archive:
+        infos = archive.infolist()
+        if len(infos) > MEMBERS_CAP:
+            raise PackageError(f"The ZIP holds {len(infos)} entries; a roster export holds a dozen or so. Check it's the "
+                               "right file.")
+        return [_member_name(i.filename).lower() for i in infos if not _ignored(i.filename) and not i.filename.endswith("/")]
+
+
+def files_from_zip(data: bytes, layout: Layout = ONEROSTER) -> Dict[str, bytes]:
+    """The roster files in a ZIP, by their name in ``layout``. Unknown files are refused, never ignored: a roster package
+    holds only roster files, and a stray one usually means the wrong export. The files no reader uses (``layout.skip``) are
+    name-checked but never unpacked: each could hold its whole cap, and some hold passwords."""
+    archive = _open_zip(data)
     files: Dict[str, bytes] = {}
     skipped: set = set()
     folders: set = set()
@@ -260,7 +314,7 @@ def files_from_zip(data: bytes) -> Dict[str, bytes]:
     with archive:
         infos = archive.infolist()
         if len(infos) > MEMBERS_CAP:
-            raise PackageError(f"The ZIP holds {len(infos)} entries; a OneRoster export holds a dozen or so. Check it's the "
+            raise PackageError(f"The ZIP holds {len(infos)} entries; a roster export holds a dozen or so. Check it's the "
                                "right file.")
         for info in infos:
             name = info.filename
@@ -278,13 +332,13 @@ def files_from_zip(data: bytes) -> Dict[str, bytes]:
             base = _member_name(name)
             if "/" in name:
                 folders.add(name.split("/")[0])
-            canonical = KNOWN.get(base.lower())
+            canonical = layout.known.get(base.lower())
             if canonical is None:
-                raise PackageError(f"The ZIP holds “{base[:80]}”, which isn't a OneRoster file. Choose the OneRoster export "
-                                   "itself.")
+                raise PackageError(f"The ZIP holds “{base[:80]}”, which isn't a {layout.label} file. Choose the "
+                                   f"{layout.label} export itself.")
             if canonical in files or canonical in skipped:
                 raise PackageError(f"The ZIP holds {canonical} twice. Export the roster again.")
-            if canonical in OPTIONAL:        # a OneRoster file this reader doesn't use: named, never unpacked
+            if canonical in layout.skip:     # a file no reader uses: named, never unpacked
                 skipped.add(canonical)
                 continue
             if info.compress_size and info.file_size / info.compress_size > RATIO_CAP:
@@ -307,21 +361,25 @@ def files_from_zip(data: bytes) -> Dict[str, bytes]:
     return files
 
 
-def files_from_csvs(named: Iterable[Tuple[str, bytes]]) -> Dict[str, bytes]:
-    """The roster files picked one by one (a folder's CSVs), by their OneRoster name. A picked file's name is matched, never
-    used as a path."""
+def _base(raw_name: str) -> str:
+    return (raw_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def files_from_csvs(named: Iterable[Tuple[str, bytes]], layout: Layout = ONEROSTER) -> Dict[str, bytes]:
+    """The roster files picked one by one (a folder's CSVs), by their name in ``layout``. A picked file's name is matched,
+    never used as a path."""
     files: Dict[str, bytes] = {}
     total = 0
     for raw_name, body in named:
-        base = (raw_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+        base = _base(raw_name)
         if _ignored(base):
             continue
-        canonical = KNOWN.get(base.lower())
+        canonical = layout.known.get(base.lower())
         if canonical is None:
-            raise PackageError(f"“{base[:80]}” isn't a OneRoster file. Pick the CSV files from the export, or its ZIP.")
+            raise PackageError(f"“{base[:80]}” isn't a {layout.label} file. Pick the CSV files from the export, or its ZIP.")
         if canonical in files:
             raise PackageError(f"{canonical} was picked twice.")
-        if canonical in OPTIONAL:            # read already (it was uploaded), but never parsed or kept
+        if canonical in layout.skip:         # read already (it was uploaded), but never parsed or kept
             continue
         total += len(body)
         if len(body) > MEMBER_CAP or total > TOTAL_CAP:
@@ -381,9 +439,42 @@ def _clean(text: str) -> str:
     return "".join(c for c in text if c not in _CONTROL and unicodedata.category(c) != "Cf").strip()
 
 
-def _rows(name: str, body: bytes) -> Iterator[Tuple[int, Dict[str, str]]]:
-    """Each row of a roster CSV as a dict of the columns this reader uses, with the line it starts on (the header is line
-    1). Bounded: lines, columns, fields, rows."""
+_OR11 = "That isn't OneRoster 1.1's layout: export OneRoster 1.1 CSV."
+
+
+def header_of(name: str, body: bytes) -> List[str]:
+    """A CSV's header row, stripped, read through the same bounds as its rows (for a column map's choices)."""
+    lines = _Lines(name, body)
+    try:
+        header = next(csv.reader(lines, strict=True), None)
+    except csv.Error as exc:
+        raise PackageError(f"{name} isn't readable CSV ({exc}).") from exc
+    if not header or not any(h.strip() for h in header):
+        raise PackageError(f"{name} is empty, or its first line isn't a header.")
+    if len(header) > COLUMNS_CAP:
+        raise PackageError(f"{name} has {len(header):,} columns, more than any roster file has.")
+    header = [h.strip() for h in header]
+    if any(len(h) > HEADER_CELL_CAP for h in header):
+        raise PackageError(f"{name} has a column name longer than {HEADER_CELL_CAP} characters, so its first line isn't a "
+                           "header. Export it with a header row.")
+    if any(_one_address(h.lower()) or "@" in h for h in header):
+        # A sheet exported without its header: the first line is a person's row. Mapping it would save their address
+        # as a "column name" (in a saved map) and drop them from the roster, so it's refused.
+        raise PackageError(f"The first line of {name} holds an email address, so it's a row, not a header. Export the "
+                           "spreadsheet with its header row (class ID, class name, email, role…).")
+    return header
+
+
+def _rows(name: str, body: bytes, required: Optional[Sequence[str]] = None, used: Optional[Sequence[str]] = None,
+          *, fold_case: bool = False, layout: str = _OR11, raw: Collection[str] = ("email",)
+          ) -> Generator[Tuple[int, Dict[str, str]], None, None]:
+    """Each row of a roster CSV as a dict of the columns ``used`` (default: OneRoster 1.1's for ``name``), keyed as
+    ``used`` spells them, with the line it starts on (the header is line 1). A ``required`` column missing refuses the
+    file, followed by the ``layout`` sentence. ``fold_case`` matches the header ignoring case (Clever's rule). Columns in
+    ``raw`` (addresses) are kept as given, to be checked whole; every other cell has control characters dropped. Bounded:
+    lines, columns, fields, rows."""
+    required = COLUMNS.get(name, ()) if required is None else required
+    used = USED.get(name, required) if used is None else used
     # The csv module's field limit is process-wide and the GAM parser raises it for other reads (parser.field_limit_at_least),
     # so this reader never sets it: each cell's length is checked here instead, and `_Lines` bounds each record.
     lines = _Lines(name, body)
@@ -395,15 +486,18 @@ def _rows(name: str, body: bytes) -> Iterator[Tuple[int, Dict[str, str]]]:
             raise PackageError(f"{name} is empty. Export the roster again.") from None
         lines.record_done()
         if len(header) > COLUMNS_CAP:
-            raise PackageError(f"{name} has {len(header):,} columns; OneRoster's have about twenty. That isn't a normal export.")
-        doubled = sorted({h for h in header if h and header.count(h) > 1})
+            raise PackageError(f"{name} has {len(header):,} columns, more than any roster file has. That isn't a normal "
+                               "export.")
+        keys = [h.lower() for h in header] if fold_case else header
+        doubled = sorted({h for h in keys if h and keys.count(h) > 1})
         if doubled:
             raise PackageError(f"{name} has the column {doubled[0]} twice. Export the roster again.")
-        missing = [c for c in COLUMNS.get(name, ()) if c not in header]
+        find = (lambda c: c.lower()) if fold_case else (lambda c: c)
+        missing = [c for c in required if find(c) not in keys]
         if missing:
-            raise PackageError(f"{name} is missing the column{'s' if len(missing) > 1 else ''} {', '.join(missing)}. That isn't "
-                               "OneRoster 1.1's layout: export OneRoster 1.1 CSV.")
-        wanted = [(c, header.index(c)) for c in USED.get(name, COLUMNS.get(name, ())) if c in header]
+            raise PackageError(f"{name} is missing the column{'s' if len(missing) > 1 else ''} {', '.join(missing)}. "
+                               + layout)
+        wanted = [(c, keys.index(find(c))) for c in used if find(c) in keys]
         width = len(header) + 1
         count = 0
         while True:
@@ -425,7 +519,7 @@ def _rows(name: str, body: bytes) -> Iterator[Tuple[int, Dict[str, str]]]:
             if not any(cell.strip() for cell in row):
                 continue
             # An address is kept as given and checked (`_one_address`); every other field has its control characters dropped.
-            yield start, {key: ((row[i].strip() if key == "email" else _clean(row[i])) if i < len(row) else "")
+            yield start, {key: ((row[i].strip() if key in raw else _clean(row[i])) if i < len(row) else "")
                           for key, i in wanted}
     except csv.Error as exc:
         raise PackageError(f"{name} isn't readable CSV ({exc}). Export the roster again.") from exc
@@ -433,7 +527,8 @@ def _rows(name: str, body: bytes) -> Iterator[Tuple[int, Dict[str, str]]]:
 
 def _manifest(files: Dict[str, bytes]) -> Dict[str, str]:
     if MANIFEST not in files:
-        raise PackageError("There's no manifest.csv, so this isn't a OneRoster export. Export OneRoster 1.1 CSV from your SIS.")
+        raise PackageError("There's no manifest.csv, so this isn't a OneRoster export. Export OneRoster 1.1 or 1.2 CSV from "
+                           "your SIS.")
     if len(files[MANIFEST]) > MANIFEST_CAP:
         raise PackageError("manifest.csv is far larger than a OneRoster manifest. Export the roster again.")
     try:
@@ -441,19 +536,25 @@ def _manifest(files: Dict[str, bytes]) -> Dict[str, str]:
     except csv.Error as exc:
         raise PackageError(f"manifest.csv isn't readable CSV ({exc}).") from exc
     if not rows or [c.strip() for c in rows[0][:2]] != ["propertyName", "value"]:
-        raise PackageError("manifest.csv isn't a OneRoster manifest. Export OneRoster 1.1 CSV from your SIS.")
+        raise PackageError("manifest.csv isn't a OneRoster manifest. Export OneRoster 1.1 or 1.2 CSV from your SIS.")
     return {r[0].strip(): r[1].strip() for r in rows[1:256] if len(r) >= 2}
+
+
+def oneroster_version(manifest: Dict[str, str]) -> str:
+    """"1.1" or "1.2" (the 1.2 binding says "1.2"; a SIS writing its revision, "1.2.1", is the same layout)."""
+    version = manifest.get("oneroster.version", "")
+    if version == "1.1":
+        return "1.1"
+    if version == "1.2" or version.startswith("1.2."):
+        return "1.2"
+    raise PackageError(f"The manifest says OneRoster version “{version[:20] or 'none'}”. Export OneRoster 1.1 or 1.2 CSV.")
 
 
 def check_package(files: Dict[str, bytes]) -> Dict[str, str]:
     """Refuse a package this reader can't take, with its fix: the manifest, the version, a delta export, a missing file."""
     manifest = _manifest(files)
-    version = manifest.get("oneroster.version", "")
-    if version.startswith("1.2"):
-        raise PackageError("This is OneRoster 1.2. GamGUI reads OneRoster 1.1 for now: export 1.1 CSV from your SIS.")
-    if version != "1.1":
-        raise PackageError(f"The manifest says OneRoster version “{version[:20] or 'none'}”. Export OneRoster 1.1 CSV.")
-    for name in REQUIRED:
+    needed = REQUIRED + ((ROLES,) if oneroster_version(manifest) == "1.2" else ())
+    for name in needed:
         mode = manifest.get(f"file.{name[:-4]}", "").lower()
         if mode == "delta":
             raise PackageError(f"This is a changes-only (delta) export: {name} holds changes, not the whole roster. Export a "
@@ -484,18 +585,52 @@ def _one_address(text: str) -> bool:
             and all(c.isprintable() and not c.isspace() and c not in "<>,;:\"'" for c in text))
 
 
-def read_oneroster(files: Dict[str, bytes]) -> Snapshot:
-    """A OneRoster 1.1 CSV package (already checked by ``check_package``) as a snapshot. Each file is taken out of ``files``
-    as it's read, so its bytes go once its rows are in the snapshot rather than all staying for the whole read."""
-    snap = Snapshot(source="OneRoster 1.1 CSV")
-    for line, row in _rows("orgs.csv", files.pop("orgs.csv")):
+def _roles_12(snap: Snapshot, body: bytes) -> Dict[str, Tuple[Set[str], Set[str]]]:
+    """OneRoster 1.2's roles.csv: each user's roster roles (teacher, student), as (primary, secondary). Other roles (an
+    aide, a guardian, an ``ext:`` one) aren't rostered and aren't kept."""
+    out: Dict[str, Tuple[Set[str], Set[str]]] = {}
+    for line, row in _rows(ROLES, body, COLUMNS_12[ROLES], USED_12[ROLES], layout=_OR12):
+        if _live(snap, ROLES, line, row) is None:
+            continue
+        role = row.get("role", "").lower()
+        if role not in ROSTERED_ROLES:
+            continue
+        primary, secondary = out.setdefault(row.get("userSourcedId", ""), (set(), set()))
+        (primary if row.get("roleType", "").lower() == "primary" else secondary).add(role)
+    return out
+
+
+def _role_12(roles: Optional[Tuple[Set[str], Set[str]]]) -> str:
+    """The roster role a 1.2 user is counted under: their primary role's, teacher first, else a secondary one's; "" if
+    neither is a teacher or a student. Each enrolment still carries its own role."""
+    for found in (roles or (set(), set())):
+        for role in ROSTERED_ROLES:
+            if role in found:
+                return role
+    return ""
+
+
+_OR12 = "That isn't OneRoster 1.2's layout: export OneRoster 1.2 CSV."
+
+
+def read_oneroster(files: Dict[str, bytes], version: str = "1.1") -> Snapshot:
+    """A OneRoster 1.1 or 1.2 CSV package (already checked by ``check_package``) as a snapshot. Each file is taken out of
+    ``files`` as it's read, so its bytes go once its rows are in the snapshot rather than all staying for the whole read.
+    1.2 differs only in where a person's role is: roles.csv, not users.csv."""
+    snap = Snapshot(source=f"OneRoster {version} CSV")
+    columns, used, layout = (COLUMNS_12, USED_12, _OR12) if version == "1.2" else (COLUMNS, USED, _OR11)
+
+    def rows(name: str) -> Iterator[Tuple[int, Dict[str, str]]]:
+        return _rows(name, files.pop(name), columns[name], used[name], layout=layout)
+
+    for line, row in rows("orgs.csv"):
         if (sid := _live(snap, "orgs.csv", line, row)) is None:
             continue
         if sid in snap.schools:
             snap.issue("duplicate_id", "orgs.csv", line, sid)
             continue
         snap.schools[sid] = School(sid, row.get("name", ""))
-    for line, row in _rows("academicSessions.csv", files.pop("academicSessions.csv")):
+    for line, row in rows("academicSessions.csv"):
         if (sid := _live(snap, "academicSessions.csv", line, row)) is None:
             continue
         if sid in snap.terms:
@@ -503,7 +638,7 @@ def read_oneroster(files: Dict[str, bytes]) -> Snapshot:
             continue
         snap.terms[sid] = Term(sid, row.get("title", ""), row.get("type", "").lower(), row.get("startDate", ""),
                                row.get("endDate", ""))
-    for line, row in _rows("courses.csv", files.pop("courses.csv")):
+    for line, row in rows("courses.csv"):
         if (sid := _live(snap, "courses.csv", line, row)) is None:
             continue
         if sid in snap.courses:
@@ -512,7 +647,7 @@ def read_oneroster(files: Dict[str, bytes]) -> Snapshot:
         if not row.get("title"):
             snap.issue("no_title", "courses.csv", line, sid)
         snap.courses[sid] = Course(sid, row.get("title", ""), row.get("courseCode", ""), row.get("orgSourcedId", ""))
-    for line, row in _rows("classes.csv", files.pop("classes.csv")):
+    for line, row in rows("classes.csv"):
         if (sid := _live(snap, "classes.csv", line, row)) is None:
             continue
         if sid in snap.classes:
@@ -531,29 +666,37 @@ def read_oneroster(files: Dict[str, bytes]) -> Snapshot:
                 snap.issue("unknown_term", "classes.csv", line, sid, term)
         snap.classes[sid] = Class(sid, title, course, school, terms, row.get("classCode", ""), row.get("location", ""))
     emails: Dict[str, str] = {}
-    for line, row in _rows("users.csv", files.pop("users.csv")):
+    roles = _roles_12(snap, files.pop(ROLES)) if version == "1.2" else {}
+    allowed: Dict[str, Set[str]] = {}            # each person's roster roles: an enrolment must be one of them
+    unrostered: Set[str] = set()                 # in users.csv, but no teacher or student role (an aide, a guardian…)
+    files.pop(ROLES, None)                       # a 1.1 package may carry one: never read
+    for line, row in rows("users.csv"):
         if (sid := _live(snap, "users.csv", line, row)) is None:
             continue
-        role = row.get("role", "").lower()
+        role = _role_12(roles.get(sid)) if version == "1.2" else row.get("role", "").lower()
         if role not in ROSTERED_ROLES:
             snap.others += 1
+            unrostered.add(sid)
             continue
         if sid in snap.people:
             snap.issue("duplicate_id", "users.csv", line, sid)
             continue
-        email = row.get("email", "").lower()
-        if not email:
+        given = row.get("email", "")
+        if not given:
             snap.issue("no_email", "users.csv", line, sid)
             continue
-        if not _one_address(email):
-            snap.issue("bad_email", "users.csv", line, sid, email)
+        if not _one_address(given):        # as given: lowercasing first turns a non-ASCII K (U+212A) into an ASCII k
+            snap.issue("bad_email", "users.csv", line, sid, given)
             continue
+        email = given.lower()
         if email in emails:
             snap.issue("duplicate_email", "users.csv", line, sid, email)
             continue
         emails[email] = sid
         snap.people[sid] = Person(sid, role, email, row.get("givenName", ""), row.get("familyName", ""))
-    for line, row in _rows("enrollments.csv", files.pop("enrollments.csv")):
+        allowed[sid] = (roles[sid][0] | roles[sid][1]) if version == "1.2" else {role}
+    roles.clear()
+    for line, row in rows("enrollments.csv"):
         if (sid := _live(snap, "enrollments.csv", line, row)) is None:
             continue
         role = row.get("role", "").lower()
@@ -563,29 +706,68 @@ def read_oneroster(files: Dict[str, bytes]) -> Snapshot:
         if klass not in snap.classes:
             snap.issue("unknown_class", "enrollments.csv", line, sid, klass)
             continue
+        if person in unrostered:
+            # In users.csv, but no role a class roster holds: 1.2's roles.csv is what to fix, not a missing person.
+            where = "no teacher or student row in roles.csv" if version == "1.2" else "users.csv gives another role"
+            snap.issue("role_mismatch", "enrollments.csv", line, sid, f"{role} in enrollments, {where}")
+            continue
         if person not in snap.people:
             snap.issue("unknown_person", "enrollments.csv", line, sid, person)
             continue
-        if snap.people[person].role != role:
-            snap.issue("role_mismatch", "enrollments.csv", line, sid, f"{role} in enrollments, {snap.people[person].role} in users")
+        if role not in allowed[person]:
+            where = "roles" if version == "1.2" else "users"
+            snap.issue("role_mismatch", "enrollments.csv", line, sid,
+                       f"{role} in enrollments, {'/'.join(sorted(allowed[person]))} in {where}")
             continue
         snap.enrollments.append(Enrollment(klass, person, role, row.get("primary", "").lower() == "true"))
     return snap
 
 
+_CLEVER_NAMES = ("schools.csv", "students.csv", "teachers.csv", "sections.csv")
+_ONEROSTER_ONLY = {n.lower() for n in (MANIFEST, *REQUIRED, ROLES)} - {"enrollments.csv"}
+
+
+def detect(names: Iterable[str]) -> str:
+    """Which export a set of file names is: "oneroster", "clever" or "" (unknown). By name alone, before anything is
+    unpacked: OneRoster's camelCase files and manifest, or Clever's schools, students, teachers and sections. enrollments.csv
+    is in both and decides nothing. Both kinds at once is neither."""
+    lowered = {n.lower() for n in names}
+    oneroster, clever = bool(lowered & _ONEROSTER_ONLY), bool(lowered & set(_CLEVER_NAMES))
+    if oneroster and clever:
+        raise PackageError("These files mix a OneRoster export with a Clever one. Choose one export.")
+    return "oneroster" if oneroster else "clever" if clever else ""
+
+
 def read_upload(uploads: Sequence[Tuple[str, bytes]]) -> Snapshot:
-    """What the operator picked (one ZIP, or a folder's CSV files) as a checked snapshot. Raises ``PackageError`` with the
-    fix for anything that isn't a OneRoster 1.1 roster."""
+    """What the operator picked (one ZIP, or a folder's CSV files) as a checked snapshot: OneRoster 1.1 or 1.2, or Clever.
+    Raises ``PackageError`` with the fix for anything that isn't one, and ``NeedsMap`` for one CSV that is neither (a
+    spreadsheet the operator maps by its columns)."""
+    from . import roster_clever      # it builds on this module
+
     if not uploads:
         raise PackageError("Choose the roster export: its ZIP, or the CSV files in it.")
     if sum(len(body) for _, body in uploads) > UPLOAD_CAP:
         raise PackageError(f"That's more than {UPLOAD_CAP >> 20} MB, more than a roster export should be.")
     zips = [body[:4] in _ZIP_MAGIC or name.lower().endswith(".zip") for name, body in uploads]
     if len(uploads) == 1 and zips[0]:
-        files = files_from_zip(uploads[0][1])        # a .zip that isn't one says "That isn't a ZIP file"
+        kind = detect(zip_names(uploads[0][1]))      # a .zip that isn't one says "That isn't a ZIP file"
     elif any(zips):
         raise PackageError("Choose one ZIP on its own, or the CSV files without it.")
     else:
-        files = files_from_csvs(uploads)
-    check_package(files)
-    return read_oneroster(files)
+        names = [_base(name) for name, _ in uploads if not _ignored(_base(name))]
+        if len(names) == 1 and names[0].lower().endswith(".csv"):
+            # One CSV is never a whole OneRoster or Clever export (each is five files or more), whatever it's named: a SIS
+            # report called students.csv is a spreadsheet to map, not a Clever export missing four files.
+            name, body = next((n, b) for n, b in uploads if _base(n) == names[0])
+            raise NeedsMap(names[0], body)
+        kind = detect(names)
+    if kind == "clever":
+        files = files_from_zip(uploads[0][1], roster_clever.LAYOUT) if zips[0] else files_from_csvs(uploads, roster_clever.LAYOUT)
+        return roster_clever.read_clever(files)
+    if not kind:
+        raise PackageError("This isn't an export GamGUI knows. Choose a OneRoster (1.1 or 1.2) or Clever export: its ZIP, "
+                           "or every CSV file in it. Any other SIS: export one spreadsheet (a CSV) with a row per person "
+                           "in a class, and map its columns.")
+    files = files_from_zip(uploads[0][1]) if zips[0] else files_from_csvs(uploads)
+    manifest = check_package(files)
+    return read_oneroster(files, oneroster_version(manifest))

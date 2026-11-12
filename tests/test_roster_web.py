@@ -76,16 +76,16 @@ def test_a_folders_csv_files_upload_together(client):
 
 
 def test_a_wrong_file_is_refused_with_its_fix_and_nothing_is_kept(client):
-    manifest = [row if row[0] != "oneroster.version" else ("oneroster.version", "1.2") for row in MANIFEST]
+    manifest = [row if row[0] != "oneroster.version" else ("oneroster.version", "2.0") for row in MANIFEST]
     r = _upload(client, ("export.zip", _zip(_files(**{"manifest.csv": manifest}))))
-    assert "This is OneRoster 1.2" in r.text and "No roster is kept" in r.text
+    assert "OneRoster version “2.0”" in r.text and "No roster is kept" in r.text
     assert not _store(client).path(DOMAIN).exists()
 
 
 def test_a_wrong_file_leaves_the_last_good_one_kept(client):
     _upload(client, ("good.zip", _zip(_files())))
     r = _upload(client, ("notes.txt", b"hello"))
-    assert "isn&#39;t a OneRoster file" in r.text and "Kept: good.zip" in r.text
+    assert "isn&#39;t an export GamGUI knows" in r.text and "Kept: good.zip" in r.text
 
 
 def test_more_than_the_upload_cap_is_refused_before_reading(client, monkeypatch):
@@ -104,7 +104,7 @@ def test_problems_are_grouped_for_the_sis_team_with_an_issues_csv(client):
     sheet = client.get("/classroom/import/issues.csv")
     rows = list(csv.DictReader(io.StringIO(sheet.text)))
     no_email = [row for row in rows if row["kind"] == "no_email"]
-    assert [(row["sourcedId"], row["line"], row["kind_total"]) for row in no_email] == [("U4", "5", "2"), ("U5", "6", "2")]
+    assert [(row["ID"], row["line"], row["kind_total"]) for row in no_email] == [("U4", "5", "2"), ("U5", "6", "2")]
     assert sheet.headers["content-disposition"] == 'attachment; filename="roster-issues.csv"'
 
 
@@ -235,3 +235,140 @@ def test_no_compare_or_an_incomplete_one_hands_nothing_over(client):
     client.app.state.gamgui.roster_compare["plan"].incomplete = True
     r = client.get("/classroom/import/handover.zip")
     assert r.status_code == 400 and "incomplete" in r.text
+
+
+# --- a spreadsheet mapped by its columns (plan C5.3) ---------------------------------------------------------------------
+SHEET = (b"Section ID,Class Title,Term,Email Address,User Type,Lead\r\n"
+         b"BIO-1,Biology,Fall 2026,ann@example.com,Teacher,yes\r\n"
+         b"BIO-1,Biology,Fall 2026,bo@example.com,Student,\r\n"
+         b"BIO-1,Biology,Fall 2026,cy@example.com,Student,\r\n"
+         b"ART-2,Art,Fall 2026,di@example.com,Pupil,\r\n")
+MAP_FORM = {"col_class_id": "Section ID", "col_class_name": "Class Title", "col_section": "Term",
+            "col_email": "Email Address", "col_role": "User Type", "col_primary": "Lead",
+            "teacher_words": "teacher", "student_words": "student, pupil"}
+
+
+@pytest.fixture
+def maps(client, tmp_path):
+    from gamgui.core.roster_maps import MapStore
+    client.app.state.gamgui.roster_maps = MapStore(tmp_path / "maps.json")
+    return client.app.state.gamgui.roster_maps
+
+
+def test_one_unknown_spreadsheet_asks_for_its_map_and_keeps_nothing_yet(client, maps, gam_calls):
+    r = _upload(client, ("schedule.csv", SHEET))
+    assert "Map the columns of schedule.csv" in r.text and "Read with this map" in r.text
+    assert '<option value="Email Address" selected>' in r.text           # guessed from the header
+    assert not _store(client).path(DOMAIN).exists() and ("roster_import", True) not in _audited(client)
+    held = client.app.state.gamgui.roster_pending
+    assert held["name"] == "schedule.csv" and held["domain"] == DOMAIN
+    assert not gam_calls()
+
+
+def test_the_map_shows_three_rows_read_with_it_before_anything_is_read(client, maps):
+    _upload(client, ("schedule.csv", SHEET))
+    r = client.post("/classroom/import/map/preview", data=MAP_FORM)
+    assert "The first 3 rows, read with this map" in r.text and "cy@example.com" in r.text
+    assert "di@example.com" not in r.text                     # the fourth row isn't shown
+    r = client.post("/classroom/import/map/preview", data={**MAP_FORM, "col_email": ""})
+    assert "Read with this map" in r.text and "disabled" in r.text     # a needed field unmapped: no read
+
+
+def test_reading_with_a_map_keeps_the_roster_audits_the_map_and_can_save_it(client, maps, gam_calls):
+    _upload(client, ("schedule.csv", SHEET))
+    r = client.post("/classroom/import/map/read", data={**MAP_FORM, "save_as": "District schedule"})
+    assert "Read: schedule.csv" in r.text and "Spreadsheet" in r.text
+    snap = _store(client).load(DOMAIN)
+    assert {p.email for p in snap.people.values()} == {"ann@example.com", "bo@example.com", "cy@example.com",
+                                                        "di@example.com"}
+    assert client.app.state.gamgui.roster_pending is None
+    assert maps.names() == ["District schedule"]
+    entry = next(e for e in client.app.state.gamgui.connector.audit.tail() if e["action"] == "roster_import")
+    assert entry["extra"]["mapped_fields"] == ["class_id", "class_name", "email", "primary", "role", "section"]
+    assert "ann@example.com" not in str(entry) and "Email Address" not in str(entry)     # fields, never the sheet's text
+    assert not gam_calls()
+
+
+def test_a_saved_map_that_fits_is_used_next_time_and_can_be_deleted(client, maps):
+    from gamgui.core.roster_mapped import ColumnMap
+    maps.save("Mine", ColumnMap.from_json({k[4:]: v for k, v in MAP_FORM.items() if k.startswith("col_")}
+                                          | {"teacher_words": ["teacher"], "student_words": ["student", "pupil"]}))
+    r = _upload(client, ("schedule.csv", SHEET))
+    assert '<option value="Mine" selected>' in r.text and "student, pupil" in r.text   # the saved words, not the defaults
+    r = client.post("/classroom/import/map/delete", data={**MAP_FORM, "delete": "Mine"})
+    assert maps.names() == [] and "Map the columns of schedule.csv" in r.text
+
+
+def test_cancel_purge_and_a_new_upload_drop_the_held_spreadsheet(client, maps):
+    for leave in (lambda: client.post("/classroom/import/map/cancel"), lambda: client.post("/classroom/import/purge"),
+                  lambda: _upload(client, ("export.zip", _zip(_files())))):
+        _upload(client, ("schedule.csv", SHEET))
+        assert client.app.state.gamgui.roster_pending is not None
+        leave()
+        assert client.app.state.gamgui.roster_pending is None
+    r = client.post("/classroom/import/map/read", data=MAP_FORM)
+    assert "Pick the spreadsheet again" in r.text
+
+
+def test_a_held_spreadsheet_from_another_domain_is_never_read(client, maps):
+    _upload(client, ("schedule.csv", SHEET))
+    client.app.state.gamgui.roster_pending["domain"] = "other.example"
+    r = client.post("/classroom/import/map/read", data=MAP_FORM)
+    assert "Pick the spreadsheet again" in r.text and not _store(client).path(DOMAIN).exists()
+
+
+def test_a_spreadsheet_whose_header_cant_be_read_is_refused_at_once(client, maps):
+    r = _upload(client, ("schedule.csv", b"\xff\xfe not utf-8"))
+    assert "isn&#39;t UTF-8" in r.text and client.app.state.gamgui.roster_pending is None
+
+
+# --- found by the adversarial run of C5 (2026-11-12) -----------------------------------------------------------------
+def test_a_column_change_after_picking_a_saved_map_is_kept(client, maps):
+    from gamgui.core.roster_mapped import ColumnMap
+    maps.save("Mine", ColumnMap.from_json({k[4:]: v for k, v in MAP_FORM.items() if k.startswith("col_")}
+                                          | {"student_words": ["student", "pupil"]}))
+    _upload(client, ("schedule.csv", SHEET))
+    changed = {**MAP_FORM, "use": "Mine", "col_section": ""}
+    r = client.post("/classroom/import/map/preview", data=changed, headers={"HX-Trigger-Name": "col_section"})
+    assert '<option value="Term" selected>' not in r.text            # the change stands; `use` rode along unasked
+    r = client.post("/classroom/import/map/preview", data=changed, headers={"HX-Trigger-Name": "use"})
+    assert '<option value="Term" selected>' in r.text                # picking the saved map loads it
+
+
+def test_a_refused_upload_drops_the_held_spreadsheet(client, maps):
+    _upload(client, ("schedule.csv", SHEET))
+    _upload(client, ("roster.zip", b"not a zip"))
+    assert client.app.state.gamgui.roster_pending is None
+
+
+def test_a_tenant_switch_during_a_mapped_read_keeps_nothing(client, maps, monkeypatch):
+    import gamgui.web.routes.roster as routes
+    _upload(client, ("schedule.csv", SHEET))
+    real = routes.read_mapped
+
+    def switch_mid_read(*a):
+        client.app.state.gamgui.audit_domain = "other.example"
+        return real(*a)
+    monkeypatch.setattr(routes, "read_mapped", switch_mid_read)
+    r = client.post("/classroom/import/map/read", data=MAP_FORM)
+    assert "switched to another domain" in r.text
+    assert not _store(client).path(DOMAIN).exists() and not _store(client).path("other.example").exists()
+
+
+def test_a_sheet_without_its_header_row_is_refused_before_any_map(client, maps):
+    r = _upload(client, ("schedule.csv", b"BIO-1,Biology,ann@example.com,teacher\r\nBIO-1,Biology,bo@example.com,student\r\n"))
+    assert "it&#39;s a row, not a header" in r.text and client.app.state.gamgui.roster_pending is None
+    assert maps.names() == []
+
+
+def test_one_csv_named_like_a_clever_or_oneroster_file_is_still_mapped(client, maps):
+    r = _upload(client, ("students.csv", SHEET))
+    assert "Map the columns of students.csv" in r.text
+
+
+def test_a_maps_file_moved_aside_is_said_on_the_map_step(client, maps):
+    maps.path.write_text("{not json")
+    from gamgui.core.roster_maps import MapStore
+    client.app.state.gamgui.roster_maps = MapStore(maps.path)
+    r = _upload(client, ("schedule.csv", SHEET))
+    assert "The saved maps file couldn't be read" in r.text

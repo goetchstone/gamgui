@@ -88,15 +88,69 @@ def test_a_byte_order_mark_is_dropped():
     ([], "Choose the roster export"),
     ([("roster.zip", b"not a zip at all")], "That isn't a ZIP file"),
     ([("a.zip", _zip(_files())), ("users.csv", b"x")], "one ZIP on its own"),
-    ([("notes.txt", b"x")], "isn't a OneRoster file"),
+    ([("notes.txt", b"x")], "isn't an export GamGUI knows"),
+    ([("a.csv", b"x"), ("b.csv", b"y")], "isn't an export GamGUI knows"),
+    ([("users.csv", b"x"), ("sections.csv", b"y")], "mix a OneRoster export with a Clever one"),
 ])
 def test_the_wrong_kind_of_file_is_refused_with_its_fix(uploads, says):
     _refused(uploads, says)
 
 
-def test_oneroster_1_2_says_to_export_1_1():
-    manifest = [r if r[0] != "oneroster.version" else ("oneroster.version", "1.2") for r in MANIFEST]
-    _refused(list(_files(**{"manifest.csv": manifest}).items()), "This is OneRoster 1.2")
+# OneRoster 1.2: users.csv has no role; roles.csv says it (1EdTech 1.2 CSV binding, Appendix A).
+USERS_12 = [("sourcedId", "status", "dateLastModified", "enabledUser", "username", "userIds", "givenName", "familyName",
+             "middleName", "identifier", "email", "primaryOrgSourcedId"),
+            ("U1", "", "", "true", "ann", "", "Ann", "Lee", "", "", "Ann.Lee@example.com", "S1"),
+            ("U2", "", "", "true", "bo", "", "Bo", "Ng", "", "", "bo@example.com", "S1"),
+            ("U3", "", "", "true", "cy", "", "Cy", "Oh", "", "", "cy@example.com", "S1"),
+            ("U4", "", "", "true", "di", "", "Di", "Ho", "", "", "di@example.com", "S1")]
+ROLES_12 = [("sourcedId", "status", "dateLastModified", "userSourcedId", "roleType", "role", "beginDate", "endDate",
+             "orgSourcedId", "userProfileSourcedId"),
+            ("R1", "", "", "U1", "primary", "teacher", "", "", "S1", ""),
+            ("R2", "", "", "U2", "primary", "student", "", "", "S1", ""),
+            ("R3", "", "", "U3", "primary", "aide", "", "", "S1", ""),
+            ("R4", "", "", "U4", "primary", "ext:counselor", "", "", "S1", ""),
+            ("R5", "", "", "U4", "secondary", "teacher", "", "", "S2", "")]
+MANIFEST_12 = [r if r[0] != "oneroster.version" else ("oneroster.version", "1.2") for r in MANIFEST] + [("file.roles", "bulk")]
+
+
+def _files_12(**override) -> dict:
+    return _files(**{"manifest.csv": MANIFEST_12, "users.csv": USERS_12, "roles.csv": ROLES_12, **override})
+
+
+@pytest.mark.parametrize("version", ["1.2", "1.2.1"])
+def test_oneroster_1_2_reads_each_role_from_roles_csv(version):
+    manifest = [r if r[0] != "oneroster.version" else ("oneroster.version", version) for r in MANIFEST_12]
+    enrol = ENROLLMENTS + [("E3", "", "C1", "S1", "U4", "teacher", "false")]
+    snap = read_upload([("export.zip", _zip(_files_12(**{"manifest.csv": manifest, "enrollments.csv": enrol})))])
+    assert snap.source == "OneRoster 1.2 CSV"
+    assert {p.id: p.role for p in snap.people.values()} == {"U1": "teacher", "U2": "student", "U4": "teacher"}
+    assert snap.others == 1                                   # the aide: counted, not rostered
+    assert [(e.person_id, e.role, e.primary) for e in snap.enrollments] == [
+        ("U1", "teacher", True), ("U2", "student", False), ("U4", "teacher", False)]
+    assert not snap.issue_counts
+
+
+def test_oneroster_1_2_needs_roles_csv_and_holds_enrolments_to_it():
+    _refused(list(_files_12(**{"roles.csv": None}).items()), "no roles.csv")
+    enrol = ENROLLMENTS + [("E3", "", "C1", "S1", "U2", "teacher", "false")]      # bo is only a student
+    snap = read_upload(list(_files_12(**{"enrollments.csv": enrol}).items()))
+    assert snap.issue_counts == {"role_mismatch": 1} and "in roles" in snap.issue_sample[0].detail
+
+
+def test_oneroster_1_2_user_profiles_are_named_but_never_unpacked(monkeypatch):
+    # userProfiles.csv holds per-app passwords: never read, whatever it holds.
+    data = _zip(_files_12(**{"userProfiles.csv": b"sourcedId,password\r\nP1,hunter2\r\n"}))
+    opened = []
+    real = zipfile.ZipFile.open
+    monkeypatch.setattr(zipfile.ZipFile, "open", lambda self, info, *a, **k: opened.append(getattr(info, "filename", info))
+                        or real(self, info, *a, **k))
+    read_upload([("export.zip", data)])
+    assert "userProfiles.csv" not in opened and "users.csv" in opened
+
+
+def test_a_1_1_users_csv_in_a_1_2_package_is_still_read_by_name():
+    # 1.2 reads columns by name: a users.csv that still has a role column reads the same (roles.csv decides).
+    assert read_upload([("export.zip", _zip(_files_12(**{"users.csv": USERS})))]).people["U1"].role == "teacher"
 
 
 def test_a_delta_export_says_to_export_bulk():
@@ -442,3 +496,30 @@ def test_a_linked_store_folder_is_refused(tmp_path):
     with pytest.raises(StoreError):
         RosterStore(tmp_path / "roster").save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
     assert not list((tmp_path / "elsewhere").iterdir())
+
+
+# --- found by the adversarial run of C5 (2026-11-12) -----------------------------------------------------------------
+def test_one_csv_is_a_spreadsheet_to_map_whatever_its_name():
+    for name in ("students.csv", "users.csv", "sections.csv", "schedule.csv"):
+        with pytest.raises(roster.NeedsMap):
+            read_upload([(name, b"a,b\r\n1,2\r\n")])
+
+
+def test_a_header_that_is_a_row_or_holds_a_huge_cell_is_refused():
+    with pytest.raises(PackageError, match="it's a row, not a header"):
+        roster.header_of("s.csv", b"C1,Math,ann@x.edu,teacher\r\n")
+    with pytest.raises(PackageError, match="column name longer than"):
+        roster.header_of("s.csv", b"a," + b"x" * 201 + b"\r\n")
+
+
+def test_a_kelvin_sign_address_is_refused_in_oneroster_not_lowercased_into_ascii():
+    users = USERS[:1] + [("U1", "", "teacher", "ann", "Ann", "Lee", "\u212aim@example.com")] + USERS[2:]
+    snap = read_upload(list(_files(**{"users.csv": users}).items()))
+    assert "U1" not in snap.people and snap.issue_counts.get("bad_email") == 1
+
+
+def test_a_1_2_enrolment_of_someone_without_a_roster_role_points_at_roles_csv():
+    roles = [r for r in ROLES_12 if r[3] != "U2"]                      # bo has no row in roles.csv
+    snap = read_upload(list(_files_12(**{"roles.csv": roles}).items()))
+    assert snap.issue_counts.get("role_mismatch") == 1 and "unknown_person" not in snap.issue_counts
+    assert "roles.csv" in next(i.detail for i in snap.issue_sample if i.code == "role_mismatch")

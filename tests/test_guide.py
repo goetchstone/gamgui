@@ -53,7 +53,7 @@ SCREENS = {
     "Share a calendar": ["calendars.html", "_calendar*.html", "user_detail.html"],
     "Find a class (school domains)": ["classroom.html", "_classroom_*.html", "index.html", "setup.html", "users.html",
                                       "user_detail.html", "_offboard_preview.html", "groups.html", "classroom_import.html",
-                                      "_roster_kept.html", "_roster_plan.html", "_roster_changes.html"],
+                                      "_roster_kept.html", "_roster_plan.html", "_roster_changes.html", "_roster_map.html"],
     "Audit external sharing": ["builder.html", "_builder_*.html", "_read_output.html", "_records_*.html"],
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],

@@ -4,7 +4,12 @@ Read only toward Google: nothing here calls GAM. The upload is read by `core/ros
 `core/roster_store.py` (student data: `0600`, 14 days, Purge). A package that can't be read is refused under the picker
 with its fix, and nothing is kept. Row problems are grouped by kind for the SIS team, with an Issues CSV.
 
-Both POSTs here (upload, purge) change only this Mac: `LOCAL_ONLY` in `tests/test_write_routes_guarded.py`.
+Every POST here changes only this Mac (upload, purge, the column map's steps): `LOCAL_ONLY` in
+`tests/test_write_routes_guarded.py`.
+
+A single CSV that isn't a known export (plan C5.3) isn't read at once: it's held in memory (`roster_pending` on the app's
+state, never on disk) while the operator maps its columns and sees three rows mapped, then read like any export. Maps are
+saved by name (`core/roster_maps.py`: column names and role words only, never a row).
 """
 from __future__ import annotations
 
@@ -21,7 +26,10 @@ from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
 from ...core.csv_safe import csv_safe
-from ...core.roster import ISSUE_WORDS, MEMBERS_CAP, UPLOAD_CAP, Issue, PackageError, read_upload
+from ...core.roster import (ISSUE_WORDS, MEMBERS_CAP, UPLOAD_CAP, Issue, NeedsMap, PackageError, Snapshot, header_of,
+                            read_upload)
+from ...core.roster_mapped import FIELDS, ColumnMap, guess, preview, read_mapped
+from ...core.roster_maps import MapStore
 from ...core.roster_handover import HandoverError, kept_changes
 from ...core.roster_handover import build as handover_files
 from ...core.roster_plan import KINDS, plan
@@ -36,8 +44,17 @@ _PAGE = "classroom_import.html"
 _KEPT = "_roster_kept.html"
 _PLAN = "_roster_plan.html"
 _CHANGES = "_roster_changes.html"
+_MAP = "_roster_map.html"
+PREVIEW_ROWS = 3          # rows shown mapped before anything is read (plan C5.3)
 
 router = APIRouter(prefix="/classroom/import")
+
+
+def map_store(st) -> MapStore:
+    """The saved column maps, made on first use (tests hand one in on the app state's ``roster_maps``)."""
+    if st.roster_maps is None:
+        st.roster_maps = MapStore()
+    return st.roster_maps
 
 
 def roster_store(st) -> RosterStore:
@@ -109,6 +126,8 @@ async def upload(request: Request) -> HTMLResponse:
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
+    st.roster_pending = None         # a new pick, read or refused, replaces a spreadsheet waiting for its map
+    domain = st.audit_domain         # what was picked belongs to this domain, whatever the app is on when the read ends
     try:
         uploads, refusal = await _read_picked(request)
     except Exception:  # noqa: BLE001 — a malformed or oversized multipart body: said in words, never a 500
@@ -117,21 +136,155 @@ async def upload(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": refusal})
     try:
         snap = await asyncio.to_thread(read_upload, uploads)
+    except NeedsMap as needs:
+        try:
+            header = await asyncio.to_thread(header_of, needs.name, needs.body)
+        except PackageError as exc:
+            return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": str(exc)})
+        if st.audit_domain != domain:
+            return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": _MOVED})
+        st.roster_pending = {"domain": domain, "name": needs.name, "body": needs.body, "header": header}
+        return await _map_panel(request, st, None, first=True)
     except PackageError as exc:
         return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": str(exc)})
     label = uploads[0][0] if len(uploads) == 1 else f"{len(uploads)} CSV files"
+    return await _keep(request, st, snap, label, [body for _, body in uploads], domain)
+
+
+_MOVED = "GamGUI switched to another domain while the file was read, so nothing was kept. Pick it again on its domain."
+
+
+async def _keep(request: Request, st, snap: Snapshot, label: str, bodies: List[bytes], domain: str,
+                extra: Optional[Dict[str, Any]] = None) -> HTMLResponse:
+    """Keep a read snapshot (replacing the last), audit it (what, how many; never the rows) and show it. Only on the
+    domain it was picked on: a tenant switch during the read discards it, never keeps one district's roster under
+    another's name."""
+    if st.audit_domain != domain or st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": _MOVED})
     hasher = hashlib.sha256()        # piece by piece: joining the bytes first was another copy of the whole upload
-    for _, body in uploads:
+    for body in bodies:
         hasher.update(body)
     digest = hasher.hexdigest()
     try:
-        meta = await asyncio.to_thread(roster_store(st).save, st.audit_domain, snap, label, digest)
+        meta = await asyncio.to_thread(roster_store(st).save, domain, snap, label, digest)
     except StoreError as exc:
         return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": str(exc)})
-    st.connector.audit.record("roster_import", connector="local", target=st.audit_domain, ok=True,
+    st.connector.audit.record("roster_import", connector="local", target=domain, ok=True,
                               extra={"source": snap.source, "label": label, "sha256": digest, "counts": meta["counts"],
-                                     "issues": snap.issue_counts})
+                                     "issues": snap.issue_counts, **(extra or {})})
     return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "just_read": True})
+
+
+# --- a spreadsheet mapped by its columns (C5.3) ------------------------------------------------------------------------
+def _pending(st) -> Optional[dict]:
+    """The spreadsheet waiting for its map, if it was picked on this domain."""
+    held = st.roster_pending
+    return held if held and held.get("domain") == st.audit_domain else None
+
+
+def _map_from(form) -> ColumnMap:
+    """The map as the form posts it: a column per field ("" = not used) and the role words, comma-separated."""
+    def words(key: str, default: str) -> List[str]:
+        raw = str(form.get(key, default) or "")[:400]
+        return [w.strip().lower() for w in raw.split(",") if w.strip()][:20]
+    return ColumnMap.from_json({**{key: str(form.get(f"col_{key}", "") or "")[:200] for key, _, _ in FIELDS},
+                                "teacher_words": words("teacher_words", "teacher"),
+                                "student_words": words("student_words", "student")})
+
+
+async def _map_panel(request: Request, st, cmap: Optional[ColumnMap], *, first: bool = False, error: str = "",
+                     using: str = "") -> HTMLResponse:
+    """The mapping step: the spreadsheet's columns, the map (a saved one that fits, or a guess, on first showing), and
+    ``PREVIEW_ROWS`` rows read with it. Nothing is kept until "Read with this map"."""
+    held = _pending(st)
+    if held is None:
+        return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st),
+                                                           "upload_error": "Pick the spreadsheet again."})
+    header: List[str] = held["header"]
+    store = map_store(st)
+    saved = await asyncio.to_thread(store.names)
+    if cmap is None:
+        fits = [n for n in saved if (m := store.get(n)) is not None and not m.problem(header)]
+        found = store.get(fits[0]) if first and fits else None
+        cmap, using = (found, fits[0]) if found is not None else (guess(header), "")
+    problem = cmap.problem(header)
+    rows: List[Dict[str, str]] = []
+    if not problem:
+        try:
+            rows = await asyncio.to_thread(preview, held["name"], held["body"], cmap, PREVIEW_ROWS)
+        except PackageError as exc:
+            problem = str(exc)
+    return TEMPLATES.TemplateResponse(request, _MAP, {
+        "name": held["name"], "header": header, "cmap": cmap, "fields": FIELDS, "rows": rows, "problem": problem,
+        "error": error, "saved": saved, "using": using, "set_aside": store.set_aside})
+
+
+@router.post("/map/preview", response_class=HTMLResponse)
+async def map_preview(request: Request) -> HTMLResponse:
+    """Show the map again with what was changed, or with a saved map picked (``use``)."""
+    st = app_state(request)
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
+    form = await request.form(max_files=0, max_fields=32)
+    # Every control posts the whole form, so `use` is posted with each change: it loads a saved map only when its own
+    # select changed (htmx names the control that fired), or a column changed after picking one would be undone.
+    use = str(form.get("use", "") or "") if request.headers.get("HX-Trigger-Name") == "use" else ""
+    chosen = map_store(st).get(use) if use else None
+    if chosen is not None:
+        return await _map_panel(request, st, chosen, using=use)
+    return await _map_panel(request, st, _map_from(form))
+
+
+@router.post("/map/read", response_class=HTMLResponse)
+async def map_read(request: Request) -> HTMLResponse:
+    """Read the held spreadsheet with the posted map and keep it, like any export; save the map first when it's named."""
+    st = app_state(request)
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
+    form = await request.form(max_files=0, max_fields=32)
+    cmap = _map_from(form)
+    held = _pending(st)
+    if held is None or cmap.problem(held["header"]):
+        return await _map_panel(request, st, cmap)
+    save_as = str(form.get("save_as", "") or "").strip()
+    if save_as:
+        try:
+            await asyncio.to_thread(map_store(st).save, save_as, cmap)
+        except ValueError as exc:
+            return await _map_panel(request, st, cmap, error=str(exc))
+    try:
+        snap = await asyncio.to_thread(read_mapped, held["name"], held["body"], cmap)
+    except PackageError as exc:
+        return await _map_panel(request, st, cmap, error=str(exc))
+    if st.roster_pending is not held:         # dropped, replaced or switched away from while it was read: keep nothing
+        return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": _MOVED})
+    st.roster_pending = None
+    # Audited with which fields were mapped, never the column names: a name is the spreadsheet's text.
+    mapped = sorted(key for key, _, _ in FIELDS if cmap.column(key))
+    return await _keep(request, st, snap, held["name"], [held["body"]], held["domain"], {"mapped_fields": mapped})
+
+
+@router.post("/map/delete", response_class=HTMLResponse)
+async def map_delete(request: Request) -> HTMLResponse:
+    """Delete a saved map (never the spreadsheet), and show the map step again as it was."""
+    st = app_state(request)
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
+    form = await request.form(max_files=0, max_fields=32)
+    name = str(form.get("delete", "") or "")
+    if name:
+        await asyncio.to_thread(map_store(st).delete, name)
+    return await _map_panel(request, st, _map_from(form))
+
+
+@router.post("/map/cancel", response_class=HTMLResponse)
+async def map_cancel(request: Request) -> HTMLResponse:
+    """Drop the held spreadsheet without reading it."""
+    st = app_state(request)
+    st.roster_pending = None
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
+    return TEMPLATES.TemplateResponse(request, _KEPT, await asyncio.to_thread(_kept, st))
 
 
 @router.post("/purge", response_class=HTMLResponse)
@@ -140,6 +293,7 @@ async def purge(request: Request) -> HTMLResponse:
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
+    st.roster_pending = None
     try:
         gone = await asyncio.to_thread(roster_store(st).purge, st.audit_domain)
     except StoreError as exc:
@@ -161,7 +315,7 @@ async def issues_csv(request: Request) -> Response:
         return Response("The kept roster couldn't be read.\n", status_code=500, media_type="text/plain")
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(["kind", "cause", "fix", "file", "line", "sourcedId", "detail", "kind_total"])
+    writer.writerow(["kind", "cause", "fix", "file", "line", "ID", "detail", "kind_total"])
     for kind in _issues(found, shown=None):
         for i in kind["rows"]:
             writer.writerow([csv_safe(v) for v in (kind["code"], kind["cause"], kind["fix"], i.file, i.row, i.source_id,
