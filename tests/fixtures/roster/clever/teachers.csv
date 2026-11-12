@@ -1,0 +1,5 @@
+School_id,Teacher_id,Teacher_number,State_teacher_id,Teacher_email,First_name,Middle_name,Last_name,Title,Username,Password
+5f2a0c1e9d3b4a0012ab0001,6a10000000000000000000a1,T100,ST-T100,Ann.Lee@Example.edu,Ann,May,Lee,Ms.,alee,CleverTeacherPw-1
+5f2a0c1e9d3b4a0012ab0001,6a10000000000000000000a2,T101,ST-T101,ben.ortiz@example.edu,Ben,,Ortiz,Mr.,bortiz,CleverTeacherPw-2
+5f2a0c1e9d3b4a0012ab0002,6a10000000000000000000a3,T200,ST-T200,cara.diaz@example.edu,Cara,,Diaz,Dr.,cdiaz,CleverTeacherPw-3
+5f2a0c1e9d3b4a0012ab0002,6a10000000000000000000a1,T100,ST-T100,ann.lee@example.edu,Ann,May,Lee,Ms.,alee,CleverTeacherPw-1

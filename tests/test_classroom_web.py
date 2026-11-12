@@ -167,6 +167,11 @@ def test_a_tenant_switch_drops_the_class_index(client):
     assert st.course_cache.cached is None and st.course_index_failed is None
 
 
+# The column map's steps (plan C5.3): hold, map, read and keep a spreadsheet on this Mac, or save a map. No GAM.
+MAP_POSTS = {"/classroom/import/map/preview", "/classroom/import/map/read", "/classroom/import/map/delete",
+             "/classroom/import/map/cancel"}
+
+
 def test_the_screen_posts_nothing(client):
     # Read only (the plan's E2): no route under /classroom writes to Google. The only POSTs are the import's two, which keep
     # or delete a roster on this Mac and call no GAM (LOCAL_ONLY in test_write_routes_guarded; test_roster_web checks the
@@ -175,7 +180,7 @@ def test_the_screen_posts_nothing(client):
     assert set(paths) == {"/classroom", "/classroom/search", "/classroom/class", "/classroom/person", "/classroom/owned.csv",
                           "/classroom/creators", "/classroom/import", "/classroom/import/upload", "/classroom/import/purge",
                           "/classroom/import/issues.csv", "/classroom/import/compare", "/classroom/import/compare/status",
-                          "/classroom/import/changes", "/classroom/import/handover.zip"}   # the scan sees the screen
+                          "/classroom/import/changes", "/classroom/import/handover.zip", *MAP_POSTS}   # the scan sees the screen
     posts = {p for p, ops in paths.items() if set(ops) != {"get"}}
-    assert posts == {"/classroom/import/upload", "/classroom/import/purge", "/classroom/import/compare"}
+    assert posts == {"/classroom/import/upload", "/classroom/import/purge", "/classroom/import/compare", *MAP_POSTS}
     assert all(set(paths[p]) == {"post"} for p in posts)

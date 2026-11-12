@@ -77,6 +77,8 @@ LOCAL_ONLY = {
     "/lifecycle/templates/save", "/lifecycle/templates/delete", "/lifecycle/templates/default",
     # A SIS roster export read and kept on this Mac, or deleted from it (plan 2026-11-11 C2). Nothing reaches Google.
     "/classroom/import/upload", "/classroom/import/purge",
+    # A spreadsheet held in memory while its columns are mapped, then read and kept like an export; a map saved by name.
+    "/classroom/import/map/preview", "/classroom/import/map/read", "/classroom/import/map/delete", "/classroom/import/map/cancel",
     "/classroom/import/compare",   # reads Classroom only: the change list is never applied (plan 2026-11-11 E2)
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation

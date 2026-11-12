@@ -1,0 +1,4 @@
+School_id,Section_id,Teacher_id,Teacher_2_id,Teacher_3_id,Teacher_4_id,Teacher_5_id,Teacher_6_id,Teacher_7_id,Teacher_8_id,Teacher_9_id,Teacher_10_id,Name,Section_number,Grade,Course_name,Course_number,Course_description,Period,Subject,Term_name,Term_start,Term_end
+5f2a0c1e9d3b4a0012ab0001,8c3000000000000000000c01,6a10000000000000000000a1,6a10000000000000000000a2,,,,,,,,,Biology - P2,BIO-2,10,Biology,BIO101,Cells and systems,2,science,Fall 2026,08/20/2026,12/18/2026
+5f2a0c1e9d3b4a0012ab0001,8c3000000000000000000c02,6a10000000000000000000a2,6a10000000000000000000a2,6a10000000000000000000ff,,,,,,,,,ALG-3,10,Algebra I,MATH201,,3,math,Fall 2026,08/20/2026,12/18/2026
+5f2a0c1e9d3b4a0012ab0002,8c3000000000000000000c03,6a10000000000000000000a3,,,,,,,,,,,ART-1,7,Art,,,,arts,,,

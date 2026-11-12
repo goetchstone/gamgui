@@ -1,0 +1,3 @@
+School_id,School_name,School_number,State_id,Low_grade,High_grade,Principal,Principal_email,School_address,School_city,School_state,School_zip,School_phone
+5f2a0c1e9d3b4a0012ab0001,Lincoln High School,101,ST-101,9,12,Dana Wu,dwu@lincoln.example.edu,1 Main St,Springfield,IL,62701,555-0100
+5f2a0c1e9d3b4a0012ab0002,Roosevelt Middle School,102,ST-102,6,8,Eli Fox,efox@roosevelt.example.edu,9 Oak Ave,Springfield,IL,62702,555-0200

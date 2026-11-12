@@ -1,0 +1,85 @@
+{#- Map a spreadsheet's columns (plan 2026-11-11 C5.3). The file is held in memory, not kept, until "Read with this map";
+    three rows are shown read with the map first. Every change re-posts the form to /map/preview. -#}
+<form id="roster-map" class="space-y-4" hx-post="/classroom/import/map/read" hx-disabled-elt="this" hx-target="#roster-kept" hx-swap="innerHTML"
+      hx-disabled-elt="find button[type=submit]">
+  <div>
+    <h2 class="font-serif text-xl text-brand-black" tabindex="-1" data-focus>Map the columns of {{ name }}</h2>
+    <p class="mt-1 text-sm text-brand-blueink">This isn't an export GamGUI knows, so say which column holds what. Each row is
+      one person in one class. Nothing is kept until you read it.</p>
+  </div>
+  {% if error %}<div>{% with ok=False, message=error %}{% include "_action_result.html" %}{% endwith %}</div>{% endif %}
+  {% if set_aside %}<p class="text-sm text-amber-800">The saved maps file couldn't be read, so it was moved aside to {{ set_aside.name }} and no saved maps are showing.</p>{% endif %}
+
+  {% if saved %}
+  <div class="flex flex-wrap items-end gap-2 text-sm">
+    <label class="flex flex-col gap-1"><span class="text-xs text-brand-grayink">Use a saved map</span>
+      <select name="use" class="rounded-lg border border-brand-field bg-brand-white px-2 py-1.5"
+              hx-post="/classroom/import/map/preview" hx-trigger="change" hx-disabled-elt="this" hx-target="#roster-kept" hx-swap="innerHTML" hx-include="#roster-map">
+        <option value="">—</option>
+        {% for n in saved %}<option value="{{ n }}"{% if n == using %} selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select>
+    </label>
+    {% if using %}
+    <button type="button" name="delete" value="{{ using }}" hx-post="/classroom/import/map/delete" hx-disabled-elt="this" hx-target="#roster-kept"
+            hx-swap="innerHTML" hx-include="#roster-map" hx-confirm="Delete the saved map “{{ using }}”? The spreadsheet isn't affected."
+            class="rounded-lg border border-brand-field px-2.5 py-1.5 text-xs text-brand-blueink hover:bg-paper">Delete “{{ using }}”</button>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <fieldset class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <legend class="sr-only">Which column holds what</legend>
+    {% for key, label, required in fields %}
+    <label class="flex flex-col gap-1 text-sm"><span class="text-xs text-brand-grayink">{{ label }}{% if required %} <span class="text-brand-black">(needed)</span>{% endif %}</span>
+      <select name="col_{{ key }}" class="rounded-lg border border-brand-field bg-brand-white px-2 py-1.5"
+              hx-post="/classroom/import/map/preview" hx-trigger="change" hx-disabled-elt="this" hx-target="#roster-kept" hx-swap="innerHTML" hx-include="#roster-map">
+        <option value="">{{ "— choose —" if required else "— not used —" }}</option>
+        {% for column in header %}{% if column %}<option value="{{ column }}"{% if column == cmap[key] %} selected{% endif %}>{{ column }}</option>{% endif %}{% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <label class="flex flex-col gap-1 text-sm"><span class="text-xs text-brand-grayink">Role words for a teacher</span>
+      <input name="teacher_words" value="{{ cmap.teacher_words | join(', ') }}" class="rounded-lg border border-brand-field bg-brand-white px-2 py-1.5"
+             hx-post="/classroom/import/map/preview" hx-trigger="change" hx-disabled-elt="this" hx-target="#roster-kept" hx-swap="innerHTML" hx-include="#roster-map" />
+    </label>
+    <label class="flex flex-col gap-1 text-sm"><span class="text-xs text-brand-grayink">Role words for a student</span>
+      <input name="student_words" value="{{ cmap.student_words | join(', ') }}" class="rounded-lg border border-brand-field bg-brand-white px-2 py-1.5"
+             hx-post="/classroom/import/map/preview" hx-trigger="change" hx-disabled-elt="this" hx-target="#roster-kept" hx-swap="innerHTML" hx-include="#roster-map" />
+    </label>
+  </fieldset>
+
+  {% if problem %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">{{ problem }}</p>
+  {% else %}
+  <div>
+    <h3 class="eyebrow text-brand-grayink">The first {{ rows | length }} row{{ "s" if rows | length != 1 }}, read with this map</h3>
+    {% if rows %}
+    <div class="mt-2 overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="text-left text-brand-grayink"><tr>
+          {% for key, label, _ in fields %}<th scope="col" class="py-1 pr-3 font-medium">{{ label }}</th>{% endfor %}
+          <th scope="col" class="py-1 font-medium">Read as</th></tr></thead>
+        <tbody class="text-brand-black">
+          {% for r in rows %}<tr class="border-t border-brand-gray/30">
+            {% for key, _, _ in fields %}<td class="max-w-[12rem] truncate py-1 pr-3">{{ r[key] }}</td>{% endfor %}
+            <td class="py-1 {{ 'text-amber-800' if not r['as'] }}">{{ r["as"] or "neither: check the role words" }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="mt-1 text-sm text-brand-blueink">The spreadsheet has no rows after its header.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="flex flex-wrap items-end gap-3 border-t border-brand-gray/30 pt-3">
+    <label class="flex flex-col gap-1 text-sm"><span class="text-xs text-brand-grayink">Save this map as (optional)</span>
+      <input name="save_as" maxlength="60" class="rounded-lg border border-brand-field bg-brand-white px-2 py-1.5" placeholder="e.g. District schedule export" />
+    </label>
+    <button type="submit"{% if problem %} disabled{% endif %}
+            class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink disabled:opacity-50">Read with this map</button>
+    <button type="button" hx-post="/classroom/import/map/cancel" hx-disabled-elt="this" hx-target="#roster-kept" hx-swap="innerHTML"
+            class="text-xs font-medium text-brand-blueink underline hover:text-brand-black">Cancel</button>
+  </div>
+  <p class="text-[11px] text-brand-grayink">A saved map holds column names and role words only, never a row.</p>
+</form>

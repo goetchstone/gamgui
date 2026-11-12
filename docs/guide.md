@@ -194,8 +194,11 @@ what they're in. Offboarding someone who owns classes names them in the preview,
 whoever gives them a new owner in Classroom before the account is deleted. Under the class finder, **Who can create
 classes** names the Classroom Teachers group; add staff to it on **Groups**.
 
-**Plan an import** reads your student information system's roster export. Export **OneRoster 1.1** as CSV, a full
-(bulk) export, then choose its ZIP, or every CSV in its folder, and click **Read the export**. A file it can't use is
+**Plan an import** reads your student information system's roster export. Export **OneRoster 1.1 or 1.2** as CSV, a
+full (bulk) export, or **Clever's CSV files**, then choose its ZIP, or every CSV in its folder, and click **Read the
+export**. Any other SIS: export one spreadsheet as CSV with a row per person in a class. GamGUI asks which column holds
+the class ID, class name, email and role (and a section and primary teacher, if you have them), shows three rows read
+that way, and reads it when you click **Read with this map**. Name the map to save it for next term. A file it can't use is
 refused under the picker with what to export instead, and nothing is kept. One it can read shows its counts and the
 **Problems to fix in your SIS**, each kind with its cause and fix; **Issues CSV** gives your SIS team the rows. The
 roster is read on this Mac and kept here for 14 days; **Purge it now** deletes it sooner.

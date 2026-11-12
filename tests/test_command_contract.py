@@ -476,7 +476,8 @@ AUDITED_OUTSIDE_CONNECTOR = {
     ("gamgui/core/setup.py", "remove_domain"): "Setup's Remove deletes a domain's Keychain credentials",
     ("gamgui/web/routes/lifecycle.py", "offboard_run"): "`offboard_plan`: the steps left out of an offboarding",
     ("gamgui/web/routes/incident.py", "secure_apply"): "`incident_secure`: the steps one Secure run planned",
-    ("gamgui/web/routes/roster.py", "upload"): "`roster_import`: a SIS roster (student data) kept on this Mac — counts, "
+    ("gamgui/web/routes/roster.py", "_keep"): "`roster_import`: a SIS roster (student data) kept on this Mac, from an "
+                                               "export or a mapped spreadsheet — counts, "
                                                "never rows",
     ("gamgui/web/routes/roster.py", "purge"): "`roster_purge`: the kept roster deleted from this Mac",
     ("gamgui/web/routes/roster.py", "handover"): "`roster_handover`: the change list handed over as files run outside "

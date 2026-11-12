@@ -35,7 +35,7 @@
         <p class="mt-1 text-xs text-brand-blueink"><span class="font-medium">Fix:</span> {{ kind.fix }}</p>
         <table class="mt-2 w-full text-xs">
           <caption class="sr-only">{{ kind.cause }}</caption>
-          <thead class="text-left text-brand-grayink"><tr><th scope="col" class="py-1 pr-2 font-medium">File</th><th scope="col" class="py-1 pr-2 font-medium">Line</th><th scope="col" class="py-1 pr-2 font-medium">sourcedId</th><th scope="col" class="py-1 font-medium">Detail</th></tr></thead>
+          <thead class="text-left text-brand-grayink"><tr><th scope="col" class="py-1 pr-2 font-medium">File</th><th scope="col" class="py-1 pr-2 font-medium">Line</th><th scope="col" class="py-1 pr-2 font-medium">ID</th><th scope="col" class="py-1 font-medium">Detail</th></tr></thead>
           <tbody class="divide-y divide-brand-gray/20">
             {% for i in kind.rows %}<tr><td class="py-1 pr-2">{{ i.file }}</td><td class="py-1 pr-2">{{ i.row }}</td><td class="py-1 pr-2 font-mono">{{ i.source_id }}</td><td class="max-w-0 truncate py-1">{{ i.detail }}</td></tr>{% endfor %}
           </tbody>

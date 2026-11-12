@@ -94,7 +94,9 @@ guarding them:
   be, and its preview is a sandboxed `srcdoc` frame that inherits the page's policy — and `img-src`
   allows any `https:` image, for the logos in those signatures.
 - **A student roster upload is read as hostile, and kept briefly.** On a school domain the operator can upload a SIS
-  export (OneRoster 1.1). `core/roster.py` never extracts it and never treats a name inside it as a path: a member is
+  export (OneRoster 1.1 or 1.2, Clever's CSV, or one spreadsheet mapped by its columns). Only the columns a roster needs
+  are ever read from a row, so the passwords some exports carry (Clever's, OneRoster 1.2's userProfiles.csv) are never
+  read, and the files that hold nothing else are never unpacked. `core/roster.py` never extracts it and never treats a name inside it as a path: a member is
   matched by its base name against OneRoster's own, and a link, an encrypted member, `..`, an absolute name, a backslash,
   a NUL or nested folders refuse the package. Sizes are counted while unpacking, never taken from the archive's headers,
   and members, rows, fields and the unpacked total are all capped. What it read (names and addresses of teachers and
