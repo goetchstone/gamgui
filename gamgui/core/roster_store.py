@@ -12,6 +12,8 @@ Nothing here talks to Google. The snapshot is what the planner (C3) compares wit
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -20,13 +22,13 @@ import stat
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 from .paths import app_data_dir
 from .roster import Class, Course, Enrollment, Issue, Person, School, Snapshot, Term
 
 KEEP_DAYS = 14
-_LOCK = threading.RLock()     # one save, read or purge at a time: two saves of one domain once swept each other's temp
+_LOCK = threading.RLock()     # one save, read or purge at a time in this process; `_held` adds a flock for every process
 _SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE schools (id TEXT PRIMARY KEY, name TEXT NOT NULL);
@@ -81,6 +83,26 @@ class RosterStore:
         os.chmod(self.root, 0o700)       # lstat said a folder, not a link
         return self.root
 
+    @contextlib.contextmanager
+    def _held(self, make: bool) -> Iterator[Optional[Path]]:
+        """The folder (as ``_folder``), held for one save, read or purge: ``_LOCK`` for this process's threads, and an
+        exclusive flock on the folder for every process sharing it (a dev run beside the installed app), so no sweep can
+        delete a save another process is still writing. None, unlocked, when there's no folder and ``make`` is off."""
+        with _LOCK:
+            folder = self._folder(make)
+            if folder is None:
+                yield None
+                return
+            try:
+                fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            except OSError as exc:
+                raise StoreError(f"Couldn't open the roster folder on this Mac ({exc}).") from exc
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                yield folder
+            finally:
+                os.close(fd)                 # closing the descriptor releases the flock
+
     def path(self, domain: str) -> Path:
         """The domain's snapshot file: named by a hash, so a domain's spelling never becomes a path."""
         key = hashlib.sha256(domain.strip().lower().encode()).hexdigest()[:24]
@@ -88,18 +110,16 @@ class RosterStore:
 
     # --- keep, read, purge --------------------------------------------------------------------------------------------
     def save(self, domain: str, snap: Snapshot, label: str, sha256: str) -> Dict[str, object]:
-        """Keep ``snap`` as the domain's roster, replacing any earlier one. Returns its metadata. One save or purge at a
-        time (``_LOCK``): two saves of one domain once swept each other's temp file."""
-        with _LOCK:
+        """Keep ``snap`` as the domain's roster, replacing any earlier one. Returns its metadata. One save, read or purge
+        at a time, across processes (``_held``): two saves of one domain once swept each other's temp file."""
+        with self._held(make=True):
             return self._save(domain, snap, label, sha256)
 
     def _save(self, domain: str, snap: Snapshot, label: object, sha256: object) -> Dict[str, object]:
-        folder = self._folder(make=True)
-        assert folder is not None
         final = self.path(domain)
         temp = final.with_name(f".saving-{os.getpid()}-{final.name}")
         try:
-            self._sweep(final)               # a save a quit cut off left its whole snapshot here: never kept
+            self._sweep()                    # a save a quit cut off left its whole snapshot here: never kept
         except OSError as exc:
             raise StoreError(f"Couldn't keep the roster on this Mac ({exc}).") from exc
         now = self.now()
@@ -142,21 +162,19 @@ class RosterStore:
             raise StoreError(f"Couldn't keep the roster on this Mac ({exc}).") from exc
         return meta
 
-    def _sweep(self, final: Path) -> None:
-        """Delete every half-written save of ``final``, whichever process wrote it, and its journals. A link is removed as a
-        link, never followed; a folder by that name is left (it can't hold a save, and refusing on it once blocked a purge)."""
-        prefix, suffix = ".saving-", f"-{final.name}"
+    def _sweep(self) -> None:
+        """Delete every half-written save in the folder, of any domain and whichever process wrote it, and its journals.
+        Called only under ``_held``, so none of them is still being written: each is a save a quit or crash cut off, and
+        holds student data. A link is removed as a link, never followed; a folder by that name is left (it can't hold a
+        save, and refusing on it once blocked a purge)."""
         for name in os.listdir(self.root):
-            stem = name.removesuffix("-journal").removesuffix("-wal").removesuffix("-shm")
-            if stem.startswith(prefix) and stem.endswith(suffix):
+            if name.startswith(".saving-") and name.endswith((".sqlite", ".sqlite-journal", ".sqlite-wal", ".sqlite-shm")):
                 path = self.root / name
                 if stat.S_ISDIR(os.lstat(path).st_mode):
                     continue
                 os.unlink(path)
 
     def _open(self, domain: str) -> Optional[sqlite3.Connection]:
-        if self._folder(make=False) is None:
-            return None
         path = self.path(domain)
         try:
             info = os.lstat(path)
@@ -171,11 +189,16 @@ class RosterStore:
 
     def meta(self, domain: str) -> Optional[Dict[str, object]]:
         """The kept roster's metadata, or None when there's none. One past its days is deleted here, and reads as none. One
-        that can't be read is deleted too, and said: its days can't be told, and student data never stays unbounded."""
-        with _LOCK:
-            return self._meta(domain)
+        that can't be read is deleted too, and said: its days can't be told, and student data never stays unbounded. Every
+        look sweeps half-written saves first: one a crash left would otherwise sit there with no Purge shown."""
+        with self._held(make=False) as folder:
+            return None if folder is None else self._meta(domain)
 
     def _meta(self, domain: str) -> Optional[Dict[str, object]]:
+        try:
+            self._sweep()
+        except OSError as exc:
+            raise StoreError(f"Couldn't delete a half-written copy of the kept roster ({exc}).") from exc
         con = self._open(domain)
         if con is None:
             return None
@@ -206,8 +229,8 @@ class RosterStore:
 
     def load(self, domain: str) -> Optional[Snapshot]:
         """The kept roster, whole, or None when there's none (or it has expired)."""
-        with _LOCK:
-            return self._load(domain)
+        with self._held(make=False) as folder:
+            return None if folder is None else self._load(domain)
 
     def _load(self, domain: str) -> Optional[Snapshot]:
         meta = self._meta(domain)
@@ -238,8 +261,8 @@ class RosterStore:
     def issues(self, domain: str) -> Optional[Tuple[Dict[str, int], List[Issue]]]:
         """The kept roster's issue counts and kept rows, without the rest of it: what the import page shows on every view
         (loading every person and enrolment to show them cost seconds on a district's roster). None when there's none."""
-        with _LOCK:
-            if self._meta(domain) is None:
+        with self._held(make=False) as folder:
+            if folder is None or self._meta(domain) is None:
                 return None
             con = self._open(domain)
             if con is None:
@@ -255,12 +278,10 @@ class RosterStore:
 
     def purge(self, domain: str) -> bool:
         """Delete the domain's kept roster, and any half-written save of it. True when there was one."""
-        with _LOCK:
-            return self._purge(domain)
+        with self._held(make=False) as folder:
+            return False if folder is None else self._purge(domain)
 
     def _purge(self, domain: str) -> bool:
-        if self._folder(make=False) is None:
-            return False
         path = self.path(domain)
         found = True
         try:
@@ -275,7 +296,7 @@ class RosterStore:
             except OSError:
                 pass
         try:
-            self._sweep(path)                # a half-written save holds the same student data
+            self._sweep()                    # a half-written save holds the same student data
         except OSError as exc:
             raise StoreError(f"Deleted the kept roster, but not a half-written copy of it ({exc}).") from exc
         return found

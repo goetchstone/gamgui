@@ -432,6 +432,41 @@ def test_a_save_a_quit_cut_off_is_swept_by_the_next_save_and_by_purge(tmp_path):
     assert sorted(p.name for p in final.parent.iterdir()) == [final.name]
 
 
+@pytest.mark.parametrize("kept", [True, False])
+def test_a_save_a_crash_cut_off_is_swept_by_the_next_look(tmp_path, kept):
+    store = RosterStore(tmp_path / "roster")
+    snap = read_upload([("x.zip", _zip(_files()))])
+    store.save("example.com", snap, "x", "")
+    if not kept:
+        store.purge("example.com")
+    final = store.path("example.com")
+    other = store.path("other.example.com")                          # any domain's leftover holds student data
+    for stale in (final.with_name(f".saving-99999-{final.name}"), other.with_name(f".saving-7-{other.name}")):
+        stale.write_bytes(b"ann.lee@example.com")
+        (final.parent / f"{stale.name}-journal").write_bytes(b"x")
+    assert (store.meta("example.com") is not None) is kept
+    assert sorted(p.name for p in final.parent.iterdir()) == ([final.name] if kept else [])
+
+
+def test_a_look_waits_for_another_process_holding_the_folder(tmp_path):
+    import fcntl
+    import threading
+    store = RosterStore(tmp_path / "roster")
+    store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    final = store.path("example.com")
+    writing = final.with_name(f".saving-99999-{final.name}")         # another process's save, mid-write
+    writing.write_bytes(b"ann.lee@example.com")
+    fd = os.open(tmp_path / "roster", os.O_RDONLY)                   # its own descriptor: the lock another process holds
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    looked = threading.Thread(target=store.purge, args=("example.com",))
+    looked.start()
+    looked.join(0.3)
+    assert looked.is_alive() and writing.exists() and final.exists()     # neither swept nor purged under its save
+    os.close(fd)
+    looked.join(5)
+    assert not looked.is_alive() and not writing.exists() and not final.exists()
+
+
 @pytest.mark.parametrize("expires", ['"garbage"', '"2099-01-01T00:00:00+00:00"', "5", '"9999-01-01T00:00:00Z"'])
 def test_an_expiry_it_cant_trust_deletes_the_snapshot(tmp_path, expires):
     import sqlite3

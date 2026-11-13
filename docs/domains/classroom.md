@@ -113,8 +113,11 @@ guard; only its read side is adapted here.
   that isn't there, rows marked to be deleted.
 - **`core/roster_store.py`** keeps one snapshot per domain: SQLite, named by a hash of the domain, `0600` in a `0700`
   folder refused if it's a link, written under `.saving-…` and renamed in. Kept `KEEP_DAYS` (14); the next look past that
-  deletes it; `purge` deletes it at once. **Both sweep every half-written `.saving-*` copy of that domain's file**, whichever
-  process left it (a quit between commit and rename once left a whole snapshot that Purge never saw). **Expiry fails
+  deletes it; `purge` deletes it at once. **Every save, look and purge sweeps every half-written `.saving-*` file in the
+  folder**, of any domain and whichever process left it (a quit between commit and rename once left a whole snapshot that
+  Purge never saw; until 2026-11-13 only a save or purge of that domain swept it). **Each holds an exclusive `flock` on the
+  folder** (`_held`), not only the in-process `_LOCK`: a dev run beside the installed app shares the folder, and one's sweep
+  could delete the other's save mid-write. **Expiry fails
   closed** (`_expired`): unreadable dates, an import dated in the future, or a stored expiry past `imported + KEEP_DAYS` all
   delete it. Every failure of a save is a `StoreError`, and its temp file goes.
 
