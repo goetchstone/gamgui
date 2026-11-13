@@ -61,6 +61,11 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   it from one user's list (no builder: the app never unsubscribes anyone, and the mock refuses it).
   No `doit` on `remove calendars` — GAM7 rejects extra args. See
   `test_calendar_delete_is_remove_calendars_not_delete_calendars`.
+- **A calendar ACL scope's bare address is a person** (`user:<address>`), even when it is a group's:
+  a group rule must go as `group:<address>` or no member gets access, and each member's subscribe
+  answers `Add Failed: Not Found`. `/calendars/share` sends `group:` for an address it resolved to a
+  group; with `GAM_MOCK_STATE` the mock refuses a subscribe that no kept rule grants (failure-log
+  2026-11-13).
 - **`create datatransfer` service list is ONE element** (`"drive,calendar"`) — splitting it caused
   Google 409 "transfer already in progress"; pinned by `test_lifecycle_commands`.
 - **An operator-chosen enum is validated in the builder, not the route.** The calendar role was

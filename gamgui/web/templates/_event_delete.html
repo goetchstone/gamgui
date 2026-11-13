@@ -5,7 +5,8 @@
   <p tabindex="-1" data-focus class="font-medium text-red-800">Delete this event?</p>
   <p class="mt-1 text-brand-black">{{ event.summary }}</p>
   <p class="text-brand-grayink">{{ event.when }}{% if event.organizer %} · organizer {{ event.organizer }}{% endif %}</p>
-  {% if event.is_recurring %}<p class="mt-1 text-red-700">⚠ Recurring event — deleting removes the entire series (all occurrences).</p>{% endif %}
+  {% if event.is_instance %}<p class="mt-1 text-brand-grayink">One occurrence of a recurring event: deleting it removes this occurrence only.</p>
+  {% elif event.is_recurring %}<p class="mt-1 text-red-700"><span aria-hidden="true">⚠ </span>Recurring event: deleting removes the entire series (all occurrences).</p>{% endif %}
   <div class="mt-3 flex gap-2">
     <button class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors"
             hx-post="/calendars/event/delete" hx-target="#event-action" hx-swap="innerHTML" hx-disabled-elt="this"

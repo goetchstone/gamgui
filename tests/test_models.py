@@ -140,6 +140,9 @@ def test_calendar_event_parse_recurring_and_organizer():
     # No title + no recurrence -> graceful defaults.
     plain = CalendarEvent.from_json({"id": "e2", "start": {"date": "2026-07-01"}})
     assert plain.summary == "(no title)" and plain.is_recurring is False and plain.when == "2026-07-01"
+    assert ev.is_instance is False and plain.is_instance is False
+    one = CalendarEvent.from_json({"id": "evt1_20260629T090000Z", "recurringEventId": "evt1"})
+    assert one.is_recurring is True and one.is_instance is True
 
 
 def test_vacation_message_excludes_gam_init_banner():

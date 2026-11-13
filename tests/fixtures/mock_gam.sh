@@ -134,6 +134,30 @@ calendar_owner() {  # <calendar id>
 }
 known_user() { in_directory "$1" || was_created "$1" || group_member "$1"; }
 is_group() { grep -qF "\"email\": \"$1\"" "$GAM_MOCK_FIXTURES/groups.json"; }   # <address, lowercased>
+# A calendar ACL scope as Google keeps it: GAM reads a bare address as a PERSON's rule (user:<address>),
+# even when the address is a group's, so such a rule gives the group's members nothing.
+acl_rule() {  # <scope>
+  r=$(lower "$1")
+  case "$r" in user:*|group:*|domain|domain:*|default) printf '%s' "$r" ;; *) printf 'user:%s' "$r" ;; esac
+}
+member_of() {  # <user, lowercased> <group, lowercased>
+  is_group "$2" || return 1
+  case "$2" in
+    allhands@example.com) mf=group_members_allhands.json ;;
+    empty-group@example.com) return 1 ;;
+    *) mf=group_members.json ;;
+  esac
+  grep -qiF "\"email\": \"$1\"" "$GAM_MOCK_FIXTURES/$mf"
+}
+acl_lets() {  # <user, lowercased> <a calendar's kept rules>: does any rule give this person access?
+  while IFS= read -r rule || [ -n "$rule" ]; do
+    case "$rule" in
+      default|domain|"domain:${1#*@}"|"user:$1") return 0 ;;
+      group:*) member_of "$1" "${rule#group:}" && return 0 ;;
+    esac
+  done < "$2"
+  return 1
+}
 # A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
 # one that isn't a user the token request fails, and GAM reports the token endpoint's words against it
 # (handleOAuthTokenError -> entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build).
@@ -516,7 +540,16 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   [ "$5" = "formatjson" ] || invalid_arg "$5"
   [ $# -eq 5 ] || invalid_arg "$6"
   addr=$(lower "$4")
-  is_group "$addr" || does_not_exist "Group" "$4"
+  if ! is_group "$addr"; then
+    # entityUnknownWarning: the domain's own address is "Does not exist" (exit 56); any other domain's is
+    # entityServiceNotApplicableWarning, SERVICE_NOT_APPLICABLE_RC (glmsgs). RATELIMITGROUP: a lookup that
+    # fails for a reason that says nothing about what the address is.
+    case "$addr" in *ratelimitgroup*) echo "ERROR: 429: Rate Limit Exceeded" 1>&2; exit 1 ;; esac
+    case "$addr" in
+      *@example.com) does_not_exist "Group" "$4" ;;
+      *) printf 'Group: %s, Service not applicable/Does not exist\n' "$4" 1>&2; exit 73 ;;
+    esac
+  fi
   echo "group,JSON"
   case "$addr" in
     allhands@example.com) rows_with group_members_allhands.json "$addr" ;;   # 12 members: past the bulk threshold
@@ -1939,6 +1972,19 @@ if { [ "${1:-}" = "calendars" ] || [ "${1:-}" = "calendar" ]; } && { [ "${4:-}" 
     *) echo "ERROR: mock: unhandled argv: $ARGS" 1>&2; exit 2 ;;
   esac
   check_exists "Calendar" "$cal"
+  scope=$(acl_rule "$scope")   # GAM names the rule as Google keeps it: a bare address is user:<address>
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then   # kept, so a later subscribe is judged by the rules written
+    mkdir -p "$GAM_MOCK_STATE/calacl"; f="$GAM_MOCK_STATE/calacl/$cal"
+    if [ "$verb" = Added ]; then printf '%s\n' "$scope" >> "$f"
+    elif [ -f "$f" ]; then
+      # acl.delete of a rule the calendar doesn't hold is Google's 404 (GAM's wording approximate): a
+      # bare address is user:<address>, so it never removes a group:<address> rule.
+      if ! grep -qxF "$scope" "$f"; then
+        printf 'Calendar: %s, Calendar ACL: (Scope: %s), Delete Failed: Not Found\n' "$cal" "$scope" 1>&2; exit 50
+      fi
+      grep -vxF "$scope" "$f" > "$f.new" || true; mv "$f.new" "$f"
+    fi
+  fi
   echo "Calendar: $cal, Calendar ACL: (Scope: $scope), $verb"
   exit 0
 fi
@@ -2028,6 +2074,12 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "add" ] && [ "${4:-}" = "calendars" ]; 
   if [ "$cal" = "$user" ]; then listed=1; fi
   if [ "$user" = "alice@example.com" ] && grep -qF "\"id\": \"$cal\"" "$GAM_MOCK_FIXTURES/user_calendars.json"; then listed=1; fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/subscribed/$user" ] && grep -qxF "$cal" "$GAM_MOCK_STATE/subscribed/$user"; then listed=1; fi
+  # calendarList.insert answers Not Found for a calendar the person has no access to. With GAM_MOCK_STATE,
+  # a calendar the run has shared is judged by the rules written to it (acl_lets); one it hasn't is not.
+  if [ -z "$listed" ] && [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/calacl/$cal" ] \
+      && ! acl_lets "$(lower "$user")" "$GAM_MOCK_STATE/calacl/$cal"; then
+    printf '  User: %s, Calendar: %s, Add Failed: Not Found\n' "$user" "$cal" 1>&2; exit 50
+  fi
   if [ -n "$listed" ]; then
     printf '  User: %s, Calendar: %s, Add Failed: Duplicate\n' "$user" "$cal" 1>&2; exit 50
   fi
