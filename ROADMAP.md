@@ -56,7 +56,10 @@ order, the decisions each item needs, and a status table to mark as items land.
   they own, and compare a student information system's export (OneRoster first, then others) with
   Classroom into a change list handed over as files GAM can run. The app itself doesn't write to
   Classroom, since those writes can't be checked live here. Adapted from a community fork.
-  [The plan](docs/plans/2026-11-11-classroom-and-rostering.md).
+  [The plan](docs/plans/2026-11-11-classroom-and-rostering.md). **Built in GamGUI** (OneRoster 1.1 and 1.2, Clever,
+  or a mapped spreadsheet; 2026-11-12), SwiftGamGui's port under way. What's owed is a report from someone with a
+  school domain, through the [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml).
+  Pulling straight from a SIS's API stays later.
 
 ## Later
 

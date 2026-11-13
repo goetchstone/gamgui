@@ -56,7 +56,15 @@
   `Analyze (actions)` and `Dependency review`, each pinned to the GitHub Actions app (integration
   15368, so no other app can post a passing status under the name), not strict, and the admin role as
   a `pull_request` bypass: every change, the owner's too, reaches `main` through a PR (a direct push
-  is refused), and merging one past a red or stuck check is an explicit, logged bypass. **`ci-ok`** is `ci.yml`'s last job: `needs` every blocking job, runs
+  is refused), and merging one past a red or stuck check is an explicit, logged bypass. The PR gate also has a
+  **code scanning** rule: an open CodeQL alert at "error" (or a security alert at high or above) on the PR blocks the
+  merge **with every check green**. The PR shows only BLOCKED; read the alert with
+  `gh api "repos/goetchstone/gamgui/code-scanning/alerts?ref=refs/pull/<N>/merge&state=open"` as the owner (SH-Goetch
+  gets a 403). It caught `py/stack-trace-exposure` twice in two days (1214420, #114): answer with fixed words, never an
+  exception's text. **Stacked PRs and squash merges:** each squash leaves the next branch in conflict. When the squash
+  commit's tree equals content the next branch already holds, `git merge -s ours <squash>` records it exactly; then a
+  real `git merge origin/main` brings in only what's new, and `git diff HEAD^1 HEAD` should equal that new work's own
+  diff. **`ci-ok`** is `ci.yml`'s last job: `needs` every blocking job, runs
   `if: always()`, and fails unless every one really passed — a required check passes on
   "skipped", and one that never reports never passes, so requiring the matrix legs by name would wedge
   every PR the day one is renamed. The decision is `scripts/ci_gate.py`: "success" from every `needs`

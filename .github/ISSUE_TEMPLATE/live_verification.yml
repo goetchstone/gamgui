@@ -1,61 +1,42 @@
-name: Live verification report
-description: You ran a GamGUI write against a real domain — tell us whether it worked.
+name: I tried it on a real domain
+description: "Tell us whether something worked: a change, a screen, or the Classroom import. Two minutes."
+title: "Tried: "
 labels: ["live-verification"]
 body:
   - type: markdown
     attributes:
       value: |
-        The README's [live verification status](https://github.com/goetchstone/gamgui#live-verification-status)
-        table lists which writes have run against a production domain. Anything marked *not yet*
-        is proven offline only. A report here — worked or failed — is how a row changes.
-        Run *not yet* writes on a **throwaway** user, group or calendar first.
+        Thanks. A report, worked or not, is how a row in the README's
+        [live verification status](https://github.com/goetchstone/gamgui#live-verification-status) changes.
+        **Never paste a real roster, export, address, domain or credential.** Column names and counts are plenty.
   - type: input
-    id: write
+    id: what
     attributes:
-      label: Which write
-      description: As named in the table's first column.
-      placeholder: Suspend / unsuspend
+      label: What you tried
+      placeholder: "Suspend a user · Offboarding · Classroom: read a Clever export"
     validations:
       required: true
   - type: dropdown
     id: result
     attributes:
-      label: Result
+      label: Did it work?
       options:
-        - Worked as the preview described
-        - Worked, but something differed from the preview
-        - Failed
+        - "Yes"
+        - Partly
+        - "No"
     validations:
       required: true
   - type: textarea
-    id: checked
+    id: notes
     attributes:
-      label: What you checked in Google afterwards
-      description: e.g. "Admin console shows the account suspended; the user was signed out of Gmail."
-  - type: textarea
-    id: audit
-    attributes:
-      label: The audit-log line
-      description: From the Audit screen. Redact addresses and your domain.
-      render: text
-  - type: input
-    id: commit
-    attributes:
-      label: GamGUI commit
-      description: "`git rev-parse --short HEAD`"
-    validations:
-      required: true
-  - type: input
-    id: gam
-    attributes:
-      label: GAM version
-      description: Shown in the app's header.
-    validations:
-      required: true
+      label: Anything worth knowing
+      description: >-
+        Optional. What differed, the error GamGUI showed, or for a roster import: your SIS and its export
+        format, and the header row (column names only).
   - type: checkboxes
-    id: redacted
+    id: private
     attributes:
       label: Nothing private
       options:
-        - label: I removed credentials, tokens, my domain and real people's addresses from this report.
+        - label: There are no real names, addresses, domains, student data or credentials in this report.
           required: true

@@ -9,7 +9,7 @@ route is usually the one below that fits.
 | Ask a question | [Discussions → Q&A](https://github.com/goetchstone/gamgui/discussions/categories/q-a) |
 | Suggest a chore GamGUI should handle | [Discussions → Ideas](https://github.com/goetchstone/gamgui/discussions/categories/ideas), or a [feature request](https://github.com/goetchstone/gamgui/issues/new/choose) if it's concrete |
 | Report something broken | a [bug report](https://github.com/goetchstone/gamgui/issues/new/choose) |
-| Say a write worked (or didn't) on a real domain | a [live verification report](https://github.com/goetchstone/gamgui/issues/new/choose) — it's how the README's [live status](README.md#live-verification-status) table moves |
+| Say something worked (or didn't) on a real domain, Classroom included | the two-minute [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml) — it's how the README's [live status](README.md#live-verification-status) table moves |
 | Report a vulnerability | privately, as [SECURITY.md](SECURITY.md) describes — never in a public issue |
 
 **Is it GamGUI or GAM?** Every write GamGUI makes is one `gam` command, and the Audit screen shows

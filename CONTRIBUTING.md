@@ -15,8 +15,8 @@ Looking for something to pick up? [ROADMAP.md](ROADMAP.md) is the ranked backlog
 
 Taking part here is under the [code of conduct](CODE_OF_CONDUCT.md). Questions go to
 [Discussions](https://github.com/goetchstone/gamgui/discussions) — [SUPPORT.md](SUPPORT.md) says what
-goes where — and issues use the forms on **New issue**: a bug, a feature request, or a *live
-verification report* when you've run a write against a real domain. A pull request fills in the
+goes where — and issues use the forms on **New issue**: a bug, a feature request, or *I tried it on a
+real domain* when you've run something against a real domain (two minutes; Classroom reports are the most wanted). A pull request fills in the
 template's checklist, and branch protection requires CI to pass before it merges: `ci-ok` (tests on
 macOS and Linux, lint, accessibility, the GAM compatibility check, the app build), CodeQL, and
 dependency review.
@@ -46,6 +46,21 @@ To look at a screen without a tenant, `.venv/bin/python scripts/preview_mock.py`
 <http://127.0.0.1:8766/?token=t> on the same mock `gam`, an in-memory Keychain and made-up
 `example.com` data (a few users and groups, an onboarding role, a small calendar index); its state
 lives in a temp dir that is deleted when it stops. A write there only proves the mock accepted it.
+
+**Trying Classroom without a school domain.** The same preview has the Classroom screens with made-up classes. On
+**Classroom → Plan an import**, upload the sample Clever export in `tests/fixtures/roster/clever/` (all five CSVs), or
+a small spreadsheet of your own: one row per person in a class, with a class ID, class name, email and role column.
+Never use a real district's export outside your own Mac. If you do run it on a real school domain, the
+[I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml) is the most useful
+thing you can send: your SIS, its export format, the header row (column names only) and what the screen said.
+
+**Working with Claude Code (or another agent).** The repo carries what the maintainer's own agent sessions use:
+[CLAUDE.md](CLAUDE.md) (the invariants, loaded every session), the area runbooks in [docs/domains/](docs/domains/README.md),
+the skills in [.claude/skills/](.claude/skills) (`start-session`, `pre-commit`, `post-failure`, `live-verify`,
+`add-builder-command`, `end-of-session`, `improve-rules`), and two agents in [.claude/agents/](.claude/agents)
+(`gam-command-author`, `gam-command-reviewer`). [docs/FRAMEWORK.md](docs/FRAMEWORK.md) explains how they fit together.
+The maintainer's local hooks are not published; the rules they enforce are in CLAUDE.md, and the one that matters
+most for you is never to run `gam` from a shell or read the Keychain from an agent.
 
 ## Project layout
 

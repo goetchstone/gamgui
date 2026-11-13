@@ -186,6 +186,13 @@ async def shoot():
             await t.click_text("Preview steps")
             await t.wait_for("/Run offboarding/.test(document.body.innerText) && document.querySelectorAll('code, pre').length > 0", 15)
             await t.shot("lifecycle.png")
+
+            await t.goto("/classroom")                                  # the mock's made-up classes, read only
+            await t.wait_for("document.querySelector('#class-results a, #class-results button')", 15)
+            await t.js("(() => { [...document.querySelectorAll('#class-results a, #class-results button')]"
+                       ".find(el => /Biology/.test(el.innerText)).click(); return true; })()")   # it has students
+            await t.wait_for("/STUDENTS · [1-9]/i.test(document.body.innerText)", 15)
+            await t.shot("classroom.png")
     finally:
         proc.terminate()
 

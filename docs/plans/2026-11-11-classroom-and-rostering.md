@@ -1,6 +1,6 @@
 # Plan: Google Classroom and SIS rostering, in both apps — reads and planning only
 
-**Status: IN PROGRESS — Phases C1 to C5.3 built in GamGUI (read only); C5.4 later; the Swift port open.** Written at GamGUI `0a4dd66` for a reader with no session
+**Status: IN PROGRESS — Phases C1 to C5.3 built in GamGUI (read only, merged by #115); C5.4 later; the Swift port under way (briefed 2026-11-13; C1.1 to C1.3 in SwiftGamGui#158).** Written at GamGUI `0a4dd66` for a reader with no session
 context. `CLAUDE.md` is auto-loaded. Before any item, read that app's runbook for the area (`docs/domains/` in each repo).
 When a PR closes an item, mark it under "Status by item" in the same PR.
 
