@@ -258,7 +258,9 @@ About 55 PRs, counting 2 for Phase 0, 6 for Phase 1, 12 for Phase 2, 10 for Phas
 |---|---|---|
 | 0.1 / 0.2 / 0.3 | done (this PR) / – / acceptance done 2026-11-10 (#104); live checks owed | – / open / – |
 | 1.1 to 1.6 | – | open |
-| 2.1 to 2.8, 2.10 | – | open |
+| 2.1, 2.3 to 2.5, 2.7, 2.8, 2.10 | – | open |
+| 2.2 | – | done (SwiftGamGui#161: a group, an OU or the whole company); live check owed |
+| 2.6 | – | done but find by name, deferred until asked (SwiftGamGui#161: share with a group, delete a calendar, list and delete events); live checks owed |
 | 2.9 | open | open |
 | 3.1 to 3.5 | open | open |
 | 4.1 to 4.8 | open | open |
