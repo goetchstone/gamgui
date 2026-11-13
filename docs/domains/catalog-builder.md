@@ -40,5 +40,9 @@
 ## To do common tasks here
 - **Add a runnable write** (or a friendlier read): follow `docs/builder-commands.md` §"Adding a buildable command" or run the `add-builder-command` skill — (1) verify syntax in `GamCommands.txt`; (2) add a `@staticmethod` to `core/gam/commands.py`; (3) arg-shape test in `tests/test_commands.py` (the grammar contract in `tests/test_command_contract.py` calls every builder by itself; a validated argument's values go in its `ENUM_ARGS`); (4) append a `_cmd(...)` to `_curated()` in `catalog.py` with the authoritative `RiskLevel`; (5) web test in `tests/test_builder.py`; (6) classify it in `tests/test_mock_gam.py` — a write needs a strict `mock_gam.sh` handler (the mock fails anything unhandled), a read with a new output shape a canned branch.
 - **Change how reads auto-promote:** edit `parse_read_template`/`make_build` in `readbuilder.py`; re-run `test_builder.py` (esp. the injection-safety and boundary tests).
+- **A read verb can carry a write keyword.** `version` is in `_READ`, and since GAM 7.52.00 its line takes
+  `(update [quiet])`, which installs the latest GAM over the running one, unpinned. It stays safe only because the read
+  builder drops optional groups; `test_runnable_gam_version_can_never_self_update` holds the runnable form to plain
+  `gam version`. On a bump, read the grammar diff for any new optional keyword that writes under a read verb.
 - **After a GAM bump:** run `scripts/build_command_catalog.py` to regenerate `command_catalog.json`, then confirm `test_catalog_matches_grammar` and `test_docs_state_the_real_catalog_counts` pass (`bump_gam.py` rewrites the counts in CLAUDE.md, README and ROADMAP; by hand, update all three).
 - **Re-group categories into areas:** edit `_AREA`/`AREA_ORDER` in `catalog.py`; `test_areas_group_the_categories` guards the shape.

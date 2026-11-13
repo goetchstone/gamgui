@@ -30,6 +30,30 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-12 — A read verb with one write keyword: `gam version update`
+- **What happened:** GAM 7.52.00 added `gam version [... (update [quiet])]`, which downloads the latest release and
+  installs it over the running binary: an unpinned, unattested GAM. `version` is in the parser's `_READ`, so the line is
+  auto-promoted. It was safe only because the read builder drops optional groups. Found by reading the release notes
+  during the bump (#116), not by any check.
+- **Invariant in force:** #3 (only read-only commands auto-promote) and #7 (the pin fails closed).
+- **Why it didn't hold:** it held, by luck of mechanism. #3 classifies a whole grammar line by its verb; #7 guards
+  vendoring, not what the vendored binary can do to itself at runtime.
+- **Would a rule have caught it?** Only if enforced differently: a tripwire that no runnable command emits a keyword
+  that writes. #116 added one for this line (`test_runnable_gam_version_can_never_self_update`); a general one would
+  scan each promoted line's optional groups for write words on a bump.
+- **Enforcement home if changed:** tripwire test (on every bump's catalog).
+
+## 2026-11-12 — The same CodeQL finding twice in two days
+- **What happened:** `py/stack-trace-exposure` blocked #114's merge (exception text in the handover route's answer),
+  a day after 1214420 fixed the same shape on the owned-classes CSV. The PR showed BLOCKED with every check green: the
+  ruleset's code-scanning rule, not a check.
+- **Invariant in force:** none numbered. The fix's rule (answer with fixed words, never `str(exc)`) lived only in that
+  commit's message.
+- **Why it didn't hold:** nothing local checks it; CodeQL only runs on the PR, and its block doesn't say why.
+- **Would a rule have caught it?** Only if enforced differently: a tripwire over `web/routes/` for a `Response` or JSON
+  answer built from a caught exception, or a pre-commit item for route changes.
+- **Enforcement home if changed:** tripwire test (backstop), plus the build-packaging runbook's note on the gate.
+
 ## 2026-10-16 — improve-rules pass: the mock-lies rule named one mock; the fakes that lied were others
 - **What happened:** the observer pass over the window since 2026-10-01: fix commits b6feae3, 383100a,
   6947456 and 5f8193e, the failure-log entries from 2026-10-01 to 2026-10-08, the two open entries
