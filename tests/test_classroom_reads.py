@@ -201,6 +201,21 @@ async def test_a_deleted_owner_never_reads_as_the_leaver_owning_nothing(connecto
     assert (await connector.get_course("500000000004")).owner_id == ADMIN_ID
 
 
+async def test_unknown_owners_with_no_table_never_read_as_owning_none(connector, monkeypatch):
+    # Exit 56 with only unknown-owner warnings means GAM found classes; no table then is a broken read. It raised as a plain
+    # GAM error classed NOT_FOUND, which courses_owned_by took as "owns none" at offboarding (found by the SwiftGamGui port).
+    from gamgui.core.gam.runner import RunResult
+
+    async def warned_but_no_table(domain, argv, timeout=None):
+        return RunResult(stdout="", stderr=f"Course: 500000000004, Owner ID: {ADMIN_ID}, Does not exist\n", returncode=56)
+
+    monkeypatch.setattr(connector.runner, "run_any_exit", warned_but_no_table)
+    with pytest.raises(Incomplete):
+        await connector.courses_owned_by("alice@example.com")
+    with pytest.raises(Incomplete):
+        await connector.list_courses(teacher="alice@example.com")
+
+
 def test_only_an_unknown_owner_warning_lets_the_table_stand():
     from gamgui.core.gam.errors import only_unknown_owners
     warn = "Course: 500000000004, Owner ID: 100000000000000000009, Does not exist"
