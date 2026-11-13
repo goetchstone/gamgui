@@ -290,11 +290,13 @@ async def map_cancel(request: Request) -> HTMLResponse:
 
 @router.post("/purge", response_class=HTMLResponse)
 async def purge(request: Request) -> HTMLResponse:
-    """Delete the kept roster now. Audited."""
+    """Delete the kept roster now, and the change list compared from it (its students' addresses, held in memory): the
+    same bytes read again never bring it back, and a compare still running keeps nothing. Audited."""
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
     st.roster_pending = None
+    st.roster_compare, st.roster_compare_job, st.roster_compare_sha = None, "", ""
     try:
         gone = await asyncio.to_thread(roster_store(st).purge, st.audit_domain)
     except StoreError as exc:
@@ -329,20 +331,37 @@ async def issues_csv(request: Request) -> Response:
 CHANGES_PAGE = 50         # changes per page of the change list
 
 
+def _kept_sha(st) -> Optional[str]:
+    """The SHA-256 of the roster kept for this domain now, or None when there's none or it can't be read."""
+    try:
+        meta = roster_store(st).meta(st.audit_domain)
+    except StoreError:
+        return None
+    return None if meta is None else str(meta.get("sha256", ""))
+
+
 def _plan_for(st) -> Optional[Dict[str, Any]]:
     """The last compare, if it's this domain's and of the roster kept now (a new upload or a purge drops it)."""
     held = st.roster_compare
     if not held or held.get("domain") != st.audit_domain:
         return None
-    try:
-        meta = roster_store(st).meta(st.audit_domain)
-    except StoreError:
+    sha = _kept_sha(st)
+    return held if sha is not None and sha == held.get("sha256") else None
+
+
+def _compare_job(st, job_id: str, sha: Optional[str]):
+    """The compare job ``job_id``, only if it's the one running for this domain and of the roster kept now: a job left from
+    another domain (a tenant switch) or an earlier upload is never shown, reused or waited on."""
+    job = st.jobs.get(job_id) if job_id else None
+    if job is None or job.id != st.roster_compare_job or sha is None or sha != st.roster_compare_sha:
         return None
-    return held if meta is not None and meta.get("sha256") == held.get("sha256") else None
+    return job
 
 
-async def _compare(job, st, domain: str) -> None:
-    """Background: read Classroom (two GAM runs), plan against the kept roster, and hold the change list. Read only."""
+async def _compare(job, st, conn, domain: str, sha: str) -> None:
+    """Background: read Classroom (two GAM runs), plan against the kept roster, and hold the change list. Read only.
+    ``conn`` is the connector the compare was started on, never a later tenant's; the result is kept only while this is
+    still the domain's compare (a tenant switch or a newer compare drops it)."""
     try:
         job.current = "Reading every class in Classroom, with its people…"
         store = roster_store(st)
@@ -351,7 +370,10 @@ async def _compare(job, st, domain: str) -> None:
         if meta is None or snap is None:
             job.error = "No roster is kept to compare. Read the export again."
             return
-        classes, unread = await st.connector.classroom_state()
+        if meta.get("sha256") != sha:
+            job.error = "A new roster was read as the compare started. Compare again."
+            return
+        classes, unread = await conn.classroom_state()
         directory: Optional[set] = None
         try:
             directory = {u.primary_email.lower() for u in await st.users()}   # fresh: it decides what is added
@@ -360,7 +382,8 @@ async def _compare(job, st, domain: str) -> None:
         out = await asyncio.to_thread(plan, snap, classes, directory, len(unread))
         if directory is None:
             out.notes.append("The directory couldn't be read, so addresses weren't checked against Workspace accounts.")
-        st.roster_compare = {"domain": domain, "sha256": meta.get("sha256"), "when": clock_text(), "plan": out}
+        if st.roster_compare_job == job.id and st.roster_compare_sha == sha and st.connector is conn:
+            st.roster_compare = {"domain": domain, "sha256": sha, "when": clock_text(), "plan": out}
         job.applied = len(out.changes)
     except StoreError:                       # the kept roster, not Classroom or GAM: said as such, in fixed words
         job.error = "The kept roster couldn't be read, so nothing was compared. Open the import page to see why."
@@ -393,12 +416,15 @@ async def compare(request: Request) -> HTMLResponse:
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _PLAN, {"error": NOT_CONNECTED})
-    running = st.jobs.get(st.roster_compare_job)
+    sha = await asyncio.to_thread(_kept_sha, st)
+    if sha is None:
+        return TEMPLATES.TemplateResponse(request, _PLAN, {"error": "No roster is kept to compare. Read the export again."})
+    running = _compare_job(st, st.roster_compare_job, sha)
     if running is not None and not running.finished:
         return TEMPLATES.TemplateResponse(request, _PLAN, {"job": running})
     job = start_job(st.jobs, 0, kind="roster_compare", title="Compare the roster with Classroom")
-    st.roster_compare_job = job.id
-    job.task = asyncio.create_task(_compare(job, st, st.audit_domain))
+    st.roster_compare_job, st.roster_compare_sha = job.id, sha
+    job.task = asyncio.create_task(_compare(job, st, st.connector, st.audit_domain, sha))
     return TEMPLATES.TemplateResponse(request, _PLAN, {"job": job})
 
 
@@ -406,7 +432,7 @@ async def compare(request: Request) -> HTMLResponse:
 async def compare_status(request: Request, job: str = "") -> HTMLResponse:
     """The compare's panel: a sentence while it reads, then the change list (or why not)."""
     st = app_state(request)
-    j = st.jobs.get(job) if job else None
+    j = _compare_job(st, job, await asyncio.to_thread(_kept_sha, st))   # another domain's or roster's job: never shown
     if j is not None and not j.finished:
         return TEMPLATES.TemplateResponse(request, _PLAN, {"job": j})
     if j is not None and j.error:

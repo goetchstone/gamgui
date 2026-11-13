@@ -20,7 +20,7 @@
     <tbody class="divide-y divide-brand-gray/20">
       {% for c in rows %}
       <tr>
-        <td class="whitespace-nowrap px-3 py-1.5 {{ 'text-amber-800' if c.kind in plan.flags else 'text-brand-blueink' }}">{{ words[c.kind] }}</td>
+        <td class="whitespace-nowrap px-3 py-1.5 {{ 'text-amber-800' if c.kind in plan.flags else 'text-brand-blueink' }}">{% if c.kind in plan.flags %}<span aria-hidden="true">⚠ </span>{% endif %}{{ words[c.kind] }}{% if c.kind in plan.flags %}<span class="sr-only">, held back</span>{% endif %}</td>
         <td class="max-w-0 truncate px-3 py-1.5 text-brand-black" title="{{ c.alias }}">{{ c.title }}</td>
         <td class="max-w-0 truncate px-3 py-1.5 text-brand-blueink">{% if c.kind == "create" %}{{ c.after }}, owned by {{ c.person }}{% elif c.before or c.after %}{{ c.before or "—" }} → {{ c.after or "—" }}{% else %}{{ c.person }}{% endif %}</td>
       </tr>

@@ -29,7 +29,7 @@
             class="rounded-full border border-brand-gray/50 px-2.5 py-0.5 text-brand-blueink hover:bg-paper">All · {{ "{:,}".format(plan.changes | length) }}</button>
     {% for k, label in kinds %}{% if plan.counts.get(k) %}
     <button type="button" hx-get="/classroom/import/changes?kind={{ k }}" hx-target="#roster-changes" hx-swap="innerHTML"
-            class="rounded-full border px-2.5 py-0.5 hover:bg-paper {{ 'border-amber-400 text-amber-800' if k in plan.flags else 'border-brand-gray/50 text-brand-blueink' }}">{{ label }} · {{ "{:,}".format(plan.counts[k]) }}</button>
+            class="rounded-full border px-2.5 py-0.5 hover:bg-paper {{ 'border-amber-400 text-amber-800' if k in plan.flags else 'border-brand-gray/50 text-brand-blueink' }}">{% if k in plan.flags %}<span aria-hidden="true">⚠ </span>{% endif %}{{ label }} · {{ "{:,}".format(plan.counts[k]) }}{% if k in plan.flags %}<span class="sr-only">, held back</span>{% endif %}</button>
     {% endif %}{% endfor %}
   </div>
   <div id="roster-changes">{% include "_roster_changes.html" %}</div>
