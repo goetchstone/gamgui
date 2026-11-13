@@ -540,7 +540,16 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   [ "$5" = "formatjson" ] || invalid_arg "$5"
   [ $# -eq 5 ] || invalid_arg "$6"
   addr=$(lower "$4")
-  is_group "$addr" || does_not_exist "Group" "$4"
+  if ! is_group "$addr"; then
+    # entityUnknownWarning: the domain's own address is "Does not exist" (exit 56); any other domain's is
+    # entityServiceNotApplicableWarning, SERVICE_NOT_APPLICABLE_RC (glmsgs). RATELIMITGROUP: a lookup that
+    # fails for a reason that says nothing about what the address is.
+    case "$addr" in *ratelimitgroup*) echo "ERROR: 429: Rate Limit Exceeded" 1>&2; exit 1 ;; esac
+    case "$addr" in
+      *@example.com) does_not_exist "Group" "$4" ;;
+      *) printf 'Group: %s, Service not applicable/Does not exist\n' "$4" 1>&2; exit 73 ;;
+    esac
+  fi
   echo "group,JSON"
   case "$addr" in
     allhands@example.com) rows_with group_members_allhands.json "$addr" ;;   # 12 members: past the bulk threshold

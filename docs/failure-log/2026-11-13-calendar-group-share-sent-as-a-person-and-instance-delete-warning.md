@@ -13,7 +13,11 @@
   The events fixture had no occurrence.
 - **Fix:** a bare address that resolved to a group is sent as `group:<address>`, an empty group's included
   (a verifier found that one still went as a person: a member lookup that answers with no rows means a
-  group, while one that fails stays a person). The delete preview says
+  group). Only GAM's "not a group" answer makes an address a person: "Does not exist" (exit 56) for the
+  domain's own, "Service not applicable/Does not exist" (exit 73) for an outside address, per GAM 7.52.01's
+  entityUnknownWarning. Any other lookup failure, a rate limit say, refuses the share before a write: it
+  once read as a person and would have given a group's address a person's rule. The mock answers both
+  not-a-group forms. The delete preview says
   "this occurrence only" for an occurrence and keeps the series warning for a series. The mock prints a
   calendar ACL scope as Google keeps it (a bare address is `user:<address>`). With `GAM_MOCK_STATE` it keeps
   the rules written to a calendar and refuses a subscribe that none of them grants, and a delete of a rule the calendar doesn't hold:

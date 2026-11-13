@@ -19,6 +19,7 @@ from ...core import guard
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GAMCommands
+from ...core.gam.errors import GAMError, GAMErrorKind
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
@@ -76,12 +77,17 @@ async def _subscribers_for(conn, target: str, known_users: set) -> "tuple[str, l
     group = scope[len("group:"):].strip() if low.startswith("group:") else scope
     try:
         members = await conn.list_group_members(group)
-    except Exception:                           # noqa: BLE001 — not a group, or the lookup failed
+    except GAMError as exc:
+        # Only GAM's "not a group" lets an address be a person: "Group: x, Does not exist" (exit 56) for
+        # the domain's own, "Group: x, Service not applicable/Does not exist" (exit 73) for an outside
+        # address, both NOT_FOUND. A rate limit or a refusal says nothing about what the address is, and
+        # reading it as a person once gave a group's address a person's rule: the caller refuses instead.
+        if exc.kind != GAMErrorKind.NOT_FOUND:
+            raise
         members = None
     if members is not None:                     # the lookup answered, so it is a group, members or none
         return "group", [m.email for m in members if getattr(m, "email", "") and "@" in m.email]
-    # An explicit group: scope whose lookup failed is still a group. A bare address stays a person: a
-    # failed lookup is also what a transient error looks like.
+    # Not a group. An explicit group: scope still goes as typed, and GAM answers for it.
     return ("group", []) if low.startswith("group:") else ("user", [scope] if _is_user_scope(scope) else [])
 
 
@@ -369,7 +375,11 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
         GAMCommands.add_calendar_acl_cal(cal, target, role=role)
     except ValueError as exc:
         return error_partial(request, f"Couldn't share calendar: {exc}.")
-    kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
+    try:
+        kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
+    except Exception as exc:  # noqa: BLE001 — any lookup failure but "not a group": nothing is written
+        return error_partial(request, f"Couldn't tell whether {target} is a group, so nothing was shared. "
+                             f"{friendly(exc)}", getattr(exc, "stderr", ""))
     decision = guard.evaluate(_fanout(emails)) if kind == "group" else None
     if decision is not None and decision.requires_confirmation:
         st = request.app.state.gamgui

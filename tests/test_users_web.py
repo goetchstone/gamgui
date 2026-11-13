@@ -1167,6 +1167,20 @@ def test_calendars_share_bare_address_of_an_empty_group_is_still_a_group(client,
         ["calendars", SEC_CAL, "add", "calendaracls", "reader", "group:empty-group@example.com"]]
 
 
+def test_calendars_share_outside_address_is_a_person(client, gam_calls):
+    # Not a group (GAM's exit-73 "Service not applicable/Does not exist"), so a person's rule as typed.
+    client.post("/calendars/share", data={"cal": SEC_CAL, "target": "friend@example.net"})
+    assert gam_writes(gam_calls())[0] == ["calendars", SEC_CAL, "add", "calendaracls", "reader", "friend@example.net"]
+
+
+def test_calendars_share_refuses_when_the_group_lookup_fails_for_another_reason(client, gam_calls):
+    # A rate limit says nothing about what the address is; reading it as a person gave a group's address
+    # a person's rule. Nothing is written.
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "ratelimitgroup@example.com"})
+    assert "Couldn't tell whether ratelimitgroup@example.com is a group" in unescape(r.text)
+    assert gam_writes(gam_calls()) == []
+
+
 def test_calendars_share_domain_scope_cannot_be_subscribed(client):
     r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "domain"})
     assert r.status_code == 200

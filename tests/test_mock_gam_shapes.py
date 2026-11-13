@@ -109,10 +109,20 @@ async def test_an_event_search_that_finds_nothing_exits_no_entities_found(runner
     assert err.exit_code == 60 and err.stdout.strip() == "calendarId,id,JSON"
 
 
-@pytest.mark.parametrize("group", ["xsales@example.com", "alice@example.com", "sales@example.co"])
+@pytest.mark.parametrize("group", ["xsales@example.com", "alice@example.com"])
 async def test_group_members_answers_a_whole_group_address_only(runner, domain, group):
     err = await _fails(runner, domain, C.print_group_members(group))
     assert err.exit_code == 56 and f"Group: {group}, Does not exist" in err.stderr
+    assert err.kind == GAMErrorKind.NOT_FOUND
+
+
+@pytest.mark.parametrize("group", ["sales@example.co", "friend@example.net"])
+async def test_group_members_of_an_outside_address_is_service_not_applicable(runner, domain, group):
+    # GAM 7.52.01 entityUnknownWarning: an address outside the domain isn't "Does not exist" (56) but
+    # entityServiceNotApplicableWarning, exit 73. Both say "not a group", which lets the address be a person.
+    err = await _fails(runner, domain, C.print_group_members(group))
+    assert err.exit_code == 73 and f"Group: {group}, Service not applicable/Does not exist" in err.stderr
+    assert err.kind == GAMErrorKind.NOT_FOUND
 
 
 async def test_group_members_matches_a_group_in_any_case(runner, domain):
