@@ -123,7 +123,8 @@ class AppState:
     incident_store: object = None      # the incidents kept here (lazy: routes/_common.incident_store)
     roster_store: Optional[RosterStore] = None   # the SIS roster kept per domain (Classroom import, plan 2026-11-11 C2)
     roster_compare: Optional[dict] = None   # the last compare with Classroom: domain, roster hash, when, ChangeList (C3)
-    roster_compare_job: str = ""            # the compare running, if any (one at a time)
+    roster_compare_job: str = ""            # the domain's compare (one at a time per roster; one replaced runs out unseen)
+    roster_compare_sha: str = ""            # the kept roster that compare is of: a new upload makes it stale
     # A spreadsheet picked but not yet read (plan C5.3): its name, bytes and domain, held in memory while the operator maps
     # its columns. Never written to disk; dropped on a read, a cancel, a purge, a new upload or a tenant switch.
     roster_pending: Optional[dict] = None
@@ -192,6 +193,8 @@ class AppState:
         self.course_cache.invalidate()
         self.course_index_failed = None
         self.roster_compare = None             # compared on the tenant being replaced
+        self.roster_compare_job = ""           # and its compare, still running, is the old tenant's: never shown here
+        self.roster_compare_sha = ""
         self.roster_pending = None             # a spreadsheet picked on the tenant being replaced
         self.gam_version_held = None   # setup re-reads the version on the next Home
         self.connected_apps = None     # read with the connector being replaced

@@ -406,3 +406,97 @@ def test_a_roster_that_cant_be_read_during_compare_is_said_as_the_roster_not_gam
     job = client.app.state.gamgui.jobs[client.app.state.gamgui.roster_compare_job]
     wait_for_job(client, job)
     assert job.error == "The kept roster couldn't be read, so nothing was compared. Open the import page to see why."
+
+
+# --- a compare belongs to its domain and its roster; held-back rows say so beyond colour --------------------------------
+def _old_job(client, sha, error=None):
+    """A compare job as one started earlier would leave it: still running, or failed."""
+    from gamgui.web.jobs import start_job
+    st = client.app.state.gamgui
+    job = start_job(st.jobs, 0, kind="roster_compare", title="Compare the roster with Classroom")
+    if error:
+        job.error = error
+        job.finish()
+    st.roster_compare_job, st.roster_compare_sha = job.id, sha
+    return job
+
+
+def test_a_tenant_switch_drops_the_old_domains_compare(client):
+    _upload(client, ("export.zip", _zip(_files())))
+    st = client.app.state.gamgui
+    old = _old_job(client, _store(client).meta(DOMAIN)["sha256"])               # still running on the old tenant
+    other = GAMConnector(runner=st.runner, domain="other.example.org", audit=st.connector.audit)
+    st.activate(other)
+    assert st.roster_compare_job == "" and st.roster_compare_sha == ""
+    assert "Reading every class" not in client.get("/classroom/import/compare/status", params={"job": old.id}).text
+    r = client.post("/classroom/import/compare")                 # never "still reading" the old tenant's job
+    assert "No roster is kept to compare" in r.text and "Reading every class" not in r.text
+
+
+def test_a_compare_of_an_earlier_roster_is_neither_waited_on_nor_its_failure_shown(client):
+    from .helpers import wait_for_job
+    _upload(client, ("export.zip", _zip(_files())))
+    st = client.app.state.gamgui
+    running = _old_job(client, _store(client).meta(DOMAIN)["sha256"])
+    _upload(client, *_files(**{"classes.csv": SIS_CLASSES, "users.csv": SIS_USERS, "enrollments.csv": SIS_ENROLL}).items())
+    client.post("/classroom/import/compare")                                     # a new roster: not the old job
+    assert st.roster_compare_job != running.id
+    wait_for_job(client, st.jobs[st.roster_compare_job])
+    failed = _old_job(client, "an-earlier-roster", error="Something went wrong talking to GAM.")
+    r = client.get("/classroom/import/compare/status", params={"job": failed.id})
+    assert "Couldn&#39;t compare" not in r.text and "Something went wrong" not in r.text
+
+
+def test_a_compare_that_lost_its_place_keeps_no_result(client, monkeypatch):
+    """A compare overtaken by a newer one (or a switch) finishes without replacing the domain's change list."""
+    from .helpers import wait_for_job
+    st = client.app.state.gamgui
+    _compared(client)
+    kept = st.roster_compare
+    real = st.connector.classroom_state
+
+    async def overtaken():
+        st.roster_compare_job = "a-newer-compare"
+        return await real()
+
+    monkeypatch.setattr(st.connector, "classroom_state", overtaken)
+    client.post("/classroom/import/compare")
+    job = next(j for j in st.jobs.values() if j.kind == "roster_compare" and not j.finished)
+    wait_for_job(client, job)
+    assert st.roster_compare is kept
+
+
+def test_held_back_rows_say_so_with_a_mark_and_to_a_screen_reader(client, monkeypatch):
+    from gamgui.core import roster_plan
+    monkeypatch.setattr(roster_plan, "LIMITS", {"remove_student": (0, 0.0)})
+    _compared(client)
+    plan = client.get("/classroom/import/compare/status").text
+    rows = client.get("/classroom/import/changes", params={"kind": "remove_student"}).text
+    for page in (plan, rows):
+        assert '<span aria-hidden="true">⚠ </span>' in page and '<span class="sr-only">, held back</span>' in page
+    assert rows.count(", held back") == rows.count("<tr>") - 1 >= 1                # every row, past the header
+
+
+def test_purge_drops_the_change_list_so_the_same_bytes_never_bring_it_back(client):
+    _compared(client)
+    st = client.app.state.gamgui
+    client.post("/classroom/import/purge")
+    assert st.roster_compare is None and st.roster_compare_job == "" and st.roster_compare_sha == ""
+    _upload(client, *_files(**{"classes.csv": SIS_CLASSES, "users.csv": SIS_USERS, "enrollments.csv": SIS_ENROLL}).items())
+    assert client.get("/classroom/import/handover.zip").status_code == 400
+
+
+def test_a_purge_during_a_compare_keeps_nothing_from_it(client, monkeypatch):
+    from .helpers import wait_for_job
+    st = client.app.state.gamgui
+    _upload(client, *_files(**{"classes.csv": SIS_CLASSES, "users.csv": SIS_USERS, "enrollments.csv": SIS_ENROLL}).items())
+    real = st.connector.classroom_state
+
+    async def purged_meanwhile():
+        st.roster_compare_sha = ""                       # what POST /purge does while the read runs
+        return await real()
+
+    monkeypatch.setattr(st.connector, "classroom_state", purged_meanwhile)
+    client.post("/classroom/import/compare")
+    wait_for_job(client, next(j for j in st.jobs.values() if j.kind == "roster_compare"))
+    assert st.roster_compare is None

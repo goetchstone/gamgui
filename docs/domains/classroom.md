@@ -209,9 +209,14 @@ guard; only its read side is adapted here.
   planned as new. `managed_from` pairs them by course ID; a class whose aliases or roster can't be read whole is listed as
   unread, and any unread class makes the list **incomplete** (said; C4 hands nothing over).
 - **The screen:** **Compare with Classroom** on the import page starts a job (`roster_compare`, unstoppable: two reads),
-  one at a time, kept in memory per domain *and* per kept roster (a new upload, a purge or a tenant switch drops it). The
-  panel shows the summary sentence (destructive parts first), the flags, the notes, a chip per kind, and the list searched
-  and paged server-side (`/classroom/import/changes`). Failures are fixed sentences (`routes/classroom._why`).
+  one at a time, kept in memory per domain *and* per kept roster (a new upload, a purge or a tenant switch drops it). **The
+  job is too** (`_compare_job`: `roster_compare_job` and `roster_compare_sha`): a job from before a tenant switch or a new
+  upload is never shown, reused or waited on, and its failure never shows against the roster kept now (until 2026-11-13
+  only the result was checked). It reads with the connector it started on, and keeps its result only while it is still
+  the domain's compare of that roster. **Purge drops the change list too** (it holds students' addresses), so reading
+  the same bytes again never brings it back. The panel shows the summary sentence (destructive parts first), the flags, the notes, a chip per
+  kind, and the list searched and paged server-side (`/classroom/import/changes`). A held-back kind's chip and rows carry
+  `⚠` and an sr-only ", held back", never amber alone. Failures are fixed sentences (`routes/classroom._why`).
 
 ## Hand it over (C4)
 - **`core/roster_handover.py`** is pure: a `ChangeList` → `README.txt`, `review.csv` and a numbered CSV per kind (`STEPS`),
