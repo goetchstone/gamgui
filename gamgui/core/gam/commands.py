@@ -562,6 +562,13 @@ class GAMCommands:
         return ["calendars", calendar_id, "print", "calendaracls", "formatjson"]
 
     @staticmethod
+    def print_calendar_data_owner(calendar_id: str) -> List[str]:
+        # One calendars.get as the admin (doCalendarsPrintShowSettings). `dataowner` is in GAM's
+        # CALENDAR_SETTINGS_FIELDS_CHOICE_MAP at 7.52.01 though GamCommands.txt doesn't list it. A secondary
+        # calendar has one data owner, the account a delete acts as.
+        return ["calendars", calendar_id, "print", "settings", "fields", "id,dataowner", "formatjson"]
+
+    @staticmethod
     def add_calendar_acl_cal(
         calendar_id: str, scope: str, role: str = "reader", send_notifications: bool = False
     ) -> List[str]:

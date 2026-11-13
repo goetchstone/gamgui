@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
@@ -1049,6 +1050,63 @@ def test_calendars_delete_refuses_when_owner_suspended(client):
     r = client.post("/calendars/delete", data={"cal": ORPHAN_CAL, "confirm": "DELETE"})
     assert "Calendar deleted" not in r.text
     assert "suspended or no longer exist" in r.text
+
+
+def test_calendars_delete_acts_as_the_data_owner_not_the_first_owner(client, gam_calls):
+    # A co-owner listed first may not be allowed to delete it; the data owner is (Calendars dataOwner).
+    cal = "c_coowned@group.calendar.google.com"           # ACL owners alice, carol, bob; data owner carol
+    preview = client.post("/calendars/delete/preview", data={"cal": cal})
+    assert "Runs as owner <b>carol@example.com</b>" in preview.text
+    r = client.post("/calendars/delete", data={"cal": cal, "confirm": "DELETE"})
+    assert "Calendar deleted" in r.text
+    assert gam_writes(gam_calls()) == [["user", "carol@example.com", "remove", "calendars", cal]]
+
+
+def test_calendars_delete_never_swaps_a_suspended_data_owner_for_a_co_owner(client, gam_calls):
+    cal = "c_bobdata@group.calendar.google.com"           # data owner bob (suspended); alice and carol co-own
+    r = client.post("/calendars/delete", data={"cal": cal, "confirm": "DELETE"})
+    assert "The calendar&#39;s data owner, bob@example.com, is suspended" in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_calendars_detail_offers_delete_only_as_the_preview_would(client):
+    # The page and the preview read the same data owner: a suspended one hides the button with the reason.
+    page = client.get("/calendars/detail", params={"cal": "c_bobdata@group.calendar.google.com"})
+    assert "Delete this calendar" not in page.text
+    assert "data owner, bob@example.com, is suspended" in unescape(page.text)
+    page = client.get("/calendars/detail", params={"cal": "c_coowned@group.calendar.google.com"})
+    assert "Delete this calendar" in page.text
+
+
+def test_calendars_delete_never_names_someone_suspended_when_the_directory_failed(client, monkeypatch):
+    async def broken():
+        raise RuntimeError("directory read failed")
+    monkeypatch.setattr(client.app.state.gamgui, "users", broken)
+    r = client.post("/calendars/delete/preview", data={"cal": "c_coowned@group.calendar.google.com"})
+    text = unescape(r.text)
+    assert "Couldn't read the directory" in text and "suspended" not in text
+
+
+@pytest.mark.parametrize("day", ["0001-01-01", "9999-12-31"])
+def test_calendars_event_search_edge_years_never_crash(client, day):
+    r = client.get("/calendars/events", params={"cal": SEC_CAL, "after": day})
+    assert r.status_code == 200
+
+
+def test_calendars_event_search_sends_the_operators_midnight(client, gam_calls, monkeypatch):
+    # GAM reads a bare day as UTC midnight, and Google keeps an event whose END is after timeMin: in New
+    # York, "on or after the 13th" listed an 8-9 pm meeting on the 12th (01:00-02:00Z on the 13th).
+    try:
+        with monkeypatch.context() as m:   # TZ alone; the suite's hermetic environment stays
+            m.setenv("TZ", "America/New_York")
+            time.tzset()
+            r = client.get("/calendars/events", params={"cal": SEC_CAL, "after": "2026-11-13", "before": "2026-11-14"})
+    finally:
+        time.tzset()                       # the context put TZ back; read it again
+    sent = next(c for c in gam_calls() if c[2:4] == ["print", "events"])
+    assert sent[sent.index("after") + 1] == "2026-11-13T00:00:00-05:00"
+    assert sent[sent.index("before") + 1] == "2026-11-14T00:00:00-05:00"
+    assert "Planning" in r.text and "Evening Review" not in r.text
 
 
 def test_calendars_share_adds_acl_and_subscribes(client):

@@ -39,6 +39,7 @@ HEADERS = {
     "print_filters": "User,id,from,subject,forward,archive,label,JSON",
     "print_calendar_acls": "primaryEmail,calendarId,JSON",
     "print_calendar_acls_cal": "calendarId,JSON",
+    "print_calendar_data_owner": "calendarId,JSON",
     "print_events": "calendarId,id,JSON",
     "get_event": "calendarId,id,JSON",
     "print_filelist": "Owner,id,name,owners,owners.0.displayName,owners.0.emailAddress,JSON",
@@ -268,3 +269,52 @@ async def test_subscribe_needs_access_and_a_bare_group_address_is_a_persons_rule
     await runner.run_authenticated(domain, C.delete_calendar_acl_cal(CAL, "group:sales@example.com"), serialize=True)
     err = await _fails(runner, domain, C.subscribe_calendar("carol@example.com", CAL))
     assert "Add Failed: Not Found" in err.stderr
+
+
+async def test_calendar_data_owner_read_and_only_the_data_owner_deletes(runner, domain):
+    # calendars.get's dataOwner, not the first owner in the ACL; a co-owner's remove is refused here.
+    cal = "c_coowned@group.calendar.google.com"
+    recs = parse_records(await runner.run_authenticated(domain, C.print_calendar_data_owner(cal)))
+    assert [(r["dataOwner"], r["id"]) for r in recs] == [("carol@example.com", cal)]
+    err = await _fails(runner, domain, C.print_calendar_data_owner("c_missing@group.calendar.google.com"))
+    assert err.exit_code == 50 and "Print Failed: Not Found" in err.stderr
+    err = await _fails(runner, domain, C.remove_calendar("alice@example.com", cal))
+    assert err.exit_code == 50 and "Remove Failed" in err.stderr
+
+
+@pytest.mark.parametrize(("after", "before", "ids"), [
+    # A bare day is UTC midnight: the 01:00Z review ends after it, so it is kept.
+    ("2026-11-13", "", ["evt-evening-review", "evt-planning"]),
+    # New York's midnight (05:00Z): the review ended before it; the 19:00Z planning didn't.
+    ("2026-11-13T00:00:00-05:00", "2026-11-14T00:00:00-05:00", ["evt-planning"]),
+    # timeMax is compared with the START: planning starts at 19:00Z, not before 18:00Z.
+    ("2026-11-13T00:00:00-05:00", "2026-11-13T18:00:00Z", []),
+])
+async def test_events_after_before_compare_instants_like_google(runner, domain, after, before, ids):
+    out = await runner.run_authenticated(domain, C.print_events(CAL, after=after, before=before))
+    assert [r["id"] for r in parse_records(out)] == ids
+
+
+@pytest.mark.parametrize(("bad", "expected"), [
+    ("2026-02-30", "Expected <yyyy-mm-dd>"),
+    ("2026-11-13 morning", "Expected <yyyy-mm-ddThh:mm:ss[.fff](Z|(+|-(hh:mm)))>"),
+    ("2026-11-13T25:00:00Z", "Expected <yyyy-mm-ddThh:mm:ss[.fff](Z|(+|-(hh:mm)))>"),
+])
+async def test_events_with_a_date_gam_cannot_read_is_its_usage_error(runner, domain, bad, expected):
+    # GAM 7.52.01 getTimeOrDeltaFromNow: a bare day fails strptime, anything else arrow.get. macOS's date
+    # rolls Feb 30 over to Mar 2, so the mock reads the day back as GAM and GNU date would refuse it.
+    err = await _fails(runner, domain, C.print_events(CAL, after=bad))
+    assert err.exit_code == 2 and f"Invalid argument: {expected}" in err.stderr
+
+
+@pytest.mark.parametrize("when", ["2026-11-13 00:00:00-05:00", "2026-11-13T00:00:00.000-05:00", "2026-11-13T00:00-05:00"])
+async def test_events_take_the_grammars_other_time_spellings(runner, domain, when):
+    out = await runner.run_authenticated(domain, C.print_events(CAL, after=when))
+    assert [r["id"] for r in parse_records(out)] == ["evt-planning"]
+
+
+@pytest.mark.parametrize("when", ["-7d", "today", "now"])
+async def test_events_relative_times_are_not_modelled_not_refused(runner, domain, when):
+    # GAM accepts these (<Time>); the mock says it doesn't model them rather than answer a usage error.
+    err = await _fails(runner, domain, C.print_events(CAL, after=when))
+    assert "isn't modelled" in err.stderr

@@ -230,7 +230,7 @@ def test_only_a_one_account_warning_with_a_csv_keeps_the_read(state, monkeypatch
 def test_exit_73_is_a_one_account_warning_too(state, monkeypatch):
     # entityUnknownWarning for an address outside the primary domain: SERVICE_NOT_APPLICABLE_RC.
     async def fails(*args, **kwargs):
-        raise GAMError.from_run(73, "User: a@other.example, Service not applicable (1/2)\n", ["print", "tokens"],
+        raise GAMError.from_run(73, "User: a@other.example, Service not applicable/Does not exist (1/2)\n", ["print", "tokens"],
                                 stdout=HEADER + ROW)
 
     monkeypatch.setattr(state.runner, "run_authenticated", fails)

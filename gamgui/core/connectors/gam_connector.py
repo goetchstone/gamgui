@@ -587,6 +587,12 @@ class GAMConnector(Connector):
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_acls_cal(calendar_id))
         return [CalendarACL.from_json(r) for r in parse_records(out)]
 
+    async def calendar_data_owner(self, calendar_id: str) -> str:
+        """The calendar's data owner (Calendars resource ``dataOwner``), or '' when Google names none."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_calendar_data_owner(calendar_id))
+        recs = parse_records(out)
+        return str(recs[0].get("dataOwner") or "").strip() if recs else ""
+
     async def add_calendar_acl_for(self, calendar_id: str, scope: str, role: str = "reader") -> ChangeResult:
         argv = GAMCommands.add_calendar_acl_cal(calendar_id, scope, role=role)
         return await self._run_write("add_calendar_acl_cal", calendar_id, argv, RiskLevel.LOW, about={"scope": scope})

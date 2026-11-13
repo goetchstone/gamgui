@@ -1,0 +1,3 @@
+{"id": "user:alice@example.com", "role": "owner", "scope": {"type": "user", "value": "alice@example.com"}}
+{"id": "user:carol@example.com", "role": "owner", "scope": {"type": "user", "value": "carol@example.com"}}
+{"id": "user:bob@example.com", "role": "owner", "scope": {"type": "user", "value": "bob@example.com"}}

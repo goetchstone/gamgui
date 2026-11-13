@@ -59,6 +59,11 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 - **`remove calendars` ≠ `delete calendars`** (footgun, verified against GAM7 source): `remove_calendar`
   PERMANENTLY deletes a secondary calendar (impersonating an owner); `delete calendars` only drops
   it from one user's list (no builder: the app never unsubscribes anyone, and the mock refuses it).
+  It acts as the calendar's data owner (`print_calendar_data_owner`: `print settings fields id,dataowner`,
+  a field GAM's source accepts though the reference omits it; `SOURCE_ONLY_FIELDS` in the contract test),
+  never the first owner in its ACL (failure-log 2026-11-13).
+  Event search's `after`/`before` are `timeMin`/`timeMax`: GAM reads a bare day as UTC midnight, so the
+  route sends a picked day as the operator's local midnight with its offset.
   No `doit` on `remove calendars` — GAM7 rejects extra args. See
   `test_calendar_delete_is_remove_calendars_not_delete_calendars`.
 - **A calendar ACL scope's bare address is a person** (`user:<address>`), even when it is a group's:
