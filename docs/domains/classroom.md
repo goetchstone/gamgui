@@ -149,7 +149,9 @@ guard; only its read side is adapted here.
   `Course_name` with its period. Fixture: `tests/fixtures/roster/clever/` (the Swift port reads the same files).
 - **A spreadsheet of any other shape** (`core/roster_mapped.py`, C5.3, the operator chose **one flat file**: a row per
   person in a class). `ColumnMap` maps six fields (class ID, class name, email and role needed; section, primary teacher
-  optional) and the role words; `guess(header)` fills it on first sight; `preview` reads three rows and stops;
+  optional) and the role words; `guess(header)` fills it on first sight; `preview` reads three rows and stops, and
+  **leaves out what `read_mapped` refuses** (`_left_out`: no class ID, no address, not one address, the address checked
+  as given; until 2026-11-13 it lowercased first, so a Kelvin-sign K previewed as a valid address the read refused);
   `read_mapped` reads the rest (person ID = address; conflicts first-kept; an unrecognized role word is `unknown_role`).
   Maps are saved by name in `roster-maps.json` (`core/roster_maps.py`: column names and words only, `0600`/`0700`, moved
   aside when unreadable).

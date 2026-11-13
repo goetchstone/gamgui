@@ -80,7 +80,7 @@ def test_preview_reads_only_n_rows_and_says_what_the_role_means():
     rows = preview("dir/sheet.csv", body, CMAP)
     assert [r["as"] for r in rows] == ["teacher", "student", ""]
     assert rows[0] == {"class_id": "C1", "class_name": "Math", "section": "Fall", "email": "t@x.edu", "role": "Staff",
-                       "primary": "yes", "as": "teacher"}
+                       "primary": "yes", "left": "", "as": "teacher"}
     with pytest.raises(PackageError):                          # the same file read far enough reaches the bad line
         preview("sheet.csv", body, CMAP, n=5000)
 
@@ -88,7 +88,7 @@ def test_preview_reads_only_n_rows_and_says_what_the_role_means():
 def test_preview_works_with_a_map_still_being_filled():
     rows = preview("s.csv", sheet("C1,Math,Fall,t@x.edu,teacher,"), ColumnMap(email="Email Address", role="Missing"))
     assert rows == [{"class_id": "", "class_name": "", "section": "", "email": "t@x.edu", "role": "", "primary": "",
-                     "as": ""}]
+                     "left": "", "as": ""}]
 
 
 # --- read_mapped -----------------------------------------------------------------------------------------------------
@@ -275,7 +275,7 @@ def test_the_store_keeps_no_row_data(store_path):
 
 # --- found by the adversarial run of C5 (2026-11-12) -----------------------------------------------------------------
 def test_a_column_mapped_as_the_address_and_a_class_is_still_cleaned_for_the_class():
-    body = b"who,role\r\n\"x\u202e\x07y@x.edu\",teacher\r\n".decode("unicode_escape").encode()
+    body = "who,role\r\n\"x\u202e\x07y@x.edu\",teacher\r\n".encode()
     cmap = ColumnMap(class_id="who", class_name="who", email="who", role="role")
     snap = read_mapped("s.csv", body, cmap)
     assert all(c.isprintable() and c != "\u202e" for cid in snap.classes for c in cid)
@@ -294,3 +294,22 @@ def test_someone_who_teaches_one_class_and_studies_in_another_counts_as_a_teache
     snap = read_mapped("s.csv", body, ColumnMap(class_id="class_id", class_name="class_name", email="email", role="role"))
     assert snap.people["s@x.edu"].role == "teacher" and snap.counts["teachers"] == 1
     assert sorted((e.class_id, e.role) for e in snap.enrollments) == [("C1", "student"), ("C2", "teacher")]
+
+
+# --- found by the SwiftGamGui port of C5 (2026-11-13) ----------------------------------------------------------------
+@pytest.mark.parametrize("given, why", [
+    ("\u212aim@example.com", "Left out: not one address"),        # KELVIN SIGN: lowercases to an ASCII k
+    ("", "Left out: no address"),
+])
+def test_the_preview_leaves_out_what_the_read_refuses(given, why):
+    body = sheet(f"C1,Math,Fall,{given},teacher,", "C1,Math,Fall,ok@x.edu,teacher,")
+    first, second = preview("s.csv", body, CMAP)
+    assert (first["left"], first["as"], first["email"]) == (why, "", given)       # shown as given, never as a fixed one
+    assert (second["left"], second["as"]) == ("", "teacher")
+    snap = read_mapped("s.csv", body, CMAP)
+    assert [p.email for p in snap.people.values()] == ["ok@x.edu"]                 # the read agrees: only the second
+
+
+def test_the_preview_leaves_out_a_row_with_no_class_id_once_that_column_is_mapped():
+    rows = preview("s.csv", sheet(",Math,Fall,t@x.edu,teacher,"), CMAP)
+    assert (rows[0]["left"], rows[0]["as"]) == ("Left out: no class ID", "")

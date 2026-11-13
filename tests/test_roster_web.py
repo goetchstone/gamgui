@@ -500,3 +500,11 @@ def test_a_purge_during_a_compare_keeps_nothing_from_it(client, monkeypatch):
     client.post("/classroom/import/compare")
     wait_for_job(client, next(j for j in st.jobs.values() if j.kind == "roster_compare"))
     assert st.roster_compare is None
+
+
+def test_the_map_preview_says_a_row_the_read_will_leave_out(client, maps):
+    sheet = SHEET.replace(b"ann@example.com", "Kim@example.com".encode())     # KELVIN SIGN: not one address
+    _upload(client, ("schedule.csv", sheet))
+    r = client.post("/classroom/import/map/preview", data=MAP_FORM)
+    assert '<span aria-hidden="true">⚠ </span>Left out: not one address' in r.text
+    assert "kim@example.com" not in r.text                         # never shown as the ASCII address it folds to
