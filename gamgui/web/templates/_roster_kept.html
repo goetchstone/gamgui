@@ -1,4 +1,11 @@
 {#- The kept roster (plan 2026-11-11 C2.4): its counts, its days, and its issues by kind, for the SIS team. -#}
+{% macro purge_form() -%}
+<form hx-post="/classroom/import/purge" hx-target="#roster-kept" hx-swap="innerHTML" hx-disabled-elt="find button"
+      hx-confirm="Delete the kept roster from this Mac now?">
+  <button type="submit" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs font-medium text-brand-blueink hover:bg-red-50 hover:text-red-800">Purge it now</button>
+  <span class="ml-2 text-[11px] text-brand-grayink">Otherwise it's deleted after {{ keep_days }} days.</span>
+</form>
+{%- endmacro %}
 {% if upload_error is defined and upload_error %}
 <div class="mb-3">{% with ok=False, message=upload_error %}{% include "_action_result.html" %}{% endwith %}</div>
 {% endif %}
@@ -7,6 +14,7 @@
 {% endif %}
 {% if store_error %}
 <div>{% with ok=False, message=store_error %}{% include "_action_result.html" %}{% endwith %}</div>
+{% if store_kept is defined and store_kept %}<div class="mt-3">{{ purge_form() }}</div>{% endif %}
 {% elif meta %}
 {% set c = meta.counts %}
 <div class="space-y-4">
@@ -51,11 +59,7 @@
 
   <div id="roster-plan" class="border-t border-brand-gray/30 pt-3" hx-get="/classroom/import/compare/status" hx-trigger="load" hx-swap="innerHTML"></div>
 
-  <form hx-post="/classroom/import/purge" hx-target="#roster-kept" hx-swap="innerHTML" hx-disabled-elt="find button"
-        hx-confirm="Delete the kept roster from this Mac now?">
-    <button type="submit" class="rounded-lg border border-brand-gray/60 px-3 py-1.5 text-xs font-medium text-brand-blueink hover:bg-red-50 hover:text-red-800">Purge it now</button>
-    <span class="ml-2 text-[11px] text-brand-grayink">Otherwise it's deleted after {{ keep_days }} days.</span>
-  </form>
+  {{ purge_form() }}
 </div>
 {% else %}
 <p class="text-sm text-brand-grayink">No roster is kept on this Mac. Choose your SIS's export to read it.</p>

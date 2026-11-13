@@ -117,7 +117,12 @@ guard; only its read side is adapted here.
   folder**, of any domain and whichever process left it (a quit between commit and rename once left a whole snapshot that
   Purge never saw; until 2026-11-13 only a save or purge of that domain swept it). **Each holds an exclusive `flock` on the
   folder** (`_held`), not only the in-process `_LOCK`: a dev run beside the installed app shares the folder, and one's sweep
-  could delete the other's save mid-write. **Expiry fails
+  could delete the other's save mid-write. The locked descriptor must be the folder `lstat` saw and still be at `root`
+  after the lock, or it's refused: a folder moved while a save waited is never written into. **Only bad content is
+  deleted** (`_damaged`: SQLite's missing-table, corrupt, mismatch, format and not-a-database codes, or a stored value json
+  can't read); a read the disk failed (I/O, busy, locked, interrupted) keeps the roster and says to try again, and the page
+  still shows Purge for it (`present`). But never past `KEEP_DAYS` by the file's mtime (`_unread`): a stray journal SQLite
+  can't roll back read only, or a file no one can open, fails every read and would otherwise never expire. **Expiry fails
   closed** (`_expired`): unreadable dates, an import dated in the future, or a stored expiry past `imported + KEEP_DAYS` all
   delete it. Every failure of a save is a `StoreError`, and its temp file goes.
 

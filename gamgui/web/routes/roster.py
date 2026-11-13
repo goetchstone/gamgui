@@ -85,6 +85,7 @@ def _kept(st) -> Dict[str, Any]:
         found = roster_store(st).issues(st.audit_domain) if meta is not None else None
     except StoreError as exc:
         ctx["store_error"] = str(exc)
+        ctx["store_kept"] = roster_store(st).present(st.audit_domain)   # kept but unread: Purge still shows
         return ctx
     ctx.update(meta=meta, issues=_issues(found))
     return ctx
@@ -361,6 +362,8 @@ async def _compare(job, st, domain: str) -> None:
             out.notes.append("The directory couldn't be read, so addresses weren't checked against Workspace accounts.")
         st.roster_compare = {"domain": domain, "sha256": meta.get("sha256"), "when": clock_text(), "plan": out}
         job.applied = len(out.changes)
+    except StoreError:                       # the kept roster, not Classroom or GAM: said as such, in fixed words
+        job.error = "The kept roster couldn't be read, so nothing was compared. Open the import page to see why."
     except Exception as exc:  # noqa: BLE001 — said in fixed words: an exception's own text never reaches a page
         job.error = explain(exc)
     finally:

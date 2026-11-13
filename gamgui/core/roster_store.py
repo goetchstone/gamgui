@@ -51,6 +51,27 @@ def default_root() -> Path:
     return app_data_dir() / "roster"
 
 
+# SQLite's primary result codes that say the file itself is bad: SQLITE_ERROR (a table or column missing), SQLITE_CORRUPT,
+# SQLITE_MISMATCH, SQLITE_FORMAT, SQLITE_NOTADB. Every other code (SQLITE_IOERR, SQLITE_BUSY, SQLITE_CANTOPEN, SQLITE_NOMEM,
+# SQLITE_INTERRUPT, SQLITE_FULL, …) is the disk or the moment failing a read, and says nothing about the roster.
+_DAMAGED_CODES = frozenset({1, 11, 20, 24, 26})
+
+
+def _damaged(exc: Exception) -> bool:
+    """True when a failed read of the kept roster means its content is bad, so it is deleted; False when only the read
+    failed (an I/O error, a busy or locked file), so it is kept and the next look tries again."""
+    if not isinstance(exc, sqlite3.Error):
+        return True                      # json.loads refused a stored value: the bytes are wrong
+    code = getattr(exc, "sqlite_errorcode", None)        # Python 3.11+
+    if code is not None:
+        return (code & 0xFF) in _DAMAGED_CODES
+    # Python 3.10 has no code: a DatabaseError that isn't an OperationalError is "not a database" or "malformed", and the
+    # only OperationalError of content is a missing table or column.
+    if isinstance(exc, sqlite3.OperationalError):
+        return str(exc).startswith(("no such table", "no such column"))
+    return isinstance(exc, sqlite3.DatabaseError)
+
+
 def _utc(when: datetime) -> str:
     return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -63,8 +84,9 @@ class RosterStore:
         self.now = now
 
     # --- the folder and the file --------------------------------------------------------------------------------------
-    def _folder(self, make: bool) -> Optional[Path]:
-        """The store's folder, `0700`, refused if it's a link or not a folder. None when it doesn't exist and ``make`` is off."""
+    def _folder(self, make: bool) -> Optional[os.stat_result]:
+        """What ``lstat`` says of the store's folder, refused if it's a link, not a folder or another user's. None when it
+        doesn't exist and ``make`` is off."""
         try:
             info = os.lstat(self.root)
         except FileNotFoundError:
@@ -80,26 +102,43 @@ class RosterStore:
             raise StoreError(f"{self.root} isn't a folder (it may be a link), so no roster is kept there.")
         if info.st_uid != os.getuid():
             raise StoreError(f"{self.root} belongs to another user, so no roster is kept there.")
-        os.chmod(self.root, 0o700)       # lstat said a folder, not a link
-        return self.root
+        return info
 
     @contextlib.contextmanager
     def _held(self, make: bool) -> Iterator[Optional[Path]]:
-        """The folder (as ``_folder``), held for one save, read or purge: ``_LOCK`` for this process's threads, and an
-        exclusive flock on the folder for every process sharing it (a dev run beside the installed app), so no sweep can
-        delete a save another process is still writing. None, unlocked, when there's no folder and ``make`` is off."""
+        """The folder, `0700`, held for one save, read or purge: ``_LOCK`` for this process's threads, and an exclusive
+        flock on the folder for every process sharing it (a dev run beside the installed app), so no sweep can delete a
+        save another process is still writing. None, unlocked, when there's no folder and ``make`` is off.
+
+        The descriptor locked must be the folder ``lstat`` saw, and still be at ``root`` once the lock is had: a folder
+        moved or swapped while a save waited is refused. Written into, the roster would land where no later look, expiry
+        or Purge reaches, and two processes could lock two different folders. (A folder moved in the milliseconds of a save
+        itself, after this check, makes that save fail and may leave its temp file in the moved folder: every file call
+        goes by path, as ``sqlite3.connect`` takes only a path. Accepted: it takes the folder moved by hand mid-save, and that
+        save says it failed.)"""
         with _LOCK:
-            folder = self._folder(make)
-            if folder is None:
+            seen = self._folder(make)
+            if seen is None:
                 yield None
                 return
             try:
-                fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
             except OSError as exc:
                 raise StoreError(f"Couldn't open the roster folder on this Mac ({exc}).") from exc
             try:
+                held = os.fstat(fd)
+                if (held.st_dev, held.st_ino) != (seen.st_dev, seen.st_ino):
+                    raise StoreError(f"{self.root} changed as it was opened, so no roster is kept or read there.")
+                os.fchmod(fd, 0o700)     # the folder held, never one swapped in at its path
                 fcntl.flock(fd, fcntl.LOCK_EX)
-                yield folder
+                try:
+                    now = os.lstat(self.root)
+                except OSError:
+                    now = None
+                if now is None or (now.st_dev, now.st_ino) != (held.st_dev, held.st_ino):
+                    raise StoreError(f"{self.root} was moved while the roster waited for it, so no roster is kept or "
+                                     f"read there. Try again.")
+                yield self.root
             finally:
                 os.close(fd)                 # closing the descriptor releases the flock
 
@@ -107,6 +146,34 @@ class RosterStore:
         """The domain's snapshot file: named by a hash, so a domain's spelling never becomes a path."""
         key = hashlib.sha256(domain.strip().lower().encode()).hexdigest()[:24]
         return self.root / f"{key}.sqlite"
+
+    def present(self, domain: str) -> bool:
+        """Whether a file sits where the domain's roster is kept, read or not: after a read fails, the page shows Purge for
+        it. Only for what to show; ``purge`` decides under the lock. False when the folder is one ``purge`` refuses (a link,
+        not a folder, another user's), so a Purge that could never work isn't shown."""
+        try:
+            if self._folder(make=False) is None:
+                return False
+            os.lstat(self.path(domain))
+        except (OSError, StoreError):
+            return False
+        return True
+
+    def _unread(self, domain: str, message: str) -> StoreError:
+        """A kept roster that couldn't be read, though its content isn't known to be bad. Kept, so a busy or failing disk
+        never deletes a good roster; but never past ``KEEP_DAYS`` by the file's own age (the app never rewrites it in
+        place, so its mtime is its save), since its stored dates can't be read: a stray journal SQLite can't roll back
+        read only, or a file no one can open, would otherwise keep student data with no end. Returns the error to raise."""
+        try:
+            saved = datetime.fromtimestamp(os.lstat(self.path(domain)).st_mtime, timezone.utc)
+        except OSError:
+            return StoreError(message)
+        now = self.now()
+        if now < saved + timedelta(days=KEEP_DAYS) and saved <= now + timedelta(days=1):
+            return StoreError(message)
+        self._purge(domain)
+        return StoreError("The kept roster couldn't be read and was past its days, so it was deleted. Upload the export "
+                          "again.")
 
     # --- keep, read, purge --------------------------------------------------------------------------------------------
     def save(self, domain: str, snap: Snapshot, label: str, sha256: str) -> Dict[str, object]:
@@ -185,7 +252,7 @@ class RosterStore:
         try:
             return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         except sqlite3.Error as exc:
-            raise StoreError(f"Couldn't read the kept roster ({exc}).") from exc
+            raise self._unread(domain, f"Couldn't read the kept roster ({exc}).") from exc
 
     def meta(self, domain: str) -> Optional[Dict[str, object]]:
         """The kept roster's metadata, or None when there's none. One past its days is deleted here, and reads as none. One
@@ -204,8 +271,10 @@ class RosterStore:
             return None
         try:
             meta = {k: json.loads(v) for k, v in con.execute("SELECT key, value FROM meta")}
-        except (sqlite3.Error, ValueError) as exc:
+        except (sqlite3.Error, ValueError, TypeError) as exc:
             con.close()
+            if not _damaged(exc):            # the disk failed the read, not the file: a good roster is never deleted for it
+                raise self._unread(domain, "The kept roster couldn't be read just now. Try again; Purge still deletes it.") from exc
             self._purge(domain)
             raise StoreError(f"The kept roster couldn't be read ({exc}), so it was deleted. Upload the export again.") from exc
         finally:
