@@ -15,7 +15,7 @@ from gamgui.core import roster
 from gamgui.core.audit import AuditLog
 from gamgui.core.connectors.gam_connector import GAMConnector
 from gamgui.core.gam.runner import GAMRunner
-from gamgui.core.roster_store import RosterStore
+from gamgui.core.roster_store import RosterStore, StoreError
 from gamgui.core.secrets.vault import InMemoryBackend, SecretsVault
 from gamgui.web.server import AppState, create_app
 
@@ -376,3 +376,33 @@ def test_a_maps_file_moved_aside_is_said_on_the_map_step(client, maps):
     client.app.state.gamgui.roster_maps = MapStore(maps.path)
     r = _upload(client, ("schedule.csv", SHEET))
     assert "The saved maps file couldn't be read" in r.text
+
+
+def test_a_kept_roster_that_cant_be_read_just_now_still_shows_purge(client, monkeypatch):
+    _upload(client, ("export.zip", _zip(_files())))
+    store = _store(client)
+
+    def fails(_domain):
+        raise StoreError("The kept roster couldn't be read just now. Try again; Purge still deletes it.")
+
+    monkeypatch.setattr(store, "meta", fails)
+    r = client.get("/classroom/import")
+    assert "couldn&#39;t be read just now" in r.text and "Purge it now" in r.text
+    monkeypatch.undo()
+    store.purge(DOMAIN)
+    monkeypatch.setattr(store, "meta", fails)
+    assert "Purge it now" not in client.get("/classroom/import").text     # nothing kept: nothing to purge
+
+
+def test_a_roster_that_cant_be_read_during_compare_is_said_as_the_roster_not_gam(client, monkeypatch):
+    from .helpers import wait_for_job
+
+    def fails(_domain):
+        raise StoreError("The kept roster couldn't be read just now. Try again; Purge still deletes it.")
+
+    _upload(client, *_files(**{"classes.csv": SIS_CLASSES, "users.csv": SIS_USERS, "enrollments.csv": SIS_ENROLL}).items())
+    monkeypatch.setattr(_store(client), "load", fails)
+    client.post("/classroom/import/compare")
+    job = client.app.state.gamgui.jobs[client.app.state.gamgui.roster_compare_job]
+    wait_for_job(client, job)
+    assert job.error == "The kept roster couldn't be read, so nothing was compared. Open the import page to see why."

@@ -5,13 +5,14 @@ from __future__ import annotations
 import csv
 import io
 import os
+import sqlite3
 import stat
 import zipfile
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from gamgui.core import roster
+from gamgui.core import roster, roster_store
 from gamgui.core.roster import PackageError, read_upload
 from gamgui.core.roster_store import KEEP_DAYS, RosterStore, StoreError
 
@@ -558,3 +559,134 @@ def test_a_1_2_enrolment_of_someone_without_a_roster_role_points_at_roles_csv():
     snap = read_upload(list(_files_12(**{"roles.csv": roles}).items()))
     assert snap.issue_counts.get("role_mismatch") == 1 and "unknown_person" not in snap.issue_counts
     assert "roles.csv" in next(i.detail for i in snap.issue_sample if i.code == "role_mismatch")
+
+
+# --- a failing read is not a damaged roster; a moved folder is never written into --------------------------------------
+class _FailingRead:
+    """A connection whose read fails the way SQLite reports ``code``: the disk or the moment, not the file."""
+
+    def __init__(self, code):
+        self.code = code
+
+    def execute(self, *_):
+        exc = sqlite3.OperationalError("disk I/O error")
+        exc.sqlite_errorcode = self.code
+        raise exc
+
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize("code", [5, 6, 9, 10, 266, 522, 13, 14])     # BUSY, LOCKED, INTERRUPT, IOERR(+READ, +SHORT_READ), FULL, CANTOPEN
+def test_a_read_the_disk_failed_keeps_the_roster_and_says_try_again(tmp_path, monkeypatch, code):
+    store = RosterStore(tmp_path / "roster")
+    store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    real = sqlite3.connect
+    monkeypatch.setattr(roster_store.sqlite3, "connect", lambda *a, **k: _FailingRead(code))
+    with pytest.raises(StoreError, match="couldn't be read just now"):
+        store.meta("example.com")
+    monkeypatch.setattr(roster_store.sqlite3, "connect", real)
+    assert store.present("example.com") and store.meta("example.com") is not None
+
+
+@pytest.mark.parametrize("exc, damaged", [
+    (sqlite3.DatabaseError("file is not a database"), True),
+    (sqlite3.DatabaseError("database disk image is malformed"), True),
+    (sqlite3.OperationalError("no such table: meta"), True),
+    (sqlite3.OperationalError("disk I/O error"), False),
+    (sqlite3.OperationalError("database is locked"), False),
+    (sqlite3.OperationalError("interrupted"), False),
+    (ValueError("Expecting value"), True),
+    (TypeError("not str"), True),
+])
+def test_damage_is_told_from_a_failing_read_without_sqlites_code(exc, damaged):
+    assert getattr(exc, "sqlite_errorcode", None) is None                # as on Python 3.10, which has no code
+    assert roster_store._damaged(exc) is damaged
+
+
+def test_a_folder_swapped_as_it_is_opened_is_refused(tmp_path, monkeypatch):
+    store = RosterStore(tmp_path / "roster")
+    store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    other = tmp_path / "other"
+    other.mkdir(mode=0o700)
+    monkeypatch.setattr(store, "_folder", lambda make: os.lstat(other))   # lstat saw one folder; another is at the path
+    with pytest.raises(StoreError, match="changed as it was opened"):
+        store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    with pytest.raises(StoreError, match="changed as it was opened"):
+        store.purge("example.com")
+    assert store.present("example.com") and not list(other.iterdir())
+
+
+def test_a_folder_moved_while_a_save_waits_is_never_written_into(tmp_path):
+    import fcntl
+    import threading
+    root = tmp_path / "roster"
+    store = RosterStore(root)
+    store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    fd = os.open(root, os.O_RDONLY)                                   # another process holds the folder
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    failed = []
+
+    def save():
+        try:
+            store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "y", "")
+        except StoreError as exc:
+            failed.append(str(exc))
+
+    waiting = threading.Thread(target=save)
+    waiting.start()
+    waiting.join(0.3)
+    assert waiting.is_alive()
+    os.rename(root, tmp_path / "moved")                               # moved (and a new one made) while the save waits
+    os.mkdir(root, 0o700)
+    os.close(fd)
+    waiting.join(5)
+    assert failed and "was moved" in failed[0]
+    assert not list(root.iterdir())                                   # the new folder: nothing written
+    assert store.meta("example.com") is None
+    moved = RosterStore(tmp_path / "moved")
+    assert moved.meta("example.com")["label"] == "x"                 # the moved one: unchanged, no leftover
+    assert sorted(p.name for p in (tmp_path / "moved").iterdir()) == [store.path("example.com").name]
+
+
+def _hot_journal(path):
+    """Leave a rollback journal SQLite can't roll back read only, as a writer that died mid-transaction would."""
+    import subprocess
+    import sys
+    code = ("import os, sqlite3, sys; c = sqlite3.connect(sys.argv[1], isolation_level=None); "
+            "c.execute('PRAGMA journal_mode=DELETE'); c.execute('PRAGMA cache_size=1'); c.execute('BEGIN'); "
+            "c.execute(\"UPDATE meta SET value = '\\\"x\\\"' WHERE key = 'label'\"); "
+            "c.execute('CREATE TABLE pad (x)'); c.executemany('INSERT INTO pad VALUES (?)', [(b'0' * 4000,)] * 50); "
+            "os._exit(0)")
+    subprocess.run([sys.executable, "-I", "-c", code, str(path)], check=True)
+    assert path.with_name(path.name + "-journal").exists()
+
+
+@pytest.mark.parametrize("unreadable", ["hot journal", "no permission"])
+def test_a_roster_that_stays_unreadable_is_still_deleted_after_its_days(tmp_path, unreadable):
+    clock = [datetime.now(timezone.utc)]
+    store = RosterStore(tmp_path / "roster", now=lambda: clock[0])
+    store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    path = store.path("example.com")
+    if unreadable == "hot journal":
+        _hot_journal(path)
+    else:
+        os.chmod(path, 0)
+    with pytest.raises(StoreError, match="couldn't be read just now|Couldn't read the kept roster"):
+        store.meta("example.com")
+    assert store.present("example.com")                               # kept while it may only be the moment
+    clock[0] += timedelta(days=KEEP_DAYS, minutes=1)
+    with pytest.raises(StoreError, match="past its days, so it was deleted"):
+        store.meta("example.com")
+    assert not store.present("example.com") and not list((tmp_path / "roster").iterdir())
+
+
+def test_purge_isnt_offered_through_a_linked_folder(tmp_path):
+    real = tmp_path / "real"
+    store = RosterStore(real)
+    store.save("example.com", read_upload([("x.zip", _zip(_files()))]), "x", "")
+    (tmp_path / "link").symlink_to(real)
+    linked = RosterStore(tmp_path / "link")
+    assert store.present("example.com") and not linked.present("example.com")
+    with pytest.raises(StoreError, match="may be a link"):
+        linked.purge("example.com")
