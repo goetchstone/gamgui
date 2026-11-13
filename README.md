@@ -34,6 +34,10 @@ time.
 - **Share a calendar** so it actually appears, and see who has access to any shared calendar.
 - **Audit**: 2SV gaps, inactive accounts, admins and storage in Reports; in the Builder, any of GAM's
   read commands, filtered down to the rows that reach outside your domains.
+- **Classroom**, for school domains: find a class and who is in it, and plan a roster import from your
+  SIS's export (OneRoster, Clever, or any spreadsheet) as a change list you review and run with GAM
+  yourself. Read only, and **untested on a real school domain**: if you run one,
+  [tell us how it went](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml).
 
 **How to get it:** there is **no notarized download yet** — you build it from source on your own Mac.
 It takes a few minutes and Python 3.10+ (macOS ships 3.9: `brew install python@3.13` first); no
@@ -69,6 +73,8 @@ Details in [Build from source](#build-from-source).
 
 ![Offboarding — a guided routine with a rendered auto-reply preview](docs/screenshots/lifecycle.png)
 
+![Classroom — find a class and see its teachers and students, read only](docs/screenshots/classroom.png)
+
 ## Status
 
 In use against live Google Workspace tenants, kept current with GAM, and at feature parity with
@@ -101,6 +107,11 @@ In use against live Google Workspace tenants, kept current with GAM, and at feat
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
 - **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.
+- **Classroom** (school domains, read only) — find any class and see its teachers and students, a person's classes
+  (with a warning at offboarding when a leaver owns some), and who may create classes. **Plan an import** reads your
+  SIS's roster export on this Mac (OneRoster 1.1 or 1.2, Clever's CSV files, or one spreadsheet you map by its
+  columns), compares it with Classroom, and hands the change list over as a review sheet and numbered CSVs for
+  `gam csv`. GamGUI itself never changes Classroom. Nothing here has run on a real school domain yet.
 - **Calendars** — find any shared calendar by name. The first time, click **Build index** on the
   Calendars screen: a one-time background scan of every user's calendars (minutes on a large tenant,
   with live progress). After that, name search is instant and served entirely from the local index —
@@ -179,6 +190,11 @@ run were last confirmed separately: setup's scoped `check serviceaccount scopes 
 its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11). The Google Classroom reads (`print courses`, `print
 course-participants`) have **never run live**: their output shapes were read from the vendored GAM build, and the
 maintainer has no Workspace for Education domain to check them on. GamGUI doesn't write to Classroom at all.
+
+**Tried something on a real domain?** Tell us with the two-minute
+[I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml): what you tried,
+whether it worked, and nothing private. That is how a row below turns **confirmed**, and a Classroom report from a
+school domain is the most useful one of all.
 
 | Write | Where | Live |
 |---|---|---|
