@@ -246,7 +246,8 @@ guard; only its read side is adapted here.
 - **An owner GAM can't look up** (a deleted account) with `owneremail`: GAM prints every class, the address as "Unknown user",
   warns "Course: <id>, Owner ID: <id>, Does not exist" and exits 56. `_courses_read` accepts that exit only when every
   reported line is that warning (`errors.only_unknown_owners`); "Unknown user" is never kept as an address. Failure log
-  2026-11-11; found by the SwiftGamGui port. The mock models it with `$GAM_MOCK_STATE/ownergone/<owner id>`.
+  2026-11-11; found by the SwiftGamGui port. Those warnings with **no table** raise `Incomplete`, never `NOT_FOUND`: GAM
+  found classes, so an owner read must not say "owns none" (failure log 2026-11-13, found by the port again). The mock models it with `$GAM_MOCK_STATE/ownergone/<owner id>`.
 - **Silent `[]` from GAM:** `_getCourseAliasesMembers` swallows notFound and serviceNotAvailable on a class's aliases *and*
   on a roster side, printing `[]` with exit 0. A failed roster side reads as an empty one; nothing in the output tells them
   apart. The roster compare's duplicate-create guard covers the alias case; the roster case is unguarded (not modelled).

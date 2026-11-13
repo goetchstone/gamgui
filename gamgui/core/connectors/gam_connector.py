@@ -367,9 +367,15 @@ class GAMConnector(Connector):
         """A `print courses` read's table. With `owneremail`, a class whose owner GAM can't look up (a deleted account) makes
         GAM warn and exit ENTITY_DOES_NOT_EXIST_RC (56) after printing every class: read as an error, one deleted owner hid
         every class, and the offboarding read said the leaver owned none (failure log 2026-11-11). Exit 56 is accepted only
-        when every line GAM reported is that warning and a table came back; anything else raises as any read does."""
+        when every line GAM reported is that warning and a table came back. Those warnings with no table mean GAM found classes
+        and printed none: Incomplete, never NOT_FOUND, which an owner read takes as "owns none". Anything else raises as any
+        read does."""
         res = await self.runner.run_any_exit(self.domain, argv)
-        if res.returncode == 0 or (res.returncode == 56 and only_unknown_owners(res.stderr) and res.stdout.strip()):
+        if res.returncode == 56 and only_unknown_owners(res.stderr):
+            if not res.stdout.strip():
+                raise Incomplete("GAM found classes but printed none of them, so they can't be told. Try again.")
+            return _classroom_table(res.stdout)
+        if res.returncode == 0:
             return _classroom_table(res.stdout)
         raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
 
