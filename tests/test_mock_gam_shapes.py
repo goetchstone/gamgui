@@ -238,3 +238,23 @@ async def test_deleting_a_delegate_they_do_not_have_fails(runner, domain):
     assert err.exit_code == 50 and "Delete Failed: Not Found" in err.stderr
     await runner.run_authenticated(domain, C.remove_delegate("carol@example.com", "helpdesk@example.com"),
                                    serialize=True)
+
+
+async def test_subscribe_needs_access_and_a_bare_group_address_is_a_persons_rule(runner, domain, gam_state):
+    # calendarList.insert answers Not Found for a calendar the person can't see. GAM reads a bare address
+    # as user:<address>, so sharing with a group's bare address gives its members nothing; group:<address>
+    # does. The mock once let every subscribe succeed, which hid exactly that.
+    out = await runner.run_authenticated(domain, C.add_calendar_acl_cal(CAL, "sales@example.com"), serialize=True)
+    assert "Scope: user:sales@example.com" in out
+    err = await _fails(runner, domain, C.subscribe_calendar("bob@example.com", CAL))
+    assert err.exit_code == 50 and f"User: bob@example.com, Calendar: {CAL}, Add Failed: Not Found" in err.stderr
+    await runner.run_authenticated(domain, C.add_calendar_acl_cal(CAL, "group:sales@example.com"), serialize=True)
+    out = await runner.run_authenticated(domain, C.subscribe_calendar("bob@example.com", CAL), serialize=True)
+    assert f"User: bob@example.com, Calendar: {CAL}, Added" in out
+    # A bare address removes the person's rule it named, never the group's; a rule not there is a 404.
+    await runner.run_authenticated(domain, C.delete_calendar_acl_cal(CAL, "sales@example.com"), serialize=True)
+    err = await _fails(runner, domain, C.delete_calendar_acl_cal(CAL, "sales@example.com"))
+    assert err.exit_code == 50 and "(Scope: user:sales@example.com), Delete Failed: Not Found" in err.stderr
+    await runner.run_authenticated(domain, C.delete_calendar_acl_cal(CAL, "group:sales@example.com"), serialize=True)
+    err = await _fails(runner, domain, C.subscribe_calendar("carol@example.com", CAL))
+    assert "Add Failed: Not Found" in err.stderr

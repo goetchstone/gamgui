@@ -966,6 +966,15 @@ def test_calendars_event_delete_preview_warns_on_recurring(client):
     assert 'hx-post="/calendars/event/delete"' in r.text  # confirm button (guarded)
 
 
+def test_calendars_event_delete_of_one_occurrence_says_only_that_one_goes(client):
+    # A moved occurrence names its series in recurringEventId; deleting its own id cancels only it
+    # (Events reference). The preview once warned that the whole series would go.
+    r = client.post("/calendars/event/preview", data={"cal": "aspen@resource.calendar.google.com",
+                                                      "event_id": "evt-weekly-standup_20260629T090000Z"})
+    assert "Delete this event?" in r.text
+    assert "this occurrence only" in r.text and "entire series" not in r.text
+
+
 def test_calendars_event_delete_applies(client):
     r = client.post("/calendars/event/delete",
                     data={"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup",
@@ -1091,6 +1100,17 @@ def test_calendars_share_bare_group_address_also_fans_out(client, monkeypatch):
     assert _fanout_job_rendered(r.text)
 
 
+def test_calendars_share_bare_group_address_grants_the_group_not_a_person(client, gam_calls, gam_state):
+    # GAM reads a bare address as a person's rule (user:<address>), which gives no member access, so
+    # every member's subscribe failed Not Found. A bare address that resolved to a group goes as group:.
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "sales@example.com"})
+    job = _job(client, r.text, "/calendars/share/status")
+    wait_for_job(client, job)
+    writes = gam_writes(gam_calls())
+    assert writes[0] == ["calendars", SEC_CAL, "add", "calendaracls", "reader", "group:sales@example.com"]
+    assert job.failed == [] and job.applied == job.total == len(writes) - 1 == 2
+
+
 ALLHANDS = [f"member{i:02d}@example.com" for i in range(1, 13)]   # the mock's 12-member group
 
 
@@ -1137,6 +1157,14 @@ def test_calendars_share_empty_group_says_so(client):
                     data={"cal": SEC_CAL, "target": "group:empty-group@example.com"})
     assert r.status_code == 200
     assert "no members" in r.text
+
+
+def test_calendars_share_bare_address_of_an_empty_group_is_still_a_group(client, gam_calls):
+    # The member lookup answered (no rows), so it is a group: a group: rule, no subscribe of its address.
+    r = client.post("/calendars/share", data={"cal": SEC_CAL, "target": "empty-group@example.com"})
+    assert "no members" in r.text
+    assert gam_writes(gam_calls()) == [
+        ["calendars", SEC_CAL, "add", "calendaracls", "reader", "group:empty-group@example.com"]]
 
 
 def test_calendars_share_domain_scope_cannot_be_subscribed(client):

@@ -341,6 +341,12 @@ class CalendarEvent:
         return bool(self.recurrence) or bool(self.recurring_event_id)
 
     @property
+    def is_instance(self) -> bool:
+        """One occurrence of a series (it names its series in recurringEventId). Deleting its own id
+        cancels that occurrence only; deleting the series event's id removes every occurrence."""
+        return bool(self.recurring_event_id)
+
+    @property
     def when(self) -> str:
         return self.start or "—"
 

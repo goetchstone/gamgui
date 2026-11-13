@@ -77,11 +77,11 @@ async def _subscribers_for(conn, target: str, known_users: set) -> "tuple[str, l
     try:
         members = await conn.list_group_members(group)
     except Exception:                           # noqa: BLE001 — not a group, or the lookup failed
-        members = []
-    emails = [m.email for m in members if getattr(m, "email", "") and "@" in m.email]
-    if emails:
-        return "group", emails
-    # An explicit group: scope that resolved to nothing is still a group — just an empty one.
+        members = None
+    if members is not None:                     # the lookup answered, so it is a group, members or none
+        return "group", [m.email for m in members if getattr(m, "email", "") and "@" in m.email]
+    # An explicit group: scope whose lookup failed is still a group. A bare address stays a person: a
+    # failed lookup is also what a transient error looks like.
     return ("group", []) if low.startswith("group:") else ("user", [scope] if _is_user_scope(scope) else [])
 
 
@@ -410,9 +410,13 @@ async def share_group(request: Request, cal: Annotated[str, Form()] = "", target
 
 async def _grant_and_subscribe(request: Request, conn, cal: str, target: str, role: str, label: str,
                                kind: str, emails: list) -> HTMLResponse:
-    """Add the ACL, then subscribe: one person inline, a group's members as a polled background job."""
+    """Add the ACL, then subscribe: one person inline, a group's members as a polled background job.
+
+    A bare address that resolved to a group is sent as ``group:<address>``: GAM reads a bare address as
+    a person's rule (``user:<address>``), which gives no member access, so every subscribe would fail."""
+    scope = target if kind != "group" or target.lower().startswith("group:") else f"group:{target}"
     try:
-        result = await conn.add_calendar_acl_for(cal, target, role=role)
+        result = await conn.add_calendar_acl_for(cal, scope, role=role)
     except ValueError as exc:  # the builder refuses a role outside the grammar's <CalendarACLRole>
         return error_partial(request, f"Couldn't share calendar: {exc}.")
     if not result.ok:
