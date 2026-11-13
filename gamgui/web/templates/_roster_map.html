@@ -62,7 +62,7 @@
         <tbody class="text-brand-black">
           {% for r in rows %}<tr class="border-t border-brand-gray/30">
             {% for key, _, _ in fields %}<td class="max-w-[12rem] truncate py-1 pr-3">{{ r[key] }}</td>{% endfor %}
-            <td class="py-1 {{ 'text-amber-800' if not r['as'] }}">{{ r["as"] or "neither: check the role words" }}</td></tr>{% endfor %}
+            <td class="py-1 {{ 'text-amber-800' if not r['as'] }}">{% if r["left"] %}<span aria-hidden="true">⚠ </span>{{ r["left"] }}{% else %}{{ r["as"] or "neither: check the role words" }}{% endif %}</td></tr>{% endfor %}
         </tbody>
       </table>
     </div>

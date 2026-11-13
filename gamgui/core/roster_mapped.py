@@ -173,9 +173,24 @@ def _mapped(cmap: ColumnMap, row: Dict[str, str]) -> Dict[str, str]:
     return {name: value if name == "email" else roster._clean(value) for name, value in out.items()}
 
 
+def _left_out(cmap: ColumnMap, r: Dict[str, str]) -> str:
+    """Why ``read_mapped`` leaves this row out before its role is read, in the preview's words, or "" when it doesn't: the
+    same checks in the same order, so the preview never promises a row the read refuses. A field not mapped yet isn't
+    checked (the map's own problem says so)."""
+    if cmap.class_id and not r["class_id"]:
+        return "Left out: no class ID"
+    if not cmap.email:
+        return ""
+    if not r["email"]:
+        return "Left out: no address"
+    if not roster._one_address(r["email"]):    # as given, as read_mapped checks it: lowercasing first turns a non-ASCII
+        return "Left out: not one address"     # K (U+212A) into an ASCII k
+    return ""
+
+
 def preview(name: str, body: bytes, cmap: ColumnMap, n: int = 3) -> List[Dict[str, str]]:
-    """The first ``n`` non-blank rows as ``cmap`` reads them, with "as" (what the role word means: "teacher", "student" or
-    ""). Works on a map still being filled in (an unmapped or absent column reads as ""), and stops after ``n`` rows:
+    """The first ``n`` non-blank rows as ``cmap`` reads them, with "left" (why ``read_mapped`` would leave the row out, or
+    "") and "as" (what the role word means: "teacher", "student" or "", always "" for a row left out). Works on a map still being filled in (an unmapped or absent column reads as ""), and stops after ``n`` rows:
     the rest of the file isn't read."""
     base = roster._base(name)
     out: List[Dict[str, str]] = []
@@ -185,8 +200,10 @@ def preview(name: str, body: bytes, cmap: ColumnMap, n: int = 3) -> List[Dict[st
     try:
         for _, row in rows:
             mapped = _mapped(cmap, row)
-            mapped["email"] = mapped["email"].strip().lower()      # shown only; read_mapped checks it as given
-            mapped["as"] = cmap.role_of(mapped["role"])
+            mapped["left"] = _left_out(cmap, mapped)
+            if not mapped["left"]:
+                mapped["email"] = mapped["email"].lower()           # as read_mapped keeps it, once it passed as given
+            mapped["as"] = "" if mapped["left"] else cmap.role_of(mapped["role"])
             out.append(mapped)
             if len(out) >= n:
                 break
