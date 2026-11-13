@@ -1,6 +1,6 @@
 # Screenshots
 
-The four images the root `README.md` shows. Regenerate them — never capture by hand from a real
+The six images the root `README.md` shows. Regenerate them — never capture by hand from a real
 tenant (hand captures once put the operator's company name and an internal calendar name in this
 public repo):
 
@@ -21,3 +21,4 @@ image before committing — the pre-commit hook's private-term check can't read 
 | `signatures.png` | Signature designer with the live preview | the headline use case for many visitors |
 | `calendars.png` | Calendars — a name-search result + "who has access" | the "find/clean up shared calendars" win |
 | `lifecycle.png` | Offboarding preview: the auto-reply and all eight steps' exact `gam` commands, down to Run offboarding | shows the guided, guarded automation |
+| `classroom.png` | Classroom: the mock's classes and one class's teachers and students | the school-domain screens, read only |
