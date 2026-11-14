@@ -166,6 +166,34 @@ def test_compare_reads_classroom_and_plans_only_gamgui_classes(client, gam_calls
     assert writes == [], writes                                               # reads only
 
 
+def test_compare_reads_a_sis_alias_as_its_account(client, gam_calls):
+    # The mock's directory gives alice the alias a.anders@example.com: a SIS that lists her by it keeps her in her classes.
+    users = [SIS_USERS[0], ("U1", "", "teacher", "a.anders@example.com", "Alice", "Anders"), SIS_USERS[2]]
+    _upload(client, *_files(**{"classes.csv": SIS_CLASSES, "users.csv": users, "enrollments.csv": SIS_ENROLL}).items())
+    st = client.app.state.gamgui
+    client.post("/classroom/import/compare")
+    from .helpers import wait_for_job
+    wait_for_job(client, st.jobs[st.roster_compare_job])
+    plan = st.roster_compare["plan"]
+    assert not [c for c in plan.changes if c.kind in ("owner", "remove_teacher")], plan.changes
+    assert not [c for c in plan.changes if "a.anders" in c.person]
+    assert ("create", "Physics", "alice@example.com") in [(c.kind, c.title, c.person) for c in plan.changes]
+    assert any("another address" in n for n in plan.notes)
+    # The mock prints aliases whatever fields are asked for; GAM prints only what is: the read must ask for them.
+    reads = [a for a in gam_calls() if a[:2] == ["print", "users"]]
+    assert reads and all("aliases" in a[a.index("fields") + 1].split(",") for a in reads)
+
+
+def test_compare_reads_the_directory_now_not_from_the_cache(client, gam_calls):
+    # A cached list can miss an alias added or an account renamed minutes ago: that account would be planned out.
+    st = client.app.state.gamgui
+    import asyncio
+    asyncio.run(st.users())                                   # the Users page filled the cache
+    before = len([a for a in gam_calls() if a[:2] == ["print", "users"]])
+    _compared(client)
+    assert len([a for a in gam_calls() if a[:2] == ["print", "users"]]) == before + 1
+
+
 def test_the_change_list_filters_and_searches_server_side(client):
     _compared(client)
     r = client.get("/classroom/import/changes", params={"kind": "remove_student"})

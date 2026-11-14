@@ -17,8 +17,15 @@ these aliases are compared, updated or archived; a class someone made by hand in
 - *remove_teacher* / *remove_student*: people Classroom has that the SIS doesn't. The owner is never removed.
 - *archive*: a class GamGUI manages that the SIS no longer has.
 
+**Who is who.** Classroom names people by their primary address; a SIS may list an alias (a renamed teacher's old
+address). Every SIS address is read as its account's primary through the directory (``directory_from``) before anything
+is compared, so an alias never plans its own account's removal. Without the directory, a class whose roster names
+someone Classroom doesn't list there has no removal and no owner change planned: that may be someone already in it.
+
 **Risk.** Removals and archives past a built-in count *and* share are flagged with the reason in a sentence; a flagged
 kind is left out of the hand-over unless ticked (C4). Thresholds are fixed defaults, not a settings table (plan C3.3).
+Each share is of what that kind can act on: active classes for archives, their teachers for teacher removals, everyone
+in them for student removals. Archived classes never count: nothing is archived or removed from them.
 """
 from __future__ import annotations
 
@@ -26,9 +33,10 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .classroom import Course, Roster, roster_from
+from .gam.models import GAMUser, primary_of_every_address
 from .roster import Snapshot
 
 ALIAS_PREFIX = "gg-"
@@ -46,7 +54,8 @@ KINDS: Tuple[Tuple[str, str], ...] = (
     ("archive", "Classes to archive"),
 )
 DESTRUCTIVE = ("remove_teacher", "remove_student", "archive")
-# Flag a destructive kind past both of these: a count, and a share of what's there now (people enrolled, or classes managed).
+# Flag a destructive kind past both of these: a count, and a share of what's there now in active managed classes (their
+# teachers, everyone in them, or the classes themselves).
 LIMITS = {"remove_teacher": (25, 0.05), "remove_student": (500, 0.05), "archive": (25, 0.10)}
 
 
@@ -64,6 +73,12 @@ def _managed_alias(aliases: Iterable[str]) -> Optional[str]:
         if bare.startswith(ALIAS_PREFIX):
             return "d:" + bare
     return None
+
+
+def directory_from(users: Iterable[GAMUser]) -> Dict[str, str]:
+    """The directory ``plan`` takes: every address of every account to its primary, from a `print users` that asked for
+    ``aliases`` (``primary_of_every_address``)."""
+    return primary_of_every_address(users)
 
 
 @dataclass(frozen=True)
@@ -149,7 +164,8 @@ class ChangeList:
     counts: Dict[str, int] = field(default_factory=dict)
     flags: Dict[str, str] = field(default_factory=dict)       # kind → why it's held back, in a sentence
     notes: List[str] = field(default_factory=list)            # SIS classes that can't be planned, said once each kind
-    managed: int = 0                                          # Classroom classes GamGUI manages
+    managed: int = 0                                          # active Classroom classes GamGUI manages (not archived)
+    teachers: int = 0                                         # teachers in them now
     enrolled: int = 0                                         # people in them now
     unmanaged_ignored: int = 0                                # Classroom classes without a GamGUI alias: left alone
     incomplete: bool = False                                  # a class couldn't be read: never handed over
@@ -193,10 +209,16 @@ def _plural(n: int, one: str, many: str) -> str:
     return f"{n:,} {one if n == 1 else many}"
 
 
-def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[str]] = None, unread: int = 0) -> ChangeList:
-    """The change list that would make Classroom match ``snap``. ``directory`` is the domain's addresses, read fresh, when
-    known: a SIS person who isn't a Workspace account can't be *added*, and is noted instead. It never causes a removal:
-    someone the SIS lists is never removed from a class because the directory didn't name them."""
+def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Mapping[str, str]] = None,
+         unread: int = 0) -> ChangeList:
+    """The change list that would make Classroom match ``snap``. ``directory`` is every address of the domain's accounts
+    to its account's primary (``directory_from``), read fresh, when known: a SIS address is planned as its account's
+    primary, and a SIS person who isn't a Workspace account can't be *added*, and is noted instead. It never causes a
+    removal: someone the SIS lists is never removed from a class because the directory didn't name them. Unknown (None),
+    a class whose roster names an address Classroom doesn't list in it gets no removal and no owner change."""
+    if directory is not None and not isinstance(directory, Mapping):
+        # A set of addresses can't say whose alias an address is; read as a directory, an alias would plan a removal.
+        raise TypeError("directory maps each address to its account's primary address (directory_from)")
     out = ChangeList()
     by_alias: Dict[str, Managed] = {}
     unmanaged: Dict[Tuple[str, str], int] = {}
@@ -208,8 +230,10 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[s
             unmanaged[key] = unmanaged.get(key, 0) + 1
             continue
         by_alias.setdefault(alias, managed)
-    out.managed = len(by_alias)
-    out.enrolled = sum(len(m.teachers) + len(m.students) for m in by_alias.values())
+    active = [m for m in by_alias.values() if m.course.state != "ARCHIVED"]
+    out.managed = len(active)
+    out.teachers = sum(len(m.teachers) for m in active)
+    out.enrolled = sum(len(m.teachers) + len(m.students) for m in active)
 
     roster: Dict[str, Dict[str, List[Tuple[str, bool]]]] = {}
     for e in snap.enrollments:
@@ -217,23 +241,39 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[s
         if person is not None:
             roster.setdefault(e.class_id, {"teacher": [], "student": []})[e.role].append((person.email, e.primary))
 
-    no_teacher = no_account_teacher = archived_wanted = maybe_existing = owner_unread = stays_teacher = 0
+    no_teacher = no_account_teacher = archived_wanted = maybe_existing = owner_unread = stays_teacher = unmatched = 0
     not_accounts: Set[str] = set()
+    aliased: Set[str] = set()
+
+    def accounts(rows: Sequence[Tuple[str, bool]]) -> Tuple[List[Tuple[str, bool]], Set[str]]:
+        """The rows as their accounts' primary addresses, and the addresses that are no account (kept as the SIS has
+        them: still never removed). Without the directory, every address is taken as it is."""
+        found: List[Tuple[str, bool]] = []
+        missing: Set[str] = set()
+        for email, primary in rows:
+            account = email if directory is None else directory.get(email)
+            if account is None:
+                missing.add(email)
+                continue
+            if account != email:
+                aliased.add(email)
+            found.append((account, primary))
+        return found, missing
     wanted_aliases: Set[str] = set()
     for class_id in sorted(snap.classes):
         klass = snap.classes[class_id]
         alias = alias_for(class_id)
         wanted_aliases.add(alias)
         members = roster.get(class_id, {"teacher": [], "student": []})
-        # Who the SIS has: what a removal is measured against, whatever the directory says.
-        sis_teachers = {email for email, _ in members["teacher"]}
-        sis_students = {email for email, _ in members["student"]} - sis_teachers
-        # Who can be added: a Workspace account, when the directory is known.
-        addable = (lambda email: True) if directory is None else (lambda email: email in directory)
-        not_accounts.update(e for e in sis_teachers | sis_students if not addable(e))
-        teacher_rows = [(email, primary) for email, primary in members["teacher"] if addable(email)]
+        # Who can be added: a Workspace account, by its primary address, when the directory is known.
+        teacher_rows, no_account_t = accounts(members["teacher"])
+        student_rows, no_account_s = accounts(members["student"])
         teachers = sorted({email for email, _ in teacher_rows})
-        students = sorted(e for e in sis_students if addable(e))
+        students = sorted({email for email, _ in student_rows} - set(teachers))
+        # Who the SIS has: what a removal is measured against, whatever the directory says.
+        sis_teachers = set(teachers) | no_account_t
+        sis_students = (set(students) | no_account_s) - sis_teachers
+        not_accounts.update(no_account_t | no_account_s)
         owner = _owner_of(teacher_rows)
         section = (snap.terms[klass.term_ids[0]].title if klass.term_ids and klass.term_ids[0] in snap.terms else "")
         title = klass.title or class_id
@@ -265,7 +305,11 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[s
                                       section=section))
         have_t, have_s = set(current.teachers), set(current.students)
         gone_t: Set[str] = set()
-        if not course.owner_email:
+        # Without the directory, an address Classroom doesn't list in this class may be someone in it by another name.
+        hold = directory is None and bool((sis_teachers | sis_students) - have_t - have_s)
+        if hold:
+            unmatched += 1
+        elif not course.owner_email:
             # The owner's address wasn't read: an owner change can't be planned, and a teacher removal might be the owner.
             owner_unread += 1
         else:
@@ -289,7 +333,7 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[s
             out.changes.append(Change("add_student", alias, title, person=s, course_id=course.id,
                                       late=s == course.owner_email))
         out.changes += [Change("remove_student", alias, title, person=s, course_id=course.id, swap=s in set(teachers))
-                        for s in sorted(have_s - sis_students)]
+                        for s in sorted(have_s - sis_students) if not hold]
     for alias, managed in sorted(by_alias.items()):
         if alias not in wanted_aliases and managed.course.state != "ARCHIVED":
             out.changes.append(Change("archive", alias, managed.course.name or managed.course.id,
@@ -312,8 +356,18 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[s
     if not_accounts:
         n = len(not_accounts)
         out.notes.append(f"{_plural(n, 'person', 'people')} in the roster {'has' if n == 1 else 'have'} no Google Workspace "
-                         f"account here, so {'they aren' if n != 1 else 'they aren'}'t added (nor removed). Check their "
-                         "addresses in users.csv, or create their accounts.")
+                         "account here, so they aren't added (nor removed). Check their addresses in users.csv, or create "
+                         "their accounts.")
+    if aliased:
+        n = len(aliased)
+        out.notes.append(f"{_plural(n, 'address', 'addresses')} in the roster {'is' if n == 1 else 'are'} another address "
+                         f"(an alias) of a Google Workspace account, so GamGUI reads {'it' if n == 1 else 'them'} as that "
+                         "account's primary address. Update them in users.csv.")
+    if unmatched:
+        out.notes.append(f"{_plural(unmatched, 'class lists', 'classes list')} roster addresses Classroom doesn't have in "
+                         f"{'it' if unmatched == 1 else 'them'}, and without the directory GamGUI can't tell whether one is "
+                         "another address (an alias) of someone who is, so no one is removed from "
+                         f"{'it' if unmatched == 1 else 'them'} and no owner change is planned. Compare again.")
     if maybe_existing:
         out.notes.append(f"{_plural(maybe_existing, 'SIS class matches', 'SIS classes match')} a Classroom class by name "
                          "and section that doesn't carry GamGUI's alias (or whose aliases couldn't be read), so nothing is "
@@ -321,8 +375,8 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Set[s
     if stays_teacher:
         out.notes.append(f"{_plural(stays_teacher, 'person is a student', 'people are students')} in the SIS but still "
                          f"{'a teacher' if stays_teacher == 1 else 'teachers'} in Classroom (the class's owner, or in a class "
-                         "whose owner couldn't be read), so they aren't added as students there. Change the owner in the "
-                         "SIS or in Classroom first.")
+                         "where no teacher removal could be planned), so they aren't added as students there. Change the "
+                         "owner in the SIS or in Classroom first.")
     if owner_unread:
         out.notes.append(f"{_plural(owner_unread, 'class', 'classes')}' owner couldn't be read, so no teacher is removed from "
                          f"{'it' if owner_unread == 1 else 'them'} and no owner change is planned.")
@@ -344,11 +398,13 @@ def _flags(out: ChangeList) -> Dict[str, str]:
     flags: Dict[str, str] = {}
     for kind, (count_limit, share_limit) in LIMITS.items():
         n = out.counts.get(kind, 0)
-        base = out.managed if kind == "archive" else out.enrolled
+        base, noun, whole = {
+            "archive": (out.managed, "classes", "of the active classes GamGUI manages"),
+            "remove_teacher": (out.teachers, "teachers", "of the teachers in them"),
+            "remove_student": (out.enrolled, "students", "of the people in them"),
+        }[kind]
         if n > count_limit and base and n / base > share_limit:
             what = "archive" if kind == "archive" else "remove"
-            noun = "classes" if kind == "archive" else ("teachers" if kind == "remove_teacher" else "students")
-            whole = "of the classes GamGUI manages" if kind == "archive" else "of the people in them"
             flags[kind] = (f"Would {what} {n:,} {noun}, {n / base:.1%} {whole} (held back past {count_limit:,} and "
                            f"{share_limit:.0%}). Check the export is complete before including it.")
     return flags

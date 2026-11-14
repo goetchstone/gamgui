@@ -30,6 +30,17 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-14 — "Not under this address" read as "no account", and drove a removal
+- **What happened:** the roster planner compared SIS addresses with Classroom's primaries as strings, so a SIS alias read as
+  "no account" and its own account was planned out of the class it owned (failure-log 2026-11-14). Found by the
+  SwiftGamGui port's review.
+- **Invariant in force:** #10 (a read that failed or stopped short is never an answer).
+- **Why it didn't hold:** weak wording. The read succeeded; it just answered a narrower question (which primaries exist)
+  than the one asked of it (is this person an account), and #10 reads as being about errors and short reads.
+- **Would a rule have caught it?** Yes but unworded: an identity lookup answers "unknown" until every address an account
+  can have (aliases, alias-domain addresses) was checked.
+- **Enforcement home if changed:** skill (`pre-commit`, for a compare keyed on addresses).
+
 ## 2026-11-14 — improve-rules pass: a failed read kept standing as the answer
 - **What happened:** the observer pass over the window since 2026-10-16: 19 fix commits (add6308 to
   3618971 and 5ba5c31), the failure-log entries since then, the ledger entries below, and failed CI runs.

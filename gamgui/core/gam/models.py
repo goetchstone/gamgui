@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 _EMAIL_KEY = "email"
 _SUBJECT_PREFIX = "Subject:"
@@ -49,6 +49,8 @@ class GAMUser:
     recovery_email: str = ""
     last_login_time: Optional[str] = None
     aliases: List[str] = field(default_factory=list)
+    # Addresses in the domain's alias domains: `fields aliases` asks for these too (USER_FIELDS_CHOICE_MAP, 7.52.01 build).
+    non_editable_aliases: List[str] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -80,6 +82,7 @@ class GAMUser:
             recovery_email=str(_get(d, "recoveryEmail", default="") or ""),
             last_login_time=_get(d, "lastLoginTime", "Last Login Time"),
             aliases=_as_list(_get(d, "aliases", "Aliases", default=[])),
+            non_editable_aliases=_as_list(_get(d, "nonEditableAliases", "NonEditableAliases", default=[])),
             raw=d,
         )
 
@@ -357,6 +360,25 @@ def _as_bool(v: Any) -> bool:
     if isinstance(v, str):
         return v.strip().lower() in ("true", "yes", "on", "1")
     return bool(v)
+
+
+def primary_of_every_address(users: Iterable[GAMUser]) -> Dict[str, str]:
+    """Every address of every account, lowercased, to the account's primary: the primary itself, its aliases and its
+    non-editable aliases (alias-domain addresses; `fields aliases` asks GAM for both). A primary is always its own
+    account's, whatever another's alias says. Used wherever an address must be read as the person it names."""
+    users = list(users)
+    out: Dict[str, str] = {}
+    for user in users:
+        primary = user.primary_email.strip().lower()
+        for alias in (*user.aliases, *user.non_editable_aliases):
+            address = alias.strip().lower()
+            if primary and "@" in address:
+                out.setdefault(address, primary)
+    for user in users:
+        primary = user.primary_email.strip().lower()
+        if primary:
+            out[primary] = primary
+    return out
 
 
 def _as_list(v: Any) -> List[str]:

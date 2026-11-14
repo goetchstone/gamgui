@@ -458,7 +458,11 @@ def test_a_group_read_ending_during_the_reading_still_shows_its_members(client, 
 
 
 def _user(primary, aliases=(), domain_aliases=None):
-    return SimpleNamespace(primary_email=primary, aliases=list(aliases), raw={} if domain_aliases is None else {"nonEditableAliases": domain_aliases})
+    from gamgui.core.gam.models import GAMUser
+    record = {"primaryEmail": primary, "aliases": list(aliases)}
+    if domain_aliases is not None:
+        record["nonEditableAliases"] = domain_aliases
+    return GAMUser.from_json(record)
 
 
 def test_a_domain_alias_is_read_as_its_person():

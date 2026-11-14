@@ -32,7 +32,7 @@ from ...core.roster_mapped import FIELDS, ColumnMap, guess, preview, read_mapped
 from ...core.roster_maps import MapStore
 from ...core.roster_handover import IncompleteList, NothingToHandOver, kept_changes
 from ...core.roster_handover import build as handover_files
-from ...core.roster_plan import KINDS, plan
+from ...core.roster_plan import KINDS, directory_from, plan
 from ...core.roster_store import KEEP_DAYS, RosterStore, StoreError
 from ..jobs import start_job
 from ..server import TEMPLATES
@@ -374,9 +374,11 @@ async def _compare(job, st, conn, domain: str, sha: str) -> None:
             job.error = "A new roster was read as the compare started. Compare again."
             return
         classes, unread = await conn.classroom_state()
-        directory: Optional[set] = None
+        directory: Optional[Dict[str, str]] = None
         try:
-            directory = {u.primary_email.lower() for u in await st.users()}   # fresh: it decides what is added
+            # Read now, never the cache (an alias added or an account renamed minutes ago would be missing, and its
+            # account planned out of its classes), with every account's aliases: it maps an alias to the account it names.
+            directory = directory_from(await st.users(force=True))
         except Exception:  # noqa: BLE001 — without the directory, addresses aren't checked (the plan says so)
             directory = None
         out = await asyncio.to_thread(plan, snap, classes, directory, len(unread))
