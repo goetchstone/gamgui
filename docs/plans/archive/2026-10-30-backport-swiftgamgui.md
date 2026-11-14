@@ -12,7 +12,7 @@ When a PR closes an item, mark it here in the same PR.
 
 SwiftGamGui is a native SwiftUI rewrite of GamGUI. It runs the same `gam` argv and is held to GamGUI's builders by
 fixtures generated from this repo (`../SwiftGamGui/scripts/gen_fixtures.py`). Since 2026-10-08, GamGUI has been
-**frozen except for GAM updates** (`docs/plans/2026-10-08-native-gamgui.md` §1), and new work has gone to Swift.
+**frozen except for GAM updates** (`docs/plans/archive/2026-10-08-native-gamgui.md` §1), and new work has gone to Swift.
 In three weeks Swift grew to ~42k lines plus ~21k of tests. Two kinds of work there matter to this repo:
 
 1. **Bugs in logic that GamGUI shares.** Swift found them by reading GAM's source while porting GamGUI's

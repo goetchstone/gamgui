@@ -10,7 +10,7 @@ The operator, 2026-11-07: finish the roadmap and add all the features to SwiftGa
 
 1. **Every open item in `ROADMAP.md`, built in both apps.**
 2. **Everything GamGUI has that SwiftGamGui doesn't, built there.** GamGUI reached parity going one way on 2026-11-06
-   (`2026-10-30-backport-swiftgamgui.md`). This is the other way. Swift's own rule 11 already calls GamGUI parity a floor.
+   (`archive/2026-10-30-backport-swiftgamgui.md`). This is the other way. Swift's own rule 11 already calls GamGUI parity a floor.
 
 ## Where things stand (checked 2026-11-07)
 
@@ -134,7 +134,13 @@ they share no files. Two sessions at once at most, for cost.
     5 → 2.4 and 2.5, R → 5.5.
   - Clear the working tree's `project.pbxproj` diff, which only moves one line.
 - **0.3 Live reads (the operator's say).** `scripts/acceptance.py` last ran 2026-10-08. Then the reads under "Live checks owed" in
-  the back-port plan. No code.
+  the back-port plan (`archive/2026-10-30-backport-swiftgamgui.md`). Also owed, from the closed ten-out-of-ten plan: the
+  one-time sheet's native print in the built `.app`, the offboarding reminder with an invitee (`sendupdates all`), and
+  the new-account signature and calendar retry (about seven minutes). No code.
+- **0.4 GamGUI: the last raw GAM errors** (ten-out-of-ten U9). Three write paths still lead with GAM's raw line: the
+  Builder's single Run result (`builder.py`), "Couldn't create the account" on onboarding (`onboarding.py`), and the
+  offboarding step log (`lifecycle.py`). Give each the friendly message the other write paths use, GAM's words kept
+  below it.
 
 ## Phase 1: Swift, the bugs the port found
 
@@ -257,6 +263,7 @@ About 55 PRs, counting 2 for Phase 0, 6 for Phase 1, 12 for Phase 2, 10 for Phas
 | Item | GamGUI | Swift |
 |---|---|---|
 | 0.1 / 0.2 / 0.3 | done (this PR) / – / acceptance done 2026-11-10 (#104); live checks owed | – / open / – |
+| 0.4 | open | – |
 | 1.1 to 1.6 | – | open |
 | 2.1, 2.3 to 2.5, 2.7, 2.8, 2.10 | – | open |
 | 2.2 | – | done (SwiftGamGui#161: a group, an OU or the whole company); live check owed |

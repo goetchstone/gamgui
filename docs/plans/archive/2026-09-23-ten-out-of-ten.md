@@ -1,8 +1,13 @@
 # Plan: GamGUI to 10/10 — security, quality, usability, value
 
-**Status: IN PROGRESS — partly APPLIED; the `harden-2026-09-23` branch is merged into `main` and deleted. Do not re-apply an item that
-[Status by item](#status-by-item) marks applied:** its file:line pointers and snippets no longer
-match the code. Written 2026-09-23 at `d5d775b` (597 passed, 1 skipped). Self-contained for a reader
+**Status: CLOSED, 2026-11-14 — 58 items APPLIED; archived. Do not re-apply anything here.** What was still open moved:
+U9's last three raw-error paths (Builder Run, onboarding create, the offboarding step log) to
+`2026-11-07-finish-the-roadmap.md` 0.4; U11's native print, Phase 8's reminder with an invitee and the new-account
+retry to its 0.3 live checks; U6's signature backup, V1, V3 and V4 to the ROADMAP entries that plan carries (4.1,
+5.5, 3.3/4.6, 3.4/4.3/4.5). Dropped: T7's grammar-driven Python mock (the sent-argv sweep replaced it), the T6 and
+C2 ratchets (upkeep the CI gates already hold), C7's httpx swap (a dependency only on the operator's say), A8
+(declined, D7) and Q9's remainder (out of its scope by design). Per-item detail is in
+[Status by item](#status-by-item); its file:line pointers and snippets no longer match the code. Written 2026-09-23 at `d5d775b` (597 passed, 1 skipped). Self-contained for a reader
 with no session context. `CLAUDE.md` is auto-loaded — honor its invariants. Before each item, read
 the `docs/domains/` runbook for its area (index: `docs/domains/README.md`). When a commit closes an
 item, update its line below in the same commit.

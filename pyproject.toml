@@ -109,9 +109,6 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["gamgui"]
-# Repo-root-relative paths in coverage.xml so the Dockerized Sonar scanner (which mounts the repo
-# at /usr/src) can map `gamgui/...` files. Absolute paths would point outside the container.
-relative_files = true
 omit = [
     "gamgui/app.py",          # pywebview/window bootstrap — exercised by launching the app, not unit tests
     "gamgui/__main__.py",

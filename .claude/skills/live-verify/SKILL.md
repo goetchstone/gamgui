@@ -123,7 +123,7 @@ the sweep's row stays **not yet**.
   **confirmed** for the Audit record's argv shape, scrubbed per Boundaries (the table is hand-edited), qualifying
   partial proof as the Transfer Drive + calendar row does. Add a dated note to any runbook or failure-log line calling
   it unproven.
-- **After `acceptance.py`.** Update the README's "last run" date and GAM (it says 7.48.11; the pin is 7.48.14), but
+- **After `acceptance.py`.** Update the README's "last run" date and GAM version, but
   split off the three checks it doesn't run (setup's scoped `check serviceaccount scopes …`, `print domains`, reading
   `oauth2.txt`): they keep their date until the operator re-runs Setup's verify and the External-only filter.
 - **Broke.** Run [post-failure](../post-failure/SKILL.md): a five-field failure-log entry, `mock_gam.sh` failing the
