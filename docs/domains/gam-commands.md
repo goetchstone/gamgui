@@ -38,7 +38,7 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 ## Invariants & the failure history
 - **#1 argv-only.** A value like `"a@x.com; rm -rf /"` is one element, never interpolated — proven by
   `test_slot_value_is_a_single_argv_element` and `test_calendar_share_id_is_single_arg_not_shell`.
-- **`EXPECTED_GAM_VERSION` = the single source of truth** (currently `7.48.11`). `test_pinned_version_consistent`
+- **`EXPECTED_GAM_VERSION` = the single source of truth** (currently `7.52.01`). `test_pinned_version_consistent`
   fails unless `scripts/fetch_gam.sh` (`TAG="v…"`) and `tests/fixtures/mock_gam.sh` agree;
   `test_catalog_matches_grammar` fails if the committed catalog's version/command-count drifts from a
   fresh parse of the vendored grammar. Bump only via the README runbook (step 1 fails by design).
@@ -106,7 +106,7 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 - The module docstring flags the mutating sub-syntax (group membership, signature flags) as
   needing live re-verification against the pinned GAM each bump — the arg-shape tests only pin *our
   intended* form, not that GAM accepts it.
-- `mock_gam.sh` echoes `GAM 7.48.11 - mock`; `EXPECTED_GAM_VERSION` is matched as a substring against
+- `mock_gam.sh` echoes `GAM 7.52.01 - mock`; `EXPECTED_GAM_VERSION` is matched as a substring against
   live `gam version` for a fail-soft runtime check.
 
 ## Testing / live-verification status
@@ -136,5 +136,6 @@ status. Read-only builders are safe to exercise via `scripts/acceptance.py`.
   curated entry in `core/catalog/catalog.py` (`build.*` → `lambda`) — see the `add-builder-command`
   skill; the connector must route any mutation through `_run_write` (invariant #2). Verify a mutation
   live on a throwaway before relying on it.
-- **Bump the pinned GAM version:** change `EXPECTED_GAM_VERSION` here, follow the README "Updating GAM"
-  runbook (step 1 fails by design), and let the three drift guards catch renamed/removed sub-commands.
+- **Bump the pinned GAM version:** run `scripts/bump_gam.py vX.Y.Z` and follow
+  [build-packaging](build-packaging.md) (the manual path's step 1 fails by design); the three drift guards
+  catch renamed or removed sub-commands.

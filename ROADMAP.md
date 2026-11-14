@@ -9,15 +9,13 @@ The organizing constraint: every mutation must keep going through the same choke
 `_run_write()` (`guard.evaluate()` only draws the Confirm button). A feature that needs a way
 around that is not on this list. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## First — prove the parity work on a real domain
+## First — prove the newer work on a real domain
 
-Feature parity with SwiftGamGui landed on 2026-11-06 ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). All of it
-has run offline only. What's owed is the live checks, each on a throwaway account with the operator's yes for each
-write: [the plan's list](docs/plans/2026-10-30-backport-swiftgamgui.md#live-checks-owed). The same plan lists what this
-work found that SwiftGamGui should take back.
+Much of what landed since 2026-11-06 has run offline only. What's owed is the live checks, each on a throwaway
+account with the operator's yes for each write. The README's
+[Live verification status](README.md#live-verification-status) says which writes have run live.
 
-Everything below is planned, in both apps, in [Finish the roadmap](docs/plans/2026-11-07-finish-the-roadmap.md): the
-order, the decisions each item needs, and a status table to mark as items land.
+Everything below is planned for both apps.
 
 ## Next — small, and each closes a real daily gap
 
@@ -25,8 +23,7 @@ order, the decisions each item needs, and a status table to mark as items land.
   (inactive 90+ days, no 2SV, suspended, missing recovery). Every one is currently a dead end you
   can only click through one user at a time (Home counts them, too). The bulk executor, the guard,
   a job's Stop and "Retry the N that failed" already handle exactly this shape of operation.
-- **Offboarding options.** "Doesn't apply" per step shipped; next, per the plan
-  (`docs/plans/2026-10-02-configurable-offboarding.md`): who receives the data, which services, an
+- **Offboarding options.** "Doesn't apply" per step shipped; next: who receives the data, which services, an
   auto-reply end date, then a few common steps off by default (GAL off, groups, admin roles,
   recovery info). Kept simple on purpose: no playbooks; anything else is a Builder read.
 
@@ -56,8 +53,7 @@ order, the decisions each item needs, and a status table to mark as items land.
   they own, and compare a student information system's export (OneRoster first, then others) with
   Classroom into a change list handed over as files GAM can run. The app itself doesn't write to
   Classroom, since those writes can't be checked live here. Adapted from a community fork.
-  [The plan](docs/plans/2026-11-11-classroom-and-rostering.md). **Built in GamGUI** (OneRoster 1.1 and 1.2, Clever,
-  or a mapped spreadsheet; 2026-11-12), SwiftGamGui's port under way. What's owed is a report from someone with a
+  **Built** (OneRoster 1.1 and 1.2, Clever, or a mapped spreadsheet; 2026-11-12). What's owed is a report from someone with a
   school domain, through the [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml).
   Pulling straight from a SIS's API stays later.
 

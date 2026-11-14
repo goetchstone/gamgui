@@ -5,12 +5,8 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/goetchstone/gamgui/badge)](https://scorecard.dev/viewer/?uri=github.com/goetchstone/gamgui)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> [!IMPORTANT]
-> **GamGUI has every feature of [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui)**, its native SwiftUI
-> rewrite, which runs the same `gam` commands, held to them by tests
-> ([the plan](docs/plans/2026-10-30-backport-swiftgamgui.md)). The exceptions are Apple-only: Siri and App Intents,
-> the on-device model and Touch ID. Only here: sharing a calendar with a group, deleting a calendar or an event, a
-> signature for many people at once, and deleting a leaver's account.
+> [!NOTE]
+> A native SwiftUI version, [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui), runs the same `gam` commands.
 
 A free, local, open-source **macOS app for [GAM7](https://github.com/GAM-team/GAM)**, the Google
 Workspace admin command line. The recurring admin chores get a screen, the big changes show a
@@ -77,8 +73,8 @@ Details in [Build from source](#build-from-source).
 
 ## Status
 
-In use against live Google Workspace tenants, kept current with GAM, and at feature parity with
-[SwiftGamGui](https://github.com/goetchstone/SwiftGamGui). The incident screens are new and have only run offline: see
+In use against live Google Workspace tenants and kept current with GAM. The incident screens are new
+and have only run offline: see
 [Live verification status](#live-verification-status). Working today:
 
 - **Setup wizard** — either **import an existing GAM install** (it auto-detects `$GAMCFGDIR`,
@@ -244,17 +240,12 @@ shared calendar (7 s after) were refused because Google hadn't finished setting 
 Onboarding now keeps those steps and retries them for about seven minutes; that retry has not yet
 run live. A create refused for want of a license now says so.
 
-**Offboarding repairs awaiting a live run.** Two offboarding bugs were found in real audit logs and
-fixed, but the fixes have not themselves run live yet: Drive and calendar are now transferred in a
-*single* data-transfer call (two separate calls collided with a `409 conflict`), and "remove from
-everyone's calendars" now tolerates the `cannotChangeOwnAcl` error that used to abort the sweep —
-along with a user who has no ACL for the leaver or no Calendar service, and nothing else. That
-sweep is one domain-wide call, so it runs under a 1-hour timeout instead of the 2-minute
-per-call default; how long it really takes on a large tenant is unmeasured. Revoking the leaver's
-access (app passwords, backup codes, connected apps' tokens, sessions) and turning off mail
-forwarding are steps of their own that have never run live. How the routine runs —
-Run executes exactly the previewed steps, a failed step stops the ones that rely on it, a re-run
-skips the steps ticked as done — is proven offline only. The
+**Offboarding: what is still unproven live.** The first live offboarding (2026-10-07) confirmed the
+single Drive-and-calendar transfer call, the sweep of everyone's calendars, revoking access and
+turning off forwarding (the table above). Still unmeasured: how long that sweep, one domain-wide call
+under a 1-hour timeout, takes on a large tenant. How the routine runs — Run executes exactly the
+previewed steps, a failed step stops the ones that rely on it, a re-run skips the steps ticked as
+done — is proven offline only. The
 [first live run checklist](docs/domains/lifecycle-offboarding.md#first-live-run-checklist) says
 what to check in the preview, what to verify in Google afterwards, and how to recover from a failed
 step.

@@ -45,6 +45,7 @@ including its failure history. If the area has entries in
 - `docs/plans/` holds handoff plans. Each opens with a **Status** line; never
   re-apply a plan, or an item of one, that its Status marks APPLIED — its
   snippets no longer match the code.
+  Finished and superseded plans live in `docs/plans/archive/`: history only.
 - If the rules-improver hook prints a nudge, mention it to the operator and move
   on; [improve-rules](../improve-rules/SKILL.md) is a separate observer pass,
   not this session's work.

@@ -18,7 +18,7 @@ Taking part here is under the [code of conduct](CODE_OF_CONDUCT.md). Questions g
 goes where — and issues use the forms on **New issue**: a bug, a feature request, or *I tried it on a
 real domain* when you've run something against a real domain (two minutes; Classroom reports are the most wanted). A pull request fills in the
 template's checklist, and branch protection requires CI to pass before it merges: `ci-ok` (tests on
-macOS and Linux, lint, accessibility, the GAM compatibility check, the app build), CodeQL, and
+macOS and Linux, lint, accessibility, the GAM compatibility check, the app build, fuzzing), CodeQL, and
 dependency review.
 
 ## Quick start

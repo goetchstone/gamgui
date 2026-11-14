@@ -20,7 +20,7 @@ line constitution gets silently ignored from the bottom up.
 
 | Layer | Where | Purpose | Loaded |
 |---|---|---|---|
-| **Constitution** | [`CLAUDE.md`](../CLAUDE.md) | Numbered invariants (#1–#9), each with the incident that birthed it. | Every session |
+| **Constitution** | [`CLAUDE.md`](../CLAUDE.md) | Numbered invariants (#1–#10), each with the incident that birthed it. | Every session |
 | **Domain runbooks** | [`docs/domains/*.md`](domains) | Per-area knowledge: files, flow, the failure history, the mock-lies traps, how to do common tasks. | On demand, by area |
 | **Skills** | [`.claude/skills/*/SKILL.md`](../.claude/skills) | Procedures for a moment: pre-commit, post-failure, start/end-session, improve-rules. | When the moment arrives |
 
@@ -140,7 +140,7 @@ adding a number.
 ## File tree
 
 ```
-CLAUDE.md                          # Constitution — numbered invariants #1–#9
+CLAUDE.md                          # Constitution — numbered invariants #1–#10
 ROADMAP.md                         # Ranked backlog + deliberate trade-offs
 docs/
 ├── FRAMEWORK.md                   # This file
@@ -153,6 +153,7 @@ docs/
 ├── settings.json                  # Hook wiring (LOCAL — gitignored)
 ├── .rules-last-run                # improve-rules window stamp (LOCAL)
 ├── hooks/                         # (LOCAL — gitignored)
+│   ├── credential-guard.sh        #   blocks Keychain reads, shell gam, credential paths, unannounced live runs
 │   ├── pre-commit-check.sh        #   injects the diff-relevant checklist; blocks fix: w/o failure log
 │   ├── session-start-check.sh     #   orient digest: git, GAM-pin drift, runbook pointer
 │   └── rules-improver-check.sh    #   nudge to run improve-rules (unresolved evidence only)
