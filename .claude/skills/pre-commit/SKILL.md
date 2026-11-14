@@ -53,6 +53,13 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    catalog counts in CLAUDE.md accurate. Only confidently READ_ONLY commands
    may auto-promote to runnable (invariant 3) — adding write coverage is
    deliberate curation.
+16. **A failed read is not an answer (invariant 10).** For any read whose
+   result drives a decision (a preview, an offboarding warning, a delete, a
+   "none" on screen), a test covers each failing and partial exit: a non-zero
+   exit, a warning exit with and without its table, a refused scope. Each one
+   shows as unknown and never as none, not found or proceed. In the mock, a
+   platform-dependent `x=$(cmd)` that is meant to fail needs `|| true`, because
+   dash exits on it under `set -e`.
 
 ## If your diff touches secrets, the web layer, or anything polled
 

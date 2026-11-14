@@ -45,6 +45,13 @@ Each of these exists because something went wrong. Several have tests guarding t
    Directory data from Google goes in an autoescaped `data-*` attribute and JS reads `el.dataset.*`.
 9. **Bound anything polled.** Live progress feeds keep a fixed rolling window (~12 rows) and cap
    retained failure lists, so a domain-wide run doesn't make each 1s poll grow with the user count.
+10. **A read that failed or stopped short is never an answer.** An error, a warning exit, a missing
+    table or a refused scope means "unknown", and the screen says so. It never reads as "none", "not
+    found", "a person" or "corrupt", and it is never a reason to proceed or delete. A leaver read as
+    owning no classes twice in two days (an exit-56 warning, then the same exit with no table), a failed
+    group lookup read as a person, an I/O error read as a corrupt roster and deleted it. A read whose
+    answer drives a decision is tested on its failing and partial exits, not only its clean one
+    (`test_unknown_owners_with_no_table_never_read_as_owning_none` is the model).
 
 ## The recurring failure mode: the mock lies
 
