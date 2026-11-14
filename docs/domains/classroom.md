@@ -197,14 +197,21 @@ guard; only its read side is adapted here.
 - **What a review proved, and the rule each fix keeps** (failure-log 2026-11-11): GAM prints `JSON-aliases` as objects,
   `[{"alias": "d:gg-C1"}]`, and the mock once printed strings (`_aliases` reads the objects; an item it can't read makes the
   class unread). GAM prints `[]` when an alias read fails, so a SIS class whose name and section match a class without
-  GamGUI's alias is never created (noted). The directory is read fresh and only limits who is *added*: someone the SIS lists
-  is never removed for it. A teacher ↔ student swap removes before it adds (`Change.swap`: Classroom refuses to add someone
+  GamGUI's alias is never created (noted). The directory is read now (`force=True`, never the cache) and only limits who is *added*: someone the SIS lists
+  is never removed for it. **Every SIS address is read as its account's primary** (`directory_from`: primaries, `aliases`
+  and `nonEditableAliases`, which GAM's `fields aliases` both asks for, 7.52.01 build), because Classroom names people by
+  their primary: a SIS alias once read as "no account" and planned its own account's owner change and removal (failure log
+  2026-11-14, found by the SwiftGamGui port). `plan` refuses a set as a directory. Without the directory, a class whose
+  roster names an address Classroom doesn't list in it gets no removal and no owner change (noted). A teacher ↔ student swap removes before it adds (`Change.swap`: Classroom refuses to add someone
   already in the class). After an owner change the former owner is removed, and if the SIS now has them as a student their
   add waits for that removal (`Change.late`; Classroom won't remove an owner). A class whose owner wasn't read gets no
   teacher removals and no owner change (noted), and a SIS student who stays a teacher there isn't added (noted). The headline never says "already matches" when the list is incomplete or
   has notes.
 - **Risk** (`LIMITS`): a removal or archive kind past both a count and a share of what's there now is flagged with why;
-  C4 leaves a flagged kind out of the hand-over unless ticked.
+  C4 leaves a flagged kind out of the hand-over unless ticked. Each share is of what that kind acts on, in **active** managed
+  classes only: archives of the classes (`managed`), teacher removals of their teachers (`teachers`), student removals of
+  everyone in them (`enrolled`). Until 2026-11-14 teacher removals were measured against everyone and archived classes
+  counted, so dropping every co-teacher went unflagged.
 - **The read** (`GAMConnector.classroom_state`): two GAM runs whose shapes were read from the build — `print courses states
   active,provisioned,archived aliases … formatjson` (a `JSON-aliases` column after `JSON`) and `print course-participants
   states … show all formatjson` (one row per class). Archived classes are read so a GamGUI class Classroom archived is never

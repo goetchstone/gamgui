@@ -30,6 +30,18 @@ def _kinds(out):
     return [(c.kind, c.person) for c in out.changes]
 
 
+def _cid(managed) -> str:
+    """The SIS class ID a managed class's GamGUI alias carries (plain IDs only)."""
+    return next(a for a in managed.aliases if a.startswith(f"d:{ALIAS_PREFIX}"))[len(f"d:{ALIAS_PREFIX}"):]
+
+
+def _everyone(snap, classroom=()):
+    """A directory in which every address the test uses is an account's primary, with no aliases."""
+    found = {p.email for p in snap.people.values()} | {a for m in classroom for a in m.teachers + m.students}
+    found |= {m.course.owner_email for m in classroom if m.course.owner_email}
+    return {a: a for a in found}
+
+
 def test_an_alias_is_the_sis_id_when_plain_and_a_hash_otherwise():
     assert alias_for("C-101.a_b") == f"d:{ALIAS_PREFIX}C-101.a_b"
     weird = alias_for("class #1 / ünï")
@@ -49,7 +61,7 @@ def test_an_existing_class_is_renamed_filled_emptied_and_its_owner_changed_in_or
     snap = _snap([("C1", "Biology II")], PEOPLE, [("C1", "U2", "teacher", True), ("C1", "U3", "student", False)])
     current = _managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"],
                        students=["di@x.com"])
-    out = plan(snap, [current])
+    out = plan(snap, [current], _everyone(snap, [current]))
     assert _kinds(out) == [("rename", ""), ("add_teacher", "ben@x.com"), ("add_student", "cy@x.com"),
                            ("owner", "ben@x.com"), ("remove_teacher", "ann@x.com"), ("remove_student", "di@x.com")]
     assert all(c.course_id == "500" for c in out.changes)
@@ -62,14 +74,15 @@ def test_the_owner_stays_unless_handed_on_and_then_goes_after_the_owner_change()
     kept = _managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com", "ben@x.com"])
     assert _kinds(plan(snap, [kept])) == [("remove_teacher", "ben@x.com")]          # ann owns it and the SIS agrees
     snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U2", "teacher", True)])
-    handed = _kinds(plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])]))
+    handed = _kinds(plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])],
+                         _everyone(snap)))
     assert handed == [("add_teacher", "ben@x.com"), ("owner", "ben@x.com"), ("remove_teacher", "ann@x.com")]
 
 
 def test_no_teacher_is_removed_from_a_class_whose_owner_wasnt_read():
     snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U2", "teacher", True)])
     current = _managed(alias_for("C1"), "500", "Biology", owner="", teachers=["ann@x.com"])
-    out = plan(snap, [current])
+    out = plan(snap, [current], _everyone(snap, [current]))
     assert _kinds(out) == [("add_teacher", "ben@x.com")] and "owner couldn't be read" in out.notes[0]
 
 
@@ -94,7 +107,7 @@ def test_only_classes_with_a_gamgui_alias_are_compared_or_archived():
     archived = _managed(alias_for("OLDER"), "800", "Older", owner="ann@x.com", state="ARCHIVED")
     out = plan(snap, [handmade, gone, archived])
     assert _kinds(out) == [("archive", "")] and out.changes[0].course_id == "700"
-    assert out.unmanaged_ignored == 1 and out.managed == 2
+    assert out.unmanaged_ignored == 1 and out.managed == 1         # an archived class isn't one GamGUI can act on
 
 
 def test_an_alias_printed_without_its_scope_is_still_ours():
@@ -128,13 +141,13 @@ def test_a_class_that_looks_like_one_already_there_is_never_created_twice():
 def test_the_directory_never_causes_a_removal():
     snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U1", "teacher", True), ("C1", "U3", "student", False)])
     current = _managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"], students=["cy@x.com"])
-    out = plan(snap, [current], directory={"ann@x.com"})      # a stale directory that doesn't know cy
+    out = plan(snap, [current], directory={"ann@x.com": "ann@x.com"})      # a stale directory that doesn't know cy
     assert out.changes == [] and "nor removed" in out.notes[0]
 
 
 def test_a_class_whose_teachers_have_no_account_says_so_not_no_teacher():
     snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U1", "teacher", True)])
-    out = plan(snap, [], directory=set())
+    out = plan(snap, [], directory={})
     assert any("no teacher of it has a Google Workspace account" in n for n in out.notes)
     assert not any("no teacher, so" in n for n in out.notes)
 
@@ -147,7 +160,7 @@ def test_the_headline_never_says_it_matches_when_it_couldnt_tell():
 
 def test_someone_without_a_workspace_account_is_noted_not_added():
     snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U1", "teacher", True), ("C1", "U3", "student", False)])
-    out = plan(snap, [], directory={"ann@x.com"})
+    out = plan(snap, [], directory={"ann@x.com": "ann@x.com"})
     assert _kinds(out) == [("create", "ann@x.com")] and "no Google Workspace account" in out.notes[0]
 
 
@@ -230,7 +243,8 @@ def test_an_outgoing_owner_who_becomes_a_student_is_moved_after_the_owner_change
     # Classroom won't remove a class's owner: the removal and the student add wait for the owner change (review of C4).
     snap = _snap([("C1", "Biology")], PEOPLE + [("U9", "student", "ann@x.com")],
                  [("C1", "U2", "teacher", True), ("C1", "U9", "student", False)])
-    out = plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])])
+    out = plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])],
+               _everyone(snap))
     assert _kinds(out) == [("add_teacher", "ben@x.com"), ("owner", "ben@x.com"), ("remove_teacher", "ann@x.com"),
                            ("add_student", "ann@x.com")]
     removal, add = out.changes[2], out.changes[3]
@@ -249,3 +263,98 @@ def test_a_rename_that_drops_the_section_carries_an_empty_one():
     snap.classes["C1"] = snap.classes["C1"].__class__("C1", "Biology", "CO1", "S1", ())
     out = plan(snap, [_managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com"])])
     assert [(c.kind, c.name, c.section, c.after) for c in out.changes] == [("rename", "Biology", "", "Biology")]
+
+
+# --- a SIS address that is another address of an account (review of the Swift port, 2026-11-14) ------------------------
+# Classroom names people by their primary address. A SIS that still lists a renamed teacher's old address (now an alias)
+# once read as "no account": the teacher was dropped from the class, another SIS teacher made owner, and she was removed.
+ALIASED = {"jane.smith@x.com": "jane.smith@x.com", "jdoe@x.com": "jane.smith@x.com", "ben@x.com": "ben@x.com",
+           "cy@x.com": "cy@x.com", "cy@alias.x.com": "cy@x.com"}
+
+
+def _aliased_class():
+    people = [("U1", "teacher", "jdoe@x.com"), ("U2", "teacher", "ben@x.com"), ("U3", "student", "cy@alias.x.com")]
+    snap = _snap([("C1", "Biology")], people, [("C1", "U1", "teacher", True), ("C1", "U2", "teacher", False),
+                                               ("C1", "U3", "student", False)])
+    current = _managed(alias_for("C1"), "500", "Biology", owner="jane.smith@x.com",
+                       teachers=["ben@x.com", "jane.smith@x.com"], students=["cy@x.com"])
+    return snap, current
+
+
+def test_a_teacher_listed_by_an_alias_keeps_the_class_she_owns():
+    snap, current = _aliased_class()
+    out = plan(snap, [current], ALIASED)
+    assert out.changes == []                                  # no owner change (07), no removal (08, 10), no add
+    assert any("2 addresses in the roster are another address" in n for n in out.notes)
+    assert not any("no Google Workspace account" in n for n in out.notes)
+
+
+def test_a_class_listed_by_an_alias_is_created_and_filled_with_primary_addresses():
+    snap, _ = _aliased_class()
+    out = plan(snap, [], ALIASED)
+    assert _kinds(out) == [("create", "jane.smith@x.com"), ("add_teacher", "ben@x.com"), ("add_student", "cy@x.com")]
+
+
+def test_without_the_directory_a_class_with_an_unmatched_address_keeps_its_people_and_owner():
+    # No directory: jdoe@ may be jane.smith@ under another name, so nothing in that class is removed or handed on.
+    snap, current = _aliased_class()
+    out = plan(snap, [current])
+    assert not [c for c in out.changes if c.kind in ("owner", "remove_teacher", "remove_student")]
+    assert any("1 class lists roster addresses" in n for n in out.notes)
+
+
+def test_without_the_directory_a_class_whose_addresses_all_match_is_still_planned():
+    snap = _snap([("C1", "Biology")], PEOPLE, [("C1", "U1", "teacher", True), ("C1", "U3", "student", False)])
+    current = _managed(alias_for("C1"), "500", "Biology", owner="ann@x.com", teachers=["ann@x.com", "ben@x.com"],
+                       students=["cy@x.com", "di@x.com"])
+    out = plan(snap, [current])
+    assert _kinds(out) == [("remove_teacher", "ben@x.com"), ("remove_student", "di@x.com")]
+
+
+def test_a_set_of_addresses_is_refused_as_a_directory():
+    # A set can't say which account an alias belongs to: refused, never read as a directory without aliases.
+    import pytest
+    snap, current = _aliased_class()
+    with pytest.raises(TypeError):
+        plan(snap, [current], {"jane.smith@x.com", "ben@x.com"})
+
+
+def test_the_directory_maps_every_address_gam_prints_to_its_primary():
+    # `print users fields …,aliases,… formatjson` asks for aliases *and* nonEditableAliases (USER_FIELDS_CHOICE_MAP,
+    # read from the 7.52.01 build) and dumps each as a JSON list of strings; an account without them has no such key.
+    from gamgui.core.gam.models import GAMUser
+    from gamgui.core.roster_plan import directory_from
+    users = [GAMUser.from_json({"primaryEmail": "Jane.Smith@x.com", "aliases": ["JDoe@x.com"],
+                                "nonEditableAliases": ["jane.smith@alias.x.com"]}),
+             GAMUser.from_json({"primaryEmail": "ben@x.com"})]
+    assert directory_from(users) == {"jane.smith@x.com": "jane.smith@x.com", "jdoe@x.com": "jane.smith@x.com",
+                                     "jane.smith@alias.x.com": "jane.smith@x.com", "ben@x.com": "ben@x.com"}
+
+
+# --- the risk check's bases (review of the Swift port, 2026-11-14) -------------------------------------------------------
+def test_removing_every_co_teacher_is_flagged_against_the_teachers_not_everyone():
+    # 30 classes, each an owner, a co-teacher and 30 students: the co-teachers are half the teachers, 3% of everyone.
+    n = LIMITS["remove_teacher"][0] + 5
+    classes = [(f"C{i}", f"Class {i}") for i in range(n)]
+    snap = _snap(classes, PEOPLE, [(cid, "U1", "teacher", True) for cid, _ in classes])
+    current = [_managed(alias_for(cid), f"5{i:02}", title, owner="ann@x.com", teachers=["ann@x.com", "ben@x.com"],
+                        students=[f"s{j}@x.com" for j in range(30)]) for i, (cid, title) in enumerate(classes)]
+    for c in current:      # the students stay: the SIS has them too
+        for s in c.students:
+            snap.people[s] = snap.people.get(s) or type(snap.people["U3"])(s, "student", s)
+            snap.enrollments.append(type(snap.enrollments[0])(_cid(c), s, "student", False))
+    out = plan(snap, current, _everyone(snap, current))
+    assert out.counts == {"remove_teacher": n} and out.teachers == 2 * n
+    assert "remove_teacher" in out.flags and "of the teachers in them" in out.flags["remove_teacher"]
+
+
+def test_archived_classes_dont_dilute_the_risk_bases():
+    # Archived classes can't be archived or removed from, so they never count in what a removal or archive is measured by.
+    n = LIMITS["archive"][0] + 5
+    gone = [_managed(alias_for(f"OLD{i}"), f"7{i:02}", f"Old {i}", owner="ann@x.com", teachers=["ann@x.com"])
+            for i in range(n)]
+    archived = [_managed(alias_for(f"PAST{i}"), f"8{i:03}", f"Past {i}", owner="ann@x.com", teachers=["ann@x.com"],
+                         students=["cy@x.com", "di@x.com"], state="ARCHIVED") for i in range(10 * n)]
+    out = plan(_snap([], PEOPLE, []), gone + archived, _everyone(_snap([], PEOPLE, []), gone + archived))
+    assert out.counts == {"archive": n} and out.managed == n and out.enrolled == n and out.teachers == n
+    assert "archive" in out.flags

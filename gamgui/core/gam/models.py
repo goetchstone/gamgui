@@ -49,6 +49,8 @@ class GAMUser:
     recovery_email: str = ""
     last_login_time: Optional[str] = None
     aliases: List[str] = field(default_factory=list)
+    # Addresses in the domain's alias domains: `fields aliases` asks for these too (USER_FIELDS_CHOICE_MAP, 7.52.01 build).
+    non_editable_aliases: List[str] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -80,6 +82,7 @@ class GAMUser:
             recovery_email=str(_get(d, "recoveryEmail", default="") or ""),
             last_login_time=_get(d, "lastLoginTime", "Last Login Time"),
             aliases=_as_list(_get(d, "aliases", "Aliases", default=[])),
+            non_editable_aliases=_as_list(_get(d, "nonEditableAliases", "NonEditableAliases", default=[])),
             raw=d,
         )
 
