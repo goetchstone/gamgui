@@ -30,6 +30,10 @@
 
 ## Gotchas / mock-lies traps
 - **The mock lies here too.** `parse_read_template` builds argv from the *vendored grammar*, so a syntactically valid line can still be rejected live (e.g. some print/show commands reject `formatjson` — see MEMORY `gamgui-gam-formatjson`). `tests/fixtures/mock_gam.sh` proves the argv shape and table render, NOT that GAM accepts the command. Check `gamgui/resources/gam7/GamCommands.txt`, not memory.
+- **Only an entry's first line is parsed.** `parse_grammar` reads lines that start with `gam `; an entry's indented
+  continuation lines (691 of 1052 entries in 7.52.03) are dropped, so `raw_syntax` shows the first line only and a
+  promoted read can't emit a required token that sits on a continuation line. It fails safe for writes: the verb, and
+  so the risk, is on the first line, and nothing on a continuation line can reach the argv.
 - **Optional `[...]` groups are dropped** — a promoted command runs on required args only. Exceptions kept as slots: self-contained `[<UserTypeEntity>]`/`[<CrOSTypeEntity>]` (emitted as `optpair` `user <x>`/`cros <x>`) and a single-token optional positional (`info user [<UserItem>]`). A `<UserTypeEntity>` buried in `[data <…>]` is NOT touched. Paren-group/alternation junk (`)`, `(`) is skipped, not guessed.
 - **Curated writes must exist in the pinned grammar** or `test_command_contract.py` fails; passing the contract proves *syntax exists*, not that the write does what you expect — verify destructive ones on a throwaway account (house rule).
 - Directory data reaches templates via autoescaped `data-*` attributes read by JS (`el.dataset.*`), never `| tojson` in an attribute (#8).
@@ -43,6 +47,9 @@
 - **A read verb can carry a write keyword.** `version` is in `_READ`, and since GAM 7.52.00 its line takes
   `(update [quiet])`, which installs the latest GAM over the running one, unpinned. It stays safe only because the read
   builder drops optional groups; `test_runnable_gam_version_can_never_self_update` holds the runnable form to plain
-  `gam version`. On a bump, read the grammar diff for any new optional keyword that writes under a read verb.
+  `gam version`. GAM 7.52.02 added `install <Path>` and `update path <Path>` and moved the options onto continuation
+  lines; `test_gam_version_still_offers_the_self_update_the_catalog_must_never_run` reads the whole entry from the
+  vendored grammar so the guard still has something to guard. On a bump, read the grammar diff for any new optional
+  keyword that writes under a read verb.
 - **After a GAM bump:** run `scripts/build_command_catalog.py` to regenerate `command_catalog.json`, then confirm `test_catalog_matches_grammar` and `test_docs_state_the_real_catalog_counts` pass (`bump_gam.py` rewrites the counts in CLAUDE.md, README and ROADMAP; by hand, update all three).
 - **Re-group categories into areas:** edit `_AREA`/`AREA_ORDER` in `catalog.py`; `test_areas_group_the_categories` guards the shape.
