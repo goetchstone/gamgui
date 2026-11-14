@@ -13,7 +13,7 @@ REPO="GAM-team/GAM"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/gamgui/resources/gam7"
 # Pinned for reproducible builds. Override with `--tag latest` to grab the newest release.
-TAG="v7.52.01"
+TAG="v7.52.03"
 # The newest macOS major whose build we take; bump_gam.py's MACOS_MAX says why, and must match.
 GAM_MACOS_MAX=26
 # Installing an asset we have no pinned hash for is opt-in: see the checksum gate below.
