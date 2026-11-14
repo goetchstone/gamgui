@@ -1437,10 +1437,13 @@ event_epoch() {  # <yyyy-mm-dd | yyyy-mm-dd(T| )hh:mm[:ss[.ms]](Z|±hh:mm)>: sec
     || return 0
   day=${t%%T*}
   # macOS's date rolls a day that isn't one over (Feb 30 -> Mar 2); GNU's refuses it. Both must read it back the same.
-  back=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${day}T00:00:00Z" +%Y-%m-%d 2>/dev/null || date -u -d "$day" +%Y-%m-%d 2>/dev/null)
+  # `|| true`: under set -eu, dash (CI's Linux /bin/sh) exits on a failed assignment from $(...), so GNU's refusal
+  # would end the mock silently with 1 instead of reaching GAM's usage error.
+  back=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${day}T00:00:00Z" +%Y-%m-%d 2>/dev/null \
+    || date -u -d "$day" +%Y-%m-%d 2>/dev/null || true)
   [ "$back" = "$day" ] || return 0
   bsd=$(printf '%s' "$t" | sed 's/Z$/+0000/; s/\([+-][0-9][0-9]\):\([0-9][0-9]\)$/\1\2/')
-  date -j -f '%Y-%m-%dT%H:%M:%S%z' "$bsd" +%s 2>/dev/null || date -d "$t" +%s 2>/dev/null
+  date -j -f '%Y-%m-%dT%H:%M:%S%z' "$bsd" +%s 2>/dev/null || date -d "$t" +%s 2>/dev/null || true
 }
 event_when() {  # <start|end> <json line>: that side's dateTime (or all-day date)
   printf '%s' "$2" | sed -n "s/.*\"$1\": {\"date[A-Za-z]*\": \"\([^\"]*\)\".*/\1/p"
