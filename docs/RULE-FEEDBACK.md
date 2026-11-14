@@ -30,6 +30,37 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-14 — improve-rules pass: a failed read kept standing as the answer
+- **What happened:** the observer pass over the window since 2026-10-16: 19 fix commits (add6308 to
+  3618971 and 5ba5c31), the failure-log entries since then, the ledger entries below, and failed CI runs.
+  Of 32 pieces of evidence, 14 were not a rules problem, 8 were known modes in the wrong layer (mostly
+  mock lies, each fix landing its own tripwire), 6 were weak wording and 4 were new. One shape recurred
+  with no invariant behind it: a read that failed or stopped short treated as a definite negative that
+  drives a decision. 7c06ccf (an exit-56 warning, so a leaver "owns no classes"), fc39ac3 (the same read
+  with no table, two days later), ad2f183 (any failed group lookup read as "a person"), e395b6e (any
+  sqlite3 error read as corrupt, and the roster deleted), a85f435 (a claim-less token took the fail-open
+  branch), and the 2026-11-06 entry below.
+- **Invariant in force:** none numbered. The 2026-11-06 entry already named it.
+- **Why it didn't hold:** not covered. Each fix closed its own read, and the next feature's read
+  repeated the shape.
+- **Would a rule have caught it?** Yes, if each read that drives a decision were tested on its failing
+  and partial exits. Proposed as invariant 10, with pre-commit item 16 as its home. Demonstrated: with
+  fc39ac3's change to `gam_connector.py` reverted, `test_unknown_owners_with_no_table_never_read_as_owning_none`
+  fails; restored, `tests/test_classroom_reads.py` passes (39).
+- **Enforcement home if changed:** CLAUDE.md text and the pre-commit skill (soft), backed by the
+  per-read tripwires each fix added. No generic test: no mechanical scan can tell which "none" is a
+  decision.
+- **Not a rules problem (recorded, no change):** the roster store fixes (57f2d82, e395b6e's folder
+  swap, f148c6c) and 3b6d8f5 were ordinary state and path bugs, caught by adversarial review before any
+  live use, as CLAUDE.md already prescribes for path handling. 5ba5c31 (the mock's date check exiting
+  silently under dash) was caught by the Ubuntu CI tripwire as designed; its lesson went into pre-commit
+  item 16. Eleven red CI runs were macOS runners never acquired, which `ci-ok` now fails correctly.
+- **Still open, next candidates:** mock lies remains the largest cluster. The new sub-shapes are a mock
+  that ignores an operator-supplied parameter (3525a63, 3618971's `after`/`before`) and the 2026-11-12
+  read-verb-with-a-write-keyword entry, which asks for a per-bump scan of every auto-promoted line. One
+  change per PR, so they wait for the next pass. Most fixes in this window were found by the SwiftGamGui
+  port's review, not here: that review has been acting as GamGUI's adversarial verifier.
+
 ## 2026-11-12 — A read verb with one write keyword: `gam version update`
 - **What happened:** GAM 7.52.00 added `gam version [... (update [quiet])]`, which downloads the latest release and
   installs it over the running binary: an unpinned, unattested GAM. `version` is in the parser's `_READ`, so the line is
