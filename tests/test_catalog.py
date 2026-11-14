@@ -53,16 +53,34 @@ def test_runnable_gam_version_can_never_self_update():
     """GAM 7.52.00 added `gam version [... (update [quiet])]`, which downloads the latest release
     and installs it over the running binary: an unpinned, unattested GAM (invariant 7). `version`
     is a read verb, so the line is auto-promoted; it stays safe only because the read builder
-    drops optional groups. Hold it to exactly `gam version`, whatever a slot is given."""
+    drops optional groups. Hold it to exactly `gam version`, whatever a slot is given. GAM 7.52.02
+    added `install <Path>` and `update path <Path>` and moved the options onto continuation lines,
+    which the catalog parser doesn't read (it keeps each entry's first line), so the line is now
+    bare `gam version`; the grammar test below proves the self-update is still there to guard."""
     cat = load_catalog()
     lines = [c for c in cat.commands if c.verb == "version"]
-    assert any("update" in c.raw_syntax.split() or "(update" in c.raw_syntax for c in lines)
     runnable = [c for c in lines if c.buildable]
     assert runnable                         # else this guards nothing; revisit if it goes browse-only
     for c in runnable:
         assert not c.slots
         assert c.build({}) == ["version"]
-        assert c.build({"a0": "update", "a1": "update"}) == ["version"]
+        assert c.build({"a0": "update", "a1": "install"}) == ["version"]
+
+
+@_needs_grammar
+def test_gam_version_still_offers_the_self_update_the_catalog_must_never_run():
+    # The whole `gam version` entry, first line and continuation lines: it still writes a GAM binary
+    # (`update`, `install <Path>`), so test_runnable_gam_version_can_never_self_update guards something.
+    lines = _GRAMMAR.read_text(errors="replace").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.split()[:2] == ["gam", "version"])
+    entry = [lines[start]]
+    for line in lines[start + 1:]:
+        if not line[:1].isspace() or not line.strip():
+            break
+        entry.append(line)
+    words = set(" ".join(entry).replace("(", " ").replace(")", " ").replace("|", " ").replace("[", " ")
+                .replace("]", " ").split())
+    assert {"update", "install"} <= words
 
 
 def test_new_curated_commands_build_correct_argv():

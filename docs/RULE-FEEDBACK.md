@@ -30,6 +30,21 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-14 — The self-update tripwire went blind when GAM reflowed one grammar entry
+- **What happened:** GAM 7.52.02 added `install <Path>` and `update path <Path>` to the `version` command and moved its
+  options onto continuation lines. `parse_grammar` reads only an entry's first line (true of 691 of 1052 entries, and
+  undocumented until now), so the catalog's `version` line lost its options and
+  `test_runnable_gam_version_can_never_self_update`'s "does this guard anything" assertion failed on the bump (#131).
+  The runnable form stayed exactly the bare command, so nothing unsafe could run.
+- **Invariant in force:** #3 and #7, through the 2026-11-12 entry's line-specific tripwire.
+- **Why it didn't hold:** it held: the tripwire failed loudly, as designed. What it exposed is that the catalog's
+  `raw_syntax` is a first-line view, so a check that reads `raw_syntax` for write keywords sees only part of an entry.
+- **Would a rule have caught it?** The tripwire did. The general scan the 2026-11-12 entry asks for (every promoted
+  line's write words, on each bump) must read whole entries from the grammar, not `raw_syntax`.
+- **Enforcement home if changed:** tripwire test, reading the vendored grammar (now
+  `test_gam_version_still_offers_the_self_update_the_catalog_must_never_run`). Joining continuation lines in the parser
+  is a separate change: it alters what auto-promotes (#3) and needs its own review.
+
 ## 2026-11-14 — "Not under this address" read as "no account", and drove a removal
 - **What happened:** the roster planner compared SIS addresses with Classroom's primaries as strings, so a SIS alias read as
   "no account" and its own account was planned out of the class it owned (failure-log 2026-11-14). Found by the
