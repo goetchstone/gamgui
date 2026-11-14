@@ -138,6 +138,7 @@ IDENTIFIERS = (
     Spec("delete_calendar_acl", ("email", "scope", "calendar")),
     Spec("print_user_calendars", ("email",)),
     Spec("print_calendar_acls_cal", ("calendar_id",)),
+    Spec("print_calendar_data_owner", ("calendar_id",)),
     Spec("add_calendar_acl_cal", ("calendar_id", "scope"), (), {"role": CAL_ROLE, "send_notifications": BOOL}),
     Spec("delete_calendar_acl_cal", ("calendar_id", "scope")),
     Spec("subscribe_calendar", ("email", "calendar_id"), (), {"selected": BOOL}),

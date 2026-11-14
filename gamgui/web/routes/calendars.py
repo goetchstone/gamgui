@@ -9,7 +9,9 @@ specific event id (a recurring master removes the whole series).
 from __future__ import annotations
 
 import asyncio
+import re
 import time
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
@@ -118,50 +120,39 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
         job.finish()
 
 
-def _owner_candidates(acls, cal: str) -> list:
-    """All ACL owners scoped to a real user mailbox (deduped; skip the calendar's self-owner id)."""
-    cid = (cal or "").strip().lower()
-    out, seen = [], set()
-    for a in acls:
-        who = (a.scope_value or "").strip()
-        if a.role == "owner" and a.scope_type == "user" and "@" in who and who.lower() != cid:
-            if who.lower() not in seen:
-                seen.add(who.lower())
-                out.append(who)
-    return out
-
-
-async def _active_emails(request: Request) -> set:
-    """Lowercased emails of current, non-suspended users (from the shared cache)."""
+async def _active_emails(request: Request, strict: bool = False) -> set:
+    """Lowercased emails of current, non-suspended users (from the shared cache). A failed read is an
+    empty set, or with ``strict`` raises, for a caller that would otherwise name someone as suspended."""
     try:
         return {u.primary_email.lower() for u in await request.app.state.gamgui.users()
                 if u.primary_email and not getattr(u, "suspended", False)}
     except Exception:
+        if strict:
+            raise
         return set()
-
-
-def _pick_owner(candidates: list, active: set) -> str:
-    """First owner candidate that is an active (non-suspended, still-existing) account."""
-    return next((c for c in candidates if c.lower() in active), "")
 
 
 async def _resolve_delete_owner(request: Request, conn, cal: str):
     """(owner_to_impersonate, refusal_message). owner is '' when the calendar can't be deleted here.
 
-    Re-reads ACLs fresh and re-validates the id — never trusts the client. The owner must currently
-    be an OWNER and an ACTIVE user (an ex-employee owner is typically suspended/deleted; GAM can't
-    act as them, so we refuse with guidance instead of a confusing impersonation failure)."""
+    Re-reads Google fresh and re-validates the id — never trusts the client. A delete acts as the
+    calendar's data owner (Calendars ``dataOwner``), never another owner in its ACL: a co-owner may not
+    be allowed to delete it. A data owner who is suspended or gone is refused with guidance, not swapped
+    for a co-owner (GAM can't act as a suspended account)."""
     if not _is_secondary(cal):
         return "", ("Only secondary calendars can be deleted here. Primary, holiday and room "
                     "calendars can't be removed this way.")
-    acls = await conn.list_calendar_acls_for(cal)
-    cands = _owner_candidates(acls, cal)
-    if not cands:
-        return "", ("Couldn't find an owner account to act as — the calendar's owner may have been "
-                    "deleted. Transfer ownership to an active user first.")
-    owner = _pick_owner(cands, await _active_emails(request))
-    if not owner:
-        return "", (f"Owner(s) {', '.join(cands)} are suspended or no longer exist — reassign "
+    owner = await conn.calendar_data_owner(cal)
+    if not owner or "@" not in owner:
+        return "", ("Google didn't name this calendar's data owner, so there's no account to delete it "
+                    "as. Transfer ownership to an active user first.")
+    try:
+        active = await _active_emails(request, strict=True)
+    except Exception as exc:  # noqa: BLE001 — never read a failed directory as "suspended"
+        return "", (f"Couldn't read the directory to check that the data owner, {owner}, is active. "
+                    f"Try again. {friendly(exc)}")
+    if owner.lower() not in active:
+        return "", (f"The calendar's data owner, {owner}, is suspended or no longer exists. Transfer "
                     "ownership to an active user, then delete.")
     return owner, ""
 
@@ -320,16 +311,13 @@ async def _detail_ctx(request: Request, conn, cal: str, label: str) -> dict:
     acls = await conn.list_calendar_acls_for(cal)
     is_secondary = _is_secondary(cal)
     owner, delete_note = "", ""
-    if is_secondary:
-        cands = _owner_candidates(acls, cal)
-        if not cands:
-            delete_note = ("This calendar can't be deleted here: no owner account was found to act "
-                           "as (its original owner may have been deleted).")
-        else:
-            owner = _pick_owner(cands, await _active_emails(request))
-            if not owner:
-                delete_note = (f"This calendar can't be deleted here: owner(s) {', '.join(cands)} are "
-                               "suspended or no longer exist. Reassign ownership to an active user first.")
+    if is_secondary:   # the same answer the delete preview and the delete itself give
+        try:
+            owner, refusal = await _resolve_delete_owner(request, conn, cal)
+        except Exception as exc:  # noqa: BLE001 — the page still shows; only the delete zone waits
+            owner, refusal = "", f"Couldn't check who can delete this calendar. {friendly(exc)}"
+        if not owner:
+            delete_note = f"This calendar can't be deleted here. {refusal}"
     return {
         "cal": cal, "label": label.strip(), "acls": acls, "acl_count": len(acls),
         "is_secondary": is_secondary, "owner": owner, "deletable": bool(owner),
@@ -542,12 +530,30 @@ async def delete_cal(request: Request, cal: Annotated[str, Form()],
     return _delete_view(request, cal=cal, label=label.strip(), owner=owner, deleted=True)
 
 
+def _local_midnight(day: str) -> str:
+    """A date-picker day as the start of that day where the operator is, e.g. 2026-11-13T00:00:00-05:00.
+
+    GAM reads a bare yyyy-mm-dd as midnight in its own timezone (UTC unless configured), so "on or after
+    the 13th" in New York listed the evening of the 12th. The offset is that day's own (DST included).
+    Anything else goes on as typed, for GAM to read or refuse."""
+    try:
+        d = date.fromisoformat(day) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else None  # not 2026-W46-5
+    except ValueError:
+        d = None
+    if d is None:
+        return day
+    try:
+        return datetime(d.year, d.month, d.day).astimezone().isoformat()
+    except (OverflowError, ValueError):   # 0001-01-01 or 9999-12-31 shifted past a year GAM can read
+        return day
+
+
 @router.get("/events", response_class=HTMLResponse)
 async def events(request: Request, cal: str, q: str = "", after: str = "", before: str = "") -> HTMLResponse:
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
-    q, after, before = q.strip(), after.strip(), before.strip()
+    q, after, before = q.strip(), _local_midnight(after.strip()), _local_midnight(before.strip())
     if not (q or after or before):  # never an unbounded all-events scan
         return TEMPLATES.TemplateResponse(request, "_event_results.html", {"cal": cal, "events": [], "need_filter": True})
     try:

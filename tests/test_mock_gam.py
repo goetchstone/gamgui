@@ -120,6 +120,7 @@ READS = {
     "print_user_calendars": [C.print_user_calendars("alice@example.com")],
     "print_all_calendars": [C.print_all_calendars()],
     "print_calendar_acls_cal": [C.print_calendar_acls_cal(CAL)],
+    "print_calendar_data_owner": [C.print_calendar_data_owner(CAL)],
     "print_events": [C.print_events(CAL, query="standup")],
     "get_event": [C.get_event(CAL, "evt-allhands")],
     "print_datatransfers": [C.print_datatransfers("carol@example.com")],

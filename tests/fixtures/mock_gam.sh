@@ -707,7 +707,7 @@ groupsenterprise|enterprisegroups|profile|ldap|directorysync|gcp|cloud|cloudsear
       if [ -z "$filtered" ] && ! in_directory "$account"; then
         case "$account" in
           *@example.com) printf 'User: %s, Does not exist\n' "$account" 1>&2; rc=56 ;;   # setSysExitRC: the last one wins
-          *) printf 'User: %s, Service not applicable\n' "$account" 1>&2; rc=73 ;;
+          *) printf 'User: %s, Service not applicable/Does not exist\n' "$account" 1>&2; rc=73 ;;
         esac
         missing=1; continue
       fi
@@ -1388,20 +1388,85 @@ if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calenda
   echo "calendarId,JSON"
   case "$2" in
     *orphan*) rows_with calendar_acls_orphan.json "$2" ;;  # sole owner is a suspended user
+    *coowned*|*bobdata*) rows_with calendar_acls_coowned.json "$2" ;;  # alice, carol and bob all own it
     *)        rows_with calendar_acls.json "$2" ;;
   esac
+  exit 0
+fi
+
+# A secondary calendar's one data owner (Calendars resource dataOwner): the account that created it, which
+# may not be the first owner in its ACL. *coowned*: carol, though alice is listed first; *bobdata*: bob,
+# who is suspended, with active co-owners.
+data_owner_of() {  # <calendar id>
+  case "$1" in
+    *orphan*|*bobdata*) echo bob@example.com ;;
+    *coowned*) echo carol@example.com ;;
+    *) echo alice@example.com ;;
+  esac
+}
+
+# `gam calendars <id> print settings fields <CalendarSettingsFieldList> formatjson` (doCalendarsPrintShowSettings, one
+# calendars.get as the admin) -> calendarId,JSON with the fields asked for, sort_keys. `dataowner` is in GAM 7.52.01's
+# CALENDAR_SETTINGS_FIELDS_CHOICE_MAP though the reference omits it; only `id,dataowner` is modelled. An unknown
+# calendar is entityActionFailedWarning, ACTION_FAILED_RC.
+if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "settings" ]; then
+  [ $# -eq 7 ] && [ "$5" = fields ] && [ "$7" = formatjson ] || not_modelled "print settings other than fields … formatjson"
+  [ "$(lower "$6")" = "id,dataowner" ] || not_modelled "print settings fields $6"
+  case "$2" in *missing*|*nonexistent*)
+    printf 'Calendar: %s, Print Failed: Not Found\n' "$2" 1>&2; exit 50 ;;
+  esac
+  echo "calendarId,JSON"
+  gam_row "$2" "{\"dataOwner\": \"$(data_owner_of "$2")\", \"id\": \"$2\"}"
   exit 0
 fi
 # `gam calendars <id> print events [query <S>] [after <T>] [before <T>] [eventid <id>] fields <…> formatjson`
 # (_validateCalendarGetEvents, _printCalendarEvent) -> calendarId,id,JSON. `eventid` answers that one event, not every
 # event; one that doesn't exist is entityActionFailedWarning, ACTION_FAILED_RC, with the titles alone (Google's words
-# approximate). A list that finds nothing is NO_ENTITIES_FOUND_RC (a NOMATCH query here). The query and dates otherwise
-# select nothing.
+# approximate). A list that finds nothing is NO_ENTITIES_FOUND_RC (a NOMATCH query here). The query otherwise selects
+# nothing. `after`/`before` are timeMin/timeMax (TYPE_DATETIME, getTimeOrDeltaFromNow): a bare yyyy-mm-dd is midnight in
+# GAM's timezone (UTC here), a full time keeps its offset; Google keeps an event whose END is after timeMin and whose
+# START is before timeMax, compared as instants. A day or time that isn't one (Feb 30, hour 25) is GAM's usage error
+# (wording approximate); the grammar's relative times and now/today/never aren't modelled.
+event_epoch() {  # <yyyy-mm-dd | yyyy-mm-dd(T| )hh:mm[:ss[.ms]](Z|±hh:mm)>: seconds since the epoch, or nothing
+  t=$(printf '%s' "$1" | sed -E 's/^([0-9-]{10}) /\1T/; s/\.[0-9]+(Z|[+-])/\1/')
+  case "$t" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) t="${t}T00:00:00Z" ;;
+    *T[0-9][0-9]:[0-9][0-9][Z+-]*) t=$(printf '%s' "$t" | sed 's/\(T[0-9][0-9]:[0-9][0-9]\)/\1:00/') ;;
+  esac
+  printf '%s' "$t" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](Z|[+-][0-9]{2}:[0-9]{2})$' \
+    || return 0
+  day=${t%%T*}
+  # macOS's date rolls a day that isn't one over (Feb 30 -> Mar 2); GNU's refuses it. Both must read it back the same.
+  # `|| true`: under set -eu, dash (CI's Linux /bin/sh) exits on a failed assignment from $(...), so GNU's refusal
+  # would end the mock silently with 1 instead of reaching GAM's usage error.
+  back=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${day}T00:00:00Z" +%Y-%m-%d 2>/dev/null \
+    || date -u -d "$day" +%Y-%m-%d 2>/dev/null || true)
+  [ "$back" = "$day" ] || return 0
+  bsd=$(printf '%s' "$t" | sed 's/Z$/+0000/; s/\([+-][0-9][0-9]\):\([0-9][0-9]\)$/\1\2/')
+  date -j -f '%Y-%m-%dT%H:%M:%S%z' "$bsd" +%s 2>/dev/null || date -d "$t" +%s 2>/dev/null || true
+}
+event_when() {  # <start|end> <json line>: that side's dateTime (or all-day date)
+  printf '%s' "$2" | sed -n "s/.*\"$1\": {\"date[A-Za-z]*\": \"\([^\"]*\)\".*/\1/p"
+}
 if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events" ]; then
-  cal=$2; shift 4; fj=""; only=""
+  cal=$2; shift 4; fj=""; only=""; tmin=""; tmax=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      query|after|before) need_value $# "String"; shift 2 ;;
+      after|before)
+        need_value $# "String"
+        case "$(lower "$2")" in [+-][0-9]*|now|today|never) not_modelled "print events $1 $2" ;; esac
+        e=$(event_epoch "$2")
+        # getTimeOrDeltaFromNow: a bare day fails strptime (YYYYMMDD_FORMAT_REQUIRED), anything else arrow.get
+        # (YYYYMMDDTHHMMSS_FORMAT_REQUIRED), both invalidArgumentExit.
+        if [ -z "$e" ]; then
+          case "$2" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) usage_error "Invalid argument: Expected <yyyy-mm-dd>" ;;
+            *) usage_error "Invalid argument: Expected <yyyy-mm-ddThh:mm:ss[.fff](Z|(+|-(hh:mm)))>" ;;
+          esac
+        fi
+        if [ "$1" = after ]; then tmin=$e; else tmax=$e; fi
+        shift 2 ;;
+      query) need_value $# "String"; shift 2 ;;
       eventid) need_value $# "EventId"; only=$2; shift 2 ;;
       fields) need_value $# "EventFieldNameList"; [ -n "$2" ] || empty_arg "EventFieldNameList"; shift 2 ;;
       formatjson) fj=1; shift ;;
@@ -1418,6 +1483,8 @@ if [ "${1:-}" = "calendars" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "events"
   while IFS= read -r record || [ -n "$record" ]; do
     [ -n "$record" ] || continue
     id=$(json_text id "$record")
+    if [ -n "$tmin" ] && [ "$(event_epoch "$(event_when end "$record")")" -le "$tmin" ]; then continue; fi
+    if [ -n "$tmax" ] && [ "$(event_epoch "$(event_when start "$record")")" -ge "$tmax" ]; then continue; fi
     if [ -z "$only" ] || [ "$only" = "$id" ]; then gam_row "$cal" "$id" "$record"; fi
   done < "$GAM_MOCK_FIXTURES/events.json"
   exit 0
@@ -2039,6 +2106,10 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "remove" ] && [ "${4:-}" = "calendars" 
   [ -n "${5:-}" ] || missing_arg "UserCalendarEntity"
   [ $# -eq 5 ] || invalid_arg "$6"
   check_exists "Calendar" "$5"
+  # Only the data owner is modelled as able to delete it; a co-owner may not be (Google's words approximate).
+  if [ "$(lower "$2")" != "$(data_owner_of "$5")" ]; then
+    printf 'User: %s, Calendar: %s, Remove Failed: Forbidden\n' "$2" "$5" 1>&2; exit 50
+  fi
   echo "User: $2, Calendar: $5, Removed"
   exit 0
 fi
@@ -2298,7 +2369,7 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && { [ "${4:-}" = "tokens" ] 
   if ! in_directory "$owner"; then
     case "$owner" in
       *@example.com) printf 'User: %s, Does not exist\n' "$owner" 1>&2; exit 56 ;;
-      *) printf 'User: %s, Service not applicable\n' "$owner" 1>&2; exit 73 ;;
+      *) printf 'User: %s, Service not applicable/Does not exist\n' "$owner" 1>&2; exit 73 ;;
     esac
   fi
   printf 'Getting Access Tokens for %s\n' "$owner" 1>&2

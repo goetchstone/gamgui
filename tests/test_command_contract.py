@@ -215,10 +215,17 @@ def _keywords(argv):
     return [t for t in argv if t and not _value(t) and not t.isdigit()]
 
 
+# Field names GAM's own source accepts at the pin though the reference omits them; the source is the authority, as for
+# `transfer ownership` above. dataowner: CALENDAR_SETTINGS_FIELDS_CHOICE_MAP at 7.52.01 (print_calendar_data_owner).
+SOURCE_ONLY_FIELDS = {"dataowner"}
+
+
 def _is_grammar_word(tok) -> bool:
     """A whole word in the grammar; a comma field list field by field, case-insensitively as GAM reads it."""
     words, lower, _, _ = _grammar()
-    return all(f.lower() in lower for f in tok.split(",")) if "," in tok else tok in words
+    if "," in tok:
+        return all(f.lower() in lower or f.lower() in SOURCE_ONLY_FIELDS for f in tok.split(","))
+    return tok in words
 
 
 @needs_grammar
