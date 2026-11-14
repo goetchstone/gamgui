@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 _EMAIL_KEY = "email"
 _SUBJECT_PREFIX = "Subject:"
@@ -360,6 +360,25 @@ def _as_bool(v: Any) -> bool:
     if isinstance(v, str):
         return v.strip().lower() in ("true", "yes", "on", "1")
     return bool(v)
+
+
+def primary_of_every_address(users: Iterable[GAMUser]) -> Dict[str, str]:
+    """Every address of every account, lowercased, to the account's primary: the primary itself, its aliases and its
+    non-editable aliases (alias-domain addresses; `fields aliases` asks GAM for both). A primary is always its own
+    account's, whatever another's alias says. Used wherever an address must be read as the person it names."""
+    users = list(users)
+    out: Dict[str, str] = {}
+    for user in users:
+        primary = user.primary_email.strip().lower()
+        for alias in (*user.aliases, *user.non_editable_aliases):
+            address = alias.strip().lower()
+            if primary and "@" in address:
+                out.setdefault(address, primary)
+    for user in users:
+        primary = user.primary_email.strip().lower()
+        if primary:
+            out[primary] = primary
+    return out
 
 
 def _as_list(v: Any) -> List[str]:

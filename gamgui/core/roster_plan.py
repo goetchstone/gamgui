@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .classroom import Course, Roster, roster_from
+from .gam.models import GAMUser, primary_of_every_address
 from .roster import Snapshot
 
 ALIAS_PREFIX = "gg-"
@@ -74,23 +75,10 @@ def _managed_alias(aliases: Iterable[str]) -> Optional[str]:
     return None
 
 
-def directory_from(users: Iterable[object]) -> Dict[str, str]:
-    """Every address of every account, lowercased, to the account's primary address: the primary itself, its aliases and
-    its non-editable aliases (alias-domain addresses). ``users`` are `GAMUser`s from a `print users` that asked for
-    ``aliases`` (GAM then reads both kinds). A primary is always its own account's, whatever an alias says."""
-    out: Dict[str, str] = {}
-    primaries: Dict[str, str] = {}
-    for user in users:
-        primary = str(getattr(user, "primary_email", "") or "").strip().lower()
-        if not primary:
-            continue
-        primaries[primary] = primary
-        for alias in [*getattr(user, "aliases", ()), *getattr(user, "non_editable_aliases", ())]:
-            address = str(alias).strip().lower()
-            if address:
-                out.setdefault(address, primary)
-    out.update(primaries)
-    return out
+def directory_from(users: Iterable[GAMUser]) -> Dict[str, str]:
+    """The directory ``plan`` takes: every address of every account to its primary, from a `print users` that asked for
+    ``aliases`` (``primary_of_every_address``)."""
+    return primary_of_every_address(users)
 
 
 @dataclass(frozen=True)
@@ -373,8 +361,8 @@ def plan(snap: Snapshot, classroom: Sequence[Managed], directory: Optional[Mappi
     if aliased:
         n = len(aliased)
         out.notes.append(f"{_plural(n, 'address', 'addresses')} in the roster {'is' if n == 1 else 'are'} another address "
-                         f"(an alias) of a Google Workspace account, so {'it is' if n == 1 else 'they are'} planned as "
-                         "that account's primary address. Update them in users.csv.")
+                         f"(an alias) of a Google Workspace account, so GamGUI reads {'it' if n == 1 else 'them'} as that "
+                         "account's primary address. Update them in users.csv.")
     if unmatched:
         out.notes.append(f"{_plural(unmatched, 'class lists', 'classes list')} roster addresses Classroom doesn't have in "
                          f"{'it' if unmatched == 1 else 'them'}, and without the directory GamGUI can't tell whether one is "

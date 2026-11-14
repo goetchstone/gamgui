@@ -19,6 +19,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core.gam.commands import is_one_address
+from ...core.gam.models import primary_of_every_address
 from ...core.csv_safe import csv_safe
 from ...core.incident import groups, logs, pull, reader, reads, runs, store
 from ...core.incident.report import got_it_table
@@ -263,13 +264,7 @@ def _when(moment: datetime) -> str:
 def _people_of(users) -> dict:
     """Each person's addresses to their own: their aliases, and the domain aliases Google adds (`nonEditableAliases`, which GAM returns with the aliases asked for). A person's own address is never taken by
     another's alias."""
-    people = {u.primary_email.lower(): u.primary_email.lower() for u in users}
-    for user in users:
-        extra = user.raw.get("nonEditableAliases") if isinstance(user.raw, dict) else None
-        for alias in (*user.aliases, *(extra if isinstance(extra, list) else ())):
-            if isinstance(alias, str):
-                people.setdefault(alias.lower(), user.primary_email.lower())
-    return people
+    return primary_of_every_address(users)
 
 
 async def _context_for(st, held: pull.Pull) -> reader.Context:

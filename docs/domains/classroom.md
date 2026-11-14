@@ -198,7 +198,7 @@ guard; only its read side is adapted here.
   `[{"alias": "d:gg-C1"}]`, and the mock once printed strings (`_aliases` reads the objects; an item it can't read makes the
   class unread). GAM prints `[]` when an alias read fails, so a SIS class whose name and section match a class without
   GamGUI's alias is never created (noted). The directory is read now (`force=True`, never the cache) and only limits who is *added*: someone the SIS lists
-  is never removed for it. **Every SIS address is read as its account's primary** (`directory_from`: primaries, `aliases`
+  is never removed for it. **Every SIS address is read as its account's primary** (`directory_from`, which is `models.primary_of_every_address`, shared with incident logs: primaries, `aliases`
   and `nonEditableAliases`, which GAM's `fields aliases` both asks for, 7.52.01 build), because Classroom names people by
   their primary: a SIS alias once read as "no account" and planned its own account's owner change and removal (failure log
   2026-11-14, found by the SwiftGamGui port). `plan` refuses a set as a directory. Without the directory, a class whose
