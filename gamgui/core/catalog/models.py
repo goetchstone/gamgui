@@ -131,7 +131,11 @@ class Catalog:
         ql = (q or "").strip().lower()
         if not ql:
             return []
-        return _by_section([c for c in self.commands if ql in c.name.lower() or ql in c.raw_syntax.lower()])
+        hits = _by_section([c for c in self.commands if ql in c.name.lower() or ql in c.raw_syntax.lower()])
+        # A syntax match can sit deep in an entry's continuation lines (`signature` is an option of many
+        # Gmail reads), so sections holding a name match come first; each section stays contiguous.
+        named = {(c.category, c.subcategory) for c in hits if ql in c.name.lower()}
+        return sorted(hits, key=lambda c: (c.category, c.subcategory) not in named)   # stable
 
     def by_id(self, cid: str) -> Optional[CatalogCommand]:
         return next((c for c in self.commands if c.id == cid), None)
