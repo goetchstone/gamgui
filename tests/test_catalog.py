@@ -40,6 +40,44 @@ def test_risk_inference_handles_entity_prefix():
     assert unknown.risk == RiskLevel.LOW and unknown.uncertain
 
 
+_WRAPPED = """# Users
+gam print widgets [todrive <ToDriveAttribute>*]
+        [fields <WidgetFieldNameList>]
+\t[formatjson]
+gam info widget <WidgetItem>
+
+<WidgetFieldName> ::=
+        name|
+        size
+gam show widgets
+        update [now]
+gam <UserTypeEntity>
+        print gadgets
+"""
+
+
+def test_an_entrys_continuation_lines_join_its_syntax():
+    # GAM wraps a long entry onto indented lines (691 of 1052 entries in 7.52.03). The parser once
+    # kept the first line only, so the Builder showed a cut-off syntax.
+    cmds = parse_grammar(_WRAPPED)
+    assert [c.raw_syntax for c in cmds] == [
+        "gam print widgets [todrive <ToDriveAttribute>*] [fields <WidgetFieldNameList>] [formatjson]",
+        "gam info widget <WidgetItem>",             # the blank line ends it: the definition below
+        "gam show widgets update [now]",            # is not part of the entry before or after it
+        "gam <UserTypeEntity> print gadgets",
+    ]
+    assert [c.id for c in cmds] == ["raw.1", "raw.4", "raw.9", "raw.11"]   # ids stay first-line
+
+
+def test_a_continuation_line_never_classifies_an_entry():
+    # Verb and risk come from the first line, as they did before the join: a write keyword wrapped
+    # under a read verb (`version`'s `update`/`install`) never makes the line look like a write, and
+    # a read verb wrapped under a verbless first line never makes an uncertain line confidently read.
+    show, gadgets = parse_grammar(_WRAPPED)[2:]
+    assert show.verb == "show" and show.risk == RiskLevel.READ_ONLY and not show.uncertain
+    assert gadgets.uncertain and gadgets.risk == RiskLevel.LOW
+
+
 def test_load_catalog_has_buildable_and_browse():
     cat = load_catalog()
     assert cat.version  # stamped from the committed JSON
@@ -54,13 +92,13 @@ def test_runnable_gam_version_can_never_self_update():
     and installs it over the running binary: an unpinned, unattested GAM (invariant 7). `version`
     is a read verb, so the line is auto-promoted; it stays safe only because the read builder
     drops optional groups. Hold it to exactly `gam version`, whatever a slot is given. GAM 7.52.02
-    added `install <Path>` and `update path <Path>` and moved the options onto continuation lines,
-    which the catalog parser doesn't read (it keeps each entry's first line), so the line is now
-    bare `gam version`; the grammar test below proves the self-update is still there to guard."""
+    added `install <Path>` and `update path <Path>` on continuation lines, which the parser joins
+    into the entry's syntax: the runnable form below carries them and must still never emit them."""
     cat = load_catalog()
     lines = [c for c in cat.commands if c.verb == "version"]
     runnable = [c for c in lines if c.buildable]
     assert runnable                         # else this guards nothing; revisit if it goes browse-only
+    assert any("update" in c.raw_syntax and "install" in c.raw_syntax for c in runnable)
     for c in runnable:
         assert not c.slots
         assert c.build({}) == ["version"]

@@ -414,8 +414,8 @@ def test_the_download_verb_is_what_saves_a_local_file():
     """The sensitive-read audit flags downloads by GAM's verb (catalog.DOWNLOAD_VERB), not a hand list
     (review F4/F27). Both halves of that rule, against the grammar: every `get` stanza takes
     `targetfolder <FilePath>` (it saves a file — to GAM's drive_dir when none is given), and no other
-    buildable read can reach a local-file option, because the read builder emits only a head line's
-    required tokens (`info cros … [downloadfile …]`, `show messages … [saveattachments …]`)."""
+    buildable read can reach a local-file option, because the read builder drops an entry's optional
+    groups (`info cros … [downloadfile …]`, `show messages … [saveattachments …]`)."""
     from gamgui.core.catalog import load_catalog
     from gamgui.core.catalog.catalog import DOWNLOAD_VERB
     from gamgui.core.connectors.base import RiskLevel
@@ -428,7 +428,7 @@ def test_the_download_verb_is_what_saves_a_local_file():
         if not (c.buildable and c.risk == RiskLevel.READ_ONLY and c.id.startswith("raw.")):
             continue
         n = int(c.id.split(".")[1])
-        assert lines[n] == c.raw_syntax, c.id          # the id is the grammar line the command came from
+        assert c.raw_syntax.split() == _stanza(lines, n).split(), c.id   # the id is the entry's first line
         argv = c.build({s.key: f"<{s.key}>" for s in c.slots})
         if c.verb == DOWNLOAD_VERB:
             assert c.sensitive, c.raw_syntax

@@ -30,6 +30,21 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-15 — Joining continuation lines exposed the read builder's guesses about groups
+- **What happened:** the parser now joins each entry's continuation lines (the follow-up the 2026-11-14 entry asked
+  for). Before the read builder was fixed with it, the join would have handed 127 promoted reads a bogus required slot:
+  `(addcsvdata <FieldName> <String>)*` kept `<FieldName>` without its keyword, an unbalanced `]` in GAM's grammar
+  turned later optional groups required, and `show contacts` would have demanded a value for an all-optional
+  `<PeoplePrintShowUserContactSelection>`. None could write: each was a read verb with operator values as single argv
+  elements. Promotion itself did not change (verb and risk stay first-line).
+- **Invariant in force:** #3. It held: the gate is the verb, and nothing on a continuation line classifies an entry.
+- **Why it didn't hold:** it held for safety; correctness of a promoted read's argv rests on grammar heuristics no
+  invariant names, and first-line parsing had hidden how many of them were wrong.
+- **Would a rule have caught it?** A diff of every promoted read's argv before and after did. The general write-word
+  tripwire the 2026-11-12 entry asked for now exists over the built argv
+  (`test_no_promoted_read_emits_a_write_keyword`).
+- **Enforcement home if changed:** tripwire test (done); the catalog-builder runbook carries the parsing rules.
+
 ## 2026-11-14 — The self-update tripwire went blind when GAM reflowed one grammar entry
 - **What happened:** GAM 7.52.02 added `install <Path>` and `update path <Path>` to the `version` command and moved its
   options onto continuation lines. `parse_grammar` reads only an entry's first line (true of 691 of 1052 entries, and
