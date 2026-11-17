@@ -30,11 +30,30 @@
 
 ## Gotchas / mock-lies traps
 - **The mock lies here too.** `parse_read_template` builds argv from the *vendored grammar*, so a syntactically valid line can still be rejected live (e.g. some print/show commands reject `formatjson` — see MEMORY `gamgui-gam-formatjson`). `tests/fixtures/mock_gam.sh` proves the argv shape and table render, NOT that GAM accepts the command. Check `gamgui/resources/gam7/GamCommands.txt`, not memory.
-- **Only an entry's first line is parsed.** `parse_grammar` reads lines that start with `gam `; an entry's indented
-  continuation lines (691 of 1052 entries in 7.52.03) are dropped, so `raw_syntax` shows the first line only and a
-  promoted read can't emit a required token that sits on a continuation line. It fails safe for writes: the verb, and
-  so the risk, is on the first line, and nothing on a continuation line can reach the argv.
-- **Optional `[...]` groups are dropped** — a promoted command runs on required args only. Exceptions kept as slots: self-contained `[<UserTypeEntity>]`/`[<CrOSTypeEntity>]` (emitted as `optpair` `user <x>`/`cros <x>`) and a single-token optional positional (`info user [<UserItem>]`). A `<UserTypeEntity>` buried in `[data <…>]` is NOT touched. Paren-group/alternation junk (`)`, `(`) is skipped, not guessed.
+- **An entry's continuation lines join its syntax; only its first line classifies it.** GAM wraps a long entry onto
+  indented lines (691 of 1052 entries in 7.52.03); `parse_grammar` joins them into one `raw_syntax`, up to the first
+  blank or unindented line (so a `<Thing> ::=` definition's body never attaches). The verb, risk, `uncertain` flag and
+  name still come from the first line alone: a word on a continuation line (`version`'s `update`/`install`) never
+  classifies an entry. Until 2026-11-15 the parser kept first lines only, so the syntax view was cut off and a promoted
+  read couldn't emit a required token from a later line (`print chromesnvalidity`'s `cros_sn <SerialNumberEntity>`).
+  The join changed no command's promotion; it changed 32 promoted reads' argv, each listed in that PR.
+  `test_an_entrys_continuation_lines_join_its_syntax`, `test_a_continuation_line_never_classifies_an_entry`.
+- **Optional `[...]` groups are dropped** — a promoted command runs on required args only. Exceptions kept as slots: self-contained `[<UserTypeEntity>]`/`[<CrOSTypeEntity>]` (emitted as `optpair` `user <x>`/`cros <x>`) and a top-level single-token optional positional whose placeholder names one value (`…Entity>`, `…Item>`, `…Name>`, `…ID>`: `info user [<UserItem>]`; not `[<PermissionMatchAction>]`, which is `pma process|skip`, nor a `[<Boolean>]` inside a flag group). A `<UserTypeEntity>` buried in `[data <…>]` is NOT touched.
+- **Groups and repeats are not required arguments.** A required-looking `(...)` group is an alternation the builder
+  can't choose (`(basic|allfields|…)`) or a repeat (`(addcsvdata <FieldName> <String>)*`), and `<X>*` may appear zero
+  times: all are dropped, except `<A>|(…`, which keeps a slot for `<A>`. A `…Selection>` placeholder is a run of
+  optional keyword groups and never becomes a slot. GAM's brackets don't always balance (`states <CourseStateList>])`),
+  so the bracket and paren depths never go below zero: a stray closer must not make the groups after it required.
+  `test_generic_read_template_from_a_joined_entry` pins each case; `test_no_promoted_read_emits_a_write_keyword` holds
+  every promoted read's fixed words to the read side.
+- **A slot value is never a write keyword.** GAM reads some slot positions as keywords (`print vaultcounts matter <M>
+  <QueryItem>`, a bare `<ChatSpace>+`), so `make_build` refuses a value equal to `readbuilder.WRITE_KEYWORDS`
+  (`todrive`, the local-file options, `update`, `install`), any case; the Builder shows the refusal.
+  `test_a_promoted_read_refuses_a_write_keyword_as_a_value`.
+- **Search matches the whole entry**, so a word in an option deep in a continuation line finds the command too;
+  `Catalog.search` puts the sections holding a *name* match first (`q=signature` still leads with "Set Gmail signature").
+- **Sensitive-read heads** in `tests/test_builder.py` are the syntax up to the first `[` or `(` of the joined entry, so
+  `get contactphotos` is pinned with its required `<PeopleResourceNameEntity>|<PeopleUserContactSelection>`.
 - **Curated writes must exist in the pinned grammar** or `test_command_contract.py` fails; passing the contract proves *syntax exists*, not that the write does what you expect — verify destructive ones on a throwaway account (house rule).
 - Directory data reaches templates via autoescaped `data-*` attributes read by JS (`el.dataset.*`), never `| tojson` in an attribute (#8).
 
@@ -47,9 +66,10 @@
 - **A read verb can carry a write keyword.** `version` is in `_READ`, and since GAM 7.52.00 its line takes
   `(update [quiet])`, which installs the latest GAM over the running one, unpinned. It stays safe only because the read
   builder drops optional groups; `test_runnable_gam_version_can_never_self_update` holds the runnable form to plain
-  `gam version`. GAM 7.52.02 added `install <Path>` and `update path <Path>` and moved the options onto continuation
-  lines; `test_gam_version_still_offers_the_self_update_the_catalog_must_never_run` reads the whole entry from the
-  vendored grammar so the guard still has something to guard. On a bump, read the grammar diff for any new optional
-  keyword that writes under a read verb.
+  `gam version`. GAM 7.52.02 added `install <Path>` and `update path <Path>` on continuation lines, which now join the
+  catalog's `raw_syntax`; `test_gam_version_still_offers_the_self_update_the_catalog_must_never_run` also reads the
+  whole entry from the vendored grammar so the guard still has something to guard. On a bump, read the grammar diff
+  for any new optional keyword that writes under a read verb; `test_no_promoted_read_emits_a_write_keyword` catches
+  one that reaches a runnable argv.
 - **After a GAM bump:** run `scripts/build_command_catalog.py` to regenerate `command_catalog.json`, then confirm `test_catalog_matches_grammar` and `test_docs_state_the_real_catalog_counts` pass (`bump_gam.py` rewrites the counts in CLAUDE.md, README and ROADMAP; by hand, update all three).
 - **Re-group categories into areas:** edit `_AREA`/`AREA_ORDER` in `catalog.py`; `test_areas_group_the_categories` guards the shape.

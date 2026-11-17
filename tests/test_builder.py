@@ -297,6 +297,65 @@ def test_generic_read_leading_useritem_gets_user_keyword():
     assert cmd.build({s.key: "joe@x.com" for s in cmd.slots})[:3] == ["user", "joe@x.com", "show"]
 
 
+def _template(line: str):
+    from gamgui.core.catalog.readbuilder import make_build, parse_read_template
+
+    slots, template = parse_read_template(line)
+    return [(s.placeholder, s.required) for s in slots], make_build(template)({s.key: "V" for s in slots})
+
+
+@pytest.mark.parametrize("line, slots, argv", [
+    # A required keyword and value on a continuation line now reach the argv.
+    ("gam print widgets [todrive <ToDriveAttribute>*] cros_sn <SerialNumberEntity> [listlimit <Number>]",
+     [("<SerialNumberEntity>", True)], ["print", "widgets", "cros_sn", "V"]),
+    # A repeat `(...)*` and a zero-or-more `<X>*` are not required: no slot, no bare value.
+    ("gam print widgets (addcsvdata <FieldName> <String>)* <WidgetFieldName>*",
+     [], ["print", "widgets"]),
+    # A required alternation group can't be chosen for the operator: dropped, not half-emitted.
+    ("gam info widget <WidgetID> (basic|allfields | (<WidgetFieldName>* [fields <WidgetFieldNameList>]))",
+     [("<WidgetID>", True)], ["info", "widget", "V"]),
+    # GAM's grammar closes a `[` it never opened: the optional groups after it stay optional.
+    ("gam print widgets ([owner <UserItem>] states <StateList>]) [fields <FieldNameList>] [delimiter <Character>]",
+     [], ["print", "widgets"]),
+    # `<A>|(…` keeps a slot for its first alternative.
+    ("gam show ownership <DriveFileID>|(drivefilename <DriveFileName>) [formatjson]",
+     [("<DriveFileID>", True)], ["show", "ownership", "V"]),
+    # A `…Selection>` is a run of optional keyword groups: nothing to fill, even placed as required.
+    ("gam <UserTypeEntity> show contacts <PeoplePrintShowUserContactSelection> [countsonly]",
+     [("user@domain", True)], ["user", "V", "show", "contacts"]),
+    # An optional positional slot only for a one-value placeholder at the top level: not a keyword
+    # construct (`<PermissionMatchAction>` is `pma process|skip`), not a `[<Boolean>]` inside a flag.
+    ("gam show widgets [<WidgetEntity>] [<PermissionMatchAction>] [showdeleted [<Boolean>]]",
+     [("<WidgetEntity>", False)], ["show", "widgets", "V"]),
+])
+def test_generic_read_template_from_a_joined_entry(line, slots, argv):
+    assert _template(line) == (slots, argv)
+
+
+def test_a_promoted_read_emits_a_required_token_from_a_continuation_line():
+    # `print chromesnvalidity` takes `cros_sn <SerialNumberEntity>` on its second line; first-line
+    # parsing ran it bare, which GAM refuses.
+    cat = load_catalog()
+    cmd = next(c for c in cat.commands
+               if c.id.startswith("raw.") and c.raw_syntax.startswith("gam print chromesnvalidity"))
+    assert cmd.buildable and cmd.build({s.key: "SN1" for s in cmd.slots}) == [
+        "print", "chromesnvalidity", "cros_sn", "SN1"]
+
+
+def test_no_promoted_read_emits_a_write_keyword():
+    # Now that each entry's whole syntax reaches the read builder, hold every promoted read's fixed
+    # words, not just `version`'s, to the read side: no verb the parser counts as a write, and not
+    # `install`/`update` (GAM's self-update). `select` is the one write-list word that appears, as
+    # the user selector in `print users select <UserTypeEntity>`.
+    from gamgui.core.catalog.parser import _DESTRUCTIVE, _LOW
+
+    writes = (_LOW | _DESTRUCTIVE | {"install", "update"}) - {"select"}
+    for c in load_catalog().commands:
+        if c.buildable and c.id.startswith("raw."):
+            words = set(c.build({s.key: "" for s in c.slots}))
+            assert not words & writes, (c.raw_syntax, words & writes)
+
+
 def test_catalog_buildable_only_filter(client):
     # The default landing lists only runnable commands — every row is a Build, none a Copy.
     r = client.get("/builder/catalog", params={"buildable": "1"})
@@ -408,9 +467,15 @@ DOWNLOAD_HEADS = {
     "gam <UserTypeEntity> get photo",
     "gam <UserTypeEntity> get profilephoto",
     "gam get contactphotos <ContactEntity>|<ContactSelection>",
-    "gam <UserTypeEntity> get contactphotos",
+    "gam <UserTypeEntity> get contactphotos <PeopleResourceNameEntity>|<PeopleUserContactSelection>",
 }
 SENSITIVE_HEADS = SECRET_HEADS | DOWNLOAD_HEADS
+
+
+def _head(c):
+    # A command's syntax up to its first optional or grouped part: what it takes on every run. The
+    # whole entry is joined (continuation lines included), so `get contactphotos` names its contact.
+    return re.split(r"[\[(]", c.raw_syntax, maxsplit=1)[0].strip()
 
 
 def _sensitive(needle):
@@ -421,7 +486,7 @@ def test_sensitive_reads_are_flagged_and_still_buildable():
     # Operator decision D3: keep them runnable, audit every run. Pinned by syntax (the raw.<line> ids
     # move on a GAM bump), so a bump that renames one fails here instead of silently losing its audit.
     flagged = [c for c in load_catalog().commands if c.sensitive]
-    assert {c.raw_syntax.split("[")[0].strip() for c in flagged} == SENSITIVE_HEADS
+    assert {_head(c) for c in flagged} == SENSITIVE_HEADS
     assert len(flagged) == len(SENSITIVE_HEADS)
     assert all(c.buildable and c.risk == RiskLevel.READ_ONLY for c in flagged)
 
@@ -435,7 +500,7 @@ def test_every_download_read_is_sensitive_by_rule():
     reads = [c for c in load_catalog().commands if c.buildable and c.risk == RiskLevel.READ_ONLY]
     downloads = [c for c in reads if c.verb == DOWNLOAD_VERB]
     assert downloads and all(c.sensitive for c in downloads)
-    others = {c.raw_syntax.split("[")[0].strip() for c in reads if c.sensitive and c.verb != DOWNLOAD_VERB}
+    others = {_head(c) for c in reads if c.sensitive and c.verb != DOWNLOAD_VERB}
     assert others == SECRET_HEADS and {v for v, _ in SECRET_READS} == {"show", "print"}
 
 
@@ -1025,3 +1090,15 @@ def test_destructive_bulk_sequence_needs_typed_confirm(client):
     blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "confirm_email": "carol@example.com",
                                                          "preview": token})
     assert "Type confirm" in blocked.text and "status?job=" not in blocked.text
+
+
+@pytest.mark.parametrize("value", ["todrive", "TargetFolder", " install ", "update"])
+def test_a_promoted_read_refuses_a_write_keyword_as_a_value(value):
+    # GAM reads some slot positions as keywords (`print vaultcounts matter M <QueryItem>`), so a value
+    # typed as `todrive` would make a read write a Sheet outside the audited export path.
+    cmd = next(c for c in load_catalog().commands
+               if c.id.startswith("raw.") and c.buildable and c.raw_syntax.startswith("gam print vaultcounts")
+               and len(c.slots) == 2)
+    with pytest.raises(ValueError):
+        cmd.build({cmd.slots[0].key: "M1", cmd.slots[1].key: value})
+    assert cmd.build({cmd.slots[0].key: "M1", cmd.slots[1].key: "todrive-report"})[-1] == "todrive-report"

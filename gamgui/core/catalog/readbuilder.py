@@ -24,6 +24,21 @@ from .models import CommandSlot, SlotKind
 _LITERAL = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _LITERAL_ALT = re.compile(r"^[a-z0-9][a-z0-9_-]*(?:\|[a-z0-9][a-z0-9_-]*)+$")
 _PLACEHOLDER = re.compile(r"<[^>]+>")
+# A placeholder that names a value an operator can type: `<UserItem>`, `<DomainName>`,
+# `<ProjectIDEntity>` (some entities also take a keyword form, e.g. `<EventEntity>`'s `id <EventId>`).
+# Only these become an optional positional slot. Others name a keyword construct one argv element
+# can't hold: `<PermissionMatchAction>` is `pma process|skip`, `<DriveFileParentAttribute>` is
+# `parentid <DriveFolderID>`.
+_ONE_VALUE = re.compile(r"(?:Entity|Item|Name|ID)>$")
+# A `…Selection>` placeholder is a run of optional keyword groups (`<ContactSelection>` is
+# `[query <QueryContact>] [emailmatchpattern …]`): nothing to fill even where the grammar places it
+# as required, so it never becomes a slot.
+_SELECTION = re.compile(r"Selection>$")
+
+# GAM reads some slot positions as keywords, so a value typed as one of these would make a read write a
+# Sheet or a local file, or replace GAM itself. `make_build` refuses them as a value.
+WRITE_KEYWORDS = frozenset({"todrive", "targetfolder", "targetname", "drivedir", "downloadfile",
+                            "saveattachments", "update", "install"})
 
 # Template parts (see `make_build`): ("lit", token) | ("req", key) | ("optpair", key, prefix).
 TemplatePart = Tuple
@@ -67,6 +82,7 @@ def parse_read_template(raw_syntax: str) -> Tuple[List[CommandSlot], List[Templa
     template: List[TemplatePart] = []
     used_labels: Dict[str, int] = {}
     depth = 0
+    parens = 0
     next_key = 0
 
     def add_slot(label: str, kind: SlotKind, required: bool, placeholder: str) -> str:
@@ -80,11 +96,24 @@ def parse_read_template(raw_syntax: str) -> Tuple[List[CommandSlot], List[Templa
         return key
 
     for pos, tok in enumerate(tokens):
-        start_depth = depth
-        depth += tok.count("[") - tok.count("]")
+        start_depth, start_parens = depth, parens
+        # GAM's grammar is not always balanced (`states <CourseStateList>])` closes a `[` it never
+        # opened), so neither depth may go below zero: a stray closer must not turn the optional
+        # groups after it into required arguments.
+        depth = max(0, depth + tok.count("[") - tok.count("]"))
+        parens = max(0, parens + tok.count("(") - tok.count(")"))
         optional = start_depth > 0 or tok.startswith("[")
         core = tok.strip("[]")
         if not core:
+            continue
+        # A `(...)` group is an alternation to choose from (`(basic|allfields|…)`) or a repeat
+        # (`(addcsvdata <FieldName> <String>)*`), and an item marked `*` may appear zero times: none
+        # of them is a required argument the builder can fill, so drop them like optional groups.
+        # `<DriveFileID>|(drivefilename …` is a placeholder whose other alternative opens a group:
+        # it keeps a slot for the placeholder below.
+        placeholder_first = core.startswith("<") and "|(" in core
+        if not optional and (start_parens > 0 or core.endswith("*")
+                             or (("(" in tok or ")" in tok) and not placeholder_first)):
             continue
         # A single, self-contained optional token like `[<UserItem>]` or `[<UserTypeEntity>]`.
         self_contained_opt = (tok.startswith("[") and tok.endswith("]")
@@ -109,24 +138,22 @@ def parse_read_template(raw_syntax: str) -> Tuple[List[CommandSlot], List[Templa
 
         # A single-token optional positional like `info user [<UserItem>]` — keep as an optional slot
         # so the command can still be targeted. Multi-token optional flag groups are dropped below.
-        if optional and self_contained_opt and ")" not in core:
+        if optional and self_contained_opt and start_depth == 0 and ")" not in core:
             m = _PLACEHOLDER.search(core)
-            if m:
+            if m and _ONE_VALUE.search(m.group()):
                 key = add_slot(_humanize(m.group()), _slot_kind(m.group()), required=False, placeholder=m.group())
                 template.append(("opt", key))
             continue
         if optional:
             continue  # drop optional flags/fields — the command runs on its required args
 
-        # Required (depth-0) tokens.
-        if ")" in tok:
-            continue  # a trailing alternative / group fragment — drop (avoids garbage + double slots)
+        # Required (depth-0) tokens, outside any `(...)` group.
         m = _PLACEHOLDER.search(core)
-        if m:  # a placeholder, possibly wrapped in `<A>|(…` junk → one clean slot from the first <…>
+        if m and _SELECTION.search(m.group()):
+            continue
+        if m:  # a placeholder (`<ChatSpace>+` → one value, `<A>|(…` → `<A>`) → one slot from the first <…>
             key = add_slot(_humanize(m.group()), _slot_kind(m.group()), required=True, placeholder=m.group())
             template.append(("req", key))
-        elif "(" in core:
-            continue  # a paren-group fragment with no placeholder
         elif _LITERAL.match(core) or _LITERAL_ALT.match(core):
             template.append(("lit", core.split("|")[0]))  # first alternative is the canonical form
         # else: unrecognized punctuation — skip rather than guess.
@@ -136,7 +163,12 @@ def parse_read_template(raw_syntax: str) -> Tuple[List[CommandSlot], List[Templa
 
 def make_build(template: List[TemplatePart]) -> Callable[[Dict[str, str]], List[str]]:
     """Return a build(slot_values) → argv closure for a parsed template (injection-safe by design)."""
+    keys = [part[1] for part in template if part[0] != "lit"]
+
     def build(values: Dict[str, str]) -> List[str]:
+        for value in (values.get(k) or "" for k in keys):
+            if value.strip().lower() in WRITE_KEYWORDS:
+                raise ValueError(f"“{value.strip()}” is a GAM option, not a value this read can take.")
         argv: List[str] = []
         for part in template:
             kind = part[0]

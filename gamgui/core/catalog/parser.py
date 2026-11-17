@@ -1,8 +1,8 @@
 """Shallow parser for GAM's `GamCommands.txt` grammar → categorized `CatalogCommand`s.
 
 Browse-only by design: it gives every command a category (from the `# ` section headers) and an
-*inferred* risk (from the verb), so the catalog can show all ~1,000 commands. Only the curated
-overlay (in `catalog.py`) is runnable.
+*inferred* risk (from the verb), so the catalog can show every command. `catalog.py` makes the
+curated overlay runnable, and every confidently read-only command through `readbuilder.py`.
 """
 
 from __future__ import annotations
@@ -75,16 +75,35 @@ def _split_header(line: str):
     return parts[0].strip(), " - ".join(p.strip() for p in parts[1:])
 
 
+def _continuation(lines: List[str], start: int) -> List[str]:
+    """The indented lines that continue the `gam` entry at `lines[start]`.
+
+    GAM wraps a long entry onto lines that start with whitespace; the entry ends at the first blank
+    or unindented line. An indented block that does not directly follow a `gam` line (a `<Thing> ::=`
+    definition's body) is never reached from here."""
+    cont: List[str] = []
+    for line in lines[start + 1:]:
+        if not line[:1].isspace() or not line.strip():
+            break
+        cont.append(line.strip())
+    return cont
+
+
 def parse_grammar(text: str) -> List[CatalogCommand]:
     out: List[CatalogCommand] = []
     category, subcategory = "Other", ""
-    for lineno, raw in enumerate(text.splitlines()):
+    lines = text.splitlines()
+    for lineno, raw in enumerate(lines):
         if _is_header(raw):
             category, subcategory = _split_header(raw)
             continue
         if not raw.startswith("gam "):
             continue
+        # Verb, risk and name come from the first line alone, as they always have: the verb sits
+        # there in every entry, and a word on a continuation line (`version`'s `update`/`install`)
+        # must never be what classifies one. The continuation lines join `raw_syntax` only.
         toks = raw.split()
+        syntax = " ".join([raw.strip(), *_continuation(lines, lineno)])
         after = toks[1:]
         if not after:
             continue
@@ -96,7 +115,7 @@ def parse_grammar(text: str) -> List[CatalogCommand]:
         name = (f"{verb} {noun}".strip() or raw[4:]).capitalize()
         out.append(CatalogCommand(
             id=f"raw.{lineno}", category=category, subcategory=subcategory, name=name,
-            raw_syntax=raw.strip(), verb=verb, risk=risk, capability=_capability(category),
+            raw_syntax=syntax, verb=verb, risk=risk, capability=_capability(category),
             buildable=False, uncertain=uncertain,
         ))
     return out
