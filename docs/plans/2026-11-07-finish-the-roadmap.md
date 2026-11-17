@@ -1,6 +1,7 @@
 # Plan: finish the roadmap, in both apps
 
-**Status: IN PROGRESS — Phase 0 under way (0.1 done); no feature built yet.** Written at GamGUI `6f7d96c` and SwiftGamGui `f4c7c5b`, for a
+**Status: IN PROGRESS — Phase 0: 0.1 done, 0.3's acceptance runs done with live checks owed, 0.4 open. Swift: 2.2
+and 2.6 done. No GamGUI item from Phases 3–5 built yet.** Written at GamGUI `6f7d96c` and SwiftGamGui `f4c7c5b`, for a
 reader with no session context. `CLAUDE.md` is auto-loaded. Before any item, read that app's runbook for the area
 (`docs/domains/` in each repo). When a PR closes half of an item, mark it under "Status by item" in the same PR.
 
@@ -133,10 +134,17 @@ they share no files. Two sessions at once at most, for cost.
   - Point `2026-11-05-filling-the-gaps.md` here. Its slices map as: 1 → 3.1, 2 → 3.2, 3 → 2.9 and 4.5, 4 → 2.1 to 2.3 and 3.5,
     5 → 2.4 and 2.5, R → 5.5.
   - Clear the working tree's `project.pbxproj` diff, which only moves one line.
-- **0.3 Live reads (the operator's say).** `scripts/acceptance.py` last ran 2026-10-08. Then the reads under "Live checks owed" in
-  the back-port plan (`archive/2026-10-30-backport-swiftgamgui.md`). Also owed, from the closed ten-out-of-ten plan: the
-  one-time sheet's native print in the built `.app`, the offboarding reminder with an invitee (`sendupdates all`), and
-  the new-account signature and calendar retry (about seven minutes). No code.
+- **0.3 Live reads (the operator's say).** `scripts/acceptance.py` last ran 2026-11-12 on GAM 7.52.01 (#117): run it again
+  on the current pin (7.52.03, #131). Then the reads under "Live checks owed" in the back-port plan
+  (`archive/2026-10-30-backport-swiftgamgui.md`). Also owed:
+  - From #132: a sample of the 32 promoted reads whose argv changed when the parser began joining continuation lines
+    (listed in that PR). None has run under GAM, and `acceptance.py` runs no catalog read. Start with those a plain
+    admin can run: `print tokens`, `print events`, `print shareddrives adminaccess`, `print contacts`.
+  - From the closed ten-out-of-ten plan: the one-time sheet's native print in the built `.app`, the offboarding
+    reminder with an invitee (`sendupdates all`), and the new-account signature and calendar retry (about seven
+    minutes).
+
+  No code.
 - **0.4 GamGUI: the last raw GAM errors** (ten-out-of-ten U9). Three write paths still lead with GAM's raw line: the
   Builder's single Run result (`builder.py`), "Couldn't create the account" on onboarding (`onboarding.py`), and the
   offboarding step log (`lifecycle.py`). Give each the friendly message the other write paths use, GAM's words kept
@@ -262,7 +270,7 @@ About 55 PRs, counting 2 for Phase 0, 6 for Phase 1, 12 for Phase 2, 10 for Phas
 
 | Item | GamGUI | Swift |
 |---|---|---|
-| 0.1 / 0.2 / 0.3 | done (this PR) / – / acceptance done 2026-11-10 (#104); live checks owed | – / open / – |
+| 0.1 / 0.2 / 0.3 | done (this PR) / – / acceptance done 2026-11-10 (#104) and 2026-11-12 (#117, GAM 7.52.01); owed on 7.52.03, with #132's reads and the live checks | – / open / – |
 | 0.4 | open | – |
 | 1.1 to 1.6 | – | open |
 | 2.1, 2.3 to 2.5, 2.7, 2.8, 2.10 | – | open |

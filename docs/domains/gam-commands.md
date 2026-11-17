@@ -38,7 +38,8 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 ## Invariants & the failure history
 - **#1 argv-only.** A value like `"a@x.com; rm -rf /"` is one element, never interpolated — proven by
   `test_slot_value_is_a_single_argv_element` and `test_calendar_share_id_is_single_arg_not_shell`.
-- **`EXPECTED_GAM_VERSION` = the single source of truth** (currently `7.52.01`). `test_pinned_version_consistent`
+- **`EXPECTED_GAM_VERSION` = the single source of truth** (`core/gam/commands.py`; this runbook doesn't repeat the
+  number, so a bump can't leave it stale). `test_pinned_version_consistent`
   fails unless `scripts/fetch_gam.sh` (`TAG="v…"`) and `tests/fixtures/mock_gam.sh` agree;
   `test_catalog_matches_grammar` fails if the committed catalog's version/command-count drifts from a
   fresh parse of the vendored grammar. Bump only via the README runbook (step 1 fails by design).
@@ -106,7 +107,7 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
 - The module docstring flags the mutating sub-syntax (group membership, signature flags) as
   needing live re-verification against the pinned GAM each bump — the arg-shape tests only pin *our
   intended* form, not that GAM accepts it.
-- `mock_gam.sh` echoes `GAM 7.52.01 - mock`; `EXPECTED_GAM_VERSION` is matched as a substring against
+- `mock_gam.sh` echoes `GAM <pin> - mock` (`bump_gam.py` rewrites it); `EXPECTED_GAM_VERSION` is matched as a substring against
   live `gam version` for a fail-soft runtime check.
 
 ## Testing / live-verification status
