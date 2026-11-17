@@ -40,13 +40,16 @@ two tiers by whether they can run (the current counts are in CLAUDE.md invariant
 
 ## How reads become buildable
 
-`core/catalog/readbuilder.py` turns a grammar line into slots + argv, so the whole read surface is
-runnable without hand-modeling 500 commands:
+`core/catalog/readbuilder.py` turns a grammar entry into slots + argv, so the whole read surface is
+runnable without hand-modeling 500 commands. An entry is its first line joined with its indented
+continuation lines (`parse_grammar`, since #132; most entries span several lines). Risk and `uncertain`
+still come from the verb on the first line.
 
 1. `_make_reads_buildable(commands)` (`core/catalog/catalog.py`) skips anything already `buildable`,
    anything whose `risk != RiskLevel.READ_ONLY`, and anything `uncertain`. A line that fails to parse
    is left browse-only rather than guessed at.
-2. `parse_read_template(raw_syntax)` walks the tokens tracking `[` / `]` depth and returns
+2. `parse_read_template(raw_syntax)` walks the tokens tracking `[` / `]` and `(` / `)` depth, each clamped
+   at zero because GAM's grammar has stray closers (`states <CourseStateList>])`), and returns
    `(slots, template)`. Template parts are `("lit", token)` for a fixed keyword, `("req", key)` /
    `("opt", key)` for a slot value, and `("optpair", key, prefix)` for a prefixed optional.
    - **Slot labels** come from `_humanize` (`<ChatSpace>` → "Chat space"; a trailing `TypeEntity` /
@@ -56,14 +59,22 @@ runnable without hand-modeling 500 commands:
      it is a drag target like a curated command's.
    - **Optional `[...]` groups are dropped** — the command runs on its required args only. Two
      exceptions are kept as optional slots: a self-contained `[<UserTypeEntity>]` / `[<CrOSTypeEntity>]`
-     (emitted as the `optpair` `user <x>` / `cros <x>`), and a single-token optional positional like
+     (emitted as the `optpair` `user <x>` / `cros <x>`), and a top-level optional positional whose
+     placeholder names one typed value (`…Entity>`, `…Item>`, `…Name>`, `…ID>`), like
      `info user [<UserItem>]`. A `<UserTypeEntity>` buried in a `[data <…>]` flag group is not touched.
+   - **Required-looking groups are dropped too.** A `(...)` group is a choice or a repeat, and an item
+     marked `*` may appear zero times, so neither is a required argument the builder can fill. In
+     `<DriveFileID>|(drivefilename …` the placeholder keeps its slot. A `…Selection>` placeholder (a run
+     of optional keyword groups) never becomes a slot.
    - **`<UserTypeEntity>` expands to `user <x>`** (`<CrOSTypeEntity>` → `cros <x>`), because that is
      the entity prefix GAM expects; a bare leading `<UserItem>` is treated the same way.
-   - Alternations take the first alternative as canonical (`print|show` → `print`); paren-group
-     fragments and unrecognized punctuation are skipped rather than guessed.
+   - Alternations take the first alternative as canonical (`print|show` → `print`); unrecognized
+     punctuation is skipped rather than guessed.
 3. `make_build(template)` returns the `build(values) → argv` closure. Literals are appended as-is;
-   each slot value is appended as exactly one element; empty optionals are omitted.
+   each slot value is appended as exactly one element; empty optionals are omitted. A value that is one
+   of GAM's write keywords (`WRITE_KEYWORDS`: `todrive`, `downloadfile`, `update`, `install`, …) is
+   refused, since GAM would read it as the option. `test_no_promoted_read_emits_a_write_keyword` checks
+   every promoted read's built argv.
 
 So `gam print addresses [todrive <ToDriveAttribute>*]` becomes zero slots and `["print", "addresses"]`,
 and `gam <CrOSTypeEntity>|<UserTypeEntity> list […]` becomes one `TARGET_USER` slot and

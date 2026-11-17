@@ -185,7 +185,9 @@ run were last confirmed separately: setup's scoped `check serviceaccount scopes 
 7.48.14), and `print domains` for the Builder's External-only filter and reading the connected admin and
 its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11). The Google Classroom reads (`print courses`, `print
 course-participants`) have **never run live**: their output shapes were read from the vendored GAM build, and the
-maintainer has no Workspace for Education domain to check them on. GamGUI doesn't write to Classroom at all.
+maintainer has no Workspace for Education domain to check them on. GamGUI doesn't write to Classroom at all. The
+Builder's automatic reads aren't in the pass: since #132 (2026-11-17), 32 of them build a fuller command from GAM's
+grammar, and none of those 32 has run on a real domain yet.
 
 **Tried something on a real domain?** Tell us with the two-minute
 [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml): what you tried,
