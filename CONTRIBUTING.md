@@ -33,6 +33,7 @@ git clone <your-fork-url> && cd gamgui
 make setup        # creates .venv (Python 3.10+), installs the hash-locked dev + native-window deps
 make gam          # vendors the GAM7 binary into gamgui/resources/gam7 (needs network)
 make test         # runs the offline test suite
+make test-fast    # the same suite across every core: about 1.5 min instead of 5, for use while editing
 make run          # launches the app
 ```
 
