@@ -106,13 +106,19 @@ async def _alias_deletes(st, decision) -> list:
     return guard_mod.alias_deletes(resolved)
 
 
-async def _pending_transfers(conn, decision) -> list:
+async def _transfers(conn, decision) -> dict:
     """Unfinished data transfers from each account the change deletes — deleting one now loses what
-    hasn't moved yet (the Users delete zone warns the same way)."""
+    hasn't moved yet (the Users delete zone warns the same way) — and the accounts whose check
+    couldn't be made, which are said, never read as having none (invariant 10)."""
     pending: list = []
+    unknown: list = []
     for address in decision.typed_emails if conn is not None else []:
-        pending += await conn.incomplete_transfers_for(address)
-    return pending
+        found = await conn.incomplete_transfers_for(address)
+        if found is None:
+            unknown.append(address)
+        else:
+            pending += found
+    return {"pending_transfers": pending, "transfers_unknown": unknown}
 
 
 # A mutation runs exactly what its preview showed: the preview holds the argv under a single-use token
@@ -144,7 +150,7 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
         _FLOW, _form_key(cmd, slots), (list(argv), target), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
         "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
-        "pending_transfers": await _pending_transfers(st.connector, decision),
+        **await _transfers(st.connector, decision),
         "error": " ".join(blocked) or error, "blocked": bool(blocked), "token": token,
     })
 
@@ -526,7 +532,7 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
     token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
         "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
-        "token": token, "pending_transfers": await _pending_transfers(st.connector, decision)})
+        "token": token, **await _transfers(st.connector, decision)})
 
 
 @router.post("/sequence/preview", response_class=HTMLResponse)
