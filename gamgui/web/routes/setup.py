@@ -9,6 +9,8 @@ same verify (plan U10b).
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from typing import Annotated
 
@@ -19,6 +21,11 @@ from ...core.audit import AuditLog
 from ...core.connectors.gam_connector import GAMConnector
 from ...core.setup import SetupService
 from ..server import TEMPLATES
+
+logger = logging.getLogger(__name__)
+_UNREADABLE_FOLDER = "That folder could not be read — check the path and try again."
+_REFUSED_FOLDER = ("macOS refused access to that folder. Check its permissions, or the app's Files and Folders "
+                   "access in System Settings, then try again.")
 
 router = APIRouter(prefix="/setup")
 
@@ -64,7 +71,7 @@ async def do_import(
     try:
         # Synchronous filesystem + Keychain work: off the event loop, or it stalls every request.
         imported = await asyncio.to_thread(svc.import_dir, config_dir, domain)
-    except (ValueError, OSError, RuntimeError) as exc:
+    except ValueError as exc:
         # A typo'd or non-directory path is operator error, not a crash — say which, and let them
         # correct it in place. The import path is written to raise only operator-facing ValueError,
         # but it stands on the filesystem and on $HOME: an unreadable folder (OSError) or an
@@ -73,8 +80,12 @@ async def do_import(
         # a programming error is not an OSError, and still surfaces as a 500.
         return TEMPLATES.TemplateResponse(
             request, "_error.html",
-            {"message": str(exc) or "That folder could not be read — check the path and try again."},
+            {"message": str(exc) or _UNREADABLE_FOLDER},
         )
+    except (OSError, RuntimeError) as exc:
+        logger.warning("importing a credentials folder failed", exc_info=exc)
+        refused = isinstance(exc, PermissionError)
+        return TEMPLATES.TemplateResponse(request, "_error.html", {"message": _REFUSED_FOLDER if refused else _UNREADABLE_FOLDER})
     return TEMPLATES.TemplateResponse(
         request, "_dwd.html",
         {
@@ -172,7 +183,8 @@ async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLR
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 — a refused or locked Keychain: the items may remain
         # It may be the case probe or a delete that failed: say only that the Keychain refused.
-        error = f"The Keychain refused the change ({exc}), so {domain} stays listed. Try Remove again."
+        logger.warning("removing a domain from the Keychain failed", exc_info=exc)
+        error = f"The Keychain refused the change, so {domain} stays listed. Try Remove again."
     return TEMPLATES.TemplateResponse(
         request, "_tenant_panel.html",
         {"domains": st.vault.list_domains(), "active": active, "notice": notice, "error": error},

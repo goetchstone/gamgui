@@ -138,6 +138,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently: a tripwire over `web/routes/` for a `Response` or JSON
   answer built from a caught exception, or a pre-commit item for route changes.
 - **Enforcement home if changed:** tripwire test (backstop), plus the build-packaging runbook's note on the gate.
+- **Resolved (2026-11-18):** `tests/test_route_error_text.py` (every handler in `web/routes/` classified; no bare
+  `Exception` or `OSError` text reaches the operator), and the rule in the web-server-security runbook.
 
 ## 2026-10-16 — improve-rules pass: the mock-lies rule named one mock; the fakes that lied were others
 - **What happened:** the observer pass over the window since 2026-10-01: fix commits b6feae3, 383100a,
