@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -194,23 +195,45 @@ _MAX_NAME_LEN = 60
 class SignatureStore:
     """Plain-JSON persistence for named HTML signature templates (0600, seeded on first run).
 
-    Mirrors ``RunbookStore``: a corrupt or missing file falls back to a deep copy of the seed, so the
-    admin always has the three starters to load and tweak.
+    Mirrors ``RunbookStore``: a missing file starts from a deep copy of the seed, so the admin always has the
+    three starters to load and tweak. A file that can't be read is moved aside first (``set_aside``, said on the
+    screen), never saved over.
     """
 
     def __init__(self, path: Optional[Path] = None) -> None:
         self.path = Path(path) if path else default_templates_path()
+        self.set_aside: Optional[Path] = None     # where an unreadable file went
         self._data = self._load()
 
-    def _load(self) -> dict:
-        if self.path.exists():
-            try:
-                data = json.loads(self.path.read_text())
-                if isinstance(data, dict) and isinstance(data.get("templates"), dict):
-                    return data
-            except Exception:  # noqa: BLE001, S110 — corrupt/old file: fall back to the seed
-                pass
+    @staticmethod
+    def _seed() -> dict:
         return json.loads(json.dumps({"templates": _DEFAULT_TEMPLATES}))   # deep copy of the seed
+
+    def _load(self) -> dict:
+        try:
+            raw = self.path.read_text()
+        except FileNotFoundError:
+            return self._seed()
+        except OSError:
+            return self._move_aside()
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return self._move_aside()
+        if not (isinstance(data, dict) and isinstance(data.get("templates"), dict)):
+            return self._move_aside()
+        return data
+
+    def _move_aside(self) -> dict:
+        """Keep an unreadable file under a new name and start from the seed: a later save then writes a new file
+        instead of over the operator's, which a read error once let it do (failure-log 2026-11-18)."""
+        aside = self.path.with_name(f"{self.path.name}.unreadable-{int(time.time())}")
+        try:
+            os.replace(self.path, aside)
+            self.set_aside = aside
+        except OSError:
+            pass
+        return self._seed()
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

@@ -19,6 +19,7 @@ import re
 import json
 import os
 import secrets
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
@@ -229,26 +230,48 @@ class RunbookStore:
 
     def __init__(self, path: Optional[Path] = None) -> None:
         self.path = Path(path) if path else default_store_path()
+        self.set_aside: Optional[Path] = None     # where an unreadable file went: said on the screen
         self._data = self._load()
 
-    def _load(self) -> dict:
-        if self.path.exists():
-            try:
-                data = json.loads(self.path.read_text())
-                data.setdefault("roles", {})
-                data["roles"] = {n: _as_role(v) for n, v in data["roles"].items()}  # migrate old list form
-                welcomes = data.get("welcomes")
-                if not isinstance(welcomes, dict):
-                    welcomes = {}
-                old = data.pop("welcome", None)            # the single welcome email of an older file
-                if isinstance(old, dict) and DEFAULT_WELCOME not in welcomes:
-                    welcomes[DEFAULT_WELCOME] = old
-                welcomes.setdefault(DEFAULT_WELCOME, dict(_DEFAULT["welcomes"][DEFAULT_WELCOME]))
-                data["welcomes"] = {str(n): _as_welcome(w) for n, w in welcomes.items()}
-                return data
-            except Exception:  # noqa: BLE001, S110 — corrupt/old file: fall back to the seed
-                pass
+    @staticmethod
+    def _seed() -> dict:
         return json.loads(json.dumps(_DEFAULT))   # deep copy of the seed
+
+    def _load(self) -> dict:
+        """The saved roles and welcome emails, or the seed when there's no file. A file that can't be read, or
+        isn't a store, is moved aside first (``set_aside``): the seed is never saved over it."""
+        try:
+            raw = self.path.read_text()
+        except FileNotFoundError:
+            return self._seed()
+        except OSError:
+            return self._move_aside()
+        try:
+            data = json.loads(raw)
+            data.setdefault("roles", {})
+            data["roles"] = {n: _as_role(v) for n, v in data["roles"].items()}  # migrate old list form
+            welcomes = data.get("welcomes")
+            if not isinstance(welcomes, dict):
+                welcomes = {}
+            old = data.pop("welcome", None)            # the single welcome email of an older file
+            if isinstance(old, dict) and DEFAULT_WELCOME not in welcomes:
+                welcomes[DEFAULT_WELCOME] = old
+            welcomes.setdefault(DEFAULT_WELCOME, dict(_DEFAULT["welcomes"][DEFAULT_WELCOME]))
+            data["welcomes"] = {str(n): _as_welcome(w) for n, w in welcomes.items()}
+            return data
+        except (ValueError, TypeError, AttributeError, KeyError):     # not a store: kept aside, not overwritten
+            return self._move_aside()
+
+    def _move_aside(self) -> dict:
+        """Keep an unreadable file under a new name and start from the seed: a later save then writes a new file
+        instead of over the operator's, which a read error once let it do (failure-log 2026-11-18)."""
+        aside = self.path.with_name(f"{self.path.name}.unreadable-{int(time.time())}")
+        try:
+            os.replace(self.path, aside)
+            self.set_aside = aside
+        except OSError:
+            pass
+        return self._seed()
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
