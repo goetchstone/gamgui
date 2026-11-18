@@ -181,9 +181,10 @@ def test_ci_ok_needs_every_blocking_job():
     # is skipped passes. Nothing may decide whether the gate runs at all, so its if: is exactly always().
     steps = ci_ok.split("\n    steps:\n", 1)[1].split("\n      - ")
     assert len(steps) == 2 and all("\n        if: always()\n" in f"\n{step}" for step in steps)
-    # It reads both sources, and the job list of this attempt: a re-run's jobs are in that attempt's list.
+    # It reads both sources, and every attempt's jobs: a rerun of the failed jobs lists the carried-over ones in
+    # its own attempt only later, and the gate judges each job by its newest attempt (failure log 2026-11-18).
     assert "\n          NEEDS: ${{ toJSON(needs) }}\n" in ci_ok
-    assert "/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" in ci_ok
+    assert "/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" in ci_ok and "/attempts/" not in ci_ok
     assert "\n      actions: read" in ci_ok and "\n      contents: read\n" in ci_ok
     assert re.search(r'^          python3 -I scripts/ci_gate\.py "\$RUNNER_TEMP/jobs\.json"$', ci_ok, re.M)
     # The names the gate goes by, held to the jobs they come from (it matches a need to its job by name).

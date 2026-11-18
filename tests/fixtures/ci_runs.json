@@ -436,5 +436,295 @@
     "conclusion": "success"
    }
   ]
+ },
+ "partial_rerun_listed_late": {
+  "run": 44318933480,
+  "attempt": 4,
+  "note": "Every attempt's jobs (filter=all) as ci-ok's attempt 4 saw them: a rerun of the failed jobs, whose carried-over jobs (gam-compat, app, fuzz, macOS py3.10) weren't in attempt 4's own list yet. Read per attempt, ci-ok failed a run whose every job had passed (failure log 2026-11-18).",
+  "total_count": 47,
+  "jobs": [
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "cancelled",
+    "run_attempt": 1
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "failure",
+    "run_attempt": 1
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "cancelled",
+    "run_attempt": 1
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "cancelled",
+    "run_attempt": 1
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1
+   },
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "cancelled",
+    "run_attempt": 2
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "failure",
+    "run_attempt": 2
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "cancelled",
+    "run_attempt": 2
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 2
+   },
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "app (build + smoke check)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "failure",
+    "run_attempt": 3
+   },
+   {
+    "name": "fuzz (atheris)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "gam-compat (latest, non-blocking)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "gam-compat (pinned binary)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "test (macos-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 3
+   },
+   {
+    "name": "a11y (axe-core ratchet)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   },
+   {
+    "name": "ci-ok",
+    "status": "completed",
+    "conclusion": "failure",
+    "run_attempt": 4
+   },
+   {
+    "name": "lint (ruff, mypy)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   },
+   {
+    "name": "test (macos-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   },
+   {
+    "name": "test (macos-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   },
+   {
+    "name": "test (ubuntu-latest, py3.10)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   },
+   {
+    "name": "test (ubuntu-latest, py3.12)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   },
+   {
+    "name": "test (ubuntu-latest, py3.14)",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 4
+   }
+  ]
  }
 }

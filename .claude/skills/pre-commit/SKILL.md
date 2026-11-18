@@ -57,9 +57,15 @@ the hook (hard) and the drift-guard/mock-lies tests (tripwire).
    result drives a decision (a preview, an offboarding warning, a delete, a
    "none" on screen), a test covers each failing and partial exit: a non-zero
    exit, a warning exit with and without its table, a refused scope. Each one
-   shows as unknown and never as none, not found or proceed. In the mock, a
-   platform-dependent `x=$(cmd)` that is meant to fail needs `|| true`, because
-   dash exits on it under `set -e`.
+   shows as unknown and never as none, not found or proceed. These tests land
+   in the PR that adds the read, not in the fix after it misleads someone. In
+   the mock, a platform-dependent `x=$(cmd)` that is meant to fail needs
+   `|| true`, because dash exits on it under `set -e`.
+17. **An address that isn't found is not "no account".** A compare keyed on
+   addresses (a roster against Classroom, a list against the directory) reads
+   "not under this address" as unknown until every address the account answers
+   to (its primary and its aliases, alias-domain ones included) has been
+   checked. Only then is it "no account", and only then may it plan a removal.
 
 ## If your diff touches secrets, the web layer, or anything polled
 

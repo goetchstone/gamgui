@@ -1,4 +1,4 @@
-.PHONY: venv setup setup-latest gam css test cov a11y lint lock run app clean help
+.PHONY: venv setup setup-latest gam css test test-fast cov a11y lint lock run app clean help
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -17,6 +17,7 @@ help:
 	@echo "make gam     - vendor the GAM7 binary into gamgui/resources/gam7"
 	@echo "make css     - rebuild gamgui/web/static/app.css (after a template adds a Tailwind class)"
 	@echo "make test    - run the offline test suite"
+	@echo "make test-fast - the same suite spread across every core (pytest-xdist); for use while editing"
 	@echo "make cov     - the suite with CI's coverage gate (floor in pyproject.toml)"
 	@echo "make a11y    - the axe-core accessibility ratchet over every screen (needs Google Chrome)"
 	@echo "make lint    - run ruff, mypy and the app.css freshness check (what CI's lint job enforces)"
@@ -71,6 +72,11 @@ css:
 
 test:
 	$(PY) -m pytest -q
+
+# The whole suite, every test, across all cores: ~1.5 min against ~5 serially. CI and `make test`
+# stay serial, so a test that only passes alone, or only in company, still shows up there.
+test-fast:
+	$(PY) -m pytest -q -n auto
 
 cov:
 	$(PY) -m pytest -q --cov --cov-report=term

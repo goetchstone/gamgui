@@ -237,7 +237,7 @@ jobs:
     if: always()
     permissions:
       contents: read
-      actions: read   # the gate reads this run's job list
+      actions: read   # the gate reads this run's job list, every attempt's
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: always()
@@ -249,5 +249,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > "$RUNNER_TEMP/jobs.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" > "$RUNNER_TEMP/jobs.json"
           python3 -I scripts/ci_gate.py "$RUNNER_TEMP/jobs.json"
