@@ -41,7 +41,7 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently: the session-start nudge counts open entries, but not
   how long each has been open, nor whether its named home exists.
 - **Enforcement home if changed:** hook (the nudge names any entry open past one observer pass). The backlog itself
-  is `docs/plans/2026-11-18-enforce-recorded-lessons.md`.
+  is a plan the operator keeps locally (not in the repo).
 
 ## 2026-11-15 — Joining continuation lines exposed the read builder's guesses about groups
 - **What happened:** the parser now joins each entry's continuation lines (the follow-up the 2026-11-14 entry asked
