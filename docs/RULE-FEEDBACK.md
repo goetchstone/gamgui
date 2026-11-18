@@ -30,6 +30,19 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-18 — A ledger entry that asks for a tripwire is not a tripwire
+- **What happened:** a light review of the repo at `ba5a717`. The code and the docs' claims held. What didn't: the
+  2026-11-12 entry's tripwire for exception text in a route's answer was never built (about 59 sites in
+  `web/routes/` still format the caught exception), the 2026-10-02 entry on #3's wording has been "next candidate"
+  through two passes, and two entries name the `pre-commit` skill as their home without a line there to show for it.
+- **Invariant in force:** none numbered. The loop itself (FRAMEWORK.md §3).
+- **Why it didn't hold:** wrong layer. An entry's "Enforcement home" line records an intent; nothing checks that the
+  test, hook or skill line it names was ever written, so an entry can sit open and read as handled.
+- **Would a rule have caught it?** Only if enforced differently: the session-start nudge counts open entries, but not
+  how long each has been open, nor whether its named home exists.
+- **Enforcement home if changed:** hook (the nudge names any entry open past one observer pass). The backlog itself
+  is `docs/plans/2026-11-18-enforce-recorded-lessons.md`.
+
 ## 2026-11-15 — Joining continuation lines exposed the read builder's guesses about groups
 - **What happened:** the parser now joins each entry's continuation lines (the follow-up the 2026-11-14 entry asked
   for). Before the read builder was fixed with it, the join would have handed 127 promoted reads a bogus required slot:
