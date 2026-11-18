@@ -83,6 +83,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Yes but unworded: an identity lookup answers "unknown" until every address an account
   can have (aliases, alias-domain addresses) was checked.
 - **Enforcement home if changed:** skill (`pre-commit`, for a compare keyed on addresses).
+- **Resolved (2026-11-18):** pre-commit item 17 (a compare keyed on addresses reads "not under this address" as
+  unknown until the primary and every alias were checked).
 
 ## 2026-11-14 — improve-rules pass: a failed read kept standing as the answer
 - **What happened:** the observer pass over the window since 2026-10-16: 19 fix commits (add6308 to
@@ -114,6 +116,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   read-verb-with-a-write-keyword entry, which asks for a per-bump scan of every auto-promoted line. One
   change per PR, so they wait for the next pass. Most fixes in this window were found by the SwiftGamGui
   port's review, not here: that review has been acting as GamGUI's adversarial verifier.
+- **Resolved (2026-11-18):** invariant 10 and pre-commit item 16, which now also says the failing- and
+  partial-exit tests land in the PR that adds the read.
 
 ## 2026-11-12 — A read verb with one write keyword: `gam version update`
 - **What happened:** GAM 7.52.00 added `gam version [... (update [quiet])]`, which downloads the latest release and
