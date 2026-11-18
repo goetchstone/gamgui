@@ -1130,6 +1130,10 @@ video {
   flex-grow: 1;
 }
 
+.basis-full {
+  flex-basis: 100%;
+}
+
 .table-fixed {
   table-layout: fixed;
 }
