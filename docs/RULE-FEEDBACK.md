@@ -30,6 +30,20 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-18 — improve-rules pass: the window held; the overdue #3 wording goes in
+- **What happened:** the observer pass over the window since 2026-11-14: no fix or revert commits on main, the ledger
+  entries since then, and the four invariant-10 bugs found on 2026-11-18 by the swallowed-read ratchet (in review as
+  #140 and #142-#144, failure-log 2026-11-18). Of them: the 2026-11-12 and 2026-11-15 grammar entries held and now
+  have their tripwires (not a rules problem); the alias entry's home is pre-commit item 17 and the CodeQL entry's is
+  `tests/test_route_error_text.py` (known mode, wrong layer: moved, no text change); the four invariant-10 bugs all
+  predate #10 and are the same known mode, now held by `tests/test_swallowed_reads.py` (no text change); the
+  2026-11-18 ledger-loop entry asks for a hook (local, no text change).
+- **Invariant in force:** #3, for the one edit: the 2026-10-02 entry, named "next" by two passes.
+- **Why it didn't hold:** weak wording. Nothing in the window outranked it.
+- **Would a rule have caught it?** Yes, worded precisely. Demonstrated: with the Builder's export served before its
+  read-only check, the new tripwire fails (the connector's own refusal raises); restored, it passes.
+- **Enforcement home if changed:** CLAUDE.md #3 text, backed by the tripwire case in `test_write_routes_guarded.py`.
+
 ## 2026-11-18 — A ledger entry that asks for a tripwire is not a tripwire
 - **What happened:** a light review of the repo at `ba5a717`. The code and the docs' claims held. What didn't: the
   2026-11-12 entry's tripwire for exception text in a route's answer was never built (about 59 sites in
@@ -199,6 +213,9 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   one-click policy lives.
 - **Enforcement home if changed:** CLAUDE.md wording for #3, plus a tripwire case in
   `tests/test_write_routes_guarded.py` posting the Builder's export (`td_export`), which no case covers.
+- **Resolved (2026-11-18):** #3 now names the read export as the one write a runnable read makes, and points at
+  `core/guard.py` for the one-click policy (chore/improve-rules-20261118);
+  `test_a_read_s_export_is_the_one_write_a_bare_post_can_make` holds the export to reads only.
 
 ## 2026-10-01 — improve-rules pass: the mock-lies rule held in prose, not for exit codes
 - **What happened:** the observer pass over 8 fix commits since 92e8f36, the 2026-09-30 failure-log

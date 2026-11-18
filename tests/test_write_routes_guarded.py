@@ -276,6 +276,20 @@ def test_bare_post_runs_no_write(route, client, gam_calls):
     assert client.app.state.gamgui.connector.audit.tail() == []
 
 
+def test_a_read_s_export_is_the_one_write_a_bare_post_can_make(client, gam_calls):
+    """Invariant 3: a runnable read can make one write, its export to a new Google Sheet (``todrive``) in a named
+    user's Drive, on one click and audited through _run_write. The export path serves reads only: the same fields
+    on a curated write's form run nothing without its confirm step (ledger 2026-10-02: no case covered it)."""
+    client.post("/builder/run", data={**GATED["/builder/run"].bare, "td_export": "1", "td_user": "boss@example.com"})
+    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.connector.audit.tail() == []
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
+                                      "td_export": "1", "td_user": "boss@example.com", "td_title": "Delegates"})
+    assert gam_writes(gam_calls()) == []                     # the export is the read's own print, plus todrive
+    [entry] = client.app.state.gamgui.connector.audit.tail()
+    assert entry["action"] == "export_to_sheet" and "print" in entry["argv"]
+    assert entry["argv"][-5:] == ["todrive", "tduser", "boss@example.com", "tdtitle", "Delegates"]
+
+
 # What a confirm step adds to say "yes" (guard.enforce checks these; calendar delete types DELETE into
 # `confirm`). Everything else the step posts — its preview token too — is not a confirmation.
 CONFIRMATION = {guard.CONFIRMED_FIELD, guard.TYPED_FIELD, guard.COUNT_FIELD, guard.EMAIL_FIELD}

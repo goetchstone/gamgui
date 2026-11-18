@@ -23,11 +23,14 @@ Each of these exists because something went wrong. Several have tests guarding t
    runs the changes its preview held (single-use `web/previews.py` token), never a rebuild of that
    form. `tests/test_write_routes_guarded.py` holds every POST route to this or a stated exemption.
 3. **Only read-only commands may become runnable automatically.** Of 1078 catalog entries, 541 run:
-   26 hand-curated (the only ones that can *change* anything) plus 515 grammar-derived commands
+   26 hand-curated (the only ones that can change an existing object) plus 515 grammar-derived commands
    auto-promoted by `core/catalog/readbuilder.py` **because they are confidently `READ_ONLY` and not
    flagged uncertain**. Everything else is inert, syntax display only. Adding write coverage is a
-   deliberate act of curation. (Two agent-facing docs once claimed only the 26 curated commands run —
-   that was wrong, and it made a reviewer flag correct code.)
+   deliberate act of curation. A runnable read makes one write: its export to a *new* Google Sheet
+   (`todrive`) in a named user's Drive, one click, audited through `_run_write`
+   (`test_a_read_s_export_is_the_one_write_a_bare_post_can_make`). Which curated writes skip the confirm
+   step is `core/guard.py`'s stated policy. (Two agent-facing docs once claimed only the 26 curated
+   commands run — that was wrong, and it made a reviewer flag correct code.)
 4. **Secrets live in the Keychain.** They are materialized into a `0700` dir (`0600` files) for one
    `gam` call and wiped — including via an `atexit` hook and an owner-PID marker, because "quit
    mid-call" was how plaintext got stranded. Never persist them anywhere else.
