@@ -52,7 +52,6 @@ KNOWN_BUGS: Dict[Tuple[str, str], str] = {
     ("core/connectors/gam_connector.py", "incomplete_transfers_for"):
         "2026-11-18-failed-transfer-check-read-as-none-pending.md",
     ("core/connectors/gam_connector.py", "scan_all_calendars"): "2026-11-18-calendar-index-silently-missing-rooms.md",
-    ("web/routes/signatures.py", "_matched"): "2026-11-18-failed-group-scope-read-as-no-one.md",
 }
 
 LOGGERS = frozenset({"log", "logger", "logging"})

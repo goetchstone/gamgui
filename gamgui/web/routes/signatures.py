@@ -34,12 +34,10 @@ def _tctx(store: SignatureStore, **extra) -> dict:
 
 
 async def _matched(st, users, scope_type: str, scope_value: str):
-    """Resolve the in-scope active users — group scope needs a GAM lookup, the rest is in-memory."""
+    """Resolve the in-scope active users — group scope needs a GAM lookup, the rest is in-memory. A lookup that
+    fails raises: its members are unknown, never "0 users" (invariant 10)."""
     if scope_type == "group" and scope_value:
-        try:
-            members = await st.connector.list_group_members(scope_value)
-        except Exception:
-            return []
+        members = await st.connector.list_group_members(scope_value)
         emails = {m.email for m in members}
         return [u for u in users if u.primary_email in emails and not u.suspended]
     return sig.match_scope(users, scope_type, scope_value)
@@ -132,7 +130,11 @@ async def preview(
         users = await st.users()
     except Exception as exc:
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": friendly(exc)})
-    matched = await _matched(st, users, scope_type, scope_value)
+    try:
+        matched = await _matched(st, users, scope_type, scope_value)
+    except Exception as exc:  # noqa: BLE001 - who is in scope is unknown: said, never "0 users"
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {
+            "error": f"Couldn't read the members of {scope_value}, so who it applies to isn't known. {friendly(exc)}"})
     return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL,
                                       _preview_ctx(st, template, matched, _form_key(template, scope_type, scope_value),
                                                    tenant))
