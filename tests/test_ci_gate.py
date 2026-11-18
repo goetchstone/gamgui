@@ -136,3 +136,35 @@ def test_a_needs_entry_without_a_result_never_exits_zero(tmp_path, monkeypatch):
     monkeypatch.setenv("NEEDS", json.dumps({"app": {}}))
     with pytest.raises(KeyError):
         GATE.main(["ci_gate.py", str(path)])
+
+
+# --- a rerun of the failed jobs (failure log 2026-11-18) ---------------------------------------------------------
+# ci-ok reads every attempt's jobs (`filter=all`) and judges each job by its newest attempt: a rerun of the failed
+# jobs copies the rest into its own attempt only later, so the attempt's own list lacked jobs that had passed.
+
+def _attempt(listing: dict, attempt: int) -> dict:
+    jobs = [job for job in listing["jobs"] if job.get("run_attempt", 1) == attempt]
+    return {**listing, "jobs": jobs, "total_count": len(jobs)}
+
+
+def test_a_rerun_of_the_failed_jobs_passes_on_what_every_attempt_ran():
+    assert GATE.failures(_needs(), _live("partial_rerun_listed_late")) == []
+
+
+def test_the_rerun_attempt_alone_is_what_failed_it():
+    problems = GATE.failures(_needs(), _attempt(_live("partial_rerun_listed_late"), 4))
+    assert "no job in the list for gam-compat" in problems and "no job in the list for app" in problems
+
+
+def test_a_job_judged_by_its_newest_attempt_fails_when_that_attempt_dropped_it():
+    listing = _live("partial_rerun_listed_late")
+    for job in listing["jobs"]:
+        if job["name"] == "test (macos-latest, py3.14)" and job["run_attempt"] == 4:
+            job["conclusion"] = "cancelled"       # passed in attempt 3, rerun and dropped in attempt 4
+    assert GATE.failures(_needs(), listing) == ["test (macos-latest, py3.14) concluded 'cancelled'"]
+
+
+def test_an_earlier_attempts_failure_is_overruled_by_a_newer_pass():
+    listing = _live("partial_rerun_listed_late")
+    older = [job for job in listing["jobs"] if job["name"] == "app (build + smoke check)"]
+    assert any(job["conclusion"] == "cancelled" for job in older) and GATE.failures(_needs(), listing) == []
