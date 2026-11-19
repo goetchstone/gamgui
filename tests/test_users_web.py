@@ -276,6 +276,14 @@ def test_signatures_preview(client):
     assert "Alice Anders" in r.text   # rendered for a real (active) sample user
 
 
+@pytest.mark.parametrize("group", ["ratelimitgroup@example.com", "nosuchgroup@example.com"])
+def test_a_group_scope_whose_members_cant_be_read_is_never_zero_people(client, group):
+    # A failed member lookup once showed "Applies to 0 users" (invariant 10; failure-log 2026-11-18).
+    r = client.post("/signatures/preview", data={"template": "{name}", "scope_type": "group", "scope_value": group})
+    shown = unescape(r.text)
+    assert "Applies to <strong>" not in shown and "Couldn't read the members of" in shown and group in shown
+
+
 def _start_apply(client, body):
     """Preview, then POST the preview's Apply, and assert it started a job-polling panel (the job is
     awaited with wait_for_job, never by polling the status endpoint under TestClient)."""

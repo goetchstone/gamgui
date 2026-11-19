@@ -50,7 +50,6 @@ HARMLESS: Dict[Tuple[str, str], str] = {
 
 KNOWN_BUGS: Dict[Tuple[str, str], str] = {
     ("core/connectors/gam_connector.py", "scan_all_calendars"): "2026-11-18-calendar-index-silently-missing-rooms.md",
-    ("web/routes/signatures.py", "_matched"): "2026-11-18-failed-group-scope-read-as-no-one.md",
 }
 
 LOGGERS = frozenset({"log", "logger", "logging"})
