@@ -101,7 +101,7 @@ The reader works both out (`Reach`, `WayIn`); `_incident_reach.html` and `_incid
 - **The open incident's ID**, never its contents, is remembered in a file beside them, so it opens again after a restart.
 
 ## Testing / live-verification status
-Offline only here. In SwiftGamGui the lock steps (reset, sign-out, forwarding off, IMAP and POP off, clear recovery) are confirmed live. Deleting filters, send-as addresses and drafts, the scheduled-send clean-up, and blocking a computer or taking an account off it are not, in either app: check them on a throwaway account before relying on them. The full list of what's owed is [the plan's](../plans/archive/2026-10-30-backport-swiftgamgui.md#live-checks-owed).
+Offline only here. In SwiftGamGui the lock steps (reset, sign-out, forwarding off, IMAP and POP off, clear recovery) are confirmed live. Deleting filters, send-as addresses and drafts, the scheduled-send clean-up, and blocking a computer or taking an account off it are not, in either app: check them on a throwaway account before relying on them. What's owed is in the README's [Live verification status](../../README.md#live-verification-status).
 
 ## The shape the reviews kept finding
 Each slice went through an adversarial review, and each found the same harm: **something reads finished, whole or proven when it isn't.** Look for it first when changing anything here: a read that failed or stopped short reading as none; a narrow read standing in for a wide one; a pick or a form applying to the wrong person or incident; a stale reading; a file with the name of the whole thing. GAM exiting 0 isn't its word that it did it.

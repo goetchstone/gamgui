@@ -150,8 +150,8 @@ by design (they cost nothing until needed):
 - **Local hooks** (`.claude/hooks/`, gitignored) inject a short orient digest at session start and
   the diff-relevant checklist before a commit, and hard-block a `fix:` commit that has no fresh
   failure-log entry — intended, not a malfunction.
-- **Plans** — [docs/plans/](docs/plans): handoff plans. Each opens with a Status line; never
-  re-apply one marked APPLIED.
+- **Plans** — `docs/plans/`: handoff plans, local to the operator's checkout (gitignored, so a fresh
+  worktree has none). Each opens with a Status line; never re-apply one marked APPLIED.
 
 Sessions **don't add, reword, or retire the numbered invariants here directly** —
 log the incident in [docs/failure-log/](docs/failure-log/), append the

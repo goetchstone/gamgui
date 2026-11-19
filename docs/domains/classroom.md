@@ -1,8 +1,7 @@
 # Domain: Google Classroom (read only)
 
-**One line:** Reads Google Classroom for school domains (classes, who teaches and who is in each) and, per
-[the plan](../plans/2026-11-11-classroom-and-rostering.md), plans roster changes from a student information system that
-leave the app as files. **GamGUI never writes to Classroom.**
+**One line:** Reads Google Classroom for school domains (classes, who teaches and who is in each) and plans roster
+changes from a student information system that leave the app as files. **GamGUI never writes to Classroom.**
 
 **Owns invariant(s):** none of its own. It leans on #1 (course IDs and addresses are validated, one argv element each)
 and #2 by having no write at all.
