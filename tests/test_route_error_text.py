@@ -61,7 +61,7 @@ VALUE_ERRORS_FROM_OUR_VALIDATORS: Dict[Tuple[str, str], str] = {
 VALIDATOR_CATCHES = frozenset({"ValueError"})
 
 # Calls that turn an exception into fixed words (or GAM's scrubbed text); the last test holds them to it.
-TRANSLATORS = frozenset({"friendly", "gam_detail", "_why", "explain", "in_words", "_details"})
+TRANSLATORS = frozenset({"friendly", "gam_detail", "_why", "explain", "in_words", "_details", "unread_why"})
 NOT_TEXT_CALLS = frozenset({"isinstance", "issubclass", "type"}) | TRANSLATORS
 NOT_TEXT_ATTRS = frozenset({"kind", "exit_code", "remediation", "errno", "__class__"})
 LOGGERS = frozenset({"log", "logger", "logging"})
@@ -178,22 +178,23 @@ def test_the_tripwire_bites():
 def _translators():
     from gamgui.core.incident.reads import in_words
     from gamgui.web.routes import builder, classroom, lifecycle, phishing
-    from gamgui.web.routes._common import friendly, gam_detail
+    from gamgui.web.routes._common import friendly, gam_detail, unread_why
 
     return {"friendly": friendly, "gam_detail": gam_detail, "in_words": in_words, "builder._details": builder._details,
-            "classroom._why": classroom._why, "lifecycle._why": lifecycle._why, "phishing._why": phishing._why}
+            "classroom._why": classroom._why, "lifecycle._why": lifecycle._why, "phishing._why": phishing._why,
+            "unread_why": unread_why}
 
 
 @pytest.mark.parametrize("exc", [Exception("LEAK-MARKER"), OSError(13, "LEAK-MARKER", "/LEAK-MARKER"),
                                  RuntimeError("LEAK-MARKER"), KeyError("LEAK-MARKER")], ids=type)
 @pytest.mark.parametrize("name", ["builder._details", "classroom._why", "friendly", "gam_detail", "in_words",
-                                  "lifecycle._why", "phishing._why"])
+                                  "lifecycle._why", "phishing._why", "unread_why"])
 def test_a_translator_never_passes_on_a_foreign_exception_s_text(name, exc):
     assert "LEAK-MARKER" not in _translators()[name](exc)
 
 
 def test_every_translator_the_scan_trusts_is_checked():
     assert sorted(_translators()) == ["builder._details", "classroom._why", "friendly", "gam_detail", "in_words",
-                                      "lifecycle._why", "phishing._why"]
+                                      "lifecycle._why", "phishing._why", "unread_why"]
     checked = {name.rsplit(".", 1)[-1] for name in _translators()} | {"explain"}   # roster's explain is classroom's _why
     assert TRANSLATORS == checked

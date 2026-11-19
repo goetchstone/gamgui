@@ -23,7 +23,7 @@ from ...core.setup import classroom_readable
 from ...core.offboard_templates import OffboardTemplate, OffboardTemplateStore
 from ..jobs import start_job
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, connector, error_partial, friendly
+from ._common import NOT_CONNECTED, connector, error_partial, friendly, unread_why
 
 router = APIRouter(prefix="/lifecycle")
 
@@ -108,7 +108,7 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
 
 def _why(exc: Exception) -> str:
     """A failed read, in words, whatever it was: the Keychain refuses without a GAMError."""
-    return exc.message if isinstance(exc, GAMError) else friendly(exc)
+    return exc.message if isinstance(exc, GAMError) else unread_why(exc)
 
 
 async def _delegate_warning(conn, user: str, manager: str) -> str:

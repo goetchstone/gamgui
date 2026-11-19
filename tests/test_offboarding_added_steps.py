@@ -283,3 +283,14 @@ def test_a_run_with_added_steps_says_so_in_the_audit(client, state, tmp_path):
     _run(client, state, token, "imap_off")
     log = (tmp_path / "audit.jsonl").read_text()
     assert '"offboard_plan"' in log and "imap_off" in log
+
+
+def test_a_calendars_read_gam_skipped_without_a_word_is_said_never_none(client, gam_state):
+    # GAM drops a refused token without a word: the titles alone, exit 0, no "Getting Calendars for" line. That once read
+    # as "owns none", so the preview neither warned nor offered the hand-over (invariant 10).
+    (gam_state / "quiet").mkdir()
+    (gam_state / "quiet" / CAROL).write_text("")
+    page = unescape(_preview(client, "secondary_calendars"))
+    assert "Couldn't check whether carol@example.com owns secondary calendars" in page
+    assert "GAM answered without reading it" in page and "transfer ownership" not in page
+    assert "has nothing to do" not in page

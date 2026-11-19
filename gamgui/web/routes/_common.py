@@ -7,6 +7,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 
 from ...core.gam.errors import GAMError
+from ...core.phishing import Incomplete
 from ...core.incident.known import KnownSignIns, NobodyHasChecks
 from ...core.incident.store import IncidentStore
 from ...core.incident.store import Problem as IncidentProblem
@@ -35,6 +36,16 @@ def as_of(cache) -> dict:
 def friendly(exc: Exception, fallback: str = GAM_TROUBLE) -> str:
     """What to do about a failed call, in words: GAM's remediation for its kind, else ``fallback``."""
     return exc.remediation if isinstance(exc, GAMError) else fallback
+
+
+# A read GAM answered without reading (a refused token skipped without a word, exit 0): unknown, never none. Fixed
+# words, never the exception's own text (tests/test_route_error_text.py).
+SILENT_READ = "GAM answered without reading it; its sign-in may have been refused, so check the service account on Setup"
+
+
+def unread_why(exc: Exception, fallback: str = GAM_TROUBLE) -> str:
+    """Why a read that drives a decision has no answer: ``friendly``, plus the silent read's own words."""
+    return SILENT_READ if isinstance(exc, Incomplete) else friendly(exc, fallback)
 
 
 def gam_detail(exc: BaseException) -> str:
