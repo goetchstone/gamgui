@@ -9,7 +9,9 @@ from fastapi.responses import HTMLResponse
 
 from ...core import clock
 from ...core import reports as reports_mod
+from ...core.catalog.catalog import load_catalog
 from ...core.gam.errors import GAMError, GAMErrorKind
+from ...core.setup import admin_token_scopes
 from ..jobs import start_job
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, as_of, friendly
@@ -29,19 +31,31 @@ async def reports_page(request: Request, refresh: int = 0) -> HTMLResponse:
     st = request.app.state.gamgui
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _REPORTS_PAGE, {"connected": False, "reports": []})
+    named = _named_reports(st)
     try:
         # The shared cache (CACHE_FIELDS covers REPORT_FIELDS); the header says how old it is.
         users = await st.users(force=bool(refresh), stale_ok=True)
     except Exception as exc:
         msg = friendly(exc, "Couldn't load users.")
         return TEMPLATES.TemplateResponse(
-            request, _REPORTS_PAGE, {"connected": True, "reports": [], "error": msg, "total": 0}
+            request, _REPORTS_PAGE, {"connected": True, "reports": [], "error": msg, "total": 0, "named": named}
         )
     return TEMPLATES.TemplateResponse(
         request,
         _REPORTS_PAGE,
-        {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users), **as_of(st.user_cache)},
+        {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users), "named": named,
+         **as_of(st.user_cache)},
     )
+
+
+def _named_reports(st) -> list:
+    """Roadmap 3.1: each named read, the Builder command it opens (None when a GAM bump lost it), and whether the admin
+    token holds its scope (None: a service-account read, or a token whose scopes can't be read)."""
+    if st.catalog is None:
+        st.catalog = load_catalog()
+    granted = admin_token_scopes(st.vault, st.audit_domain) if st.vault is not None else None
+    return [{"report": r, "cmd": reports_mod.named_report_command(st.catalog, r),
+             "held": reports_mod.admin_scope_held(r, granted)} for r in reports_mod.NAMED_REPORTS]
 
 
 @router.get("/usage", response_class=HTMLResponse)

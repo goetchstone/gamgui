@@ -53,3 +53,24 @@ Connected apps: offline only, and not yet live in either app. `scripts/acceptanc
 - **Add a directory-insight bucket:** append a list + condition in `build_reports()` (`gamgui/core/reports.py`), add its `Report(...)` to the returned list, ensure its source field is in `CACHE_FIELDS`/`REPORT_FIELDS` and on `GAMUser` (`core/gam/models.py`), then add a case to `tests/test_reports.py`; the card loop in `reports.html` is already generic.
 - **Add a usage parameter:** add the `service:metric` string to `USAGE_PARAMS`, a field on `UsageRow` + its `_int(...)` in `parse_usage`, a column in `_usage_report.html`, and — because the mock won't catch a bad name — confirm the parameter exists in the vendored grammar and run it live once.
 - **Change the inactivity window:** `INACTIVE_DAYS` in `core/reports.py` (threaded through as `inactive_days`).
+- **Add a named report:** a `NamedReport` in `NAMED_REPORTS` with its syntax up to the first option, and the token and scope
+  from GAM's glapi tables (not a guess); `tests/test_named_reports.py` checks it is one runnable read.
+
+## More reports (roadmap 3.1)
+Nine domain-wide reads the Builder already runs, named on the Reports page (`core/reports.py` `NAMED_REPORTS`): licences,
+shared drives, their permissions and organizers, org units, mobile devices, group memberships, data transfers and Google's
+alerts. No new parser and no new route: each row links to `/builder?cid=<id>`, which opens that command's form (the Builder
+page's `cid`; an id the catalog doesn't hold opens none), where it runs, filters and exports like any read.
+- **Named by syntax, not `raw.N`.** The ids move with each GAM bump, so `named_report_command` matches the command's syntax
+  up to its first option and wants exactly one runnable read; `test_every_named_report_is_one_read` fails a bump that renames
+  one or makes it ambiguous, and the page says "this GAM version has no single command for it" rather than open another.
+- **The access each needs, from GAM's own tables** (gamlib glapi, read statically from the vendored 7.52.03 build):
+  licences, org units, mobile devices, group memberships and data transfers use the **admin token** (`_CLIENT_SCOPES`, picked
+  when the admin token is created); shared drives and alerts use the **service account** (`_SVCACCT_SCOPES`). For an
+  admin-token read the row says whether `oauth2.txt` records the scope (`admin_scope_held`: its `.readonly` form counts; a
+  token whose scopes can't be read is unknown, never "held"). Delegation can only be seen by GAM's service-account check, so a
+  service-account row names its scope and says Setup lists it. Drive was already delegated; the Alert Center's `apps.alerts`
+  is offered beside the devices scope (`setup.OPTIONAL_DWD_SCOPES`), never asked of verify, so only that read is refused
+  without it.
+- **Not run on a real domain yet.** The mock models none of the nine (it fails anything it doesn't handle); check each by eye
+  on its first live run.

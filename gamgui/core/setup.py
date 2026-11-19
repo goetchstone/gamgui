@@ -371,6 +371,10 @@ DWD_SCOPES: Tuple[Tuple[str, str], ...] = (
 # Delegated with the others, but not asked of Setup's verify: a Security tab's computers need it, and nothing else does.
 # An install delegated before it stays connected, and that one read says how to add it (person_reads.computer_note).
 DEVICES_SCOPE = ("https://www.googleapis.com/auth/cloud-identity.devices", "The computers signed in with an account")
+# Reports' "Google's alerts" (roadmap 3.1) reads the Alert Center through the service account: offered, never verified, so an
+# install without it stays connected and only that read is refused (gamlib glapi `_SVCACCT_SCOPES`, alertcenter).
+ALERTS_SCOPE = ("https://www.googleapis.com/auth/apps.alerts", "Google's alerts (Reports)")
+OPTIONAL_DWD_SCOPES = (DEVICES_SCOPE, ALERTS_SCOPE)
 
 # Offboarding's sign-out (`deprovision … signout`, `signout`) calls the Directory API with the
 # ADMIN token (oauth2.txt), not the service account: in GAM's tables this is a client-access scope
@@ -752,7 +756,7 @@ class SetupService:
         scopes to authorize, the Admin-console link with both filled in, and whether the admin
         token carries the sign-out scope (``None`` when its scopes can't be read)."""
         client_id = str(_json_field(self.vault.get(domain, "oauth2service"), "client_id") or "")
-        offered = (*DWD_SCOPES, DEVICES_SCOPE)
+        offered = (*DWD_SCOPES, *OPTIONAL_DWD_SCOPES)
         scopes = [s for s, _ in offered]
         granted = admin_token_scopes(self.vault, domain)
         return {

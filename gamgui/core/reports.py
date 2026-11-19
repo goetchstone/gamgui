@@ -126,3 +126,58 @@ def build_reports(users: List[GAMUser], now: Optional[datetime] = None, inactive
         Report("no_phone", "No phone", "Active users with no work phone set.", no_phone),
         Report("no_location", "No location", "Active users with no location set.", no_location),
     ]
+
+
+# --- named reports (roadmap 3.1) ------------------------------------------------------------------------------------
+# Domain-wide reads the Builder already runs, named so they can be found. No new parser: each opens its catalog command.
+# A command is named by its syntax, not its `raw.N` id, which moves with every GAM bump; test_every_named_report_is_one_read
+# fails if a bump renames one or makes it ambiguous. Each read's token and scope are GAM's own (gamlib glapi
+# `_CLIENT_SCOPES` for the admin token, `_SVCACCT_SCOPES` for the service account), read from the vendored 7.52.03 build.
+ADMIN_TOKEN, SERVICE_ACCOUNT = "admin", "service"
+
+
+@dataclass(frozen=True)
+class NamedReport:
+    key: str
+    title: str
+    what: str
+    syntax: str     # the catalog command's syntax up to its first option
+    token: str      # ADMIN_TOKEN (oauth2.txt, picked in `gam oauth create`) or SERVICE_ACCOUNT (domain-wide delegation)
+    scope: str
+
+
+NAMED_REPORTS = (
+    NamedReport("licenses", "Licenses", "Who holds which Google Workspace licence.", "gam print licenses",
+                ADMIN_TOKEN, "https://www.googleapis.com/auth/apps.licensing"),
+    NamedReport("shared_drives", "Shared drives", "Every shared drive in the domain.", "gam print shareddrives",
+                SERVICE_ACCOUNT, "https://www.googleapis.com/auth/drive"),
+    NamedReport("shared_drive_acls", "Shared drive permissions", "Who has access to each shared drive, and how.",
+                "gam print shareddriveacls", SERVICE_ACCOUNT, "https://www.googleapis.com/auth/drive"),
+    NamedReport("shared_drive_organizers", "Shared drive organizers", "Who can manage each shared drive.",
+                "gam print shareddriveorganizers", SERVICE_ACCOUNT, "https://www.googleapis.com/auth/drive"),
+    NamedReport("org_units", "Org units", "The organizational units and their paths.", "gam print orgs|ous",
+                ADMIN_TOKEN, "https://www.googleapis.com/auth/admin.directory.orgunit"),
+    NamedReport("mobile_devices", "Mobile devices", "Phones and tablets that sync with the domain.", "gam print mobile",
+                ADMIN_TOKEN, "https://www.googleapis.com/auth/admin.directory.device.mobile"),
+    NamedReport("group_members", "Group memberships", "Every group's members and their roles.", "gam print group-members",
+                ADMIN_TOKEN, "https://www.googleapis.com/auth/admin.directory.group"),
+    NamedReport("data_transfers", "Data transfers", "Drive and Calendar ownership transfers and how far each got.",
+                "gam print datatransfers|transfers", ADMIN_TOKEN, "https://www.googleapis.com/auth/admin.datatransfer"),
+    NamedReport("alerts", "Google's alerts", "The Alert Center: suspicious sign-ins, phishing, device issues.",
+                "gam print alerts", SERVICE_ACCOUNT, "https://www.googleapis.com/auth/apps.alerts"),
+)
+
+
+def named_report_command(catalog, report: NamedReport):
+    """The one runnable catalog read ``report`` names, else ``None`` (a bump renamed it, or it matches more than one)."""
+    hits = [c for c in catalog.commands
+            if (c.raw_syntax == report.syntax or c.raw_syntax.startswith(report.syntax + " ")) and c.buildable]
+    return hits[0] if len(hits) == 1 else None
+
+
+def admin_scope_held(report: NamedReport, granted) -> Optional[bool]:
+    """Whether the admin token holds ``report``'s scope (or its read-only form): ``None`` for a service-account read, whose
+    delegation only `check serviceaccount` can see, and when the token's scopes can't be read. Unknown is never "held"."""
+    if report.token != ADMIN_TOKEN or not isinstance(granted, list):
+        return None
+    return report.scope in granted or f"{report.scope}.readonly" in granted
