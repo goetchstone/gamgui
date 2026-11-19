@@ -109,6 +109,15 @@ from the admin GamGUI is connected as. The operator's text becomes HTML only by 
 (`reminder_html`): nothing they type is markup. GATED in the tripwire; tests in `tests/test_remind_buckets.py`. **Not run on
 a real domain yet:** the same `sendemail` as onboarding's confirmed welcome email, but this route hasn't sent one.
 
+## The completeness buckets as sheets to fill in (roadmap 3.3, D3)
+No title, department, phone or location: the fix is data only the organisation has, so each of those cards (when it lists
+anyone) links to `/reports/fill-in.csv?key=<bucket>`, a `download` link (the app window would show a CSV as a page,
+`tests/test_app_window_downloads.py`). The sheet is the card's own people, from the same cached directory, by address, in
+`FILL_IN_COLUMNS`: `email`, `name` (for whoever fills it in), then `title`, `department`, `phone`, `location`, `org_unit`,
+the columns bulk apply from CSV (roadmap 4.6) reads back by name. Every value goes through `csv_safe`. Only those four
+buckets download (400 otherwise), and a directory that couldn't be read answers in plain text (502), never a sheet holding
+only its titles, which would read as "everyone has one" (invariant 10). Tests: `tests/test_fill_in_csv.py`.
+
 ## Forwarding & mail delegates (roadmap 3.2)
 Reports' panel for every active account's forwarding that is on, and every mail delegate: `all users print forward
 enabledonly` and `all users print delegates shownames` (`GAMCommands.all_users_print_forward/_delegates`; neither takes
