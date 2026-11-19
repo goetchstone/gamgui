@@ -554,12 +554,13 @@ def test_an_unreadable_credential_file_does_not_500(ctx):
 @pytest.mark.parametrize(
     "exc, fragment",
     [
-        (PermissionError(13, "Permission denied"), "Permission denied"),
-        (OSError(5, "Input/output error"), "Input/output error"),
-        (RuntimeError("Could not determine home directory."), "home directory"),
+        (PermissionError(13, "Permission denied"), "macOS refused access to that folder"),
+        (OSError(5, "Input/output error"), "That folder could not be read"),
+        (RuntimeError("Could not determine home directory."), "That folder could not be read"),
     ],
 )
 def test_import_route_renders_filesystem_and_home_failures(ctx, monkeypatch, exc, fragment):
+    # In fixed words: the OS's own text never reaches the page (tests/test_route_error_text.py).
     client, base, vault, _ = ctx
 
     def boom(self, path, domain):
@@ -570,6 +571,7 @@ def test_import_route_renders_filesystem_and_home_failures(ctx, monkeypatch, exc
         "domain": "ex.com", "admin": "a@ex.com", "config_dir": str(base)})
     assert r.status_code == 200
     assert fragment in r.text
+    assert str(exc.args[-1]) not in r.text
     assert not vault.has_credentials("ex.com")
 
 
