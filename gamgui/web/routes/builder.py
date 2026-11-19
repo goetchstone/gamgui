@@ -408,7 +408,6 @@ ROW_ACTIONS = [
     {"cid": "build.set_organization", "label": "Title / dept", "risk": "change", "param": "email", "group": "user"},
     {"cid": "build.reset_password", "label": "Reset password", "risk": "change", "param": "email", "group": "user"},
     {"cid": "build.suspend_user", "label": "Suspend", "risk": "destructive", "param": "email", "group": "user"},
-    {"cid": "build.delete_user", "label": "Delete account", "risk": "destructive", "param": "email", "group": "user"},
     {"cid": "build.add_group_member", "label": "Add a member", "risk": "change", "param": "group", "group": "group"},
     {"cid": "build.remove_group_member", "label": "Remove a member", "risk": "change", "param": "group", "group": "group"},
 ]

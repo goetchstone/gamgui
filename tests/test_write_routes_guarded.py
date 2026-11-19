@@ -114,9 +114,9 @@ def _sales_role(client) -> None:
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
 
 
-def _ten_deletes(client) -> None:   # destructive + bulk: the typed confirmation
+def _ten_suspends(client) -> None:   # destructive + bulk: the typed confirmation
     for _ in range(10):
-        client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"})
+        client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "carol@example.com"})
 
 
 def _another_step(client) -> None:  # the sequence lives on the server: its "edit" is a step added
@@ -149,7 +149,7 @@ GATED = {
     "/users/password/apply": Case({"email": "alice@example.com"}, "/users/password/preview",
                                   edit={"email": "carol@example.com"}),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
-                                typed={"confirm_email": "alice@example.com"}),
+                                typed={"confirm_email": "alice@example.com"}, edit={"email": "carol@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},
                                     "/calendars/event/preview"),
     "/calendars/delete": Case({"cal": SEC_CAL, "label": "Team Calendar"}, "/calendars/delete/preview",
@@ -179,8 +179,7 @@ GATED = {
     "/users/groups/remove": Case({"email": "alice@example.com", "group": "sales@example.com"},
                                  "/users/groups/remove/preview"),
     "/builder/sequence/run": Case({}, "/builder/sequence/preview",
-                                  typed={"confirm": "confirm", "confirm_email": "carol@example.com"},
-                                  setup=_ten_deletes, edit=_another_step),
+                                  typed={"confirm": "confirm"}, setup=_ten_suspends, edit=_another_step),
 }
 
 

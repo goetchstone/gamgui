@@ -378,6 +378,26 @@ def vault_holds_warning(user: str, holds: Sequence[VaultHold], transfer_runs: bo
     return f"{user} is under {held}: {named}. Google doesn't transfer held data{moved}, and the account can't be deleted while it's held."
 
 
+def delete_refusal(user: str, holds: Sequence[VaultHold], owned: Sequence[OwnedCalendar]) -> str:
+    """Why the account delete refuses, "" when nothing does (roadmap 2.9, SwiftGamGui's Off3): Google won't delete an
+    account on hold, and it deletes the secondary calendars a deleted account owns, events and all, with nothing to
+    transfer them from after. Only what a read found: a read that failed is said as unread, never as none."""
+    why = []
+    if holds:
+        named = _named([f"“{h.hold}” in “{h.matter}”" + (f" (through the org unit {h.org_unit})" if h.org_unit else "")
+                        for h in holds])
+        held = "a Vault hold" if len(holds) == 1 else f"{len(holds)} Vault holds"
+        why.append(f"{user} is under {held}: {named}. Google won't delete an account on hold: release it in Google Vault "
+                   f"first (that can take a day or two to take effect).")
+    if owned:
+        one = len(owned) == 1
+        why.append(f"{user} owns {len(owned)} secondary calendar{'' if one else 's'}: "
+                   f"{_named([f'“{c.label}”' for c in owned])}. Google deletes {'it' if one else 'them'} with the account, "
+                   f"events and all: hand {'it' if one else 'each'} over first (Offboard's "
+                   f"“{STEP_NAMES['secondary_calendars']}”).")
+    return " ".join(why)
+
+
 def vault_holds_unread(user: str, reason: str, transfer_runs: bool) -> str:
     transfer = "the Drive & Calendar transfer and " if transfer_runs else ""
     return f"Couldn't check {user} for Vault holds ({reason}). A hold stops {transfer}the account's deletion: check in Google Vault."

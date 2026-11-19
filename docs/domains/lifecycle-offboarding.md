@@ -41,10 +41,13 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
   Starts the held steps as a progress-tracked `BatchJob` (`lifecycle.run_offboard`); name-resolution helpers;
   `_running` (one offboarding per leaver).
-- `gamgui/web/routes/users.py` (lines ~425-455) — the **delete** flow: `delete_zone`,
-  `delete_confirm` (warns on pending transfers), `delete_apply` (type-the-exact-email confirm —
-  `guard.enforce`'s rule for every account delete, so the Builder's "Delete account" asks for the
-  address and warns on a pending transfer too).
+- `gamgui/web/routes/users.py` — the **delete** flow, the only one (the Builder has none, roadmap 2.9):
+  `delete_zone`, `delete_confirm` (refuses a Vault hold or an owned secondary calendar, warns on a pending or
+  unknown transfer and on a read that failed, and holds which reads answered under a single-use token, flow
+  `user_delete`), `delete_apply` (takes that token first, then the type-the-exact-email confirm —
+  `guard.enforce`'s rule for every account delete — and the alias check; then reads the holds and calendars again:
+  one found refuses, and a read that answered at the confirm step must answer now). A typo gives the step back
+  under a fresh token. `_delete_reads` and `lifecycle.delete_refusal` hold the reads and the words.
 - `gamgui/core/connectors/gam_connector.py` — the real mutations: `transfer_data`,
   `remove_from_all_calendars`, `reset_password`, `revoke_access`, `forward_off`, `delete_user`,
   `add_delegate`, `set_vacation`, `add_calendar_event`; all via `_run_write` (`tolerate_kinds`). `incomplete_transfers_for` is a
@@ -206,9 +209,17 @@ parser was read statically (its bytecode, never run). No mismatch found.
   `incomplete_transfers_for(email)` and loudly warns if a Drive/Calendar transfer is still running —
   deleting then permanently loses the un-transferred data. It is a warning + type-the-email confirm,
   **not a hard block**. A read that failed, or exited without its table (GAM prints the header even with no
-  transfers: read statically from the 7.52.03 build), returns `None`, and the Users delete zone and the
-  Builder's delete previews say "Couldn't check for a data transfer". It once returned `[]`, which read as
+  transfers: read statically from the 7.52.03 build), returns `None`, and the Users delete zone says
+  "Couldn't check for a data transfer". It once returned `[]`, which read as
   "nothing pending" and offered the delete with no warning (failure-log 2026-11-18). Added in `b26da7e`.
+- **Delete refused on a Vault hold or an owned secondary calendar (roadmap 2.9, SwiftGamGui's Off3).** Google
+  won't delete an account on hold, and it deletes a deleted account's secondary calendars, events and all, with
+  nothing to transfer them from after. `delete_confirm` reads `user L print vaultholds` and `user L print calendars
+  ownedsecondary showhidden`; anything found refuses ("Not deleted. …") and nothing is held. A read that failed is
+  said as unread, never as none, and the operator may go on (Google itself refuses a held account). `delete_apply`
+  reads both again: a hold or calendar since refuses, and so does a read that answered at the confirm step and
+  fails now. SwiftGamGui refuses the same two; neither app refuses on a running transfer (a loud warning in both).
+  Tests: `test_delete_is_refused_*`, `test_a_delete_reads_again_*`. Not run on a real account yet.
 - **Calendar sweep is best-effort.** `remove_from_all_calendars` runs `all users delete calendaracls
   primary <email>` and passes `tolerate_kinds=SWEEP_TOLERATED` to `_run_write`: NOT_FOUND = that
   user never shared with the leaver; SERVICE_NOT_ENABLED = a user without Calendar ("User: x,

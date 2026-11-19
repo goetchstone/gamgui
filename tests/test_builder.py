@@ -170,7 +170,7 @@ def test_every_command_has_a_description():
     cat = load_catalog()
     assert all(c.description for c in cat.commands)
     by = {c.id: c for c in cat.commands}
-    assert by["build.delete_user"].description.startswith("Permanently delete")   # curated
+    assert by["build.suspend_user"].description.startswith("Block the user")   # curated
     # the verified noun glossary feeds the gloss for parsed commands
     ve = next(c for c in cat.commands if c.id.startswith("raw.") and c.raw_syntax.startswith("gam print vaultexports"))
     assert "Vault" in ve.description
@@ -599,7 +599,7 @@ def test_a_plain_read_writes_no_audit_entry(client):
 
 async def test_catalog_read_and_export_refuse_a_write_command(connector, gam_calls):
     # The Builder's read entry points can't become a second write path, whatever a caller passes.
-    write = load_catalog().by_id("build.delete_user")
+    write = load_catalog().by_id("build.suspend_user")
     with pytest.raises(ValueError):
         await connector.catalog_read(write, write.build({"email": "alice@example.com"}))
     with pytest.raises(ValueError):
@@ -649,7 +649,7 @@ def test_preview_requires_field(client):
 
 
 def test_destructive_command_requires_confirm(client):
-    r = client.post("/builder/preview", data={"cid": "build.delete_user", "email": "alice@example.com"})
+    r = client.post("/builder/preview", data={"cid": "build.suspend_user", "email": "alice@example.com"})
     assert "DESTRUCTIVE" in r.text and "Confirm" in r.text   # red confirm button (& is HTML-escaped)
 
 
@@ -666,11 +666,11 @@ def _builder_run(client, token, **form):
 
 
 @pytest.mark.parametrize("previewed, ran, shown", [
-    # Preview an undelete, load "Delete account", type another address, click the stale blue Run:
-    # the account was deleted with no preview and no confirm dialog.
+    # Preview an undelete, load "Suspend account", type another address, click the stale blue Run: the
+    # account was once deleted that way, with no preview and no confirm dialog (the Builder no longer deletes).
     ({"cid": "build.undelete_user", "email": "carol@example.com"},
-     {"cid": "build.delete_user", "email": "alice@example.com", "confirm_email": "alice@example.com"},
-     "gam delete user alice@example.com"),
+     {"cid": "build.suspend_user", "email": "alice@example.com"},
+     "gam update user alice@example.com suspended on"),
     # Preview a suspend for carol, retype the address, click Confirm & run: alice was suspended.
     ({"cid": "build.suspend_user", "email": "carol@example.com"},
      {"cid": "build.suspend_user", "email": "alice@example.com"},
@@ -701,36 +701,14 @@ def test_builder_mutation_runs_only_from_its_preview(client, gam_calls):
     assert gam_writes(gam_calls()) == []
 
 
-def test_builder_delete_needs_the_email_typed(client, gam_calls):
-    # The Builder's "Delete account" (a row action on every result table) once ran on the Confirm
-    # click alone, while the Users delete zone demanded the exact email typed. guard.enforce owns
-    # that rule now: the preview asks for the address, and the run refuses without it.
-    form = {"cid": "build.delete_user", "email": "alice@example.com"}
-    shown, _ = _builder_preview(client, **form)
-    assert 'name="confirm_email"' in shown and "#builder-confirm-email" in shown
-    for typed in ({}, {"confirm_email": "carol@example.com"}):
-        _, token = _builder_preview(client, **form)
-        r = _builder_run(client, token, **form, **typed)
-        assert "Type the exact email" in r.text and "Will run" in r.text and "done" not in r.text
-    assert gam_writes(gam_calls()) == []
-    _, token = _builder_preview(client, **form)
-    ok = _builder_run(client, token, **form, confirm_email="alice@example.com")
-    assert "Delete account" in ok.text and "done" in ok.text
-    assert gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
-
-
-def test_builder_refuses_to_delete_by_an_alias(client, gam_calls):
-    # GAM's `delete user` resolves an alias to the account that owns it: typing an alias (and typing it
-    # back) would delete alice — an account the preview never named. Refused at the preview, no Run.
-    shown, token = _builder_preview(client, cid="build.delete_user", email="a.anders@example.com")
-    assert "is an alias of alice@example.com" in shown and "/builder/run" not in shown and not token
-    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "A.Anders@example.com"})
-    seq, _ = _seq_preview(client)
-    assert "is an alias of alice@example.com" in seq and "/builder/sequence/run" not in seq
-    # GAM resolves the address itself (info user), so an alias the cached directory doesn't list — a
-    # secondary domain's, or one added minutes ago — is caught too.
-    shown, token = _builder_preview(client, cid="build.delete_user", email="alice@alias.example.net")
-    assert "is an alias of alice@example.com" in shown and not token
+def test_the_builder_has_no_account_delete(client, gam_calls):
+    # Roadmap 2.9: the Builder's delete walked around the Users delete's refusals (a Vault hold, an owned secondary
+    # calendar) and its read again at the confirm. Only Users → a person → Delete account deletes now.
+    assert load_catalog().by_id("build.delete_user") is None
+    assert "Unknown command." in client.get("/builder/command/build.delete_user").text
+    assert "can&#39;t be built" in client.post("/builder/preview", data={"cid": "build.delete_user", "email": "carol@example.com"}).text
+    assert "can&#39;t be added" in client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"}).text
+    assert "Delete account" not in client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"}).text
     assert gam_writes(gam_calls()) == []
 
 
@@ -748,25 +726,6 @@ def test_a_data_transfer_is_confirmed_like_a_destructive_change(client, gam_call
     _, token = _builder_preview(client, **form)
     assert "done" in _builder_run(client, token, **form).text
     assert gam_writes(gam_calls()) == [["create", "datatransfer", "carol@example.com", "drive", "alice@example.com", "all"]]
-
-
-def test_builder_delete_warns_on_a_pending_data_transfer(client):
-    # Deleting before an offboarding's Drive transfer finishes loses the rest: the Builder warns like
-    # the Users delete zone does (both read `print datatransfers olduser <address>`).
-    r = client.post("/builder/preview", data={"cid": "build.delete_user", "email": "xferpending@example.com"})
-    assert "Data transfer still in progress" in r.text and "permanently loses" in r.text
-    r = client.post("/builder/preview", data={"cid": "build.delete_user", "email": "alice@example.com"})
-    assert "Data transfer still in progress" not in r.text
-
-
-@pytest.mark.parametrize("email", ["xferfail@example.com", "xfernotable@example.com"])
-def test_builder_delete_says_a_transfer_check_that_failed(client, email):
-    # A failed read is unknown, never "nothing pending" (invariant 10; failure-log 2026-11-18).
-    r = client.post("/builder/preview", data={"cid": "build.delete_user", "email": email})
-    assert "Couldn't check for a data transfer" in r.text and email in r.text
-    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": email})
-    r = client.post("/builder/sequence/preview")
-    assert "Couldn't check for a data transfer" in r.text
 
 
 def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
@@ -1078,27 +1037,12 @@ def test_sequence_run_is_single_use(client, gam_calls):
     assert len(gam_writes(gam_calls())) == 1
 
 
-def test_a_sequence_that_deletes_an_account_needs_the_email_typed(client, gam_calls):
-    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"})
-    shown, token = _seq_preview(client)
-    assert 'name="confirm_email"' in shown and "carol@example.com" in shown
-    r = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
-    assert "status?job=" not in r.text and "exact email" in r.text
-    assert gam_writes(gam_calls()) == []
-    _, token = _seq_preview(client)
-    ok = client.post("/builder/sequence/run", data={"confirmed": "1", "confirm_email": "carol@example.com",
-                                                    "preview": token})
-    assert "status?job=" in ok.text
-
-
 def test_destructive_bulk_sequence_needs_typed_confirm(client):
-    for _ in range(10):  # ten destructive deletes => bulk + destructive => typed confirm
-        client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": "carol@example.com"})
+    for _ in range(10):  # ten destructive suspends => bulk + destructive => typed confirm
+        client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "carol@example.com"})
     prev, token = _seq_preview(client)
     assert 'name="confirm"' in prev               # typed confirmation required
-    assert prev.count('name="confirm_email"') == 1               # and the one deleted address, once
-    blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "confirm_email": "carol@example.com",
-                                                         "preview": token})
+    blocked = client.post("/builder/sequence/run", data={"confirm": "nope", "preview": token})
     assert "Type confirm" in blocked.text and "status?job=" not in blocked.text
 
 

@@ -83,7 +83,7 @@ _PATTERNS = [
     ("gamgui/core/gam/commands.py", r'EXPECTED_GAM_VERSION = "[0-9.]+"'),
     ("scripts/fetch_gam.sh", r'^TAG="v[0-9.]+"'),
     ("tests/fixtures/mock_gam.sh", r'echo "GAM [0-9.]+ - mock"'),
-    ("CLAUDE.md", r"Of \d+ catalog entries, \d+ run:\n   26 hand-curated \(the only ones that can change an existing object\) plus \d+ grammar-derived commands"),
+    ("CLAUDE.md", r"Of \d+ catalog entries, \d+ run:\n   \d+ hand-curated \(the only ones that can change an existing object\) plus \d+ grammar-derived commands"),
     ("CLAUDE.md", r"\(currently [0-9.]+\)"),
     ("README.md", bump.README_COUNTS),
     ("ROADMAP.md", bump.ROADMAP_COUNTS),
