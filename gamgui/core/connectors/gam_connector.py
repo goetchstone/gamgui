@@ -860,16 +860,21 @@ class GAMConnector(Connector):
             timeout=DOMAIN_WIDE_TIMEOUT,
         )
 
-    async def incomplete_transfers_for(self, email: str) -> List[dict]:
-        """Data transfers FROM ``email`` that haven't reached 'completed' yet.
+    async def incomplete_transfers_for(self, email: str) -> Optional[List[dict]]:
+        """Data transfers FROM ``email`` that haven't reached 'completed' yet, or ``None`` when that isn't known.
 
         Deleting an account before its Drive/calendar transfer completes permanently loses the
-        un-transferred data, so the delete flow checks this first. Returns [] on any read error
-        (never blocks deletion on an inability to check — just can't warn)."""
+        un-transferred data, so the delete flow checks this first. A read that failed, or that exited
+        without its table, is ``None``: the delete screens say the check couldn't be made. It once
+        returned [] here, which read as "nothing pending" and offered the delete with no warning
+        (invariant 10; failure-log 2026-11-18). It never blocks the delete: the operator may know."""
         try:
             out = await self.runner.run_authenticated(self.domain, GAMCommands.print_datatransfers(email))
-        except Exception:
-            return []
+        except Exception as exc:  # noqa: BLE001 - any failure leaves the answer unknown, whatever it was
+            logger.warning("the data-transfer check for a delete failed", exc_info=exc)
+            return None
+        if not out.strip():       # GAM prints the header even with no transfers: no table is no answer
+            return None
         pending = []
         for r in parse_records(out):
             status = str(r.get("overallTransferStatusCode") or r.get("status") or "")

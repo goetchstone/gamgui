@@ -41,7 +41,7 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently: the session-start nudge counts open entries, but not
   how long each has been open, nor whether its named home exists.
 - **Enforcement home if changed:** hook (the nudge names any entry open past one observer pass). The backlog itself
-  is `docs/plans/2026-11-18-enforce-recorded-lessons.md`.
+  is a plan the operator keeps locally (not in the repo).
 
 ## 2026-11-15 — Joining continuation lines exposed the read builder's guesses about groups
 - **What happened:** the parser now joins each entry's continuation lines (the follow-up the 2026-11-14 entry asked
@@ -83,6 +83,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Yes but unworded: an identity lookup answers "unknown" until every address an account
   can have (aliases, alias-domain addresses) was checked.
 - **Enforcement home if changed:** skill (`pre-commit`, for a compare keyed on addresses).
+- **Resolved (2026-11-18):** pre-commit item 17 (a compare keyed on addresses reads "not under this address" as
+  unknown until the primary and every alias were checked).
 
 ## 2026-11-14 — improve-rules pass: a failed read kept standing as the answer
 - **What happened:** the observer pass over the window since 2026-10-16: 19 fix commits (add6308 to
@@ -114,6 +116,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   read-verb-with-a-write-keyword entry, which asks for a per-bump scan of every auto-promoted line. One
   change per PR, so they wait for the next pass. Most fixes in this window were found by the SwiftGamGui
   port's review, not here: that review has been acting as GamGUI's adversarial verifier.
+- **Resolved (2026-11-18):** invariant 10 and pre-commit item 16, which now also says the failing- and
+  partial-exit tests land in the PR that adds the read.
 
 ## 2026-11-12 — A read verb with one write keyword: `gam version update`
 - **What happened:** GAM 7.52.00 added `gam version [... (update [quiet])]`, which downloads the latest release and
@@ -138,6 +142,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently: a tripwire over `web/routes/` for a `Response` or JSON
   answer built from a caught exception, or a pre-commit item for route changes.
 - **Enforcement home if changed:** tripwire test (backstop), plus the build-packaging runbook's note on the gate.
+- **Resolved (2026-11-18):** `tests/test_route_error_text.py` (every handler in `web/routes/` classified; no bare
+  `Exception` or `OSError` text reaches the operator), and the rule in the web-server-security runbook.
 
 ## 2026-10-16 — improve-rules pass: the mock-lies rule named one mock; the fakes that lied were others
 - **What happened:** the observer pass over the window since 2026-10-01: fix commits b6feae3, 383100a,

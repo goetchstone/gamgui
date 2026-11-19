@@ -2143,9 +2143,18 @@ def test_delete_confirm_warns_on_pending_transfer(client):
     assert "permanently loses" in r.text
 
 
+@pytest.mark.parametrize("email", ["xferfail@example.com", "xfernotable@example.com"])
+def test_a_transfer_check_that_failed_is_said_never_read_as_none_pending(client, email):
+    # Invariant 10: an error exit, or a clean exit with no table, is "unknown". It once read as "no transfer
+    # running", and the confirm step offered the delete with no warning (failure-log 2026-11-18).
+    r = client.post("/users/delete/confirm", data={"email": email})
+    assert "Couldn't check for a data transfer" in r.text and "Data transfer still in progress" not in r.text
+    assert "Permanently delete" in r.text   # a warning, not a block: the operator may know the transfer finished
+
+
 def test_delete_confirm_no_warning_when_transfers_done(client):
     r = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
-    assert "Data transfer still in progress" not in r.text
+    assert "Data transfer still in progress" not in r.text and "Couldn't check for a data transfer" not in r.text
     assert "Permanently delete" in r.text   # the confirm form still renders
 
 

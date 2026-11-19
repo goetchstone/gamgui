@@ -786,7 +786,7 @@ async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTM
     pending = await conn.incomplete_transfers_for(email.strip())
     return TEMPLATES.TemplateResponse(
         request, _DELETE_ZONE,
-        {"email": email, "confirming": True, "pending_transfers": pending},
+        {"email": email, "confirming": True, "pending_transfers": pending or [], "transfers_unknown": pending is None},
     )
 
 
