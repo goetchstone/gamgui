@@ -4,6 +4,7 @@ file that can't be read is moved aside, never saved over. The cases are SwiftGam
 from __future__ import annotations
 
 import json
+import re
 import stat
 from html import unescape
 from pathlib import Path
@@ -58,14 +59,31 @@ def test_the_starters_show_on_first_use_and_can_all_run(tmp_path):
 def test_a_save_round_trips_and_is_private(tmp_path):
     path = tmp_path / "app" / "t.json"
     store = OffboardTemplateStore(path)
-    template = OffboardTemplate(leave_out=frozenset({"calacls"}), add=frozenset({"imap_off"}), subject="S", message="M", days=7, invitee="it@example.com")
+    template = OffboardTemplate(leave_out=frozenset({"calacls"}), add=frozenset({"imap_off"}), subject="S", message="M", days=7, invitee="it@example.com",
+                                services=frozenset({"drive", "lookerstudio"}))
     store.save("Mine", template)
     store.set_default("Mine")
     again = OffboardTemplateStore(path)
     assert again.get("Mine") == template and again.default == "Mine" and again.opening == template
     assert stat.S_IMODE(path.stat().st_mode) == 0o600 and stat.S_IMODE(path.parent.stat().st_mode) == 0o700
-    assert json.loads(path.read_text())["version"] == 2
+    saved = json.loads(path.read_text())
+    assert saved["version"] == 3 and saved["templates"]["Mine"]["services"] == ["drive", "lookerstudio"]
     assert [p.name for p in path.parent.iterdir()] == ["t.json"]     # no temp file left
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_an_older_file_reads_as_transferring_drive_and_calendar(tmp_path, version):
+    # Roadmap 3.4: version 3 added the transfer's services. A file from before it is the routine's own transfer.
+    path = tmp_path / "t.json"
+    path.write_text(json.dumps({"version": version, "default": "Old", "templates": {"Old": {"leave_out": [], "subject": "S", "message": "M", "days": 3, "invitee": ""}}}))
+    store = OffboardTemplateStore(path)
+    assert store.get("Old").services == frozenset({"drive", "calendar"}) and store.set_aside is None and path.exists()
+
+
+@pytest.mark.parametrize("services, problem", [([], "moves nothing"), (["drive", "photos"], "isn't something the transfer moves")])
+def test_a_template_must_transfer_something_it_can(services, problem):
+    assert problem in OffboardTemplate(services=frozenset(services)).problem
+    assert OffboardTemplate(services=frozenset(), leave_out=frozenset({"transfer"})).problem == ""   # left out: nothing to move
 
 
 def test_version_1_reads_as_adding_nothing(tmp_path):
@@ -139,7 +157,8 @@ def test_picking_one_fills_the_form_and_keeps_the_addresses(client, gam_calls):
     before = len(gam_calls())
     fields = client.get("/lifecycle/template", params={"name": "Lock only", "user": "a@example.com", "manager": "b@example.com"}).text
     assert 'value="a@example.com"' in fields and 'value="b@example.com"' in fields
-    assert fields.count("checked") == len(OPTIONAL_STEPS)
+    assert len(re.findall(r'name="na" value="\w+" checked', fields)) == len(OPTIONAL_STEPS)
+    assert re.findall(r'name="service" value="(\w+)" checked', fields) == ["drive", "calendar"]   # the template's services
     assert len(gam_calls()) == before       # a template runs nothing
 
 

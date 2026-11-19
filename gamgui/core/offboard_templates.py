@@ -16,12 +16,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
-from .lifecycle import ADDABLE_STEPS, DEFAULT_MESSAGE, DEFAULT_SUBJECT, OPTIONAL_STEPS, RUN_ORDER, ROUTINE, STEP_NAMES
+from .lifecycle import (ADDABLE_STEPS, DEFAULT_MESSAGE, DEFAULT_SERVICES, DEFAULT_SUBJECT, OPTIONAL_STEPS, ROUTINE, RUN_ORDER,
+                        SERVICE_CHOICES, STEP_NAMES)
 from .onboarding import looks_like_email
 from .paths import app_data_dir
 
 MIN_DAYS, MAX_DAYS = 1, 36_500
-FILE_VERSION = 2
+# 3 adds `services` (roadmap 3.4); 1 and 2 read as transferring Drive and Calendar, as the routine always did.
+FILE_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class OffboardTemplate:
     message: str = DEFAULT_MESSAGE
     days: int = 30
     invitee: str = ""                  # also invited to the reminder
+    services: FrozenSet[str] = DEFAULT_SERVICES   # what the transfer moves
 
     @property
     def runs(self) -> List[str]:
@@ -54,6 +57,10 @@ class OffboardTemplate:
                 return f"“{STEP_NAMES[key]}” is one of the routine's steps: it isn't added, it runs unless left out."
         if not MIN_DAYS <= self.days <= MAX_DAYS:
             return f"The reminder is between {MIN_DAYS} and {MAX_DAYS:,} days out."
+        if not self.services and "transfer" not in self.leave_out:
+            return "The transfer moves nothing: pick Drive, Calendar or Looker Studio, or leave the transfer out."
+        if unknown := self.services - {key for key, _ in SERVICE_CHOICES}:
+            return f"“{sorted(unknown)[0]}” isn't something the transfer moves."
         invitee = self.invitee.strip()
         if invitee and not looks_like_email(invitee):
             return f"The invitee “{invitee}” isn't one email address. Enter one, like it@example.com, or leave it empty."
@@ -61,17 +68,20 @@ class OffboardTemplate:
 
     def as_json(self) -> Dict[str, Any]:
         return {"leave_out": sorted(self.leave_out), "add": sorted(self.add), "subject": self.subject, "message": self.message,
-                "days": self.days, "invitee": self.invitee}
+                "days": self.days, "invitee": self.invitee, "services": [k for k, _ in SERVICE_CHOICES if k in self.services]}
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> "OffboardTemplate":
-        """ValueError for a record that isn't one. Version 1's has no `add`, and reads as adding nothing."""
+        """ValueError for a record that isn't one. Version 1's has no `add`, and reads as adding nothing; 1's and 2's have no
+        `services`, and read as the routine's Drive and Calendar."""
         leave_out, add, days = data.get("leave_out", []), data.get("add", []), data.get("days", 30)
         subject, message, invitee = data.get("subject", DEFAULT_SUBJECT), data.get("message", DEFAULT_MESSAGE), data.get("invitee", "")
+        services = data.get("services", sorted(DEFAULT_SERVICES))
         if (not isinstance(leave_out, list) or not isinstance(add, list) or not isinstance(days, int) or isinstance(days, bool)
-                or not all(isinstance(v, str) for v in (*leave_out, *add, subject, message, invitee))):
+                or not isinstance(services, list)
+                or not all(isinstance(v, str) for v in (*leave_out, *add, *services, subject, message, invitee))):
             raise ValueError("not a template")
-        return cls(frozenset(leave_out), frozenset(add), subject, message, days, invitee)
+        return cls(frozenset(leave_out), frozenset(add), subject, message, days, invitee, frozenset(services))
 
 
 # The templates on first use, all the operator's to change or delete. The form opens as it always has, all eight steps,
@@ -110,7 +120,7 @@ class OffboardTemplateStore:
             return self._move_aside()
         try:
             data = json.loads(raw)
-            if not isinstance(data, dict) or data.get("version") not in (1, FILE_VERSION) or not isinstance(data.get("templates"), dict):
+            if not isinstance(data, dict) or data.get("version") not in (1, 2, FILE_VERSION) or not isinstance(data.get("templates"), dict):
                 raise ValueError("not a templates file")
             templates = {str(name): OffboardTemplate.from_json(t) for name, t in data["templates"].items()}
             if any(t.problem for t in templates.values()) or not templates:
