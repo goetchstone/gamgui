@@ -188,6 +188,9 @@ def _index_ready(request: Request) -> bool:
     return status.count > 0 and status.domain == st.audit_domain
 
 
+_ROOMS_UNREAD = "Room calendars couldn't be listed, so no room is in the index: rebuild to try again."
+
+
 def _index_ctx(request: Request) -> dict:
     """Status of the persistent calendar index for the page/status partials."""
     idx = request.app.state.gamgui.calendar_index
@@ -196,7 +199,7 @@ def _index_ctx(request: Request) -> dict:
         return {"count": 0, "age": "", "ready": False}
     status = idx.status()
     age = _humanize_age(time.time() - status.updated_at) if status.updated_at else ""
-    return {"count": status.count, "age": age, "ready": True}
+    return {"count": status.count, "age": age, "ready": True, "rooms_unread": _ROOMS_UNREAD if status.rooms_unread else ""}
 
 
 @router.get("", response_class=HTMLResponse)
@@ -254,10 +257,13 @@ async def _build_index(job, conn, idx, domain: str) -> None:
     """Background: scan the whole domain once and atomically replace the index."""
     try:
         job.current = "Scanning every user's calendars…"
-        cals = await conn.scan_all_calendars()
-        await asyncio.to_thread(idx.replace_all, domain, cals)
+        unread: list = []
+        cals = await conn.scan_all_calendars(unread)
+        await asyncio.to_thread(idx.replace_all, domain, cals, "rooms" in unread)
         job.applied = len(cals)
         job.log.append(f"Indexed {len(cals)} calendars.")
+        if "rooms" in unread:
+            job.log.append(_ROOMS_UNREAD)
     except Exception as exc:  # noqa: BLE001 — surface any failure in the status partial
         logger.warning("the calendar scan failed", exc_info=exc)
         job.error = f"The calendars weren't scanned, so the index is as it was. {friendly(exc)}"

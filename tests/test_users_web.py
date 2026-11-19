@@ -918,6 +918,32 @@ def test_calendars_search_also_matches_rooms(client):
     assert "Aspen Conference Room" in r.text
 
 
+def test_an_index_built_without_its_rooms_says_so(client):
+    client.app.state.gamgui.calendar_index.replace_all(DOMAIN, [
+        IndexedCalendar("c_train123@group.calendar.google.com", "Training Calendar", "alice@example.com", "secondary", 2)],
+        rooms_unread=True)
+    assert "Room calendars couldn&#39;t be listed, so no room is in the index" in client.get("/calendars").text
+    _seed_index(client)
+    assert "Room calendars couldn" not in client.get("/calendars").text
+
+
+@pytest.mark.asyncio
+async def test_a_rebuild_that_couldnt_list_rooms_says_so_and_keeps_it(tmp_path):
+    from gamgui.core.calendar_index import CalendarIndex
+    from gamgui.web.jobs import BatchJob
+    from gamgui.web.routes.calendars import _build_index
+
+    class Conn:
+        async def scan_all_calendars(self, unread):
+            unread.append("rooms")
+            return [IndexedCalendar("c_x@group.calendar.google.com", "X", "o@example.com", "secondary", 1)]
+
+    idx, job = CalendarIndex(tmp_path / "c.db"), BatchJob(total=0)   # what start_job makes
+    await _build_index(job, Conn(), idx, DOMAIN)
+    assert not job.error and any("Room calendars couldn't be listed" in line for line in job.log)
+    assert idx.status().rooms_unread is True
+
+
 def test_calendars_search_empty_index_prompts_build(client):
     # Nothing indexed yet -> guide the user to build it, don't silently return nothing.
     r = client.get("/calendars/search", params={"q": "training"})
