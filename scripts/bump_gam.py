@@ -121,7 +121,7 @@ def refresh_doc_counts(total: int, buildable: int, curated: int, promoted: int, 
     (tests/test_polish.py) stays green."""
     v = version.lstrip("v")
     _sub(CLAUDE_MD,
-         r"Of \d+ catalog entries, \d+ run:\n   26 hand-curated \(the only ones that can change an existing object\) plus \d+ grammar-derived commands",
+         r"Of \d+ catalog entries, \d+ run:\n   \d+ hand-curated \(the only ones that can change an existing object\) plus \d+ grammar-derived commands",
          (f"Of {total} catalog entries, {buildable} run:\n"
           f"   {curated} hand-curated (the only ones that can change an existing object) plus {promoted} "
           "grammar-derived commands"))

@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, urlencode
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import bulk, guard, person_reads
+from ...core import bulk, guard, lifecycle, person_reads
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError, GAMErrorKind
@@ -53,6 +53,7 @@ _PAGER_IDS = ("users-prev", "users-next", "users-clear")
 
 _USERS_PAGE = "users.html"
 _DELETE_ZONE = "_delete_zone.html"
+_DELETE_FLOW = "user_delete"   # the confirm step's single-use token: which reads answered there
 _BULK_STORE_PAGE = "bulk_store.html"
 _TRY_AGAIN = f"{GAM_TROUBLE} Please try again."
 
@@ -783,11 +784,40 @@ async def delete_confirm(request: Request, email: Annotated[str, Form()]) -> HTM
     refusal = await conn.cut_off_refusal([GAMCommands.delete_user(email)], previewing=True)
     if refusal:
         return error_partial(request, refusal)
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the reads: what the confirm step is bound to (web/previews.py)
+    refusal, unread, answered = await _delete_reads(conn, email.strip())
+    if refusal:   # refused, nothing held (roadmap 2.9)
+        return error_partial(request, f"Not deleted. {refusal}")
     pending = await conn.incomplete_transfers_for(email.strip())
+    # The confirm click reads the holds and calendars again: one that answered here must answer then.
+    token = st.previews.hold(_DELETE_FLOW, email.strip().lower(), answered, tenant=tenant)
     return TEMPLATES.TemplateResponse(
         request, _DELETE_ZONE,
-        {"email": email, "confirming": True, "pending_transfers": pending or [], "transfers_unknown": pending is None},
+        {"email": email, "confirming": True, "pending_transfers": pending or [], "transfers_unknown": pending is None,
+         "unread": unread, "token": token},
     )
+
+
+async def _delete_reads(conn, email: str):
+    """The account delete's two refusals, read: ``(refusal, unread, answered)``. ``refusal`` says what was found
+    (a Vault hold, an owned secondary calendar), ``unread`` each read that failed, in words, and ``answered`` the names of
+    the reads that did answer. A failed read is unknown, never none (invariant 10)."""
+    holds: list = []
+    calendars: list = []
+    unread: list = []
+    answered = set()
+    try:
+        holds = lifecycle.vault_holds_from(await conn.vault_holds(email))
+        answered.add("holds")
+    except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
+        unread.append(lifecycle.vault_holds_unread(email, friendly(exc, _TRY_AGAIN), False))
+    try:
+        calendars = lifecycle.owned_calendars_from(await conn.owned_calendars(email))
+        answered.add("calendars")
+    except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
+        unread.append(lifecycle.secondary_calendars_unread(email, friendly(exc, _TRY_AGAIN)))
+    return lifecycle.delete_refusal(email, holds, calendars), unread, frozenset(answered)
 
 
 @router.post("/delete/apply", response_class=HTMLResponse)
@@ -795,18 +825,35 @@ async def delete_apply(request: Request, email: Annotated[str, Form()]) -> HTMLR
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # a typo's fresh token is bound to the tenant this request started on (web/previews.py)
+    form = await request.form()
+    # Only the address its confirm step read (roadmap 2.9): a hand-made POST, an edited address or a replay is refused.
+    answered, refusal = st.previews.take(_DELETE_FLOW, str(form.get(TOKEN_FIELD) or ""), email.strip().lower(),
+                                         again="click Delete account… again", what="address")
+    if refusal:
+        return error_partial(request, refusal)
     # The exact address typed (and the confirm click): guard.enforce owns that rule for every route
     # that deletes an account, recognising the delete by the argv conn.delete_user runs.
     delete = ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=email, summary="Delete account",
                            risk=RiskLevel.DESTRUCTIVE, argv=GAMCommands.delete_user(email))
-    refusal = guard.enforce([delete], await request.form())
+    refusal = guard.enforce([delete], form)
     if not refusal:
         try:
             refusal = " ".join(guard.alias_deletes({email: await conn.primary_address(email.strip())}))
         except Exception as exc:  # noqa: BLE001 - fail closed: an address GAM can't resolve can't be ruled out
             refusal = f"Couldn't confirm which account that address belongs to — {friendly(exc, _TRY_AGAIN)}"
-    if refusal:
-        return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal})
+    if refusal:   # a mistyped address: the same confirm step again, under a fresh token holding what it read
+        token = st.previews.hold(_DELETE_FLOW, email.strip().lower(), answered, tenant=tenant)
+        return TEMPLATES.TemplateResponse(request, _DELETE_ZONE, {"email": email, "confirming": True, "error": refusal,
+                                                                 "token": token})
+    # Read again: a hold or a calendar since the confirm step refuses, and a read that answered then must answer now.
+    found, _unread, now = await _delete_reads(conn, email.strip())
+    if found:
+        return error_partial(request, f"Not deleted. {found}")
+    if lost := sorted(set(answered) - now):
+        what = " and ".join({"holds": "Vault holds", "calendars": "secondary calendars"}[k] for k in lost)
+        return error_partial(request, f"Not deleted: couldn't check {email} for {what} again. Try again.")
     result = await conn.delete_user(email)
     if not result.ok:
         return write_failed(request, f"Couldn't delete {email}.", result)

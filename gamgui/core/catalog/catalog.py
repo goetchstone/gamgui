@@ -256,11 +256,8 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.set_suspended(s["email"], True),
              "gam update user <email> suspended on",
              "Block the user from signing in, without deleting the account (reversible)."),
-        _cmd("build.delete_user", "Users", "", "Delete account", RiskLevel.DESTRUCTIVE,
-             [_slot("email", "User", U)],
-             lambda s: GAMCommands.delete_user(s["email"]),
-             "gam delete user <email>",
-             "Permanently delete the account (recoverable for ~20 days, then gone)."),
+        # No account delete here (roadmap 2.9): Users → a person → Delete account refuses a Vault hold or an owned
+        # secondary calendar and reads both again at the confirm. A Builder delete would walk around both.
     ]
 
 

@@ -695,6 +695,8 @@ def test_a_single_user_write_patches_the_cached_record(client, gam_calls, path, 
     # page re-ran `gam print users`. Their new values are known, so the one record changes instead.
     assert "alice@example.com" in client.get("/users/table").text
     assert len(gam_writes(gam_calls())) == 0
+    if path == "/users/delete/apply":
+        form = {**form, "preview": _delete_token(client, form["email"])}
     r = client.post(path, data=form)
     assert r.status_code == 200 and len(gam_writes(gam_calls())) == 1, r.text[:300]
     listed = client.get("/users/table", params=view).text
@@ -1783,7 +1785,8 @@ def test_user_page_delete_refuses_an_alias(client, gam_calls):
     # The delete zone posts the page's primary address; a hand-made POST with an alias (typed back
     # exactly) would still delete the owning account in GAM — refused before any write.
     r = client.post("/users/delete/apply", data={"email": "a.anders@example.com", "confirmed": "1",
-                                                 "confirm_email": "a.anders@example.com"})
+                                                 "confirm_email": "a.anders@example.com",
+                                                 "preview": _delete_token(client, "a.anders@example.com")})
     assert "is an alias of alice@example.com" in r.text and gam_writes(gam_calls()) == []
 
 
@@ -2113,6 +2116,14 @@ async def test_offboard_executor_runs_every_step(connector, gam_calls):
     assert [e["action"] for e in audit] == OFFBOARD_AUDIT and all(e["ok"] for e in audit)
 
 
+def _delete_token(client, email):
+    """The delete's confirm step, as its Delete account… button posts it: the single-use token its form carries."""
+    shown = client.post("/users/delete/confirm", data={"email": email}).text
+    found = re.search(r'name="preview" value="([^"]+)"', shown)
+    assert found, shown[:400]
+    return found.group(1)
+
+
 def test_delete_zone_shows_button_then_typed_confirm(client):
     r = client.get("/users/delete/zone", params={"email": "alice@example.com"})
     assert "Delete account" in r.text
@@ -2121,15 +2132,19 @@ def test_delete_zone_shows_button_then_typed_confirm(client):
 
 
 def test_delete_requires_exact_email_match(client, gam_calls):
+    token = _delete_token(client, "alice@example.com")
     for typed in ({}, {"confirm_email": "wrong@example.com"}):
-        r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1", **typed})
+        r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1", "preview": token,
+                                                     **typed})
         assert "Type the exact email" in r.text
+        token = re.search(r'name="preview" value="([^"]+)"', r.text).group(1)   # a typo gives the step back, held again
     assert gam_writes(gam_calls()) == []
 
 
 def test_delete_applies_with_matching_confirm(client, gam_calls):
     r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
-                                                 "confirm_email": " Alice@example.com "})
+                                                 "confirm_email": " Alice@example.com ",
+                                                 "preview": _delete_token(client, "alice@example.com")})
     assert r.status_code == 200
     assert "Account deleted" in r.text and "20 days" in r.text
     assert gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
@@ -2346,6 +2361,8 @@ def test_a_failed_write_says_why_with_gams_error_expandable(client, monkeypatch,
         result = ChangeResult(preview=preview, ok=False, detail=raw, remediation=why)
         return [result] if method == "apply" else result
 
+    if route == "/users/delete/apply":
+        form = {**form, "preview": _delete_token(client, form["email"])}
     monkeypatch.setattr(client.app.state.gamgui.connector, method, fail)
     r = client.post(route, data=form)
     headline, _, expandable = r.text.partition("<details")
@@ -2408,3 +2425,89 @@ def test_each_calendar_access_remove_button_names_its_row(client, path, params):
 def test_the_preview_names_only_the_reported_steps_that_run(client, na, sentence):
     shown, _ = _offboard_preview(client, na=na)
     assert sentence in unescape(shown.text)
+
+
+# --- the delete's refusals (roadmap 2.9, SwiftGamGui's Off3) ----------------------------------------------------
+
+def _held(conn, monkeypatch):
+    """`print vaultholds` answering one hold on alice (the mock's held dana@ isn't in its directory, so its read fails)."""
+    async def held(_email):
+        return [{"User": "alice@example.com", "matterName": "Contract audit", "name": "Mail and Drive", "orgUnitPath": ""}]
+    monkeypatch.setattr(conn, "vault_holds", held)
+
+
+def test_delete_is_refused_on_a_vault_hold(client, gam_calls, monkeypatch):
+    # Google won't delete an account on hold: refused at the confirm step, nothing held, no form to type into.
+    _held(client.app.state.gamgui.connector, monkeypatch)
+    r = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
+    page = unescape(r.text)
+    assert "Not deleted. alice@example.com is under a Vault hold: “Mail and Drive” in “Contract audit”" in page
+    assert 'name="confirm_email"' not in r.text and 'name="preview"' not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_delete_is_refused_while_they_own_a_secondary_calendar(client, gam_calls):
+    # Google deletes a deleted account's secondary calendars, events and all: hand them over first.
+    r = client.post("/users/delete/confirm", data={"email": "carol@example.com"})
+    page = unescape(r.text)
+    assert "Not deleted. carol@example.com owns" in page and "secondary calendar" in page
+    assert "hand" in page and 'name="confirm_email"' not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_delete_is_refused_on_a_failed_read_never_read_as_none(client, gam_state):
+    # Invariant 10: a refused Vault read is unknown, said as such, never "no hold". The operator may go on: Google itself
+    # refuses to delete a held account.
+    (gam_state / "novault").write_text("")
+    page = unescape(client.post("/users/delete/confirm", data={"email": "alice@example.com"}).text)
+    assert "Couldn't check alice@example.com for Vault holds" in page and "Permanently delete" in page
+
+
+def test_a_delete_reads_again_at_the_confirm_click(client, gam_calls, gam_state):
+    # A read that answered at the confirm step must answer at the click: one that fails now runs nothing.
+    token = _delete_token(client, "alice@example.com")
+    (gam_state / "novault").write_text("")
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
+                                                 "confirm_email": "alice@example.com", "preview": token})
+    assert "Not deleted: couldn&#39;t check alice@example.com for Vault holds again" in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_a_delete_reads_again_and_refuses_a_hold_placed_since(client, gam_calls, monkeypatch):
+    token = _delete_token(client, "alice@example.com")
+    _held(client.app.state.gamgui.connector, monkeypatch)
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
+                                                 "confirm_email": "alice@example.com", "preview": token})
+    assert "Not deleted. alice@example.com is under a Vault hold" in unescape(r.text)
+    assert gam_writes(gam_calls()) == []
+
+
+def test_a_delete_whose_read_failed_both_times_goes_on_as_warned(client, gam_calls, gam_state):
+    (gam_state / "novault").write_text("")
+    token = _delete_token(client, "alice@example.com")
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
+                                                 "confirm_email": "alice@example.com", "preview": token})
+    assert "Account deleted" in r.text and gam_writes(gam_calls()) == [["delete", "user", "alice@example.com"]]
+
+
+def test_a_delete_confirm_step_runs_once(client, gam_calls):
+    token = _delete_token(client, "alice@example.com")
+    form = {"email": "alice@example.com", "confirmed": "1", "confirm_email": "alice@example.com", "preview": token}
+    assert "Account deleted" in client.post("/users/delete/apply", data=form).text
+    assert "expired or was already run" in client.post("/users/delete/apply", data=form).text
+    assert len(gam_writes(gam_calls())) == 1
+
+
+def test_a_refused_calendar_read_is_said_and_reread_at_the_click(client, gam_calls, gam_state):
+    # The calendars read's failing exit (Calendar off, exit 73): unknown at the confirm step, never "owns none".
+    (gam_state / "nocalendar").mkdir()
+    (gam_state / "nocalendar" / "alice@example.com").write_text("")
+    page = unescape(client.post("/users/delete/confirm", data={"email": "alice@example.com"}).text)
+    assert "Couldn't check whether alice@example.com owns secondary calendars" in page and "Permanently delete" in page
+    # ...and a read that answered at the confirm step but fails at the click deletes nothing.
+    (gam_state / "nocalendar" / "alice@example.com").unlink()
+    token = _delete_token(client, "alice@example.com")
+    (gam_state / "nocalendar" / "alice@example.com").write_text("")
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
+                                                 "confirm_email": "alice@example.com", "preview": token})
+    assert "for secondary calendars again" in r.text and gam_writes(gam_calls()) == []

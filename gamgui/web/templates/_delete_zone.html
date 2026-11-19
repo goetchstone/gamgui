@@ -6,6 +6,7 @@
 <form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" class="space-y-2">
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="hidden" name="confirmed" value="1" />
+  <input type="hidden" name="preview" value="{{ token }}" />
   {% if pending_transfers %}
   <div id="del-transfer-warning" class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">
     ⚠ <strong>Data transfer still in progress</strong> for {{ email }}:
@@ -21,9 +22,12 @@
     the Admin console first.
   </div>
   {% endif %}
+  {% for line in unread %}
+  <div id="del-unread-{{ loop.index }}" class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ {{ line }}</div>
+  {% endfor %}
   <label for="del-confirm-email" class="block text-sm text-red-700"><strong>Permanently delete {{ email }}?</strong> Recoverable for ~20 days, then gone. Type the email to confirm:</label>
   <input id="del-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ email }}" data-focus
-         {% if pending_transfers or transfers_unknown or error %}aria-describedby="{% if error %}del-confirm-error {% endif %}{% if pending_transfers %}del-transfer-warning {% endif %}{% if transfers_unknown %}del-transfer-unknown{% endif %}"{% endif %}
+         {% if pending_transfers or transfers_unknown or unread or error %}aria-describedby="{% if error %}del-confirm-error {% endif %}{% if pending_transfers %}del-transfer-warning {% endif %}{% if transfers_unknown %}del-transfer-unknown {% endif %}{% for line in unread %}del-unread-{{ loop.index }} {% endfor %}"{% endif %}
          {% if error %}aria-invalid="true"{% endif %}
          class="w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
   {% if error %}<p id="del-confirm-error" class="text-xs text-red-700">{{ error }}</p>{% endif %}
