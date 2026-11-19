@@ -74,3 +74,22 @@ page's `cid`; an id the catalog doesn't hold opens none), where it runs, filters
   without it.
 - **Not run on a real domain yet.** The mock models none of the nine (it fails anything it doesn't handle); check each by eye
   on its first live run.
+
+## Inactive → suspend (roadmap 3.3, D3)
+The one write on this screen. The Inactive card's **Suspend these…** posts `/reports/inactive/preview`, which:
+- **reads the directory again** (`st.users(force=True)`): the card counted a cached list, and the people a suspend acts on
+  are the ones this read found (`reports.inactive_to_suspend`), held under a single-use token (flow `suspend_inactive`,
+  keyed on the window the preview used, posted back as `days`). Apply suspends exactly that held list, never a rebuilt one
+  (`test_someone_who_went_inactive_since_the_preview_isnt_suspended`);
+- **flags new hires**: Inactive includes accounts that never signed in, so anyone made inside the window, or when isn't
+  known, is marked *new* and the list opens. `creationTime` is in `CACHE_FIELDS` for this (`GAMUser.creation_time`);
+- **leaves the connected admin out by name**, matched by Google account ID as well as address (`connector.connected_admin`).
+  An admin GamGUI can't confirm offers nothing. The chokepoint's own refusal (`cut_off_refusal` in `_run_write`) still holds
+  for every write.
+
+`/reports/inactive/apply` takes the token, then `guard.enforce(plan_suspend(held), confirm_step=True,
+typed_count_above=COUNT_CONFIRM_ABOVE)`: ten or more need `confirm` typed (destructive and bulk), more than 25 the count
+too. The job (`suspend_inactive`, stoppable) runs `bulk.suspend_users`: `plan_suspend` → `apply` → `_run_write` per account,
+stopping at an account-wide failure (`stop_reason`); each accepted suspend is patched into the cache, and any failure drops
+the cached list (a failed write's outcome isn't known). GATED in `tests/test_write_routes_guarded.py`; tests in
+`tests/test_inactive_suspend.py`. **Not run on a real domain yet:** suspend itself is "not yet" in the README.

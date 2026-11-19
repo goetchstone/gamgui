@@ -54,6 +54,14 @@
             {% endfor %}
           </ul>
         </details>
+        {% if r.key == "inactive" %}
+        {# Reads the directory again and previews; it suspends nothing by itself (roadmap 3.3). #}
+        <div id="inactive-suspend">
+          <button type="button" hx-post="/reports/inactive/preview" hx-target="#inactive-suspend" hx-swap="innerHTML" hx-disabled-elt="this"
+                  aria-label="Suspend the {{ r.count }} inactive accounts…"
+                  class="inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors">Suspend these…</button>
+        </div>
+        {% endif %}
         {% else %}
         <p class="mt-3 text-sm text-emerald-700">None — all clear.</p>
         {% endif %}

@@ -67,3 +67,33 @@ async def set_departments(job, conn, users, department: str,
         job.error = _why(exc)
     finally:
         job.finish()
+
+
+async def suspend_users(job, conn, emails, on_set: Optional[Callable[[str], None]] = None) -> None:
+    """Suspend each of ``emails`` through the chokepoint (``plan_suspend`` → ``apply`` → ``_run_write``, which refuses the
+    admin GamGUI signs in as); ``on_set(email)`` after each write GAM accepted. Stops at a failure every later account
+    would share (``stop_reason``), or at Stop."""
+    try:
+        for email in emails:
+            if stop_requested(job):
+                break
+            job.current = email
+            kind, why, detail = None, "", ""
+            try:
+                res = (await conn.apply(conn.plan_suspend([email], suspend=True)))[0]
+                ok = bool(getattr(res, "ok", False))
+                if not ok:
+                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
+            except Exception as exc:  # noqa: BLE001 — one account must not stop the rest
+                ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc) if isinstance(exc, GAMError) else ""
+            job.record(email, ok, why, detail)
+            if ok and on_set is not None:
+                on_set(email)
+            stop = stop_reason(kind, why, job.total - job.done)
+            if stop:
+                job.error = stop
+                break
+    except Exception as exc:
+        job.error = _why(exc)
+    finally:
+        job.finish()

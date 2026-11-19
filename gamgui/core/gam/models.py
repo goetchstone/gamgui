@@ -48,6 +48,7 @@ class GAMUser:
     phone: str = ""
     recovery_email: str = ""
     last_login_time: Optional[str] = None
+    creation_time: Optional[str] = None   # when the account was made (roadmap 3.3: a new hire is never just "inactive")
     aliases: List[str] = field(default_factory=list)
     # Addresses in the domain's alias domains: `fields aliases` asks for these too (USER_FIELDS_CHOICE_MAP, 7.52.01 build).
     non_editable_aliases: List[str] = field(default_factory=list)
@@ -81,6 +82,7 @@ class GAMUser:
             phone=str(phone.get("value") or ""),
             recovery_email=str(_get(d, "recoveryEmail", default="") or ""),
             last_login_time=_get(d, "lastLoginTime", "Last Login Time"),
+            creation_time=_get(d, "creationTime", "Creation Time"),
             aliases=_as_list(_get(d, "aliases", "Aliases", default=[])),
             non_editable_aliases=_as_list(_get(d, "nonEditableAliases", "NonEditableAliases", default=[])),
             raw=d,
