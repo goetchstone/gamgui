@@ -208,3 +208,17 @@ def inactive_to_suspend(users: List[GAMUser], admin_email: str, admin_id: str, n
         made = _parse_dt(u.creation_time)
         targets.append(InactiveTarget(u.primary_email, u.full_name, u.last_login_time or "", made is None or made >= cutoff))
     return targets, left_out
+
+
+# --- the completeness buckets as a sheet to fill in (roadmap 3.3, D3) -------------------------------------------------
+# No title, department, phone or location: the fix is data only the organisation has, so each of these buckets downloads as
+# a spreadsheet to fill in. Its columns are the ones bulk apply from CSV (roadmap 4.6) will read back, by name: `email`
+# says who, `name` is there for the person filling it in, and each other column is the profile field it sets.
+FILL_IN_REPORTS = ("no_title", "no_department", "no_phone", "no_location")
+FILL_IN_COLUMNS = ("email", "name", "title", "department", "phone", "location", "org_unit")
+
+
+def fill_in_rows(users: List[GAMUser]) -> List[tuple]:
+    """One row per person, in FILL_IN_COLUMNS order, sorted by address: the values the directory holds now."""
+    return [(u.primary_email, u.full_name, u.title, u.department, u.phone, u.location, u.org_unit_path)
+            for u in sorted(users, key=lambda u: u.primary_email.lower())]

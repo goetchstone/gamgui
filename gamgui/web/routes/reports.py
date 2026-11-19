@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from ...core import bulk, clock, guard
 from ...core import reports as reports_mod
 from ...core.catalog.catalog import load_catalog
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.setup import admin_token_scopes
+from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
@@ -45,6 +48,7 @@ async def reports_page(request: Request, refresh: int = 0) -> HTMLResponse:
         request,
         _REPORTS_PAGE,
         {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users), "named": named,
+         "fill_in": reports_mod.FILL_IN_REPORTS,
          **as_of(st.user_cache)},
     )
 
@@ -57,6 +61,31 @@ def _named_reports(st) -> list:
     granted = admin_token_scopes(st.vault, st.audit_domain) if st.vault is not None else None
     return [{"report": r, "cmd": reports_mod.named_report_command(st.catalog, r),
              "held": reports_mod.admin_scope_held(r, granted)} for r in reports_mod.NAMED_REPORTS]
+
+
+@router.get("/fill-in.csv")
+async def fill_in_csv(request: Request, key: str = "") -> Response:
+    """A completeness bucket (no title, department, phone or location) as a spreadsheet to fill in (roadmap 3.3): the
+    columns bulk apply from CSV reads back (``FILL_IN_COLUMNS``), formula-safe, from the same cached directory the card
+    counted. A list that couldn't be read is said in plain text, never an empty sheet (invariant 10)."""
+    st = request.app.state.gamgui
+    if key not in reports_mod.FILL_IN_REPORTS:
+        return Response("Not a list that downloads.\n", status_code=400, media_type="text/plain")
+    if st.connector is None:
+        return Response(NOT_CONNECTED + "\n", status_code=400, media_type="text/plain")
+    try:
+        users = await st.users(stale_ok=True)
+    except Exception as exc:  # noqa: BLE001 — said in words, as a plain-text answer
+        return Response(friendly(exc, "Couldn't load users.") + "\n", status_code=502, media_type="text/plain")
+    bucket = next(r for r in reports_mod.build_reports(users) if r.key == key)
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(reports_mod.FILL_IN_COLUMNS)
+    for row in reports_mod.fill_in_rows(bucket.users):
+        writer.writerow([csv_safe(v) for v in row])
+    # `key` is one of FILL_IN_REPORTS, so the name carries only filename-safe characters.
+    return Response(out.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{key.replace("_", "-")}.csv"'})
 
 
 @router.get("/usage", response_class=HTMLResponse)
