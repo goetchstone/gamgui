@@ -2009,8 +2009,8 @@ def test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_
     assert job.skipped == ["Set auto-responder", "Transfer Drive & Calendar ownership",
                            "30-day reminder for alice@example.com"]
     text = html.unescape(client.get("/lifecycle/offboard/status", params={"job": job.id}).text)
-    assert FAILED_MARK + f"Set delegate — GAM failed (unknown, exit=50): User: {LEAVER}, Delegate: {MGR}, Add Failed: " \
-           "Delegate already exists." in text
+    assert FAILED_MARK + "Set delegate — " in text and "Set delegate — GAM failed" not in text   # words lead
+    assert "GAM's error" in text and f"User: {LEAVER}, Delegate: {MGR}, Add Failed: Delegate already exists." in text
     assert "Offboarding stopped" in text and "Don't delete the account" in text
     assert [w[:4] for w in gam_writes(gam_calls())][-5:] == [
         ["update", "user", LEAVER, "password"], ["user", LEAVER, "deprovision", "signout"],

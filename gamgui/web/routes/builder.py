@@ -33,7 +33,7 @@ from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES, cell
-from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly, gam_detail
+from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly, gam_detail, write_failed
 
 logger = logging.getLogger(__name__)
 
@@ -478,8 +478,9 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     if refusal:
         return await _preview_page(request, cmd, argv, target, slots, error=refusal)
     result = (await conn.apply([preview]))[0]
-    return TEMPLATES.TemplateResponse(request, "_action_result.html",
-                                      {"ok": result.ok, "message": (cmd.name + " — " + ("done" if result.ok else result.detail))})
+    if not result.ok:   # what didn't happen, in words; GAM's own line one click away (roadmap 0.4)
+        return write_failed(request, f"{cmd.name} didn't run.", result)
+    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": cmd.name + " — done"})
 
 
 # --- sequence --------------------------------------------------------------------------

@@ -355,8 +355,10 @@ async def run(request: Request, role: Annotated[str, Form()], name: Annotated[st
     hire, cfg = held   # the previewed hire, role template and welcome email — never re-read from the store
     res = await onboarding.provision_hire(conn, signature_store(request), store, cfg, hire)
     if make_account and not res["account_created"]:
-        detail = next((e[len("create: "):] for e in res["errors"] if e.startswith("create:")), "unknown error")
-        return error_partial(request, "Couldn't create the account: " + detail)
+        # What to do in words, GAM's own line one click away — never GAM's line as the headline (roadmap 0.4).
+        # (A hire refused before GAM ran — no address, no last name — carries our own words in ``errors``.)
+        why, detail = res.get("create_failure") or (next(iter(res["errors"]), ""), "")
+        return error_partial(request, f"Couldn't create the account. {why}".strip(), detail)
 
     # Map the structured result onto the single-hire result panel's contract.
     credentials = {**res["credential"], "signature": res["signature"],

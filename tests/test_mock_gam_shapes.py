@@ -223,7 +223,9 @@ async def test_offboarding_a_suspended_leaver_says_why_and_goes_on(connector):
     job = start_job({}, len(steps))
     await run_offboard(job, connector, steps)
     [line] = [ln for ln in job.log if ln.startswith("✗ ") and "Revoke" in ln]
-    assert "You must unsuspend to process backupcodes" in line
+    # GAM's reason is kept with the failure, one click away on the finished panel (roadmap 0.4).
+    [failed] = [f for f in job.failed if "Revoke" in f.item]
+    assert "You must unsuspend to process backupcodes" in failed.detail and failed.reason in line
     assert job.skipped == []
 
 

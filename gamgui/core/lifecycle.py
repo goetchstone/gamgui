@@ -9,6 +9,7 @@ starts and polls.
 from __future__ import annotations
 
 import html
+import logging
 import re
 import shlex
 from dataclasses import dataclass, field
@@ -19,8 +20,14 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Dict, FrozenSet, Iterable
 from .audit import redact_argv
 from .bulk import stop_requested
 from .gam.commands import GAMCommands
+from .gam.errors import GAMError
 from .gam.models import GAMUser
 from .gam.runner import DOMAIN_WIDE_TIMEOUT
+
+logger = logging.getLogger(__name__)
+
+# A step that raised something other than a GAM error: our words, the exception goes to the log.
+_STEP_FAILED = "Something went wrong talking to GAM."
 
 if TYPE_CHECKING:
     from .connectors.gam_connector import GAMConnector
@@ -531,12 +538,19 @@ async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str
             try:
                 res = await step.action(conn)
                 ok = res is None or bool(getattr(res, "ok", True))
-                detail = "" if res is None else getattr(res, "detail", "")
+                detail = "" if res is None else (getattr(res, "detail", "") or "")
+                why = "" if res is None else (getattr(res, "remediation", "") or detail)
             except Exception as exc:  # noqa: BLE001 - a raising step is a failed step, reported like one
-                ok, detail = False, str(exc)
+                ok = False
+                why = exc.remediation if isinstance(exc, GAMError) else _STEP_FAILED
+                detail = str(exc) if isinstance(exc, GAMError) else ""
+                if not isinstance(exc, GAMError):
+                    logger.exception("offboarding step %r raised", step.label)
+            # The log line says what to do in words; GAM's own line stays one click away on the
+            # finished panel (job.failed), never the headline (roadmap 0.4).
             mark = "✓ " if ok else "✗ "
-            job.log.append(mark + step.label + (f" — {detail}" if (not ok and detail) else ""))
-            job.record(step.label, ok, detail=detail)
+            job.log.append(mark + step.label + (f" — {why}" if (not ok and why) else ""))
+            job.record(step.label, ok, reason=why if not ok else "", detail=detail)
             if ok:
                 succeeded.add(step.key)
             handled += 1

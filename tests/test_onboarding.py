@@ -436,6 +436,8 @@ def test_run_account_duplicate_fails_gracefully(client):
                                     "email": "exists@example.com", "assignee": "it@example.com",
                                     "create_account": "1"})
     assert "create the account" in r.text and "Create Failed: Duplicate" in r.text   # GAM's words, not swallowed
+    # ...but below the words, never the headline (roadmap 0.4).
+    assert "Create Failed: Duplicate" not in r.text.split("<details", 1)[0]
 
 
 def test_run_account_failure_error_partial_never_shows_password(tmp_path, echoing_gam, monkeypatch):
@@ -1122,7 +1124,7 @@ def test_a_single_hire_refused_for_want_of_a_license_says_so(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     r = _preview_and_run(client, role="Sales", name="Ada Byte", email="ada-USERLIMIT@example.com",
                          assignee="it@example.com", create_account="1")
-    assert "Couldn&#39;t create the account: Your Google Workspace subscription has no free license" in r.text
+    assert "Couldn&#39;t create the account. Your Google Workspace subscription has no free license" in r.text
 
 
 @pytest.mark.asyncio
