@@ -75,6 +75,10 @@
   (failure-log 2026-11-04; the value it does report is unseen, and the gate's log prints it). So don't
   read a job's Checks conclusion as its `needs` result. A job's name must be `<id> (<detail>)`, which
   the gate matches a need by, and a `continue-on-error` job is listed in the script's `NON_BLOCKING`.
+  The job list is every attempt's (`jobs?filter=all`), each job judged by its newest attempt: on a
+  "re-run failed jobs", GitHub copies the jobs that passed into the new attempt's own list only later,
+  so the gate once read that list, found no `gam-compat`, `app` or `fuzz`, and failed runs whose every
+  job had passed (failure-log 2026-11-18). Re-running only the failed jobs is the right retry now.
   `test_ci_ok_needs_every_blocking_job` (a new job must join
   `needs`, or carry `continue-on-error` like the latest-GAM preview; every step runs `if: always()`; the names match), `tests/test_ci_gate.py` (the decision, on the job lists of real runs) and
   `test_the_required_checks_always_report_on_a_pull_request` (no job-level `if:`, `continue-on-error`

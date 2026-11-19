@@ -61,6 +61,7 @@
   <div class="hidden max-h-[calc(100vh-17rem)] overflow-y-auto pr-1 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start" role="tabpanel" id="panel-roles" aria-labelledby="tab-roles" tabindex="0">
     <div class="{{ card }}">
       <h2 class="eyebrow text-brand-grayink">Roles</h2>
+      {% if set_aside %}<p class="mt-2 text-sm text-amber-800">The saved roles file couldn't be read, so it was moved aside to {{ set_aside.name }} and the starters are showing.</p>{% endif %}
       <div id="onboard-roles" class="mt-3">{% include "_onboard_roles.html" %}</div>
     </div>
     <form class="{{ card }} space-y-2" hx-post="/onboard/role" hx-target="#onboard-roles" hx-swap="innerHTML">

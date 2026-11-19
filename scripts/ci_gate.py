@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """ci-ok's decision: did every blocking job of this run really run and pass?
 
-Takes the path of the run's job list (GitHub's "jobs for a workflow run attempt" JSON) and reads the
-workflow's `needs` context from the NEEDS variable, as JSON. Exits 0 only when every `needs` result is
+Takes the path of the run's job list (GitHub's "jobs for a workflow run" JSON with `filter=all`: every
+attempt's jobs) and reads the workflow's `needs` context from the NEEDS variable, as JSON. Each job is
+judged by its newest attempt. A rerun of the failed jobs copies the others into its own attempt only
+later, so that attempt's own list once lacked jobs that had passed, and ci-ok failed a green run
+(failure log 2026-11-18); the earlier attempts are complete. Exits 0 only when every `needs` result is
 "success" and every blocking job in the list concluded "success". Anything else fails, including a value
 nobody expected: a job no runner picked up shows `cancelled` in the job list, yet reports something other
 than failure, cancelled or skipped through `needs` (failure log 2026-11-04). So nothing here names the bad
@@ -21,9 +24,19 @@ SELF = "ci-ok"
 NON_BLOCKING = {"gam-compat (latest, non-blocking)"}
 
 
+def newest(jobs: list) -> list:
+    """Each job as its newest attempt ran it: a job rerun and dropped now is dropped, one not rerun keeps its result."""
+    latest: dict = {}
+    for job in jobs:
+        held = latest.get(job["name"])
+        if held is None or job.get("run_attempt", 1) >= held.get("run_attempt", 1):
+            latest[job["name"]] = job
+    return list(latest.values())
+
+
 def failures(needs: dict, listing: dict) -> list[str]:
     """Why this run may not pass; empty only when every blocking job ran and succeeded."""
-    jobs = [job for job in listing["jobs"] if job["name"] != SELF and job["name"] not in NON_BLOCKING]
+    jobs = [job for job in newest(listing["jobs"]) if job["name"] != SELF and job["name"] not in NON_BLOCKING]
     problems = []
     if not needs or not jobs:
         problems.append("nothing to check: no needs, or no blocking job in the list")

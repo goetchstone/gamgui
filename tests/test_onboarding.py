@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from html import unescape
 from pathlib import Path
@@ -1200,3 +1201,50 @@ async def test_stop_ends_the_wait_for_google_at_once(connector):
     await asyncio.wait_for(task, 3)
     assert job.error == "Stopped by you." and [(f.item, f.reason) for f in job.failed] == [
         (onboarding.step_label(step), onboarding.STOPPED_REASON)]
+
+
+# --- a store file that can't be read is kept, never saved over (failure-log 2026-11-18) ---------------------------
+
+def _unreadable(path, how):
+    if how == "not json":
+        path.write_text('{"roles": {"Cashier": ["step"]')            # cut off mid-write
+    elif how == "not a store":
+        path.write_text('["a list, not a store"]')
+    else:                                                               # a read the OS refuses
+        path.write_text('{"roles": {}}')
+        path.chmod(0)
+
+
+@pytest.mark.parametrize("store_cls, name", [(RunbookStore, "onboarding.json"), (SignatureStore, "signatures.json")])
+@pytest.mark.parametrize("how", ["not json", "not a store", "refused"])
+def test_a_store_that_cant_be_read_is_set_aside_and_never_saved_over(tmp_path, store_cls, name, how):
+    if how == "refused" and os.geteuid() == 0:
+        pytest.skip("root reads a 0000 file")
+    path = tmp_path / name
+    _unreadable(path, how)
+    original = None if how == "refused" else path.read_text()
+    store = store_cls(path)
+    assert store.set_aside is not None and store.set_aside.exists() and not path.exists()
+    if store_cls is RunbookStore:
+        store.set_role("Barista", ["one step"])
+    else:
+        store.save("Mine", "<p>hi</p>")
+    assert path.exists() and store.set_aside.exists()      # the save wrote a new file beside the kept one
+    if original is not None:
+        assert store.set_aside.read_text() == original
+    store.set_aside.chmod(0o600)
+
+
+def test_a_missing_store_file_is_the_seed_and_nothing_is_set_aside(tmp_path):
+    assert RunbookStore(tmp_path / "ob.json").set_aside is None
+    assert SignatureStore(tmp_path / "sig.json").set_aside is None
+
+
+def test_the_screens_say_a_store_file_was_set_aside(tmp_path, monkeypatch):
+    monkeypatch.setenv("GAM_MOCK_FIXTURES", str(FIXTURES))
+    (tmp_path / "onboarding.json").write_text("not json")
+    (tmp_path / "signatures.json").write_text("not json")
+    with _client(tmp_path, FIXTURES / "mock_gam.sh") as c:
+        c.get("/?token=t")
+        assert "The saved roles file couldn't be read, so it was moved aside" in c.get("/onboard").text
+        assert "The saved templates file couldn't be read, so it was moved aside" in c.get("/signatures/templates").text

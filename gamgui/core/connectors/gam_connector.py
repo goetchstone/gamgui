@@ -543,7 +543,7 @@ class GAMConnector(Connector):
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_user_calendars(email))
         return [UserCalendar.from_json(r) for r in parse_records(out)]
 
-    async def scan_all_calendars(self) -> List[IndexedCalendar]:
+    async def scan_all_calendars(self, unread: Optional[List[str]] = None) -> List[IndexedCalendar]:
         """The full domain scan that backs the calendar index (slow; run in the background).
 
         Walks every user's calendar list (one ``all users print calendars`` call) plus the room
@@ -573,14 +573,18 @@ class GAMConnector(Connector):
         cals = [IndexedCalendar(id=cid, summary=v["summary"], owner=v["owner"],
                                 kind="secondary", subscribers=v["subs"]) for cid, v in agg.items()]
         # Room / resource calendars (one fast admin call). Isolated: a tenant without the Resource
-        # Calendar API shouldn't waste the expensive user scan we just completed — index without rooms.
+        # Calendar API shouldn't waste the expensive user scan we just completed — index without rooms,
+        # and say so: "rooms" goes in ``unread``, which the index keeps and the Calendars page shows, so a
+        # room missing from a search reads as unread, never as not there (invariant 10).
         try:
             for r in await self.list_resources(""):
                 if r.email:
                     cals.append(IndexedCalendar(id=r.email, summary=r.name or r.email, owner="",
                                                 kind="room", subscribers=0))
-        except Exception:  # noqa: BLE001, S110 — rooms are a bonus; keep the secondary-calendar index
-            pass
+        except Exception as exc:  # noqa: BLE001 — rooms are a bonus; keep the secondary-calendar index
+            logger.warning("listing room calendars for the index failed", exc_info=exc)
+            if unread is not None:
+                unread.append("rooms")
         return cals
 
     async def list_calendar_acls_for(self, calendar_id: str) -> List[CalendarACL]:
@@ -856,16 +860,21 @@ class GAMConnector(Connector):
             timeout=DOMAIN_WIDE_TIMEOUT,
         )
 
-    async def incomplete_transfers_for(self, email: str) -> List[dict]:
-        """Data transfers FROM ``email`` that haven't reached 'completed' yet.
+    async def incomplete_transfers_for(self, email: str) -> Optional[List[dict]]:
+        """Data transfers FROM ``email`` that haven't reached 'completed' yet, or ``None`` when that isn't known.
 
         Deleting an account before its Drive/calendar transfer completes permanently loses the
-        un-transferred data, so the delete flow checks this first. Returns [] on any read error
-        (never blocks deletion on an inability to check — just can't warn)."""
+        un-transferred data, so the delete flow checks this first. A read that failed, or that exited
+        without its table, is ``None``: the delete screens say the check couldn't be made. It once
+        returned [] here, which read as "nothing pending" and offered the delete with no warning
+        (invariant 10; failure-log 2026-11-18). It never blocks the delete: the operator may know."""
         try:
             out = await self.runner.run_authenticated(self.domain, GAMCommands.print_datatransfers(email))
-        except Exception:
-            return []
+        except Exception as exc:  # noqa: BLE001 - any failure leaves the answer unknown, whatever it was
+            logger.warning("the data-transfer check for a delete failed", exc_info=exc)
+            return None
+        if not out.strip():       # GAM prints the header even with no transfers: no table is no answer
+            return None
         pending = []
         for r in parse_records(out):
             status = str(r.get("overallTransferStatusCode") or r.get("status") or "")

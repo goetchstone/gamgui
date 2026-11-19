@@ -276,6 +276,14 @@ def test_signatures_preview(client):
     assert "Alice Anders" in r.text   # rendered for a real (active) sample user
 
 
+@pytest.mark.parametrize("group", ["ratelimitgroup@example.com", "nosuchgroup@example.com"])
+def test_a_group_scope_whose_members_cant_be_read_is_never_zero_people(client, group):
+    # A failed member lookup once showed "Applies to 0 users" (invariant 10; failure-log 2026-11-18).
+    r = client.post("/signatures/preview", data={"template": "{name}", "scope_type": "group", "scope_value": group})
+    shown = unescape(r.text)
+    assert "Applies to <strong>" not in shown and "Couldn't read the members of" in shown and group in shown
+
+
 def _start_apply(client, body):
     """Preview, then POST the preview's Apply, and assert it started a job-polling panel (the job is
     awaited with wait_for_job, never by polling the status endpoint under TestClient)."""
@@ -908,6 +916,32 @@ def test_calendars_search_also_matches_rooms(client):
     _seed_index(client)
     r = client.get("/calendars/search", params={"q": "aspen"})
     assert "Aspen Conference Room" in r.text
+
+
+def test_an_index_built_without_its_rooms_says_so(client):
+    client.app.state.gamgui.calendar_index.replace_all(DOMAIN, [
+        IndexedCalendar("c_train123@group.calendar.google.com", "Training Calendar", "alice@example.com", "secondary", 2)],
+        rooms_unread=True)
+    assert "Room calendars couldn&#39;t be listed, so no room is in the index" in client.get("/calendars").text
+    _seed_index(client)
+    assert "Room calendars couldn" not in client.get("/calendars").text
+
+
+@pytest.mark.asyncio
+async def test_a_rebuild_that_couldnt_list_rooms_says_so_and_keeps_it(tmp_path):
+    from gamgui.core.calendar_index import CalendarIndex
+    from gamgui.web.jobs import BatchJob
+    from gamgui.web.routes.calendars import _build_index
+
+    class Conn:
+        async def scan_all_calendars(self, unread):
+            unread.append("rooms")
+            return [IndexedCalendar("c_x@group.calendar.google.com", "X", "o@example.com", "secondary", 1)]
+
+    idx, job = CalendarIndex(tmp_path / "c.db"), BatchJob(total=0)   # what start_job makes
+    await _build_index(job, Conn(), idx, DOMAIN)
+    assert not job.error and any("Room calendars couldn't be listed" in line for line in job.log)
+    assert idx.status().rooms_unread is True
 
 
 def test_calendars_search_empty_index_prompts_build(client):
@@ -2109,9 +2143,18 @@ def test_delete_confirm_warns_on_pending_transfer(client):
     assert "permanently loses" in r.text
 
 
+@pytest.mark.parametrize("email", ["xferfail@example.com", "xfernotable@example.com"])
+def test_a_transfer_check_that_failed_is_said_never_read_as_none_pending(client, email):
+    # Invariant 10: an error exit, or a clean exit with no table, is "unknown". It once read as "no transfer
+    # running", and the confirm step offered the delete with no warning (failure-log 2026-11-18).
+    r = client.post("/users/delete/confirm", data={"email": email})
+    assert "Couldn't check for a data transfer" in r.text and "Data transfer still in progress" not in r.text
+    assert "Permanently delete" in r.text   # a warning, not a block: the operator may know the transfer finished
+
+
 def test_delete_confirm_no_warning_when_transfers_done(client):
     r = client.post("/users/delete/confirm", data={"email": "alice@example.com"})
-    assert "Data transfer still in progress" not in r.text
+    assert "Data transfer still in progress" not in r.text and "Couldn't check for a data transfer" not in r.text
     assert "Permanently delete" in r.text   # the confirm form still renders
 
 

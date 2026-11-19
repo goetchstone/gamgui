@@ -11,6 +11,8 @@ provisioning (``core.onboarding.provision_hire``) as a polled job. Every mutatio
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from dataclasses import dataclass, field
 from typing import Annotated, Any, Dict, List, Optional, Tuple
@@ -21,12 +23,14 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from ...core import clock, guard, onboarding
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
-from ...core.gam.errors import GAMErrorKind
+from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.onboarding import RoleTemplate, RunbookStore
 from ..jobs import Job, register_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, app_state, as_of, error_partial, signature_store
+from ._common import NOT_CONNECTED, app_state, as_of, error_partial, signature_store, gam_detail, friendly
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/onboard")
 
@@ -109,7 +113,9 @@ async def _run_finish(job: FinishJob, conn, waiting: List[Dict[str, Any]],
         if job.cancel_requested:
             job.error = "Stopped by you."
     except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
-        job.error = str(exc)
+        if not isinstance(exc, GAMError):
+            logger.warning("finishing new accounts failed", exc_info=exc)
+        job.error = gam_detail(exc) or "Finishing the new accounts stopped on an unexpected error. What finished is listed."
     finally:
         job.finish()
 
@@ -155,7 +161,9 @@ async def _run_bulk_onboard(job: OnboardJob, conn, sig_store, store,
         quitting = True   # the app is quitting (server._lifespan): start nothing new
         raise
     except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
-        job.error = str(exc)
+        if not isinstance(exc, GAMError):
+            logger.warning("the bulk onboarding run failed", exc_info=exc)
+        job.error = gam_detail(exc) or "The run stopped on an unexpected error. What finished is listed."
     finally:
         job.finish()
         if waiting and job.error:
@@ -176,6 +184,7 @@ async def page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "onboarding.html", {
         "connected": True, "roles": store.roles(), **_welcome_ctx(store),
         "vars": onboarding.WELCOME_VARS, "sig_templates": signature_store(request).names(),
+        "set_aside": store.set_aside,
     })
 
 
@@ -391,7 +400,8 @@ async def bulk_preview(request: Request, csv_file: Annotated[UploadFile, File()]
     try:
         data = await csv_file.read(_MAX_CSV_BYTES + 1)
     except Exception as exc:  # noqa: BLE001
-        return error_partial(request, "Couldn't read the file: " + str(exc))
+        logger.warning("reading an uploaded CSV failed", exc_info=exc)
+        return error_partial(request, "Couldn't read the file. Choose it again and try once more.")
     if len(data) > _MAX_CSV_BYTES:
         return error_partial(request, "That file is over 1 MB — a hire list should be far smaller. Split it into "
                              "several CSVs, or check you picked the right file.")
@@ -452,7 +462,7 @@ async def search_groups(request: Request, q: str = "", refresh: int = 0) -> HTML
         groups = await st.groups(force=bool(refresh), stale_ok=True)   # cached; the picker says how old
     except Exception as exc:  # noqa: BLE001
         return TEMPLATES.TemplateResponse(request, "_onboard_picker.html",
-                                          {"field": "groups", "items": [], "error": "Couldn't list groups: " + str(exc)})
+                                          {"field": "groups", "items": [], "error": "Couldn't list groups. " + friendly(exc)})
     ql = q.strip().lower()
     items = []
     for g in groups:

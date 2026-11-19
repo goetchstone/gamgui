@@ -84,3 +84,33 @@ async def test_scan_all_calendars_filters_and_aggregates(connector):
     assert "alice@example.com" not in by_id                   # a user's PRIMARY calendar is excluded
     assert any(c.kind == "room" for c in cals)                # rooms folded in
     assert all(c.kind == "room" or c.id.endswith("@group.calendar.google.com") for c in cals)
+
+
+# --- rooms that couldn't be listed are said, never read as no rooms (failure-log 2026-11-18) ----------------------
+
+@pytest.mark.asyncio
+async def test_a_room_list_that_failed_is_named_unread_and_the_rest_kept(connector, monkeypatch):
+    async def refused(query):
+        raise RuntimeError("Resource Calendar API refused")
+
+    monkeypatch.setattr(connector, "list_resources", refused)
+    unread: list = []
+    cals = await connector.scan_all_calendars(unread)
+    assert unread == ["rooms"] and cals and not any(c.kind == "room" for c in cals)
+
+
+@pytest.mark.asyncio
+async def test_a_room_list_that_read_names_nothing_unread(connector):
+    unread: list = []
+    await connector.scan_all_calendars(unread)
+    assert unread == []
+
+
+def test_the_index_keeps_whether_its_rooms_were_read(tmp_path):
+    path = tmp_path / "c.db"
+    idx = CalendarIndex(path)
+    assert idx.status().rooms_unread is False
+    idx.replace_all("d.com", [IndexedCalendar("c_x@group.calendar.google.com", "X", "o@d.com", "secondary", 1)], rooms_unread=True)
+    assert CalendarIndex(path).status().rooms_unread is True       # survives a restart
+    idx.replace_all("d.com", [])
+    assert idx.status().rooms_unread is False                      # the next whole rebuild clears it

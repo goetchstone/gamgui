@@ -44,6 +44,7 @@ class IndexStatus:
     count: int
     updated_at: Optional[float]   # epoch seconds of the last successful rebuild, or None
     domain: str
+    rooms_unread: bool = False    # the last rebuild couldn't list room calendars, so none are in it
 
 
 class CalendarIndex:
@@ -87,8 +88,9 @@ class CalendarIndex:
             c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
 
     # --- writes ------------------------------------------------------------------------
-    def replace_all(self, domain: str, cals: List[IndexedCalendar]) -> int:
-        """Atomically swap the whole index for a fresh scan; records domain + timestamp."""
+    def replace_all(self, domain: str, cals: List[IndexedCalendar], rooms_unread: bool = False) -> int:
+        """Atomically swap the whole index for a fresh scan; records domain + timestamp, and whether the scan
+        couldn't list room calendars (shown with the index, so a missing room reads as unread)."""
         with closing(self._conn()) as c, c:  # `c` as a context manager = one transaction (atomic swap)
             c.execute("DELETE FROM calendars")
             c.executemany(
@@ -97,6 +99,7 @@ class CalendarIndex:
             )
             c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('domain', ?)", (domain,))
             c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('updated_at', ?)", (str(time.time()),))
+            c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES ('rooms_unread', ?)", ("1" if rooms_unread else "0",))
         self._restrict_perms()  # WAL sidecars may have just been (re)created
         return len(cals)
 
@@ -130,13 +133,15 @@ class CalendarIndex:
             count = c.execute("SELECT COUNT(*) FROM calendars").fetchone()[0]
             up = c.execute("SELECT v FROM meta WHERE k = 'updated_at'").fetchone()
             dom = c.execute("SELECT v FROM meta WHERE k = 'domain'").fetchone()
+            rooms = c.execute("SELECT v FROM meta WHERE k = 'rooms_unread'").fetchone()
         updated = None
         if up:
             try:
                 updated = float(up[0])
             except (TypeError, ValueError):
                 updated = None
-        return IndexStatus(count=count, updated_at=updated, domain=(dom[0] if dom else ""))
+        return IndexStatus(count=count, updated_at=updated, domain=(dom[0] if dom else ""),
+                           rooms_unread=bool(rooms and rooms[0] == "1"))
 
     def is_empty(self) -> bool:
         return self.status().count == 0

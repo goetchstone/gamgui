@@ -8,6 +8,8 @@ specific event id (a recurring master removes the whole series).
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import re
 import time
@@ -25,7 +27,9 @@ from ...core.gam.errors import GAMError, GAMErrorKind
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, connector, error_partial, friendly, write_failed
+from ._common import NOT_CONNECTED, connector, error_partial, friendly, write_failed, gam_detail
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/calendars")
 
@@ -108,7 +112,9 @@ async def _run_subscribe(job, conn, cal: str, emails: list) -> None:
                 if not ok:
                     kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
             except Exception as exc:            # noqa: BLE001 — one member must not stop the rest
-                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc), str(exc)
+                if not isinstance(exc, GAMError):
+                    logger.warning("subscribing a member failed", exc_info=exc)
+                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc), gam_detail(exc)
             job.record(email, ok, why, detail)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
@@ -182,6 +188,9 @@ def _index_ready(request: Request) -> bool:
     return status.count > 0 and status.domain == st.audit_domain
 
 
+_ROOMS_UNREAD = "Room calendars couldn't be listed, so no room is in the index: rebuild to try again."
+
+
 def _index_ctx(request: Request) -> dict:
     """Status of the persistent calendar index for the page/status partials."""
     idx = request.app.state.gamgui.calendar_index
@@ -190,7 +199,7 @@ def _index_ctx(request: Request) -> dict:
         return {"count": 0, "age": "", "ready": False}
     status = idx.status()
     age = _humanize_age(time.time() - status.updated_at) if status.updated_at else ""
-    return {"count": status.count, "age": age, "ready": True}
+    return {"count": status.count, "age": age, "ready": True, "rooms_unread": _ROOMS_UNREAD if status.rooms_unread else ""}
 
 
 @router.get("", response_class=HTMLResponse)
@@ -248,12 +257,16 @@ async def _build_index(job, conn, idx, domain: str) -> None:
     """Background: scan the whole domain once and atomically replace the index."""
     try:
         job.current = "Scanning every user's calendars…"
-        cals = await conn.scan_all_calendars()
-        await asyncio.to_thread(idx.replace_all, domain, cals)
+        unread: list = []
+        cals = await conn.scan_all_calendars(unread)
+        await asyncio.to_thread(idx.replace_all, domain, cals, "rooms" in unread)
         job.applied = len(cals)
         job.log.append(f"Indexed {len(cals)} calendars.")
+        if "rooms" in unread:
+            job.log.append(_ROOMS_UNREAD)
     except Exception as exc:  # noqa: BLE001 — surface any failure in the status partial
-        job.error = str(exc)
+        logger.warning("the calendar scan failed", exc_info=exc)
+        job.error = f"The calendars weren't scanned, so the index is as it was. {friendly(exc)}"
     finally:
         job.finish()
 
@@ -367,7 +380,7 @@ async def share(request: Request, cal: Annotated[str, Form()], target: Annotated
         kind, emails = await _subscribers_for(conn, target, await _active_emails(request))
     except Exception as exc:  # noqa: BLE001 — any lookup failure but "not a group": nothing is written
         return error_partial(request, f"Couldn't tell whether {target} is a group, so nothing was shared. "
-                             f"{friendly(exc)}", getattr(exc, "stderr", ""))
+                             f"{friendly(exc)}", gam_detail(exc))
     decision = guard.evaluate(_fanout(emails)) if kind == "group" else None
     if decision is not None and decision.requires_confirmation:
         st = request.app.state.gamgui

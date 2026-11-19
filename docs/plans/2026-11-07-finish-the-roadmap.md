@@ -123,8 +123,8 @@ they share no files. Two sessions at once at most, for cost.
 
 ## Phase 0: clear the ground
 
-**Ahead of Phases 3–5 in GamGUI:** `2026-11-18-enforce-recorded-lessons.md` (tripwires the ledger asked for, a fast
-test target). No new feature or write lands before its items B, C and D.
+**Ahead of Phases 3–5 in GamGUI:** the operator's local enforce-recorded-lessons plan (tripwires the ledger asked for, a fast
+test target; kept out of the repo). No new feature or write lands before its items B, C and D.
 
 - **0.1 GamGUI docs PR.** Start from `origin/main`: local `docs/parity-sweep` is stale, merged as #99.
   - `ROADMAP.md`: drop the compromised-account entry and point at this plan.
