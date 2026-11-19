@@ -134,6 +134,7 @@ class Job:
     about: str = ""                  # the person a run is for, when its panel names them
     title: str = ""                  # what the tray calls it ("Offboarding carol@example.com")
     kind: str = ""                   # a PANELS key: which screen's panel shows it
+    bucket: str = ""                 # Reports: which card's panel shows the job (a reminder's bucket, roadmap 3.3)
     retry: object = None             # what "Retry the N that failed" re-runs: a signature's template, a department
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 

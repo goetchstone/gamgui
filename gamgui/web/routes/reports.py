@@ -275,7 +275,7 @@ async def remind_status(request: Request, job: str = "") -> HTMLResponse:
     found = request.app.state.gamgui.jobs.get(job)
     if found is None or found.kind != "remind":
         return TEMPLATES.TemplateResponse(request, "_remind_run.html", {"error": "That run is no longer here.", "key": ""})
-    return TEMPLATES.TemplateResponse(request, "_remind_run.html", {"job": found, "key": getattr(found, "bucket", "")})
+    return TEMPLATES.TemplateResponse(request, "_remind_run.html", {"job": found, "key": found.bucket})
 
 
 # --- mail review (roadmap 3.2): forwarding that is on, and mail delegates, across every active account ----------------
