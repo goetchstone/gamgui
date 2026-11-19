@@ -148,6 +148,9 @@ NOT_A_COMMAND = {"todrive_args"}
 ANY_EXIT_READS = {
     "find_message_copies": [C.find_message_copies(MessageId("CAPh1sh+Notice=0001@mail.example.com"))],
     "find_spam_copies": [C.find_spam_copies(MessageId("CAPh1sh+Notice=0001@mail.example.com"))],
+    # Reports' mail review (roadmap 3.2): every active account, each announced on stderr; the last warning's code stands.
+    "all_users_print_forward": [C.all_users_print_forward()],
+    "all_users_print_delegates": [C.all_users_print_delegates()],
 }
 
 

@@ -12,6 +12,7 @@
 - `gamgui/core/gam/commands.py` — `GAMCommands.report_users(date, params)` argv builder; `CACHE_FIELDS`.
 - `gamgui/web/templates/reports.html`, `_usage_report.html` — render (autoescaped text, no `tojson`, inv. 8 not in play).
 - `tests/test_reports.py` — unit tests for the pure functions.
+- `gamgui/core/mail_review.py` — pure: accounts for every account the two domain-wide mail reads listed (`account_for`), forwarding that is on, delegates. `_mail_review.html`, `tests/test_mail_review.py` (see "Forwarding & mail delegates" below).
 - `gamgui/core/connected_apps.py` — pure: grants grouped by app, reach and kinds of broad access, `Summary` and its sentences. Ported from SwiftGamGui's `GamEngine/ConnectedApps.swift`.
 - `gamgui/web/templates/_connected_apps.html`, `tests/test_connected_apps.py`, `tests/fixtures/tokens.csv` — the panel, its tests, the mock's grants.
 
@@ -94,3 +95,24 @@ too. The job (`suspend_inactive`, stoppable) runs `bulk.suspend_users`: `plan_su
 stopping at an account-wide failure (`stop_reason`); each accepted suspend is patched into the cache, and any failure drops
 the cached list (a failed write's outcome isn't known). GATED in `tests/test_write_routes_guarded.py`; tests in
 `tests/test_inactive_suspend.py`. **Not run on a real domain yet:** suspend itself is "not yet" in the README.
+
+## Forwarding & mail delegates (roadmap 3.2)
+Reports' panel for every active account's forwarding that is on, and every mail delegate: `all users print forward
+enabledonly` and `all users print delegates shownames` (`GAMCommands.all_users_print_forward/_delegates`; neither takes
+`formatjson`, the old trap). One Gmail call per account each, so like connected apps it reads only when asked, as a
+background job (`mail_review`, unstoppable: one read, no "between targets"), kept per connector (`AppState.mail_review`,
+dropped on a switch, and not kept when the connection changed mid-read). Each row opens the person.
+- **Every account GAM listed is accounted for** (`mail_review.account_for`). Read statically from the vendored 7.52.03 build
+  (printShowForward, printShowDelegates): in print mode GAM announces each account on stderr before reading it ("Getting
+  Forward Enabled for <u> (i/N)", "Getting all Delegates for <u> (i/N)"), warns by name for one it can't read ("User: <u>,
+  Gmail Service/App not enabled"), and skips a refused token without a word (`if not gmail: continue`). So an account is
+  read, unread with a reason, or skipped (counted from "Got N Users" and the counter, as it can't be named). The panel says
+  "read X of N", names the unread, counts the skipped, and only says "none of the accounts read forwards" when some were.
+- **The connector runs both through `run_any_exit`** (`_mail_read`): the per-account exits (`PER_USER_RCS`) are read line by
+  line; any other raises. A run that announced no account, or wrote no table (GAM writes the titles even with no row), is
+  `Incomplete`, said in fixed words (`unread_why`), never "none".
+- **Not covered, and the panel says so:** Gmail filters that forward, which `forward off` doesn't stop either; a person's
+  filters are on their page.
+- **The mock** answers both as GAM does (`all users print forward|delegates`): the active users, each "Getting" line, Gmail
+  off by name (`GAM_MOCK_STATE/nogmail/<u>`, exit 73), the silent skip (`quiet/<u>`), the titles even with no row.
+- **Not run on a real domain yet.** Read only; check the counts against the Admin console on its first run.

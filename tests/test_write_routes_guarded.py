@@ -67,7 +67,7 @@ LOCAL_ONLY = {
     "/signatures/templates/save", "/signatures/templates/delete",
     "/onboard/role", "/onboard/role/delete", "/onboard/welcome", "/onboard/welcome/delete", "/onboard/bulk/done",
     "/setup/import", "/setup/fresh", "/setup/verify", "/setup/switch", "/setup/remove",
-    "/calendars/index/rebuild", "/reports/connected-apps/read", "/jobs/stop",
+    "/calendars/index/rebuild", "/reports/connected-apps/read", "/reports/mail-review/read", "/jobs/stop",
     "/incident/check", "/incident/logs/pull", "/incident/logs/rest",   # reads only
     # A kept incident: a person's words and saved reads, on this Mac. Nothing reaches Google.
     "/incident/kept/new", "/incident/kept/open", "/incident/kept/close", "/incident/kept/details", "/incident/kept/note", "/incident/kept/import",
