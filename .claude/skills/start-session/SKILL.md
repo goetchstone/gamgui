@@ -42,7 +42,8 @@ including its failure history. If the area has entries in
 
 - [ROADMAP.md](../../../ROADMAP.md) — the ranked backlog and deliberate
   trade-offs.
-- `docs/plans/` holds handoff plans. Each opens with a **Status** line; never
+- `docs/plans/` holds handoff plans, local only (gitignored: the operator's checkout has them, a
+  fresh worktree does not). Each opens with a **Status** line; never
   re-apply a plan, or an item of one, that its Status marks APPLIED — its
   snippets no longer match the code.
   Finished and superseded plans live in `docs/plans/archive/`: history only.

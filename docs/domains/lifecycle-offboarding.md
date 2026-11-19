@@ -143,8 +143,7 @@ step (failure-log).
 | Manager reminder | (last) | — |
 
 ### Leaving a step out ("doesn't apply")
-Not every org hands a leaver's mailbox to the manager or moves their data (plan
-`docs/plans/2026-10-02-configurable-offboarding.md`). The form's "Doesn't apply to this leaver" boxes
+Not every org hands a leaver's mailbox to the manager or moves their data. The form's "Doesn't apply to this leaver" boxes
 (posted as `na`) list `lifecycle.OPTIONAL_STEPS` only — delegate, auto-reply, transfer, calendar
 sweep, reminder; the reset, the sign-out and forwarding off are the minimum lock and always run (a
 crafted `na=password` is ignored, `build_offboard_steps` raises on one). A step left out is not run
