@@ -322,17 +322,20 @@ async def export_csv(request: Request, rid: str = "", q: str = "", external: str
 # --- pages -----------------------------------------------------------------------------
 
 @router.get("", response_class=HTMLResponse)
-async def page(request: Request) -> HTMLResponse:
+async def page(request: Request, cid: str = "") -> HTMLResponse:
     st = app_state(request)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, "builder.html", {"connected": False})
     cat = _catalog(request)
+    # `?cid=` opens that command's form, as Reports' named reports do (roadmap 3.1); an id the catalog doesn't hold opens none.
+    opened = cat.by_id(cid) if cid else None
     counts = cat.area_counts()
     areas = [(a, counts[a]) for a in AREA_ORDER if counts.get(a)]
     # User/group lists aren't fetched here — the slot pickers query /builder/pick on demand so the
     # page loads instantly and the picker scales to large domains (only the cached top matches render).
     return TEMPLATES.TemplateResponse(request, "builder.html", {
         "connected": True, "areas": areas, "sequence": st.builder_sequence, "row_actions": ROW_ACTIONS,
+        "open_cid": opened.id if opened is not None else "",
     })
 
 

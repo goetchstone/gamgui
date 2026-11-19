@@ -49,7 +49,7 @@
     <!-- RIGHT: form + result scroll together as one panel, so a tall form can never push the
          confirm/Run button off-screen or under the sequence drawer (it scrolls into reach). -->
     <section id="build-pane" class="min-h-0 overflow-y-auto pr-0.5">
-      <div id="cmd-form">
+      <div id="cmd-form"{% if open_cid %} hx-get="/builder/command/{{ open_cid | urlencode }}" hx-trigger="load" hx-swap="innerHTML"{% endif %}>
         <div class="rounded-2xl border border-dashed border-brand-gray/40 bg-brand-white/50 p-6 text-sm text-brand-grayink">
           Browse every GAM command; build &amp; run the buildable ones, or queue a sequence. Pick a command on the left and click <strong class="text-brand-blueink">Build</strong> — its form opens here. Click a User field to choose someone.
         </div>

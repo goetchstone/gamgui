@@ -42,6 +42,7 @@ Open **Setup** (every screen points you there until a domain is connected).
    | `https://www.googleapis.com/auth/drive` | A user's Drive file list |
    | `https://www.googleapis.com/auth/tasks` | Onboarding task lists |
    | `https://www.googleapis.com/auth/cloud-identity.devices` | The computers signed in with an account. Setup's check doesn't ask for this one: without it, only that list is missing |
+   | `https://www.googleapis.com/auth/apps.alerts` | Google's alerts, on Reports. Setup's check doesn't ask for this one either: without it, only that report is refused |
 
    Offboarding's sign-out needs one more permission that delegation can't give: the admin token's
    "Directory API - User Security" scope, ticked when `gam oauth create` runs. Setup says whether
