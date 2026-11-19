@@ -783,6 +783,25 @@ def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
     assert rec["argv"] == ["user", "alice@example.com", "signature", "***redacted***", "html"]  # body kept out of the log
 
 
+def test_a_failed_run_leads_with_words_and_keeps_gam_s_line_below(client, monkeypatch):
+    # The single Run's result once led with GAM's raw line (roadmap 0.4, ten-out-of-ten U9): it says what
+    # didn't happen and what to do, as every other write path does, with GAM's words one click away.
+    from gamgui.core.connectors.base import ChangeResult
+    raw = "User: alice@example.com, Signature Update Failed: a representative GAM failure detail"
+    conn = client.app.state.gamgui.connector
+
+    async def failed(previews):
+        return [ChangeResult(preview=previews[0], ok=False, detail=raw, remediation="Check the address and try again.")]
+
+    monkeypatch.setattr(conn, "apply", failed)
+    form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
+    _, token = _builder_preview(client, **form)
+    r = _builder_run(client, token, **form)
+    headline = r.text.split("<details", 1)[0]
+    assert "Set Gmail signature failed. Check the address and try again." in headline
+    assert raw not in headline and raw in r.text
+
+
 def test_run_read_command_renders_table(client):
     r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
     assert r.status_code == 200

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -337,7 +338,9 @@ async def test_offboard_sweep_timeout_is_a_clear_step_failure(connector, monkeyp
     await run_offboard(job, connector, steps)
     assert (job.applied, job.failed_items) == (len(steps) - 1, ["Remove from everyone's calendars"])
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
-    assert "timed out after 0.5s and was stopped" in line
+    # The line says what to do; how long it ran is kept with GAM's words, one click away (roadmap 0.4).
+    assert line == "✗ Remove from everyone's calendars — The command timed out. Check connectivity and retry."
+    assert "timed out after 0.5s and was stopped" in job.failed[0].detail
     assert job.log[-1].startswith("✓ ") and "reminder" in job.log[-1]
     rec = next(e for e in connector.audit.tail() if e["action"] == "remove_from_all_calendars")
     assert rec["ok"] is False and rec["extra"]["tolerated"] is False
@@ -494,7 +497,8 @@ async def test_offboard_failed_sign_out_is_a_failed_step_that_stops_nothing(conn
     assert job.failed_items == ["Revoke access & sign out"] and job.skipped == []
     assert job.applied == len(lifecycle.ROUTINE) - 1
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
-    assert line.startswith("✗ Revoke access & sign out — ") and "Sign Out Failed" in line
+    assert line.startswith("✗ Revoke access & sign out — ") and "Sign Out Failed" not in line   # words, not GAM's line
+    assert "Sign Out Failed" in job.failed[0].detail
     audit = [(e["action"], e["ok"]) for e in connector.audit.tail()]
     assert ("revoke_access", False) in audit and ("reset_password", True) in audit
 
@@ -510,7 +514,8 @@ async def test_offboard_turns_off_forwarding_and_a_failure_stops_nothing(connect
     job = await _offboard(connector, "FWDFAIL-leaver@example.com")
     assert job.failed_items == ["Turn off forwarding"] and job.skipped == []
     [line] = [ln for ln in job.log if ln.startswith("✗ ")]
-    assert "Gmail Service/App not enabled" in line
+    assert line.startswith("✗ Turn off forwarding — That Google service is turned off for this user")
+    assert "Gmail Service/App not enabled" not in line and "Gmail Service/App not enabled" in job.failed[0].detail
 
 
 @pytest.mark.asyncio
@@ -563,3 +568,41 @@ def test_the_builders_vacation_sends_the_text_as_the_html_it_names():
         {"email": "a@example.com", "subject": "Out", "message": "Ask <IT> & co.\nThanks"})
     assert argv[argv.index("message") + 1] == autoreply_html("Ask <IT> & co.\nThanks")
     assert "html" in argv
+
+
+@pytest.mark.asyncio
+async def test_a_step_that_raised_says_so_in_words_and_logs_python_s(connector, caplog):
+    # A step that raised something not GAM's: our words on the line, nothing of Python's on the screen,
+    # the exception in the log (roadmap 0.4; the route-text rule of tests/test_route_error_text.py).
+    from gamgui.web.jobs import start_job
+
+    async def boom(*_a, **_k):
+        raise OSError("/private/var/secret-path: Permission denied")
+
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = [s for s in steps if s.label == "Turn off forwarding"]
+    steps[0] = replace(steps[0], action=boom, requires=())
+    job = start_job({}, len(steps))
+    with caplog.at_level("ERROR"):
+        await run_offboard(job, connector, steps)
+    assert job.log == ["✗ Turn off forwarding — Something went wrong talking to GAM."]
+    assert job.failed[0].detail == "" and "secret-path" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_failed_step_without_a_remediation_never_headlines_gam_s_line(connector):
+    from types import SimpleNamespace
+
+    from gamgui.web.jobs import start_job
+
+    raw = "ERROR: 400: Bad Request - a representative GAM failure detail"
+
+    async def failed(_conn):
+        return SimpleNamespace(ok=False, detail=raw)
+
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = [s for s in steps if s.label == "Turn off forwarding"]
+    steps[0] = replace(steps[0], action=failed, requires=())
+    job = start_job({}, len(steps))
+    await run_offboard(job, connector, steps)
+    assert raw not in job.log[0] and job.failed[0].detail == raw

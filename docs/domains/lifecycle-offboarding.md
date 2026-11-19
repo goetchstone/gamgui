@@ -95,6 +95,11 @@ means every step succeeded; any `✗` makes it "incomplete" (amber, with the rec
 no app-side scheduler. The final
 account **delete** is a distinct guarded action on the user detail page (`delete_user`,
 `RiskLevel.DESTRUCTIVE`).
+A `✗` line gives the step's remediation (`ChangeResult.remediation`, or `GAMError.remediation` for a step that
+raised), never GAM's raw line; `job.record` keeps that line as the failure's `detail`, and the finished panel lists
+it under `failures(job)` one click away (roadmap 0.4; a step that raised something not GAM's logs the exception, and it or a
+result with no remediation says "Something went wrong talking to GAM."). The running panel lists them too, so a
+"See details below" has its details while the run goes on.
 
 **Why there is no scheduler.** This is deliberate. GamGUI's server runs only while its window is
 open (`app.py` stops it when the window closes), and the window is normally closed long before the
@@ -174,7 +179,7 @@ the reminder runs without one). What each step does if run again after it succee
 | Reset password | Harmless: `password random` makes a new password each time. | optional |
 | Revoke access & sign out | Harmless: whatever app passwords and tokens are left are deleted, the backup codes are invalidated again, sessions are ended again. | optional |
 | Turn off forwarding | Harmless: `forward off` when it's off changes nothing. **Leave it unticked if "Revoke access" failed** — a session left open could have switched forwarding back on. | optional |
-| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. The run's ✗ line quotes GAM ("… Add Failed: Delegate already exists."), and the panel says the routine stopped. The mock refuses an add of a delegate the user already has (and any `*exists*` address) the same way, exit 50; end to end, with nothing patched, in `test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_says_why`. Google's exact wording is not captured. | **yes** |
+| Set delegate | **Fails.** GAM catches the Gmail API's `alreadyExists` and reports "Add Failed" with exit 50 (`processDelegates` → `entityActionFailedWarning`, read statically from the vendored build's bytecode) — and a failed delegate stops the routine. The preview warns when the manager is already a delegate (`_delegate_warning`, a `print delegates` read), which also covers a manager who had access before offboarding started. The run's ✗ line says what to do in words, the finished panel keeps GAM's line ("… Add Failed: Delegate already exists.") in its collapsed "GAM's error", and the panel says the routine stopped. The mock refuses an add of a delegate the user already has (and any `*exists*` address) the same way, exit 50; end to end, with nothing patched, in `test_offboard_with_the_manager_already_a_delegate_stops_at_the_delegate_and_says_why`. Google's exact wording is not captured. | **yes** |
 | Auto-reply | Harmless: the command names every setting (on, subject, message, every sender, no start or end date), so a re-run writes the same reply. GAM itself *merges* `vacation` into the stored settings — see Gotchas. | optional |
 | Transfer Drive & Calendar | **Fails** while the first is still in progress (409 "already in progress", mock `CONFLICT409`), which also skips the reminder. After the first completes, a new one moves what the leaver still owns — normally nothing (Data Transfer API semantics, unverified live). | **yes** |
 | Remove from everyone's calendars | Harmless: users without an ACL for the leaver answer "does not exist" and users without Calendar "Calendar Service/App not enabled", both tolerated. Takes as long as the first time. A sweep that timed out partway should be re-run. | optional |

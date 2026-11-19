@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import logging
 import re
 import json
 import os
@@ -28,6 +29,8 @@ from .gam.errors import GAMError, GAMErrorKind
 from .gam.models import GAMUser
 from .paths import app_data_dir
 from .signatures import render_signature
+
+logger = logging.getLogger(__name__)
 
 WELCOME_VARS = ["name", "role", "email", "manager"]   # the {tokens} the welcome email understands
 _TOKEN = re.compile(r"\{(\w+)\}")
@@ -421,6 +424,10 @@ async def _apply_groups(conn, email: str, groups: List[str]) -> "tuple[int, list
 # enabled". Both work once Google has finished setting the account up. So on an account THIS run
 # created, those failures park the step for `finish_new_accounts` instead of failing it. On an existing
 # user the same words mean a missing delegation scope or a service turned off: a real failure there.
+# The words for an account GAM didn't create when it gave no remediation of its own, and for a create
+# that raised before GAM could say why (nothing to show below it).
+_CREATE_FAILED = "Something went wrong talking to GAM. See details below."
+_CREATE_RAISED = "Something went wrong talking to GAM."
 _TOKEN_NOT_READY = re.compile(r"Requested client not authorized", re.I)
 # Seconds before each retry: about 7 minutes in all, in few enough tries that an account Google is slow
 # with leaves a handful of failed attempts in the audit log, not dozens.
@@ -546,6 +553,11 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
                                         org_unit=(cfg.org_unit or None), notify=notify)
         except Exception as exc:  # noqa: BLE001
             res["ok"] = False; res["errors"].append("create: " + str(getattr(exc, "remediation", exc)))
+            if isinstance(exc, GAMError):
+                res["create_failure"] = (exc.remediation, str(exc))
+            else:   # Python's or the OS's words go to the log, not the screen (tests/test_route_error_text.py)
+                logger.exception("creating %s raised", email)
+                res["create_failure"] = (_CREATE_RAISED, "")
             res["stop"] = (getattr(exc, "kind", None), str(getattr(exc, "remediation", exc)))
             return res
         if not cr.ok:
@@ -553,6 +565,7 @@ async def provision_hire(conn, sig_store, store, cfg, hire: dict) -> dict:
             # the generic "GAM reported an error" would say less than it.
             known = cr.kind is not None and cr.kind is not GAMErrorKind.UNKNOWN
             res["ok"] = False; res["errors"].append("create: " + (cr.remediation if known else (cr.detail or "failed")))
+            res["create_failure"] = (cr.remediation or _CREATE_FAILED, cr.detail or "")   # words, then GAM's line
             res["stop"] = (cr.kind, cr.remediation)   # the bulk executor stops on an account-wide kind
             return res
         res["account_created"] = True

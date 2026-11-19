@@ -436,6 +436,8 @@ def test_run_account_duplicate_fails_gracefully(client):
                                     "email": "exists@example.com", "assignee": "it@example.com",
                                     "create_account": "1"})
     assert "create the account" in r.text and "Create Failed: Duplicate" in r.text   # GAM's words, not swallowed
+    # ...but below the words, never the headline (roadmap 0.4).
+    assert "Create Failed: Duplicate" not in r.text.split("<details", 1)[0]
 
 
 def test_run_account_failure_error_partial_never_shows_password(tmp_path, echoing_gam, monkeypatch):
@@ -1122,7 +1124,7 @@ def test_a_single_hire_refused_for_want_of_a_license_says_so(client):
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
     r = _preview_and_run(client, role="Sales", name="Ada Byte", email="ada-USERLIMIT@example.com",
                          assignee="it@example.com", create_account="1")
-    assert "Couldn&#39;t create the account: Your Google Workspace subscription has no free license" in r.text
+    assert "Couldn&#39;t create the account. Your Google Workspace subscription has no free license" in r.text
 
 
 @pytest.mark.asyncio
@@ -1248,3 +1250,21 @@ def test_the_screens_say_a_store_file_was_set_aside(tmp_path, monkeypatch):
         c.get("/?token=t")
         assert "The saved roles file couldn't be read, so it was moved aside" in c.get("/onboard").text
         assert "The saved templates file couldn't be read, so it was moved aside" in c.get("/signatures/templates").text
+
+
+def test_a_create_that_raised_says_so_without_pointing_at_details(client, monkeypatch, caplog):
+    # A create that raised before GAM could say why has no GAM line to show: the panel mustn't point at
+    # details that aren't there, and Python's words go to the log, not the screen (roadmap 0.4).
+    from gamgui.core.connectors.gam_connector import GAMConnector
+
+    async def boom(*_a, **_k):
+        raise OSError("/private/var/secret-path: Permission denied")
+
+    monkeypatch.setattr(GAMConnector, "create_user", boom)
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    with caplog.at_level("ERROR"):
+        r = _preview_and_run(client, role="Sales", name="Ada Byte", email="ada@example.com",
+                             assignee="it@example.com", create_account="1")
+    assert "Couldn&#39;t create the account. Something went wrong talking to GAM." in r.text
+    assert "See details below" not in r.text and "<details" not in r.text
+    assert "secret-path" not in r.text and "secret-path" in caplog.text
