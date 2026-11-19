@@ -150,6 +150,24 @@ step (failure-log).
 | Remove from everyone's calendars | continue | Needs only the reset. The account is locked, so a leftover share grants nothing; the reminder doesn't depend on it. **Scope:** every *active* user's *primary* calendar — secondary calendars other users shared with the leaver, and suspended users' calendars, are not swept. |
 | Manager reminder | (last) | — |
 
+### The transfer's recipient and services (roadmap 3.4, plan P1.3)
+The form's "The transfer" row: **Transfer to** (empty is the manager) and **What it moves** (Drive, Calendar, Looker Studio;
+`lifecycle.SERVICE_CHOICES`). `build_offboard_steps(recipient=, services=)` sends the transfer, and the secondary-calendars
+hand-over, to the recipient; the delegate, the auto-reply's contact and the reminder stay the manager's. The services ride as
+one `<DataTransferServiceList>` element, always in `SERVICE_CHOICES` order (`transfer_services`), and the privacy level
+`all` only with Drive: GAM's `_assignAppParameter` refuses a parameter no chosen service takes ("No data transfer
+application for key PRIVACY_LEVEL", a usage error, read statically from the vendored build; the mock refuses it the same
+way). The default (no recipient, Drive and Calendar) sends the routine's argv byte for byte, label included
+(`test_the_default_transfer_is_the_routine_s_own_byte_for_byte`). The recipient is checked against the directory as the
+manager is (`check_addresses(recipient=)`: unknown, an alias, the leaver themself are errors; suspended a warning), at the
+preview and again at the run from what the preview held (`_Preview.recipient`). No service ticked is refused unless the
+transfer is left out or done (`services_shown` marks a form that offers the choice; a post without it is the default).
+Every option is in `_form_key` (`test_changing_any_option_changes_the_form_key`, plan P1.5). Templates hold the services,
+not the recipient (one leaver's, like the addresses): `offboarding-templates.json` version 3; 1 and 2 read as Drive and
+Calendar. Still open in 3.4: the manager optional when no running step needs one, the auto-reply's end date, and
+`release_resources` (the mock still accepts it without Calendar, which GAM refuses the same way). Not run on a real
+tenant: a transfer to someone other than the manager, or of anything but Drive and Calendar.
+
 ### Leaving a step out ("doesn't apply")
 Not every org hands a leaver's mailbox to the manager or moves their data. The form's "Doesn't apply to this leaver" boxes
 (posted as `na`) list `lifecycle.OPTIONAL_STEPS` only — delegate, auto-reply, transfer, calendar

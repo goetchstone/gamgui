@@ -50,6 +50,7 @@ class _Preview:
     filters: Tuple[lifecycle.ForwardingFilter, ...] = ()   # what an added filter step will delete: read again at the run
     not_applicable: FrozenSet[str] = frozenset()   # keys left out ("doesn't apply"): not run, never succeeded
     filters_read: bool = False   # the filter step was asked for and read: checked again at the run, none found included
+    recipient: str = ""          # who the transfer goes to when it isn't the manager: checked again at the run (roadmap 3.4)
 
 
 def _done(form) -> FrozenSet[str]:
@@ -62,6 +63,14 @@ def _not_applicable(form) -> FrozenSet[str]:
     return frozenset(form.getlist("na")).intersection(lifecycle.OPTIONAL_STEPS)
 
 
+def _services(form) -> FrozenSet[str]:
+    """What the transfer moves (roadmap 3.4). The form says it shows the choice (``services_shown``): then the boxes ticked,
+    none included, which the preview refuses. A post without the choice is the routine's own Drive and Calendar."""
+    if not form.get("services_shown"):
+        return lifecycle.DEFAULT_SERVICES
+    return frozenset(form.getlist("service")).intersection(key for key, _ in lifecycle.SERVICE_CHOICES)
+
+
 def _added(form) -> FrozenSet[str]:
     """The steps the operator added to this offboarding; only the addable ones."""
     return frozenset(form.getlist("add")).intersection(lifecycle.ADDABLE_STEPS)
@@ -69,9 +78,11 @@ def _added(form) -> FrozenSet[str]:
 
 def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str,
               done: FrozenSet[str], not_applicable: FrozenSet[str] = frozenset(),
-              added: FrozenSet[str] = frozenset()) -> tuple:
+              added: FrozenSet[str] = frozenset(), recipient: str = "",
+              services: FrozenSet[str] = lifecycle.DEFAULT_SERVICES) -> tuple:
     return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
-            tuple(sorted(done)), tuple(sorted(not_applicable)), tuple(sorted(added)))
+            tuple(sorted(done)), tuple(sorted(not_applicable)), tuple(sorted(added)), recipient.strip().lower(),
+            tuple(sorted(services)))
 
 
 def _running(st, user: str):
@@ -88,7 +99,7 @@ def _already_running(request: Request, job, user: str) -> HTMLResponse:
                                        "step_names": lifecycle.STEP_NAMES})
 
 
-async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
+async def _check(st, user: str, manager: str, recipient: str = "") -> lifecycle.AddressCheck:
     """Both addresses against the cached directory — before the preview and again before the run.
     Fails closed: a directory that can't be read blocks the routine rather than skipping the check.
     Never ``stale_ok`` (plan U12b): a list past its TTL is re-read first, and a failed re-read blocks
@@ -98,7 +109,7 @@ async def _check(st, user: str, manager: str) -> lifecycle.AddressCheck:
     except Exception as exc:  # noqa: BLE001 - any read failure blocks; the message says why
         return lifecycle.AddressCheck(errors=[f"Couldn't read the directory to check the addresses — {friendly(exc)}"])
     admin = st.vault.oauth_admin_email(st.connector.domain) if st.vault is not None and st.connector else ""
-    check = lifecycle.check_addresses(directory, user, manager, connected_admin=admin)
+    check = lifecycle.check_addresses(directory, user, manager, connected_admin=admin, recipient=recipient)
     if not check.errors and st.connector is not None:
         refusal = await st.connector.cut_off_refusal([GAMCommands.deprovision_user(user)], previewing=True)
         if refusal:
@@ -179,8 +190,9 @@ def _template_store(request: Request) -> OffboardTemplateStore:
 
 def _fields(template: OffboardTemplate, user: str = "", manager: str = "") -> dict:
     return {"values": {"user": user, "manager": manager, "subject": template.subject, "message": template.message,
-                       "days": template.days, "invitee": template.invitee, "leave_out": template.leave_out, "add": template.add},
-            "step_names": lifecycle.STEP_NAMES, "optional_steps": lifecycle.OPTIONAL_STEPS, "addable_steps": lifecycle.ADDABLE_STEPS,
+                       "days": template.days, "invitee": template.invitee, "leave_out": template.leave_out, "add": template.add,
+                       "services": template.services},
+            "service_choices": lifecycle.SERVICE_CHOICES, "step_names": lifecycle.STEP_NAMES, "optional_steps": lifecycle.OPTIONAL_STEPS, "addable_steps": lifecycle.ADDABLE_STEPS,
             "added_notes": lifecycle.ADDED_NOTES, "routine": lifecycle.ROUTINE}
 
 
@@ -209,7 +221,7 @@ async def template_save(request: Request) -> HTMLResponse:
     name = str(form.get("template_name") or "").strip()
     template = OffboardTemplate(leave_out=_not_applicable(form), add=_added(form), subject=str(form.get("subject") or ""),
                                 message=str(form.get("message") or ""), days=_days(str(form.get("days") or "30")),
-                                invitee=str(form.get("notify") or "").strip())
+                                invitee=str(form.get("notify") or "").strip(), services=_services(form))
     if store.get(name) is not None and form.get("replace") != "1":
         return _templates_panel(request, error=f"There's already a template called “{name}”.", replacing=name, typed_name=name)
     try:
@@ -240,14 +252,15 @@ async def offboard_preview(
     user: Annotated[str, Form()], manager: Annotated[str, Form()],
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
+    recipient: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     tenant = st.tenant_key()   # before the address checks read the directory (web/previews.py)
     if st.connector is None:
         return error_partial(request, NOT_CONNECTED)
     posted = await request.form()
-    done, na, added = _done(posted), _not_applicable(posted), _added(posted)
-    form = _form_key(user, manager, subject, message, days, notify, done, na, added)
+    done, na, added, services = _done(posted), _not_applicable(posted), _added(posted), _services(posted)
+    form = _form_key(user, manager, subject, message, days, notify, done, na, added, recipient, services)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return error_partial(request, "Enter both the departing user and the manager email.")
@@ -255,11 +268,14 @@ async def offboard_preview(
         return error_partial(request, f"“{both[0]}” is ticked both as already done and as doesn't apply — pick one.")
     if not (frozenset(lifecycle.ROUTINE) | added) - done - na:
         return error_partial(request, "Every step is ticked as already done or left out — there is nothing to run.")
-    check = await _check(st, user, manager)
+    if not services and "transfer" not in done | na:
+        return error_partial(request, "The transfer moves nothing: tick Drive, Calendar or Looker Studio, or leave the transfer out.")
+    check = await _check(st, user, manager, recipient)
     if check.errors:
         return error_partial(request, " ".join(check.errors))
     assert check.user and check.manager  # check_addresses: no errors means both were found
     user, manager = check.user.primary_email, check.manager.primary_email
+    recipient = check.recipient.primary_email if check.recipient else ""   # "" is the manager
     if running := _running(st, user):
         return _already_running(request, running, user)
     if "delegate" not in done | na and (warning := await _delegate_warning(st.connector, user, manager)):
@@ -317,13 +333,16 @@ async def offboard_preview(
             user, manager, subject, message, days_i, date.today(),
             notify=notify.strip(), employee_name=await _employee_name(st, user),
             manager_contact=await _manager_contact(st, manager), not_applicable=na, added=added,
-            calendars=calendars, filters=filters)
+            calendars=calendars, filters=filters, recipient=recipient,
+            # None ticked passed the check above only with the transfer left out or done: never run, so the routine's own.
+            services=services or lifecycle.DEFAULT_SERVICES)
     except ValueError as exc:    # an ID GAM couldn't take as one: the builders refuse it
         return error_partial(request, f"Couldn't plan the added steps: {exc}.")
     to_run = [s for s in steps if s.key not in done | na]
     if not to_run:     # the steps asked for found nothing to do: a run would report "complete" having done nothing
         return error_partial(request, " ".join([*check.warnings, "Every step is ticked as already done, left out, or has nothing to do — there is nothing to run."]))
-    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done, tuple(filters), na, filters_read), tenant=tenant)
+    token = st.previews.hold(_FLOW, form, _Preview(user, manager, to_run, done, tuple(filters), na, filters_read, recipient),
+                             tenant=tenant)
     typed = guard.evaluate(guard.changes([s.label for s in to_run], RiskLevel.DESTRUCTIVE, "Offboard")).requires_typed_confirmation
     ar_subject, ar_message = await _compose_autoreply(st, user, manager, subject, message)
     return TEMPLATES.TemplateResponse(
@@ -357,7 +376,7 @@ async def offboard_run(
     user: Annotated[str, Form()], manager: Annotated[str, Form()],
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
-    preview: Annotated[str, Form()] = "",
+    preview: Annotated[str, Form()] = "", recipient: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
@@ -371,7 +390,8 @@ async def offboard_run(
         return error_partial(request, refusal)
     # Single use: a second Run, or a Run after the form was edited, needs a new preview.
     held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
-                                                               _done(form), _not_applicable(form), _added(form)),
+                                                               _done(form), _not_applicable(form), _added(form),
+                                                               recipient, _services(form)),
                                      again="click Preview steps again")
     if refusal:
         return error_partial(request, refusal)
@@ -379,7 +399,7 @@ async def offboard_run(
     refusal = guard.enforce(guard.changes([s.label for s in held.steps], RiskLevel.DESTRUCTIVE, "Offboard"), form)
     if refusal:
         return error_partial(request, refusal)
-    check = await _check(st, held.user, held.manager)   # the directory may have changed since
+    check = await _check(st, held.user, held.manager, held.recipient)   # the directory may have changed since
     if check.errors:
         return error_partial(request, " ".join(check.errors))
     user, steps = held.user, held.steps
