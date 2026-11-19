@@ -2496,3 +2496,18 @@ def test_a_delete_confirm_step_runs_once(client, gam_calls):
     assert "Account deleted" in client.post("/users/delete/apply", data=form).text
     assert "expired or was already run" in client.post("/users/delete/apply", data=form).text
     assert len(gam_writes(gam_calls())) == 1
+
+
+def test_a_refused_calendar_read_is_said_and_reread_at_the_click(client, gam_calls, gam_state):
+    # The calendars read's failing exit (Calendar off, exit 73): unknown at the confirm step, never "owns none".
+    (gam_state / "nocalendar").mkdir()
+    (gam_state / "nocalendar" / "alice@example.com").write_text("")
+    page = unescape(client.post("/users/delete/confirm", data={"email": "alice@example.com"}).text)
+    assert "Couldn't check whether alice@example.com owns secondary calendars" in page and "Permanently delete" in page
+    # ...and a read that answered at the confirm step but fails at the click deletes nothing.
+    (gam_state / "nocalendar" / "alice@example.com").unlink()
+    token = _delete_token(client, "alice@example.com")
+    (gam_state / "nocalendar" / "alice@example.com").write_text("")
+    r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
+                                                 "confirm_email": "alice@example.com", "preview": token})
+    assert "for secondary calendars again" in r.text and gam_writes(gam_calls()) == []
