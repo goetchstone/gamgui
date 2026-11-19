@@ -33,7 +33,7 @@ _TEMPLATES_PARTIAL = "_sig_templates.html"
 
 def _tctx(store: SignatureStore, **extra) -> dict:
     """Context for ``_sig_templates.html``: each template as {name, body}, plus any saved/error flag."""
-    ctx: dict = {"templates": [{"name": n, "body": store.get(n)} for n in store.names()]}
+    ctx: dict = {"templates": [{"name": n, "body": store.get(n)} for n in store.names()], "set_aside": store.set_aside}
     ctx.update(extra)
     return ctx
 

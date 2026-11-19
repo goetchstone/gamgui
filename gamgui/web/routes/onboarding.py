@@ -184,6 +184,7 @@ async def page(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, "onboarding.html", {
         "connected": True, "roles": store.roles(), **_welcome_ctx(store),
         "vars": onboarding.WELCOME_VARS, "sig_templates": signature_store(request).names(),
+        "set_aside": store.set_aside,
     })
 
 
