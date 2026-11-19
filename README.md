@@ -139,10 +139,10 @@ and have only run offline: see
   and downloadable as CSV — and clicking any address in a result offers pre-filled follow-ups
   (delegates, forwarding, vacation, signature, title/dept, reset password, suspend, delete, group
   add/remove).
-- **Reports** — 2SV gaps, inactive accounts (suspend them from there: the directory is read again, new hires are
-  flagged, the confirm step holds exactly who it showed), admins, missing recovery, suspended accounts, and
-  directory completeness (missing title/department/phone/location), plus a **storage & mail usage**
-  panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
+- **Reports** — 2SV gaps and missing recovery (email those people a reminder, previewed first), inactive accounts
+  (suspend them from there: the directory is read again, new hires are flagged, the confirm step holds exactly who it
+  showed), admins, suspended accounts, and directory completeness (missing title/department/phone/location), plus a
+  **storage & mail usage** panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
   (which lags a few days). **Connected apps and AI agents**: every account's grants, read when you ask,
   as a summary counted by code and each app with what it may do in words and who granted it.
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
@@ -200,6 +200,7 @@ school domain is the most useful one of all.
 | Create an account | Onboard (one hire or a CSV) | **confirmed** |
 | Tasks checklist (a task list, one task per step) | Onboard | **confirmed** |
 | Welcome email | Onboard | **confirmed** |
+| Reminder email (No 2SV, No recovery) | Reports | not yet; the same `sendemail` as the welcome email, one per person |
 | Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
