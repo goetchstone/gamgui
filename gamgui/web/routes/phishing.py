@@ -7,6 +7,8 @@ Gmail query: a Message-ID only (``core/gam/commands.MessageId``). The sender's S
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import csv
 import io
@@ -27,7 +29,9 @@ from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, admin_address, error_partial, friendly, nobody_has_checks
+from ._common import NOT_CONNECTED, admin_address, error_partial, friendly, nobody_has_checks, gam_detail
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/phishing")
 
@@ -204,7 +208,9 @@ async def _trash(job, st, conn, steps: List[phishing.TrashStep]) -> None:
                 if not ok:
                     kind, why, detail = res.kind, res.remediation, res.detail
             except Exception as exc:  # noqa: BLE001 — one mailbox must not stop the rest
-                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc), str(exc)
+                if not isinstance(exc, GAMError):
+                    logger.warning("trashing in a mailbox failed", exc_info=exc)
+                ok, kind, why, detail = False, getattr(exc, "kind", None), friendly(exc), gam_detail(exc)
             job.record(f"{step.email}{' (Spam)' if step.in_spam else ''}", ok, why, detail)
             if not ok and (reason := bulk.stop_reason(kind, why, len(steps) - i - 1)):
                 job.error = reason

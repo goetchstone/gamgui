@@ -5,6 +5,8 @@ Reads and this Mac only: nothing here changes the tenant. Rules: ``core/incident
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -17,6 +19,8 @@ from ...core.incident import pull, store
 from ..jobs import start_job
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, admin_address, error_partial, incident_store, open_incident_record
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/incident/kept")
 
@@ -75,8 +79,11 @@ async def _read_saved(job, st, conn, kept: store.IncidentStore, record_id: str) 
         shown = st.incident_pull
         if not _pull_running(st) and (together is not None or (shown is not None and shown.from_evidence)):
             st.incident_pull = together
-    except Exception as exc:  # noqa: BLE001 - said on the screen, whatever it was
+    except store.Problem as exc:
         job.error = f"Couldn't read the incident's saved logs: {exc}"
+    except Exception as exc:  # noqa: BLE001 - said on the screen, whatever it was
+        logger.warning("reading an incident's saved logs failed", exc_info=exc)
+        job.error = "Couldn't read the incident's saved logs. Open the incident again to retry."
     finally:
         job.done += 1
         job.finish()

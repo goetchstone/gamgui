@@ -6,6 +6,8 @@ Reads only, as a background job: a pull for every account can take many reads a 
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import csv
 import io
@@ -29,6 +31,8 @@ from ..jobs import start_job
 from ..server import TEMPLATES
 from .incident_kept import read_back, reopen_remembered
 from ._common import NOT_CONNECTED, admin_address, error_partial, incident_store, known_sign_ins, nobody_has_checks, open_incident_record
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/incident/logs")
 
@@ -110,8 +114,12 @@ async def _keep(job, st, conn, read: pull.Pull, record_id: str) -> bool:
         if export is not None:
             name = await asyncio.to_thread(kept.keep, export, record_id)
             others = set(await asyncio.to_thread(kept.names, record_id)) - {name}
-    except (store.Problem, OSError) as exc:
+    except store.Problem as exc:
         job.error = f"This pull wasn't saved to the incident: {exc}"
+        return False
+    except OSError as exc:
+        logger.warning("saving a pull to an incident failed", exc_info=exc)
+        job.error = "This pull wasn't saved to the incident: its folder couldn't be written. Check the disk has room."
         return False
 
     def elsewhere() -> bool:

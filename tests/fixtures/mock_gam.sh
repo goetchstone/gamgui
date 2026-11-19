@@ -1571,6 +1571,9 @@ fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "datatransfers" ]; then
   case "${4:-}" in
     *pending*) cat "$GAM_MOCK_FIXTURES/datatransfers_pending.csv" ;;
+    # A read that fails, and one that exits 0 without its table: neither answers "nothing pending".
+    *xferfail*) echo "ERROR: 403: Forbidden - insufficientPermissions: Request had insufficient authentication scopes." 1>&2; exit 1 ;;
+    *xfernotable*) ;;
     *)         printf 'id,oldOwnerUserEmail,newOwnerUserEmail,overallTransferStatusCode,application\n' ;;
   esac
   exit 0

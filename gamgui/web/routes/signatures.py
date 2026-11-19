@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from typing import Annotated
 
@@ -12,11 +14,14 @@ from ...core import guard
 from ...core import signatures as sig
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
+from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
 from ..jobs import Job, register_job, retry_key, retry_of
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, friendly, signature_store
+from ._common import NOT_CONNECTED, friendly, signature_store, gam_detail
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/signatures")
 
@@ -71,7 +76,9 @@ async def _run_apply(job: Job, conn, matched, template: str) -> None:
                 job.record(u.primary_email, result.ok, result.remediation, result.detail)
                 kind, why = (None if result.ok else result.kind), result.remediation
             except Exception as exc:  # noqa: BLE001 — _run_write reports GAM's failures; this is anything else
-                job.record(u.primary_email, False, friendly(exc), str(exc))
+                if not isinstance(exc, GAMError):
+                    logger.warning("applying a signature failed", exc_info=exc)
+                job.record(u.primary_email, False, friendly(exc), gam_detail(exc))
                 kind, why = getattr(exc, "kind", None), friendly(exc)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:

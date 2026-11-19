@@ -8,6 +8,8 @@ audited BatchJob. Browse-only commands are inert (read/copy syntax only).
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import csv
 import io
@@ -31,7 +33,9 @@ from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES, cell
-from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly
+from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly, gam_detail
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/builder")
 
@@ -48,10 +52,12 @@ def _catalog(request: Request):
 
 
 def _details(exc: Exception) -> str:
-    """The raw error text to show under the friendly message — so 'see details below' has details."""
+    """GAM's raw error text to show under the friendly message, so 'see details below' has details. Any other
+    exception's text is Python's or the OS's: it goes to the log, never the page."""
     if isinstance(exc, GAMError):
         return (exc.stderr or "").strip() or exc.message
-    return str(exc)
+    logger.warning("a Builder run failed", exc_info=exc)
+    return ""
 
 
 # --- slot assembly ---------------------------------------------------------------------
@@ -71,8 +77,11 @@ async def _assemble(request: Request, cmd):
             target = val
     try:
         argv = cmd.build(slots)
-    except Exception as exc:  # noqa: BLE001 — a builder/validation error (e.g. bad role)
+    except ValueError as exc:   # a builder's argument validation (e.g. a bad role): its words are ours
         return {}, [], "", str(exc)
+    except Exception as exc:  # noqa: BLE001 — anything else is a fault, not the operator's input
+        logger.warning("building a Builder command failed", exc_info=exc)
+        return {}, [], "", "That command couldn't be built from these values, so nothing ran."
     return slots, list(argv), (target or "(command)"), None
 
 
@@ -106,13 +115,19 @@ async def _alias_deletes(st, decision) -> list:
     return guard_mod.alias_deletes(resolved)
 
 
-async def _pending_transfers(conn, decision) -> list:
+async def _transfers(conn, decision) -> dict:
     """Unfinished data transfers from each account the change deletes — deleting one now loses what
-    hasn't moved yet (the Users delete zone warns the same way)."""
+    hasn't moved yet (the Users delete zone warns the same way) — and the accounts whose check
+    couldn't be made, which are said, never read as having none (invariant 10)."""
     pending: list = []
+    unknown: list = []
     for address in decision.typed_emails if conn is not None else []:
-        pending += await conn.incomplete_transfers_for(address)
-    return pending
+        found = await conn.incomplete_transfers_for(address)
+        if found is None:
+            unknown.append(address)
+        else:
+            pending += found
+    return {"pending_transfers": pending, "transfers_unknown": unknown}
 
 
 # A mutation runs exactly what its preview showed: the preview holds the argv under a single-use token
@@ -144,7 +159,7 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
         _FLOW, _form_key(cmd, slots), (list(argv), target), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
         "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
-        "pending_transfers": await _pending_transfers(st.connector, decision),
+        **await _transfers(st.connector, decision),
         "error": " ".join(blocked) or error, "blocked": bool(blocked), "token": token,
     })
 
@@ -526,7 +541,7 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
     token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
         "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
-        "token": token, "pending_transfers": await _pending_transfers(st.connector, decision)})
+        "token": token, **await _transfers(st.connector, decision)})
 
 
 @router.post("/sequence/preview", response_class=HTMLResponse)
@@ -554,7 +569,9 @@ async def _run_sequence(job, conn, previews, catalog=None) -> None:
                     res = (await conn.apply([p]))[0]
                     ok, why, detail = res.ok, res.remediation, res.detail
             except Exception as exc:  # noqa: BLE001 — report every step, never abort the run
-                ok, why, detail = False, friendly(exc), str(exc)
+                if not isinstance(exc, GAMError):
+                    logger.warning("a sequence step failed", exc_info=exc)
+                ok, why, detail = False, friendly(exc), gam_detail(exc)
             job.record(f"{p.summary} — {p.target}", ok, why, detail)
     finally:
         job.finish()

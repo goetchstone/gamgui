@@ -37,6 +37,12 @@ def friendly(exc: Exception, fallback: str = GAM_TROUBLE) -> str:
     return exc.remediation if isinstance(exc, GAMError) else fallback
 
 
+def gam_detail(exc: BaseException) -> str:
+    """GAM's own error text for a run's collapsed details, scrubbed of secrets when the GAMError was built; "" for any
+    other exception, whose words are Python's or the OS's and go to the log instead (tests/test_route_error_text.py)."""
+    return str(exc) if isinstance(exc, GAMError) else ""
+
+
 def error_partial(request: Request, message: str, details: str = "") -> HTMLResponse:
     """The amber inline result (an HTMX swap target); ``details`` is GAM's raw error, collapsed."""
     return TEMPLATES.TemplateResponse(request, "_action_result.html",
