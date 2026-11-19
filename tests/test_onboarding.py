@@ -1250,3 +1250,21 @@ def test_the_screens_say_a_store_file_was_set_aside(tmp_path, monkeypatch):
         c.get("/?token=t")
         assert "The saved roles file couldn't be read, so it was moved aside" in c.get("/onboard").text
         assert "The saved templates file couldn't be read, so it was moved aside" in c.get("/signatures/templates").text
+
+
+def test_a_create_that_raised_says_so_without_pointing_at_details(client, monkeypatch, caplog):
+    # A create that raised before GAM could say why has no GAM line to show: the panel mustn't point at
+    # details that aren't there, and Python's words go to the log, not the screen (roadmap 0.4).
+    from gamgui.core.connectors.gam_connector import GAMConnector
+
+    async def boom(*_a, **_k):
+        raise OSError("/private/var/secret-path: Permission denied")
+
+    monkeypatch.setattr(GAMConnector, "create_user", boom)
+    client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS"})
+    with caplog.at_level("ERROR"):
+        r = _preview_and_run(client, role="Sales", name="Ada Byte", email="ada@example.com",
+                             assignee="it@example.com", create_account="1")
+    assert "Couldn&#39;t create the account. Something went wrong talking to GAM." in r.text
+    assert "See details below" not in r.text and "<details" not in r.text
+    assert "secret-path" not in r.text and "secret-path" in caplog.text

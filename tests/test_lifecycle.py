@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -567,3 +568,41 @@ def test_the_builders_vacation_sends_the_text_as_the_html_it_names():
         {"email": "a@example.com", "subject": "Out", "message": "Ask <IT> & co.\nThanks"})
     assert argv[argv.index("message") + 1] == autoreply_html("Ask <IT> & co.\nThanks")
     assert "html" in argv
+
+
+@pytest.mark.asyncio
+async def test_a_step_that_raised_says_so_in_words_and_logs_python_s(connector, caplog):
+    # A step that raised something not GAM's: our words on the line, nothing of Python's on the screen,
+    # the exception in the log (roadmap 0.4; the route-text rule of tests/test_route_error_text.py).
+    from gamgui.web.jobs import start_job
+
+    async def boom(*_a, **_k):
+        raise OSError("/private/var/secret-path: Permission denied")
+
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = [s for s in steps if s.label == "Turn off forwarding"]
+    steps[0] = replace(steps[0], action=boom, requires=())
+    job = start_job({}, len(steps))
+    with caplog.at_level("ERROR"):
+        await run_offboard(job, connector, steps)
+    assert job.log == ["✗ Turn off forwarding — Something went wrong talking to GAM."]
+    assert job.failed[0].detail == "" and "secret-path" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_failed_step_without_a_remediation_never_headlines_gam_s_line(connector):
+    from types import SimpleNamespace
+
+    from gamgui.web.jobs import start_job
+
+    raw = "ERROR: 400: Bad Request - a representative GAM failure detail"
+
+    async def failed(_conn):
+        return SimpleNamespace(ok=False, detail=raw)
+
+    steps = build_offboard_steps("carol@example.com", "alice@example.com", "s", "m", 30, date(2026, 6, 23))
+    steps = [s for s in steps if s.label == "Turn off forwarding"]
+    steps[0] = replace(steps[0], action=failed, requires=())
+    job = start_job({}, len(steps))
+    await run_offboard(job, connector, steps)
+    assert raw not in job.log[0] and job.failed[0].detail == raw

@@ -97,8 +97,9 @@ account **delete** is a distinct guarded action on the user detail page (`delete
 `RiskLevel.DESTRUCTIVE`).
 A `✗` line gives the step's remediation (`ChangeResult.remediation`, or `GAMError.remediation` for a step that
 raised), never GAM's raw line; `job.record` keeps that line as the failure's `detail`, and the finished panel lists
-it under `failures(job)` one click away (roadmap 0.4; a step that raised something not GAM's logs the exception and
-says "Something went wrong talking to GAM.").
+it under `failures(job)` one click away (roadmap 0.4; a step that raised something not GAM's logs the exception, and it or a
+result with no remediation says "Something went wrong talking to GAM."). The running panel lists them too, so a
+"See details below" has its details while the run goes on.
 
 **Why there is no scheduler.** This is deliberate. GamGUI's server runs only while its window is
 open (`app.py` stops it when the window closes), and the window is normally closed long before the

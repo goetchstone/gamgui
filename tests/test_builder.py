@@ -798,7 +798,7 @@ def test_a_failed_run_leads_with_words_and_keeps_gam_s_line_below(client, monkey
     _, token = _builder_preview(client, **form)
     r = _builder_run(client, token, **form)
     headline = r.text.split("<details", 1)[0]
-    assert "Set Gmail signature didn&#39;t run. Check the address and try again." in headline
+    assert "Set Gmail signature failed. Check the address and try again." in headline
     assert raw not in headline and raw in r.text
 
 

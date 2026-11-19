@@ -479,7 +479,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
         return await _preview_page(request, cmd, argv, target, slots, error=refusal)
     result = (await conn.apply([preview]))[0]
     if not result.ok:   # what didn't happen, in words; GAM's own line one click away (roadmap 0.4)
-        return write_failed(request, f"{cmd.name} didn't run.", result)
+        return write_failed(request, f"{cmd.name} failed.", result)
     return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": cmd.name + " — done"})
 
 

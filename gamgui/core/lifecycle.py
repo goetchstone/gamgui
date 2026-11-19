@@ -539,7 +539,8 @@ async def run_offboard(job, conn, steps: List[OffboardStep], done: FrozenSet[str
                 res = await step.action(conn)
                 ok = res is None or bool(getattr(res, "ok", True))
                 detail = "" if res is None else (getattr(res, "detail", "") or "")
-                why = "" if res is None else (getattr(res, "remediation", "") or detail)
+                # Never GAM's line as the headline, even from a result that carries no remediation.
+                why = "" if ok else (getattr(res, "remediation", "") or _STEP_FAILED)
             except Exception as exc:  # noqa: BLE001 - a raising step is a failed step, reported like one
                 ok = False
                 why = exc.remediation if isinstance(exc, GAMError) else _STEP_FAILED
