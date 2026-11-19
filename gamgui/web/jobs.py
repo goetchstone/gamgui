@@ -36,6 +36,7 @@ PANELS = {
     "roster_compare": "/classroom/import/compare/status",
     "connected_apps": "/reports/connected-apps",
     "suspend_inactive": "/reports/inactive/status",
+    "remind": "/reports/remind/status",
     "mail_review": "/reports/mail-review",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",
@@ -80,6 +81,7 @@ CHANGE_WORDS = {
     "onboard_runbook": "Create a task list",
     "reset_password": "Reset a password",
     "revoke_access": "Revoke access",
+    "send_reminder_email": "Send a reminder email",
     "send_welcome_email": "Send a welcome email",
     "set_organization": "Set title or department",
     "set_password": "Set a temporary password",
@@ -132,6 +134,7 @@ class Job:
     about: str = ""                  # the person a run is for, when its panel names them
     title: str = ""                  # what the tray calls it ("Offboarding carol@example.com")
     kind: str = ""                   # a PANELS key: which screen's panel shows it
+    bucket: str = ""                 # Reports: which card's panel shows the job (a reminder's bucket, roadmap 3.3)
     retry: object = None             # what "Retry the N that failed" re-runs: a signature's template, a department
     task: object = field(default=None, repr=False)  # strong ref so the bg task isn't GC'd mid-run
 

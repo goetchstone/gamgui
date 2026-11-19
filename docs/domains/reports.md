@@ -96,6 +96,19 @@ stopping at an account-wide failure (`stop_reason`); each accepted suspend is pa
 the cached list (a failed write's outcome isn't known). GATED in `tests/test_write_routes_guarded.py`; tests in
 `tests/test_inactive_suspend.py`. **Not run on a real domain yet:** suspend itself is "not yet" in the README.
 
+## No 2SV / No recovery → a reminder email (roadmap 3.3, D3)
+The fix is the person's to make, so these two cards each carry **Email them a reminder…**: a form with a subject and a
+message, starting from `reports.REMINDERS` (plain words and a link to the person's Google Security page). **Preview** posts
+`/reports/remind/preview`, which reads the directory again (`st.users(force=True)`), lists the bucket's people as that read
+found them (`reports.to_remind`), and holds them under a single-use token keyed on the bucket and the exact text (flow
+`remind_bucket`). **Send** posts the card's live form with the token (`/reports/remind/apply`), so text edited since the
+preview is refused ("The message changed after the preview"), never sent. The guard needs `confirmed=1`, and the count
+typed past 25 (`COUNT_CONFIRM_ABOVE`). The job (`remind`, stoppable; the bucket rides on `job.bucket` for the panel and the
+jobs tray) runs `bulk.send_reminders`: one `sendemail` per person through `_run_write` (`send_reminder_email`, audited),
+from the admin GamGUI is connected as. The operator's text becomes HTML only by escaping it and keeping its line breaks
+(`reminder_html`): nothing they type is markup. GATED in the tripwire; tests in `tests/test_remind_buckets.py`. **Not run on
+a real domain yet:** the same `sendemail` as onboarding's confirmed welcome email, but this route hasn't sent one.
+
 ## The completeness buckets as sheets to fill in (roadmap 3.3, D3)
 No title, department, phone or location: the fix is data only the organisation has, so each of those cards (when it lists
 anyone) links to `/reports/fill-in.csv?key=<bucket>`, a `download` link (the app window would show a CSV as a page,

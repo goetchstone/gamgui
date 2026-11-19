@@ -6,12 +6,15 @@ import asyncio
 import csv
 import io
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core import bulk, clock, guard
 from ...core import reports as reports_mod
 from ...core.catalog.catalog import load_catalog
+from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.setup import admin_token_scopes
 from ..csvutil import csv_safe
@@ -48,6 +51,7 @@ async def reports_page(request: Request, refresh: int = 0) -> HTMLResponse:
         request,
         _REPORTS_PAGE,
         {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users), "named": named,
+         "reminders": reports_mod.REMINDERS,
          "fill_in": reports_mod.FILL_IN_REPORTS,
          **as_of(st.user_cache)},
     )
@@ -234,6 +238,73 @@ async def inactive_status(request: Request, job: str = "") -> HTMLResponse:
     if found is None or found.kind != "suspend_inactive":
         return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"error": "That run is no longer here."})
     return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"job": found})
+
+
+# --- No 2SV / No recovery → a reminder email (roadmap 3.3, D3) ---------------------------------------------------------
+# The card's form holds the subject and message; Preview reads the directory again and holds the people it found with that
+# exact text, under a single-use token keyed on the bucket and the text. Send posts the live form: text edited since the
+# preview is refused, never sent.
+_REMIND_FLOW = "remind_bucket"
+_REMIND_SHOWN = 200
+
+
+def _remind_key(key: str, subject: str, message: str) -> tuple:
+    return (key, subject.strip(), message.strip())
+
+
+@router.post("/remind/preview", response_class=HTMLResponse)
+async def remind_preview(request: Request, key: Annotated[str, Form()] = "", subject: Annotated[str, Form()] = "",
+                         message: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the read: what the preview is bound to
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    if key not in reports_mod.REMINDERS:
+        return error_partial(request, "Not a list that gets a reminder.")
+    if not subject.strip() or not message.strip():
+        return error_partial(request, "Write a subject and a message first.")
+    try:
+        users = await st.users(force=True)   # read now: the card counted a cached list
+    except Exception as exc:  # noqa: BLE001 — a failed read is said, and nothing is offered
+        return error_partial(request, "Couldn't read the directory again, so nothing is offered. " + friendly(exc))
+    people = reports_mod.to_remind(users, key)
+    emails = [u.primary_email for u in people]
+    token = st.previews.hold(_REMIND_FLOW, _remind_key(key, subject, message), emails, tenant=tenant) if emails else ""
+    decision = guard.evaluate(guard.changes(emails, RiskLevel.LOW, "Send a reminder"), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    return TEMPLATES.TemplateResponse(request, "_remind_preview.html", {
+        "key": key, "people": people[:_REMIND_SHOWN], "count": len(people), "token": token, "decision": decision,
+        "subject": subject.strip()})
+
+
+@router.post("/remind/apply", response_class=HTMLResponse)
+async def remind_apply(request: Request, key: Annotated[str, Form()] = "", subject: Annotated[str, Form()] = "",
+                       message: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    emails, refusal = st.previews.take(_REMIND_FLOW, str(form.get(TOKEN_FIELD) or ""), _remind_key(key, subject, message),
+                                       again="click Preview again", what="message")
+    if refusal:
+        return error_partial(request, refusal)
+    refusal = guard.enforce(guard.changes(emails, RiskLevel.LOW, "Send a reminder"), form, confirm_step=True,
+                            typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    if refusal:
+        return error_partial(request, refusal)
+    n = len(emails)
+    job = start_job(st.jobs, n, kind="remind", title=f"Reminder “{subject.strip()}” to {n} {'person' if n == 1 else 'people'}")
+    job.bucket = key   # which card's panel shows it, for the status poll and the jobs tray
+    job.task = asyncio.create_task(bulk.send_reminders(job, conn, emails, subject.strip(), reports_mod.reminder_html(message)))
+    return TEMPLATES.TemplateResponse(request, "_remind_run.html", {"job": job, "key": key})
+
+
+@router.get("/remind/status", response_class=HTMLResponse)
+async def remind_status(request: Request, job: str = "") -> HTMLResponse:
+    found = request.app.state.gamgui.jobs.get(job)
+    if found is None or found.kind != "remind":
+        return TEMPLATES.TemplateResponse(request, "_remind_run.html", {"error": "That run is no longer here.", "key": ""})
+    return TEMPLATES.TemplateResponse(request, "_remind_run.html", {"job": found, "key": found.bucket})
 
 
 # --- mail review (roadmap 3.2): forwarding that is on, and mail delegates, across every active account ----------------

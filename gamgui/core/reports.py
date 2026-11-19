@@ -6,6 +6,7 @@ No GAM calls here (kept testable); the connector fetches the users with the righ
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -208,6 +209,33 @@ def inactive_to_suspend(users: List[GAMUser], admin_email: str, admin_id: str, n
         made = _parse_dt(u.creation_time)
         targets.append(InactiveTarget(u.primary_email, u.full_name, u.last_login_time or "", made is None or made >= cutoff))
     return targets, left_out
+
+
+# --- No 2SV / No recovery → a reminder email (roadmap 3.3, D3) ---------------------------------------------------------
+# The fix is the person's to make, so the action is an email asking them to. Each bucket has its own starting text, which
+# the operator can change before the preview; the preview holds the people a fresh directory read found and that exact text.
+SECURITY_PAGE = "https://myaccount.google.com/security"
+REMINDERS = {
+    "no_2sv": ("Please turn on 2-Step Verification",
+               "Hello,\n\nYour Google account doesn't have 2-Step Verification turned on yet. It keeps your account safe "
+               "even if someone learns your password. Please turn it on from the Security page of your Google account: "
+               f"{SECURITY_PAGE}\n\nThank you."),
+    "no_recovery": ("Please add a recovery email or phone",
+                    "Hello,\n\nYour Google account has no recovery email or phone. Without one, getting back into your "
+                    "account after a lost password takes much longer. Please add one from the Security page of your "
+                    f"Google account: {SECURITY_PAGE}\n\nThank you."),
+}
+
+
+def reminder_html(text: str) -> str:
+    """The operator's plain text as the email's HTML: escaped, its line breaks kept, nothing else of theirs as markup."""
+    return "<br>".join(html.escape(line) for line in text.strip().splitlines())
+
+
+def to_remind(users: List[GAMUser], key: str, now: Optional[datetime] = None) -> List[GAMUser]:
+    """The bucket ``key`` (a REMINDERS key) from a directory read just now, sorted by address."""
+    bucket = next(r for r in build_reports(users, now=now) if r.key == key)
+    return sorted(bucket.users, key=lambda u: u.primary_email.lower())
 
 
 # --- the completeness buckets as a sheet to fill in (roadmap 3.3, D3) -------------------------------------------------

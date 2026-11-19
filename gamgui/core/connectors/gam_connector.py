@@ -879,6 +879,10 @@ class GAMConnector(Connector):
         return await self._run_write(
             "send_welcome_email", to, GAMCommands.send_email(to, subject, body), RiskLevel.LOW)
 
+    async def send_reminder_email(self, to: str, subject: str, body: str) -> ChangeResult:
+        """Reports' reminder to one person in a bucket (roadmap 3.3: no 2SV, no recovery info), from the admin."""
+        return await self._run_write("send_reminder_email", to, GAMCommands.send_email(to, subject, body), RiskLevel.LOW)
+
     async def remove_from_all_calendars(self, email: str) -> ChangeResult:
         # Best-effort sweep across every user. Expected, harmless per-user outcomes: NOT_FOUND (that
         # user never shared with the departing user), SERVICE_NOT_ENABLED (a user without Calendar —

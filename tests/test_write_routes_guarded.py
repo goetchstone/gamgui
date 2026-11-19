@@ -49,7 +49,7 @@ DOMAIN = "example.com"
 # Previews: they resolve and render the confirm step (a GAM read at most), never write.
 PREVIEWS = {
     "/users/password/preview", "/users/phone/preview", "/phishing/trash/preview", "/incident/secure/preview",
-    "/users/bulk/preview", "/users/suspend/preview", "/users/delete/confirm", "/reports/inactive/preview",
+    "/users/bulk/preview", "/users/suspend/preview", "/users/delete/confirm", "/reports/inactive/preview", "/reports/remind/preview",
     "/calendars/delete/preview", "/calendars/event/preview",
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
@@ -150,6 +150,9 @@ GATED = {
                                   edit={"email": "carol@example.com"}),
     # Reports' Inactive → suspend (roadmap 3.3): the preview reads the directory again and holds who it found.
     "/reports/inactive/apply": Case({}, "/reports/inactive/preview", preview_data={}, edit={"days": "30"}),
+    # And its reminder email (No 2SV, No recovery): the card's form holds the text; Send posts it live with the token.
+    "/reports/remind/apply": Case({"key": "no_2sv", "subject": "Turn on 2SV", "message": "Please turn it on."},
+                                  "/reports/remind/preview", edit={"message": "Something else."}),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
                                 typed={"confirm_email": "alice@example.com"}, edit={"email": "carol@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},

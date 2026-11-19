@@ -1,0 +1,27 @@
+{#- Reports' reminder (roadmap 3.3): who a directory read just now found in this bucket, and the Send button. Send posts the
+    card's live form (#remind-<key>-form) with this preview's token: text edited since the preview is refused, never sent. -#}
+{% if not count %}
+<p tabindex="-1" data-focus class="mt-2 text-sm text-brand-grayink">Read again just now: nobody is in this list any more. Nothing to send.</p>
+{% else %}
+<p tabindex="-1" data-focus class="mt-2 text-sm text-brand-black">Email “{{ subject }}” to <strong>{{ count }}</strong> {{ "person" if count == 1 else "people" }}, read again just now, one email each, from the admin GamGUI is connected as.</p>
+<details class="mt-2">
+  <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ count }}</summary>
+  <ul class="mt-2 space-y-1 max-h-56 overflow-auto">
+    {% for u in people %}
+    <li class="text-sm"><a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a> <span class="text-brand-grayink">— {{ u.primary_email }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if count > people | length %}<p class="mt-1 text-xs text-brand-grayink">… and {{ count - people | length }} more.</p>{% endif %}
+</details>
+{% if decision.requires_typed_count %}
+<label class="mt-2 block text-sm text-brand-blueink">Type <strong>{{ count }}</strong>, the number of people, to send:
+  <input id="remind-{{ key }}-count" name="confirm_count" inputmode="numeric" autocomplete="off"
+         class="mt-1 block w-32 rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+</label>
+{% endif %}
+<button type="button" class="mt-2 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+        hx-post="/reports/remind/apply" hx-include="#remind-{{ key }}-form{{ ', #remind-' ~ key ~ '-count' if decision.requires_typed_count }}"
+        hx-vals='{"confirmed": "1", "preview": "{{ token }}"}' hx-target="#remind-{{ key }}" hx-swap="innerHTML" hx-disabled-elt="this"
+        {% if not decision.requires_typed_count %}hx-confirm="Email {{ count }} {{ 'person' if count == 1 else 'people' }}?"{% endif %}>Send to {{ count }}</button>
+<p class="mt-1 text-xs text-brand-grayink">Sends exactly this preview's text to these people. Change the text and you'll need to preview again.</p>
+{% endif %}
