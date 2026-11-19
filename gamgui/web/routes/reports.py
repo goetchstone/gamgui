@@ -14,7 +14,7 @@ from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.setup import admin_token_scopes
 from ..jobs import start_job
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, as_of, friendly
+from ._common import NOT_CONNECTED, as_of, friendly, unread_why
 
 router = APIRouter(prefix="/reports")
 
@@ -126,3 +126,60 @@ async def connected_apps_read(request: Request) -> HTMLResponse:
     st.connected_apps_job_id = job.id
     job.task = asyncio.create_task(_read_connected_apps(job, st, st.connector))
     return _connected_apps_response(request, job, announce=True)
+
+
+# --- mail review (roadmap 3.2): forwarding that is on, and mail delegates, across every active account ----------------
+_MAIL_REVIEW_PARTIAL = "_mail_review.html"
+MAIL_ROWS_SHOWN = 100   # rows of each list the panel draws; the count says how many more (bounded page, invariant 9)
+
+
+def _mail_review_response(request: Request, job=None, announce: bool = False) -> HTMLResponse:
+    st = request.app.state.gamgui
+    ctx = {"connected": st.connector is not None, "job": job, "announce": announce, "shown": MAIL_ROWS_SHOWN}
+    if st.mail_review is not None:
+        review, when = st.mail_review
+        ctx.update(review=review, review_age=clock.now() - when)
+    return TEMPLATES.TemplateResponse(request, _MAIL_REVIEW_PARTIAL, ctx)
+
+
+@router.get("/mail-review", response_class=HTMLResponse)
+async def mail_review(request: Request, job: str = "") -> HTMLResponse:
+    """The last review, a running one, or the button. Never reads by itself: one Gmail call per account, twice."""
+    st = request.app.state.gamgui
+    asked = st.jobs.get(job) if job else None
+    if asked is not None and asked.kind != "mail_review":
+        asked = None
+    if asked is not None and asked.finished and asked.id != st.mail_review_job_id:
+        asked = None
+    return _mail_review_response(request, asked or st.jobs.get(st.mail_review_job_id), announce=asked is not None)
+
+
+async def _read_mail_review(job, st, conn) -> None:
+    """Background: read every account's forwarding and delegates, kept only while ``conn`` is still the connected tenant's."""
+    try:
+        job.current = "Reading every account's forwarding and delegates…"
+        review = await conn.mail_review()
+        if st.connector is conn:
+            st.mail_review = (review, clock.now())
+            job.applied = len(review.forwarding) + len(review.delegations)
+        else:
+            job.error = "Not kept: the connection changed during the read. Read again."
+    except Exception as exc:  # noqa: BLE001 — surface any failure in the panel, in fixed words
+        timed_out = isinstance(exc, GAMError) and exc.kind is GAMErrorKind.TIMEOUT
+        job.error = _READ_TIMED_OUT if timed_out else unread_why(exc)
+    finally:
+        job.finish()
+
+
+@router.post("/mail-review/read", response_class=HTMLResponse)
+async def mail_review_read(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return _mail_review_response(request)
+    existing = st.jobs.get(st.mail_review_job_id)
+    if existing is not None and not existing.finished:  # don't start a second domain-wide read
+        return _mail_review_response(request, existing, announce=True)
+    job = start_job(st.jobs, 0, kind="mail_review", title="Mail review read")
+    st.mail_review_job_id = job.id
+    job.task = asyncio.create_task(_read_mail_review(job, st, st.connector))
+    return _mail_review_response(request, job, announce=True)
