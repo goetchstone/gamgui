@@ -91,6 +91,19 @@ def test_the_connected_admin_is_left_out_and_said(client, gam_calls, monkeypatch
     assert gam_writes(gam_calls()) == [["update", "user", CAROL, "suspended", "on"]]
 
 
+def test_a_renamed_admin_is_left_out_by_its_account_id(client, gam_calls, monkeypatch):  # noqa: F811
+    # The sign-in token keeps the address the admin had when it was made; renamed since, only Google's account ID says it's
+    # alice. The directory read must ask for `id` (the API returns only the fields named), or this match never happens.
+    async def renamed():
+        return "old.name@example.com", "100000000000000000001", ""
+
+    monkeypatch.setattr(client.app.state.gamgui.connector, "connected_admin", renamed)
+    page, _ = _preview(client)
+    read = [a for a in gam_calls() if a[:2] == ["print", "users"]][-1]
+    assert "id" in read[read.index("fields") + 1].split(",")
+    assert f"Left out: {ALICE}, the admin GamGUI is connected as" in page and f"— {ALICE}" not in page
+
+
 def test_an_admin_gamgui_cant_confirm_offers_nothing(client, gam_calls, monkeypatch):  # noqa: F811
     async def unconfirmed():
         return "", "", "its sign-in token doesn't say"

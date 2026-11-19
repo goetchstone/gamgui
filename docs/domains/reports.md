@@ -84,6 +84,7 @@ The one write on this screen. The Inactive card's **Suspend these…** posts `/r
 - **flags new hires**: Inactive includes accounts that never signed in, so anyone made inside the window, or when isn't
   known, is marked *new* and the list opens. `creationTime` is in `CACHE_FIELDS` for this (`GAMUser.creation_time`);
 - **leaves the connected admin out by name**, matched by Google account ID as well as address (`connector.connected_admin`).
+  The ID match needs the read to ask for `id` (`CACHE_FIELDS`; the API returns only what's named, failure-log 2026-11-19).
   An admin GamGUI can't confirm offers nothing. The chokepoint's own refusal (`cut_off_refusal` in `_run_write`) still holds
   for every write.
 

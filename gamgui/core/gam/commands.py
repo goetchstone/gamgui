@@ -53,7 +53,7 @@ FILE_LIST_FIELDS = ("id", "name", "mimeType", "owners", "modifiedTime", "webView
 CACHE_FIELDS = (
     "primaryEmail", "name", "suspended", "orgUnitPath", "organizations",
     "isAdmin", "isDelegatedAdmin", "isEnrolledIn2Sv", "lastLoginTime", "recoveryEmail",
-    "aliases", "locations", "phones", "creationTime",
+    "aliases", "locations", "phones", "creationTime", "id",
 )
 
 
