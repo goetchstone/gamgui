@@ -45,6 +45,27 @@ TRANSFER_SERVICES = "drive,calendar"
 # Every Drive file the leaver owns, private and shared: left to the API's default, files they had
 # shared might stay behind — and be lost when the account is deleted.
 TRANSFER_PRIVACY = "all"
+# What the transfer can move (grammar `<DataTransferService>`), in the order it's always sent, and its name in words.
+# Drive and Calendar by default, which is TRANSFER_SERVICES: the default routine sends the same argv, byte for byte.
+SERVICE_CHOICES: Tuple[Tuple[str, str], ...] = (("drive", "Drive"), ("calendar", "Calendar"), ("lookerstudio", "Looker Studio"))
+DEFAULT_SERVICES: FrozenSet[str] = frozenset({"drive", "calendar"})
+
+
+def transfer_services(chosen: Iterable[str]) -> str:
+    """The <DataTransferServiceList> for ``chosen``, in SERVICE_CHOICES order: one argv element. ValueError for none, or for
+    one GAM doesn't transfer."""
+    chosen = set(chosen)
+    if not chosen:
+        raise ValueError("pick at least one service to transfer, or leave the transfer out")
+    if unknown := chosen - {key for key, _ in SERVICE_CHOICES}:
+        raise ValueError(f"{sorted(unknown)[0]!r} isn't a service the transfer moves")
+    return ",".join(key for key, _ in SERVICE_CHOICES if key in chosen)
+
+
+def services_named(chosen: Iterable[str]) -> str:
+    """``chosen`` in words, in SERVICE_CHOICES order: "Drive & Calendar", "Drive, Calendar & Looker Studio"."""
+    names = [name for key, name in SERVICE_CHOICES if key in set(chosen)]
+    return " & ".join(names) if len(names) < 3 else ", ".join(names[:-1]) + " & " + names[-1]
 
 # What each step needs to have succeeded before it runs — a failed step stops the steps that rely on
 # it rather than half-offboarding the account (the runbook's "When a step fails" table):
@@ -96,7 +117,7 @@ ADDED_NOTES = {
                 "download their mail over IMAP.",
     "pop_off": "Belt and braces, as IMAP: no mail app can download their mail over POP. Mail already downloaded stays where it "
                "is; nothing in Gmail is deleted.",
-    "secondary_calendars": "Makes the manager the owner of each secondary calendar they own: Google deletes those with the "
+    "secondary_calendars": "Makes the manager (or the transfer's recipient) the owner of each secondary calendar they own: Google deletes those with the "
                            "account, and the transfer doesn't move them. GAM looks each one up as you, so one not shared with "
                            "you fails and says so, and the rest still go.",
     "hide_from_directory": "Colleagues stop being offered their address; mail to it still arrives. Google can take up to a day.",
@@ -243,12 +264,13 @@ class AddressCheck:
     """The directory's verdict on an offboarding's two addresses: errors block it, warnings are shown."""
     user: Optional[GAMUser] = None
     manager: Optional[GAMUser] = None
+    recipient: Optional[GAMUser] = None   # who the transfer goes to, when it isn't the manager (roadmap 3.4)
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
 
 def check_addresses(directory: Sequence[GAMUser], user: str, manager: str,
-                    connected_admin: str = "") -> AddressCheck:
+                    connected_admin: str = "", recipient: str = "") -> AddressCheck:
     """Find the departing user and the manager in the directory, by primary address.
 
     Unknown is an error: a typo'd manager would have the mailbox, Drive and reminder handed to nobody
@@ -272,6 +294,9 @@ def check_addresses(directory: Sequence[GAMUser], user: str, manager: str,
         return found
 
     check.user, check.manager = find(user, "departing user"), find(manager, "manager")
+    # A transfer recipient other than the manager is checked as the manager is: in the directory, by primary address.
+    if recipient.strip() and recipient.strip().lower() != manager.strip().lower():
+        check.recipient = find(recipient.strip(), "transfer recipient")
     leaver, mgr = check.user, check.manager
     if leaver and connected_admin and leaver.primary_email.lower() == connected_admin.lower():
         check.errors.append(f"GamGUI is connected as {leaver.primary_email}, so it can't offboard that account: "
@@ -282,6 +307,13 @@ def check_addresses(directory: Sequence[GAMUser], user: str, manager: str,
         check.errors.append("The departing user and the manager are the same account — enter the manager "
                             "who takes over the mailbox and files.")
         return check
+    if leaver and check.recipient and leaver.primary_email.lower() == check.recipient.primary_email.lower():
+        check.errors.append("The departing user and the transfer recipient are the same account — GAM refuses a "
+                            "transfer to oneself. Enter who takes over the files, or leave it empty for the manager.")
+        return check
+    if check.recipient and check.recipient.suspended:
+        check.warnings.append(f"The transfer recipient {check.recipient.primary_email} is suspended — the transfer "
+                              f"will likely fail.")
     if leaver and leaver.is_admin:
         check.warnings.append(
             f"{leaver.primary_email} is a super admin. Offboarding doesn't remove the role — revoke it in the "
@@ -415,6 +447,7 @@ def build_offboard_steps(
     notify: str = "", employee_name: str = "", manager_contact: str = "",
     not_applicable: FrozenSet[str] = frozenset(), added: FrozenSet[str] = frozenset(),
     calendars: Sequence[OwnedCalendar] = (), filters: Sequence[ForwardingFilter] = (),
+    recipient: str = "", services: Iterable[str] = DEFAULT_SERVICES,
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence).
 
@@ -425,6 +458,9 @@ def build_offboard_steps(
 
     ``employee_name`` / ``manager_contact`` are the directory-resolved display forms used only in the
     auto-reply TEXT; the raw ``manager`` email is still what the delegate/transfer/reminder steps act on.
+
+    ``recipient`` takes the transfer and the secondary calendars instead of the manager ("" is the manager), and ``services``
+    are what the transfer moves; the privacy level is a Drive parameter, sent only with Drive (GAM refuses it otherwise).
     """
     if not added <= set(ADDABLE_STEPS):
         raise ValueError(f"only {', '.join(ADDABLE_STEPS)} can be added")
@@ -437,9 +473,17 @@ def build_offboard_steps(
     message = fill_autoreply(message, employee, contact)
     body = autoreply_html(message)   # what's sent; the preview and the step summary show `message`
     due = today + timedelta(days=days)
+    to = recipient.strip() or manager
+    services = frozenset(services)
+    service_list = transfer_services(services)
+    privacy = TRANSFER_PRIVACY if "drive" in services else ""
+    moving = services_named(services)
+    transfer_label = ("Transfer Drive & Calendar ownership" if services == DEFAULT_SERVICES
+                      else f"Transfer {moving} ownership")
     reminder_summary = f"Offboarding {user}: confirm with IT whether to delete the account"
     moved = ("nothing transferred" if "transfer" in not_applicable
-             else f"data + calendars transferred to {manager}")
+             else f"data + calendars transferred to {manager}" if (to, services) == (manager, DEFAULT_SERVICES)
+             else f"{moving} transferred to {to}")
     reminder_desc = (
         f"{user} was offboarded on {today.isoformat()} (password reset; {moved}). When you're sure it's "
         f"safe, tell IT to delete the account."
@@ -471,10 +515,12 @@ def build_offboard_steps(
                      f"Auto-reply — “{subject}”: {message}",
                      lambda c: c.set_vacation(user, subject, body),
                      [GAMCommands.set_vacation(user, subject, body)]),
-        OffboardStep("transfer", "Transfer Drive & Calendar ownership",
-                     f"Transfer {user}'s Drive/Docs (private and shared files) and calendars to {manager}",
-                     lambda c: c.transfer_data(user, TRANSFER_SERVICES, manager, privacy=TRANSFER_PRIVACY),
-                     [GAMCommands.create_datatransfer(user, TRANSFER_SERVICES, manager, privacy=TRANSFER_PRIVACY)]),
+        OffboardStep("transfer", transfer_label,
+                     (f"Transfer {user}'s Drive/Docs (private and shared files) and calendars to {manager}"
+                      if (to, services) == (manager, DEFAULT_SERVICES) else
+                      f"Transfer {user}'s {moving} to {to}" + (" (private and shared Drive files)" if "drive" in services else "")),
+                     lambda c: c.transfer_data(user, service_list, to, privacy=privacy),
+                     [GAMCommands.create_datatransfer(user, service_list, to, privacy=privacy)]),
         OffboardStep("calacls", "Remove from everyone's calendars",
                      f"Remove {user}'s access to every active user's primary calendar — one "
                      f"domain-wide call that visits every user, so it can take many minutes (stopped and "
@@ -511,9 +557,9 @@ def build_offboard_steps(
             lambda c: c.pop_off(user), [GAMCommands.pop_off(user)]),
         "secondary_calendars": lambda: OffboardStep(
             "secondary_calendars", STEP_NAMES["secondary_calendars"],
-            f"Make {manager} the owner of {_named([f'“{c.label}”' for c in calendars])}. A failure leaves the rest done",
-            lambda c: c.transfer_calendar_ownership(user, calendar_ids, manager),
-            [GAMCommands.transfer_calendar_ownership(calendar_ids, manager)]),
+            f"Make {to} the owner of {_named([f'“{c.label}”' for c in calendars])}. A failure leaves the rest done",
+            lambda c: c.transfer_calendar_ownership(user, calendar_ids, to),
+            [GAMCommands.transfer_calendar_ownership(calendar_ids, to)]),
         "hide_from_directory": lambda: OffboardStep(
             "hide_from_directory", STEP_NAMES["hide_from_directory"],
             f"Take {user} out of the Global Address List and autocomplete. Mail to them still arrives",
