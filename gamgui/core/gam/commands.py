@@ -478,6 +478,19 @@ class GAMCommands:
         return ["print", "tokens"]
 
     @staticmethod
+    def all_users_print_forward() -> List[str]:
+        # Reports' mail review (roadmap 3.2): every active account's forwarding that is on (grammar `<UserTypeEntity> print
+        # forward [enabledonly]`). No formatjson: CSV `User,forwardEnabled,forwardTo,disposition`. One account at a time,
+        # each announced on stderr ("Getting Forward Enabled for <u> (i/N)"), which is how a skipped one is told apart.
+        return ["all", "users", "print", "forward", "enabledonly"]
+
+    @staticmethod
+    def all_users_print_delegates() -> List[str]:
+        # Every active account's mail delegates (grammar `<UserTypeEntity> print delegates [shownames]`). No formatjson:
+        # CSV `User,delegateName,delegateAddress,delegationStatus`, each account announced ("Getting all Delegates for <u>").
+        return ["all", "users", "print", "delegates", "shownames"]
+
+    @staticmethod
     def info_user(email: str, fields: Optional[Sequence[str]] = None) -> List[str]:
         argv = ["info", "user", email, "fields", ",".join(fields or USER_DETAIL_FIELDS)]
         argv.append("formatjson")

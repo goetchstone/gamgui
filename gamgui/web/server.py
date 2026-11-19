@@ -113,6 +113,8 @@ class AppState:
     cal_index_job_id: str = ""  # the in-flight index-rebuild job, if any (guards double-rebuilds)
     connected_apps: Optional[tuple] = None  # (AppsRead, when) from the last read on this connector
     connected_apps_job_id: str = ""  # the last connected-apps read's job (guards a second domain-wide read)
+    mail_review: Optional[tuple] = None  # (MailReview, when) from the last mail review on this connector (roadmap 3.2)
+    mail_review_job_id: str = ""  # the last mail review's job (guards a second domain-wide read)
     offboard_jobs: dict = field(default_factory=dict)  # leaver (lowercase) -> their running offboarding's job id
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
@@ -199,6 +201,8 @@ class AppState:
         self.gam_version_held = None   # setup re-reads the version on the next Home
         self.connected_apps = None     # read with the connector being replaced
         self.connected_apps_job_id = ""
+        self.mail_review = None        # read with the connector being replaced
+        self.mail_review_job_id = ""
         self.incident_open = ""        # opens only while connected to its domain
         self.incident_open_job = ""
         self.incident_evidence = None
