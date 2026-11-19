@@ -1003,6 +1003,11 @@ class GAMConnector(Connector):
         return results
 
     # --- the connected admin ------------------------------------------------------------
+    async def connected_admin(self) -> Tuple[str, str, str]:
+        """The admin GamGUI signs in as, confirmed by GAM: (address, account ID, ""), or ("", "", why not). A bulk preview
+        leaves this account out by name (roadmap 3.3); ``_run_write`` refuses it whatever a caller sends."""
+        return await self._admin_identity()
+
     async def _admin_identity(self) -> Tuple[str, str, str]:
         """The admin GamGUI signs in as, asked now: (address, account ID, ""), or ("", "", why not). The ID
         is the token's ``sub``, kept only once GAM reads the same ``id`` for that address. A re-import

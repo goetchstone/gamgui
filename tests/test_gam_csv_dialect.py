@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 
 import pytest
 
@@ -64,5 +65,7 @@ async def test_the_mock_prints_users_as_gam_writes_them(runner, domain, fixtures
     lines = [ln for ln in (fixtures_dir / "print_users.json").read_text().split("\n") if ln]
     assert any('\\"' in ln for ln in lines) and any("\\\\" in ln for ln in lines), \
         "no fixture user needs the escapes any more (carol's title and department did)"
-    expected = rct.gam_csv([["primaryEmail", "JSON"]] + [[json.loads(ln)["primaryEmail"], ln] for ln in lines])
+    # The list's fields don't name `id`, and the API returns only what was asked for: each record without it.
+    shown = [re.sub(r'"id": "[^"]*", ', "", ln) for ln in lines]
+    expected = rct.gam_csv([["primaryEmail", "JSON"]] + [[json.loads(ln)["primaryEmail"], ln] for ln in shown])
     assert await runner.run_authenticated(domain, C.print_users()) == expected

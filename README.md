@@ -139,7 +139,8 @@ and have only run offline: see
   and downloadable as CSV — and clicking any address in a result offers pre-filled follow-ups
   (delegates, forwarding, vacation, signature, title/dept, reset password, suspend, delete, group
   add/remove).
-- **Reports** — 2SV gaps, inactive accounts, admins, missing recovery, suspended accounts, and
+- **Reports** — 2SV gaps, inactive accounts (suspend them from there: the directory is read again, new hires are
+  flagged, the confirm step holds exactly who it showed), admins, missing recovery, suspended accounts, and
   directory completeness (missing title/department/phone/location), plus a **storage & mail usage**
   panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
   (which lags a few days). **Connected apps and AI agents**: every account's grants, read when you ask,
@@ -210,7 +211,7 @@ school domain is the most useful one of all.
 | Reset password (it runs no sign-out: offboarding's next step does, or *Sign out everywhere*) | Offboarding, Builder | **confirmed** |
 | Sign out everywhere | Users, Builder | not yet |
 | Revoke access: app passwords, backup codes, OAuth tokens, and sign out (`deprovision signout`) | Offboarding | **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14) |
-| Suspend / unsuspend | Users (both), Builder (suspend) | not yet |
+| Suspend / unsuspend | Users (both), Builder (suspend), Reports (Inactive, many at once) | not yet |
 | Offboarding's added steps: clear recovery, hide from the directory, IMAP off, POP off | Lifecycle | argv-identical to SwiftGamGui's confirmed runs (2026-10-16) |
 | Offboarding's added steps: hand over secondary calendars, remove filters that forward | Lifecycle | not yet — not live in either app |
 | Block a computer, or take an account off it | Incident | not yet — not live in either app |

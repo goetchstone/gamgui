@@ -183,6 +183,33 @@ def admin_scope_held(report: NamedReport, granted) -> Optional[bool]:
     return report.scope in granted or f"{report.scope}.readonly" in granted
 
 
+# --- Inactive → suspend (roadmap 3.3, D3) -----------------------------------------------------------------------------
+@dataclass(frozen=True)
+class InactiveTarget:
+    email: str
+    name: str
+    last_login: str      # as the directory gave it; "" for never
+    new: bool            # made inside the window, or when isn't known: a new hire who hasn't signed in yet looks inactive
+
+
+def inactive_to_suspend(users: List[GAMUser], admin_email: str, admin_id: str, now: Optional[datetime] = None,
+                        inactive_days: int = INACTIVE_DAYS) -> "tuple[List[InactiveTarget], List[str]]":
+    """The Inactive bucket as the people a suspend would act on, from a directory read just now: ``(targets, left_out)``.
+    The admin GamGUI signs in as is left out (suspending it would sign GamGUI out, and the chokepoint refuses it anyway),
+    matched by Google's account ID as well as by address. Each target says whether it was made inside the window."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=inactive_days)
+    bucket = next(r for r in build_reports(users, now=now, inactive_days=inactive_days) if r.key == "inactive")
+    targets, left_out = [], []
+    for u in sorted(bucket.users, key=lambda u: u.primary_email.lower()):
+        if u.primary_email.strip().lower() == admin_email.strip().lower() or (admin_id and str(u.raw.get("id") or "") == admin_id):
+            left_out.append(u.primary_email)
+            continue
+        made = _parse_dt(u.creation_time)
+        targets.append(InactiveTarget(u.primary_email, u.full_name, u.last_login_time or "", made is None or made >= cutoff))
+    return targets, left_out
+
+
 # --- the completeness buckets as a sheet to fill in (roadmap 3.3, D3) -------------------------------------------------
 # No title, department, phone or location: the fix is data only the organisation has, so each of these buckets downloads as
 # a spreadsheet to fill in. Its columns are the ones bulk apply from CSV (roadmap 4.6) will read back, by name: `email`

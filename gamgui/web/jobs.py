@@ -35,6 +35,7 @@ PANELS = {
     "index": "/calendars/index/status",
     "roster_compare": "/classroom/import/compare/status",
     "connected_apps": "/reports/connected-apps",
+    "suspend_inactive": "/reports/inactive/status",
     "mail_review": "/reports/mail-review",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",

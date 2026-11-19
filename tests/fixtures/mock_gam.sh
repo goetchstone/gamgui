@@ -320,7 +320,21 @@ fi
 # escapes it (carol's title and department need it). Every formatjson read below prints GAM's own key columns,
 # read from its source at 7.50.00 (failure log 2026-11-04, the mock's reads and writes).
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
-  print_formatjson primaryEmail print_users.json
+  # The Directory API returns only the fields asked for, and GAM adds no `id` of its own: a read that names fields but not
+  # `id` gets none (once every record came whole, and a read that never asked for `id` passed a test matching on it).
+  pu_fields=""; pu_prev=""
+  for pu_arg in "$@"; do [ "$pu_prev" = fields ] && pu_fields=$pu_arg; pu_prev=$pu_arg; done
+  case ",$(lower "$pu_fields")," in
+    ,,|*,id,*) print_formatjson primaryEmail print_users.json ;;
+    *)
+      printf 'primaryEmail,JSON\n'
+      while IFS= read -r record || [ -n "$record" ]; do
+        [ -n "$record" ] || continue
+        record=$(printf '%s' "$record" | sed 's/"id": "[^"]*", //')
+        gam_row "$(json_text primaryEmail "$record")" "$record"
+      done < "$GAM_MOCK_FIXTURES/print_users.json"
+      ;;
+  esac
   exit 0
 fi
 

@@ -9,15 +9,16 @@ import io
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
-from ...core import clock
+from ...core import bulk, clock, guard
 from ...core import reports as reports_mod
 from ...core.catalog.catalog import load_catalog
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.setup import admin_token_scopes
 from ..csvutil import csv_safe
 from ..jobs import start_job
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, as_of, friendly, unread_why
+from ._common import NOT_CONNECTED, as_of, error_partial, friendly, unread_why
 
 router = APIRouter(prefix="/reports")
 
@@ -155,6 +156,84 @@ async def connected_apps_read(request: Request) -> HTMLResponse:
     st.connected_apps_job_id = job.id
     job.task = asyncio.create_task(_read_connected_apps(job, st, st.connector))
     return _connected_apps_response(request, job, announce=True)
+
+
+# --- Inactive → suspend (roadmap 3.3, D3) --------------------------------------------------------------------------------
+# The card's list comes from the cached directory, so the preview reads the directory again and holds the people that read
+# found, under a single-use token (web/previews.py): Apply suspends exactly those, never a list rebuilt since. A new hire
+# who hasn't signed in yet looks inactive, so each one made inside the window is flagged; the admin GamGUI signs in as is
+# left out by name (the chokepoint refuses it whatever is sent).
+_SUSPEND_FLOW = "suspend_inactive"
+_SUSPEND_PARTIAL = "_inactive_suspend.html"
+_SUSPEND_SHOWN = 200   # people the preview lists; the count is the whole of it (bounded page)
+_ADMIN_UNCONFIRMED = ("GamGUI can't confirm which account it signs in as, so it can't leave that account out of a suspend. "
+                      "Import the credentials again on Setup, then preview again.")
+
+
+def _suspend_key(days) -> tuple:
+    return ("inactive", str(days or "").strip())
+
+
+@router.post("/inactive/preview", response_class=HTMLResponse)
+async def inactive_preview(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the reads: what the preview is bound to
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    admin, admin_id, _why_not = await conn.connected_admin()
+    if not admin:
+        return error_partial(request, _ADMIN_UNCONFIRMED)
+    try:
+        users = await st.users(force=True)   # read now: the card counted a cached list
+    except Exception as exc:  # noqa: BLE001 — a failed read is said, and nothing is offered
+        return error_partial(request, "Couldn't read the directory again, so nothing is offered. " + friendly(exc))
+    targets, left_out = reports_mod.inactive_to_suspend(users, admin, admin_id)
+    emails = [t.email for t in targets]
+    # Keyed on the window the preview used, posted back with Apply: a form edited since is refused, never re-read.
+    token = st.previews.hold(_SUSPEND_FLOW, _suspend_key(reports_mod.INACTIVE_DAYS), emails, tenant=tenant) if emails else ""
+    decision = guard.evaluate(conn.plan_suspend(emails), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    return TEMPLATES.TemplateResponse(request, _SUSPEND_PARTIAL, {
+        "targets": targets[:_SUSPEND_SHOWN], "count": len(targets), "new": sum(t.new for t in targets),
+        "left_out": left_out, "days": reports_mod.INACTIVE_DAYS, "decision": decision, "token": token})
+
+
+@router.post("/inactive/apply", response_class=HTMLResponse)
+async def inactive_apply(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    emails, refusal = st.previews.take(_SUSPEND_FLOW, str(form.get(TOKEN_FIELD) or ""), _suspend_key(form.get("days")),
+                                       again="click Suspend these… again")
+    if refusal:
+        return error_partial(request, refusal)
+    refusal = guard.enforce(conn.plan_suspend(emails), form, confirm_step=True, typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    if refusal:
+        return error_partial(request, refusal)
+    n = len(emails)
+    job = start_job(st.jobs, n, kind="suspend_inactive", title=f"Suspend {n} inactive account{'s' if n != 1 else ''}")
+    job.task = asyncio.create_task(_run_suspend(job, st, conn, emails))
+    return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"job": job})
+
+
+async def _run_suspend(job, st, conn, emails) -> None:
+    """The job's task: each suspend GAM accepted is patched into the cached directory as it lands. A failed write's outcome
+    isn't known (a timeout may still have applied it), so any failure, or the loop dying, drops the whole list instead."""
+    try:
+        await bulk.suspend_users(job, conn, emails, on_set=lambda e: st.patch_user(e, suspended=True))
+    finally:
+        if job.failed_total or job.error:
+            st.invalidate_users()
+
+
+@router.get("/inactive/status", response_class=HTMLResponse)
+async def inactive_status(request: Request, job: str = "") -> HTMLResponse:
+    found = request.app.state.gamgui.jobs.get(job)
+    if found is None or found.kind != "suspend_inactive":
+        return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"error": "That run is no longer here."})
+    return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"job": found})
 
 
 # --- mail review (roadmap 3.2): forwarding that is on, and mail delegates, across every active account ----------------
