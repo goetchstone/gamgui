@@ -2374,6 +2374,11 @@ video {
   background-color: rgb(255 255 255 / 0.1);
 }
 
+.hover\:text-amber-900:hover {
+  --tw-text-opacity: 1;
+  color: rgb(120 53 15 / var(--tw-text-opacity, 1));
+}
+
 .hover\:text-brand-black:hover {
   --tw-text-opacity: 1;
   color: rgb(0 0 0 / var(--tw-text-opacity, 1));

@@ -2851,6 +2851,82 @@ if [ "${1:-}" = "user" ] && case "${3:-}" in imap|imap4|pop|pop3) true ;; *) fal
   exit 0
 fi
 
+# `all users print forward [enabledonly]` and `all users print delegates [shownames]` (printShowForward, printShowDelegates, read
+# from the vendored 7.52.03 build): Reports' domain-wide mail review. Every active user (isSuspended=False), one at a time:
+#   - a refused token GAM drops without a word (buildGAPIServiceObject, then `if not gmail: continue`): nothing for that user,
+#     not even its "Getting" line ($GAM_MOCK_STATE/quiet/<u>);
+#   - else "Getting Forward Enabled for <u> (i/N)" or "Getting all Delegates for <u> (i/N)" on stderr (printGetting…ForWhom,
+#     the count only past one user), then Gmail off is "User: <u>, Gmail Service/App not enabled (i/N)" after it
+#     (userGmailServiceNotEnabledWarning, $GAM_MOCK_STATE/nogmail/<u>), the last code set standing;
+#   - the CSV once every user is read: forward's `User,forwardEnabled,forwardTo,disposition` (enabledonly: only those on),
+#     delegates' `User,delegateAddress,delegationStatus`, `User,delegateName,…` with shownames (a delegate the Directory
+#     can't name keeps its address, _getDelegateName). The header line even with no row.
+if [ "${1:-}" = "all" ] && [ "${2:-}" = "users" ] && [ "${3:-}" = "print" ] \
+   && { [ "${4:-}" = "forward" ] || [ "${4:-}" = "delegates" ]; }; then
+  what=$4; shift 4; enabledonly=""; shownames=""
+  while [ $# -gt 0 ]; do
+    case "$what:$(lower "$1")" in
+      forward:enabledonly) enabledonly=1; shift ;;
+      delegates:shownames) shownames=1; shift ;;
+      *) not_modelled "all users print $what with $1" ;;
+    esac
+  done
+  users=$(grep -vF '"suspended": true' "$GAM_MOCK_FIXTURES/print_users.json" \
+    | sed -n 's/.*"primaryEmail": "\([^"]*\)".*/\1/p' | LC_ALL=C sort)
+  count=$(printf '%s\n' "$users" | grep -c . || true)
+  printf 'Getting all Users that match query (isSuspended=False isGuest=False), may take some time on a large Google Workspace Account...\n' 1>&2
+  got_users "$count"
+  rows=""; rc=0; i=0
+  for user in $users; do
+    i=$((i + 1))
+    if [ "$count" -gt 1 ]; then n=" ($i/$count)"; else n=""; fi
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then continue; fi
+    if [ "$what" = forward ]; then
+      printf 'Getting Forward Enabled for %s%s\n' "$user" "$n" 1>&2
+    else
+      printf 'Getting all Delegates for %s%s\n' "$user" "$n" 1>&2
+    fi
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+      printf 'User: %s, Gmail Service/App not enabled%s\n' "$user" "$n" 1>&2
+      rc=73; continue
+    fi
+    if [ "$what" = forward ]; then
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/forward/$user" ]; then
+        row="$user,$(cat "$GAM_MOCK_STATE/forward/$user")"
+      else
+        case "$user" in
+          carol@example.com) row="$user,True,carol.home@example.org,leaveInInbox" ;;
+          *) row="$user,False,," ;;
+        esac
+      fi
+      case "$row" in "$user,True,"*) ;; *) [ -n "$enabledonly" ] && continue ;; esac
+      rows="$rows$row
+"
+    else
+      for d in $(delegates_of "$user"); do
+        if [ -n "$shownames" ]; then
+          name=$(sed -n "s/.*\"primaryEmail\": \"$d\", \"name\": {\"givenName\": \"\([^\"]*\)\", \"familyName\": \"\([^\"]*\)\".*/\1 \2/p" \
+            "$GAM_MOCK_FIXTURES/print_users.json")
+          rows="$rows$user,${name:-$d},$d,accepted
+"
+        else
+          rows="$rows$user,$d,accepted
+"
+        fi
+      done
+    fi
+  done
+  if [ "$what" = forward ]; then
+    echo "User,forwardEnabled,forwardTo,disposition"
+  elif [ -n "$shownames" ]; then
+    echo "User,delegateName,delegateAddress,delegationStatus"
+  else
+    echo "User,delegateAddress,delegationStatus"
+  fi
+  printf '%s' "$rows"
+  exit "$rc"
+fi
+
 # `all users print messages query "rfc822msgid:<id> in:spam" includespamtrash headers message-id showlabels`: the Phishing
 # screen's read of the copies Gmail filed to Spam (GamCommands.findSpamCopies, SpamCopies), strict, as GAM 7.48.30's
 # printShowMessagesThreads runs it over every active user (isSuspended=False, by address), from mock_gam/messages.csv and

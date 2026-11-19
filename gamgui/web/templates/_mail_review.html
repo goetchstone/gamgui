@@ -1,0 +1,68 @@
+{#- Reports' mail review (roadmap 3.2): forwarding that is on and mail delegates, for every active account, read only when
+    asked (one Gmail call per account, twice). Carries its own id, because it also shows inside a job's page. Every account
+    GAM listed is accounted for: read, unread with a reason, or skipped without a word. Only a read one says anything. -#}
+{% macro accounts(a, what) -%}
+  <p class="mt-1 text-xs text-brand-grayink">{{ what }}: read {{ a.read }} of {{ a.listed }} account{{ "" if a.listed == 1 else "s" }}.</p>
+  {% if a.unread %}
+  <div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+    Not read, so not known: {% for u in a.unread[:shown] %}<a class="underline hover:text-amber-900" href="/users/detail?email={{ u.user | urlencode }}">{{ u.user }}</a> ({{ u.why }}){{ ", " if not loop.last }}{% endfor %}{% if a.unread | length > shown %} and {{ (a.unread | length) - shown }} more{% endif %}.
+  </div>
+  {% endif %}
+  {% if a.skipped %}
+  <div class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+    GAM skipped {{ a.skipped }} account{{ "" if a.skipped == 1 else "s" }} without a word, so {{ "its" if a.skipped == 1 else "their" }} {{ what | lower }} {{ "isn't" if a.skipped == 1 else "aren't" }} known. A refused sign-in does that: check the service account on Setup.
+  </div>
+  {% endif %}
+{%- endmacro %}
+<div id="mail-review-panel">
+{% if job and not job.finished %}
+  <div class="flex items-center gap-2 text-sm text-brand-grayink"
+       hx-get="/reports/mail-review?job={{ job.id }}" hx-trigger="load delay:1500ms"
+       hx-target="#mail-review-panel" hx-swap="outerHTML"{% if announce %} data-announce="{{ job.id }}"{% endif %}>
+    <span class="spinner"></span> Reading every account’s forwarding and delegates… about two seconds an account. You can keep working.
+  </div>
+{% elif not connected %}
+  <p class="text-sm text-brand-grayink">Connect a domain on Setup first.</p>
+{% else %}
+  {% if job and job.error %}
+  <div class="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800"{% if announce %} data-announce="{{ job.id }}"{% endif %}>Couldn’t read the mail settings. {{ job.error }}</div>
+  {% endif %}
+  {% if review is defined %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm"{% if announce and job and not job.error %} data-announce="{{ job.id }}"{% endif %}>
+    <h3 class="text-sm font-medium text-brand-black">Forwarding that is on ({{ review.forwarding | length }})</h3>
+    {{ accounts(review.forwarding_accounts, "Forwarding") }}
+    {% if review.forwarding %}
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for f in review.forwarding[:shown] %}
+      <li><a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ f.user | urlencode }}">{{ f.user }}</a>
+        <span class="text-brand-grayink">→ {{ f.to }}{% if f.disposition %} ({{ f.disposition }}){% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if review.forwarding | length > shown %}<p class="mt-1 text-xs text-brand-grayink">… and {{ (review.forwarding | length) - shown }} more.</p>{% endif %}
+    {% elif review.forwarding_accounts.read %}
+    <p class="mt-2 text-sm text-brand-grayink">None of the {{ review.forwarding_accounts.read }} accounts read forwards.</p>
+    {% endif %}
+
+    {% set by_user = review.delegated_by_user() %}
+    <h3 class="mt-5 text-sm font-medium text-brand-black">Mail delegates ({{ by_user | length }} account{{ "" if by_user | length == 1 else "s" }})</h3>
+    {{ accounts(review.delegation_accounts, "Delegates") }}
+    {% if by_user %}
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for user, delegations in by_user[:shown] %}
+      <li><a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ user | urlencode }}">{{ user }}</a>
+        <span class="text-brand-grayink">— {% for d in delegations %}{% if d.name and d.name != d.delegate %}{{ d.name }} {% endif %}&lt;{{ d.delegate }}&gt;{% if d.status and d.status != "accepted" %} ({{ d.status }}){% endif %}{{ ", " if not loop.last }}{% endfor %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if by_user | length > shown %}<p class="mt-1 text-xs text-brand-grayink">… and {{ (by_user | length) - shown }} more.</p>{% endif %}
+    {% elif review.delegation_accounts.read %}
+    <p class="mt-2 text-sm text-brand-grayink">None of the {{ review.delegation_accounts.read }} accounts read has a delegate.</p>
+    {% endif %}
+    <p class="mt-4 text-xs text-brand-grayink">Read {{ review_age | ago }}. Suspended accounts are left out. This doesn’t cover Gmail filters that forward, which turning forwarding off doesn’t stop either: a person’s filters are on their page.</p>
+  </div>
+  {% else %}
+  <p class="mb-3 text-sm text-brand-blueink">Who forwards their mail, and to where, and who has a mail delegate, across every active account. Read with GAM when you ask, about two seconds an account. Reading changes nothing. Gmail filters that forward aren’t covered.</p>
+  {% endif %}
+  <button type="button" hx-post="/reports/mail-review/read" hx-target="#mail-review-panel" hx-swap="outerHTML" hx-disabled-elt="this"
+          class="{{ 'mt-3 ' if review is defined }}inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">{{ "Read again" if review is defined else ("Try again" if job and job.error else "Read mail settings") }}</button>
+{% endif %}
+</div>

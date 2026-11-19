@@ -31,6 +31,7 @@ from ..calendar_index import IndexedCalendar
 from ..classroom import Course, Roster, courses_from, owned_by, roster_from
 from ..roster_plan import Managed, managed_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
+from ..mail_review import MailReview, account_for, delegations_from, forwarding_from
 from ..gam.parser import parse_one, parse_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
 from ..incident.check import (
@@ -452,6 +453,27 @@ class GAMConnector(Connector):
                 raise
             out, complete = exc.stdout, False
         return await asyncio.to_thread(lambda: read_from(parse_records(out), complete))
+
+    async def mail_review(self) -> MailReview:
+        """Reports' mail review (roadmap 3.2): every active account's forwarding that is on, and every mail delegate. Two
+        domain-wide reads, one Gmail call per account each, so a background job runs them when asked. GAM carries on past an
+        account it can't read and exits with that warning's code (PER_USER_RCS): its lines say which, and core/mail_review
+        accounts for every account it listed. Any other exit, or a run that announced no account, is an error, never "none"."""
+        forward = await self._mail_read(GAMCommands.all_users_print_forward(), "forwarding")
+        delegates = await self._mail_read(GAMCommands.all_users_print_delegates(), "delegates")
+        return MailReview(forwarding_from(forward[0]), forward[1], delegations_from(delegates[0]), delegates[1])
+
+    async def _mail_read(self, argv: List[str], what: str):
+        res = await self.runner.run_any_exit(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
+        if res.returncode not in PER_USER_RCS:
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        accounted = account_for(res.stderr)
+        # GAM writes the CSV's titles even with no row: without them the table never came, and its absence isn't "none".
+        if accounted is None or not res.stdout.strip():
+            raise Incomplete(f"GAM exited without reading any account's {what}, so it can't be told. Its sign-in may have "
+                             "been refused: check the service account on Setup.")
+        records = await asyncio.to_thread(parse_records, res.stdout)
+        return records, accounted
 
     async def usage_report(self, params: Sequence[str], max_lookback: int = 6) -> dict:
         """Per-user usage (storage/mail/drive). Usage lags ~2-3 days, so walk back to a date with data."""
