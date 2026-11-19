@@ -103,7 +103,10 @@ def test_only_a_reviewed_read_may_use_the_any_exit_door():
                 if isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "run_any_exit":
                     callers.add(fn.name)
     # _courses_read: `print courses` (a READS builder), whose exit 56 can be only unknown-owner warnings over a whole table.
-    assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy", "script_projects", "_courses_read"}
+    # owned_calendars: `print calendars ownedsecondary` (a READS builder), which needs stderr's "Getting" line to tell a read
+    # from GAM skipping a refused token without a word; any non-zero exit still raises.
+    assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy", "script_projects", "_courses_read",
+                       "owned_calendars"}
 
 
 # --- MessageCopies ------------------------------------------------------------------------------------------------------

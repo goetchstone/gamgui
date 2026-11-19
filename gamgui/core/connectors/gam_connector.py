@@ -696,7 +696,18 @@ class GAMConnector(Connector):
         return await self._run_write("delete_filters", email, GAMCommands.delete_filters(email, filter_ids), RiskLevel.DESTRUCTIVE)
 
     async def owned_calendars(self, email: str) -> List[Dict[str, Any]]:
-        return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_owned_calendars(email)))
+        """The secondary calendars ``email`` owns. GAM skips a refused token without a word (validateCalendar, then
+        ``if not cal: continue``): the titles alone, exit 0, which read as "owns none", and the account delete and the
+        offboarding preview decide on that. Its "Getting Calendars for" line comes only once the service is built
+        (``show_gettings``, on by default), so no rows without it is Incomplete, never none (invariant 10)."""
+        argv = GAMCommands.print_owned_calendars(email)
+        res = await self.runner.run_any_exit(self.domain, argv)
+        if res.returncode != 0:
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        rows = parse_records(res.stdout)
+        if not rows and "Getting Calendars for" not in res.stderr:
+            raise Incomplete("GAM answered without reading the calendars, so whether they own any can't be told.")
+        return rows
 
     async def user_filters(self, email: str) -> List[Dict[str, Any]]:
         return parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.print_filters(email)))

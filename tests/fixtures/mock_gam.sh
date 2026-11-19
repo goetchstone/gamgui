@@ -1352,6 +1352,9 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "calendars" ]
   # unless showHidden: `user_owned_calendars/<u>.json` are the visible ones, `<u>.hidden.json` the hidden ones. Calendar
   # off (GAM_MOCK_STATE/nocalendar/<u>) fails after the "Getting" line, exit 73.
   if [ -n "$owned" ]; then
+    # validateCalendar: a refused token GAM drops without a word (REFRESH_PERM_ERRORS), `if not cal: continue`: no
+    # "Getting" line, the titles alone, exit 0 (GAM_MOCK_STATE/quiet/<u>; SwiftGamGui's mock models it the same).
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$(lower "$user")" ]; then echo "primaryEmail,calendarId,JSON"; exit 0; fi
     printf 'Getting Calendars for %s\n' "$user" 1>&2
     if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nocalendar/$(lower "$user")" ]; then
       printf 'User: %s, Calendar Service/App not enabled\n' "$user" 1>&2; exit 73

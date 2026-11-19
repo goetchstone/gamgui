@@ -2511,3 +2511,20 @@ def test_a_refused_calendar_read_is_said_and_reread_at_the_click(client, gam_cal
     r = client.post("/users/delete/apply", data={"email": "alice@example.com", "confirmed": "1",
                                                  "confirm_email": "alice@example.com", "preview": token})
     assert "for secondary calendars again" in r.text and gam_writes(gam_calls()) == []
+
+
+def test_a_delete_whose_calendars_read_gam_skipped_says_so(client, gam_calls, gam_state):
+    # Carol owns secondary calendars, so the delete refuses her. GAM skipping the read without a word (a refused token,
+    # exit 0, no "Getting" line) once read as "owns none": the delete would have gone on and lost them (invariant 10).
+    (gam_state / "quiet").mkdir()
+    (gam_state / "quiet" / "carol@example.com").write_text("")
+    page = unescape(client.post("/users/delete/confirm", data={"email": "carol@example.com"}).text)
+    assert "Couldn't check whether carol@example.com owns secondary calendars" in page
+    assert "GAM answered without reading it" in page
+    # ...and a read that answered at the confirm step but is skipped at the click deletes nothing.
+    (gam_state / "quiet" / "carol@example.com").unlink()
+    token = _delete_token(client, "bob@example.com")
+    (gam_state / "quiet" / "bob@example.com").write_text("")
+    r = client.post("/users/delete/apply", data={"email": "bob@example.com", "confirmed": "1",
+                                                 "confirm_email": "bob@example.com", "preview": token})
+    assert "for secondary calendars again" in r.text and gam_writes(gam_calls()) == []

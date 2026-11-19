@@ -220,7 +220,7 @@ parser was read statically (its bytecode, never run). No mismatch found.
 - **Delete refused on a Vault hold or an owned secondary calendar (roadmap 2.9, SwiftGamGui's Off3).** Google
   won't delete an account on hold, and it deletes a deleted account's secondary calendars, events and all, with
   nothing to transfer them from after. `delete_confirm` reads `user L print vaultholds` and `user L print calendars
-  ownedsecondary showhidden`; anything found refuses ("Not deleted. …") and nothing is held. A read that failed is
+  ownedsecondary showhidden` (a read GAM skipped without a word, a refused token's titles alone and exit 0 with no "Getting Calendars for" line, is `Incomplete`, never none: failure-log 2026-11-19); anything found refuses ("Not deleted. …") and nothing is held. A read that failed is
   said as unread, never as none, and the operator may go on (Google itself refuses a held account). `delete_apply`
   reads both again: a hold or calendar since refuses, and so does a read that answered at the confirm step and
   fails now. SwiftGamGui refuses the same two; neither app refuses on a running transfer (a loud warning in both).

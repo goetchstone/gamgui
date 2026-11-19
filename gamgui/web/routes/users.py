@@ -33,6 +33,7 @@ from ..jobs import retry_key, retry_of, start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, GAM_TROUBLE, as_of, connector, error_partial, friendly, write_failed
+from ._common import unread_why
 
 router = APIRouter(prefix="/users")
 
@@ -811,12 +812,12 @@ async def _delete_reads(conn, email: str):
         holds = lifecycle.vault_holds_from(await conn.vault_holds(email))
         answered.add("holds")
     except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
-        unread.append(lifecycle.vault_holds_unread(email, friendly(exc, _TRY_AGAIN), False))
+        unread.append(lifecycle.vault_holds_unread(email, unread_why(exc, _TRY_AGAIN), False))
     try:
         calendars = lifecycle.owned_calendars_from(await conn.owned_calendars(email))
         answered.add("calendars")
     except Exception as exc:  # noqa: BLE001 - any failure is said, whatever it was
-        unread.append(lifecycle.secondary_calendars_unread(email, friendly(exc, _TRY_AGAIN)))
+        unread.append(lifecycle.secondary_calendars_unread(email, unread_why(exc, _TRY_AGAIN)))
     return lifecycle.delete_refusal(email, holds, calendars), unread, frozenset(answered)
 
 
