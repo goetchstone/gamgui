@@ -5,6 +5,9 @@
   {% for t in pending_transfers | default([]) %}
   <p class="rounded-lg border border-red-400 bg-red-100 px-3 py-2 text-sm text-red-900">⚠ <strong>Data transfer still in progress</strong> ({{ t.application }}: {{ t.status }}) from an account this deletes. Deleting now <strong>permanently loses</strong> whatever hasn't transferred yet.</p>
   {% endfor %}
+  {% for a in transfers_unknown | default([]) %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ <strong>Couldn't check for a data transfer</strong> from {{ a }}, so one may still be running. Deleting before it completes <strong>permanently loses</strong> whatever hasn't transferred yet: check Data transfers in the Admin console first.</p>
+  {% endfor %}
   {% if error %}<p tabindex="-1" data-focus class="text-xs font-medium text-red-700">{{ error }}</p>{% endif %}
   {% if not blocked %}
   <form hx-post="/builder/sequence/run" hx-target="#sequence-action" hx-swap="innerHTML" hx-disabled-elt="find button" class="flex items-center gap-2">

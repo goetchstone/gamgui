@@ -759,6 +759,16 @@ def test_builder_delete_warns_on_a_pending_data_transfer(client):
     assert "Data transfer still in progress" not in r.text
 
 
+@pytest.mark.parametrize("email", ["xferfail@example.com", "xfernotable@example.com"])
+def test_builder_delete_says_a_transfer_check_that_failed(client, email):
+    # A failed read is unknown, never "nothing pending" (invariant 10; failure-log 2026-11-18).
+    r = client.post("/builder/preview", data={"cid": "build.delete_user", "email": email})
+    assert "Couldn't check for a data transfer" in r.text and email in r.text
+    client.post("/builder/sequence/add", data={"cid": "build.delete_user", "email": email})
+    r = client.post("/builder/sequence/preview")
+    assert "Couldn't check for a data transfer" in r.text
+
+
 def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
     form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
     _, token = _builder_preview(client, **form)

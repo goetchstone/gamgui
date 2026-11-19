@@ -97,3 +97,10 @@ async def test_incomplete_transfers_for(connector):
     assert pending and pending[0]["application"] == "Drive and Docs"
     assert all(t["status"].lower() != "completed" for t in pending)   # the completed row is filtered out
     assert await connector.incomplete_transfers_for("nobody@example.com") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("email", ["xferfail@example.com", "xfernotable@example.com"])
+async def test_a_failed_transfer_read_is_unknown_not_none_pending(connector, email):
+    # An error exit, or exit 0 with no table: None (unknown), never [] (failure-log 2026-11-18).
+    assert await connector.incomplete_transfers_for(email) is None

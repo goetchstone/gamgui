@@ -206,8 +206,10 @@ parser was read statically (its bytecode, never run). No mismatch found.
 - **Delete gated on transfer completion (advisory).** `delete_confirm` calls
   `incomplete_transfers_for(email)` and loudly warns if a Drive/Calendar transfer is still running —
   deleting then permanently loses the un-transferred data. It is a warning + type-the-email confirm,
-  **not a hard block**; `incomplete_transfers_for` returns `[]` on any read error, so an inability to
-  check never blocks deletion (it just can't warn). Added in `b26da7e`.
+  **not a hard block**. A read that failed, or exited without its table (GAM prints the header even with no
+  transfers: read statically from the 7.52.03 build), returns `None`, and the Users delete zone and the
+  Builder's delete previews say "Couldn't check for a data transfer". It once returned `[]`, which read as
+  "nothing pending" and offered the delete with no warning (failure-log 2026-11-18). Added in `b26da7e`.
 - **Calendar sweep is best-effort.** `remove_from_all_calendars` runs `all users delete calendaracls
   primary <email>` and passes `tolerate_kinds=SWEEP_TOLERATED` to `_run_write`: NOT_FOUND = that
   user never shared with the leaver; SERVICE_NOT_ENABLED = a user without Calendar ("User: x,
