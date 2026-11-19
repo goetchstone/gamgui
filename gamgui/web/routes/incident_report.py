@@ -3,6 +3,8 @@ docs/domains/incident.md."""
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 import contextlib
 import os
@@ -25,6 +27,8 @@ from ..server import TEMPLATES
 from ._common import admin_address, error_partial, incident_store, open_incident_record
 from .incident_kept import reopen_remembered
 from .incident_logs import _current_reading, _partial, _running, _ticked
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/incident/report")
 
@@ -105,8 +109,11 @@ async def _report(st) -> Optional[Report]:
     saved: Tuple[Tuple[str, str], ...] = ()
     try:
         saved = tuple(await asyncio.to_thread(kept.saved_about, record.id)) if kept else ()
-    except (OSError, store.Problem) as exc:
-        saved_problem = getattr(exc, "strerror", None) or str(exc)
+    except store.Problem as exc:
+        saved_problem = str(exc)
+    except OSError as exc:
+        logger.warning("listing an incident's saved logs failed", exc_info=exc)
+        saved_problem = "the incident's folder couldn't be read"
     held = st.incident_pull
     if held is None:
         return None
@@ -238,10 +245,16 @@ async def make_export(request: Request) -> HTMLResponse:
     os.close(fd)
     try:
         await asyncio.to_thread(_write_export, replace(report, made=datetime.now(timezone.utc)), kept, report.record.id, path, _partial(st))
-    except (store.Problem, OSError) as exc:
+    except store.Problem as exc:
         with contextlib.suppress(OSError):
             os.unlink(path)
         return error_partial(request, f"The report wasn't exported: {exc}")
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            os.unlink(path)
+        logger.warning("writing the report export failed", exc_info=exc)
+        return error_partial(request, "The report wasn't exported: it couldn't be written. Check the disk has room, then "
+                             "try again.")
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(path)

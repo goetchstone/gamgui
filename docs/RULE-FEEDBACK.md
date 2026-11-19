@@ -41,7 +41,7 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently: the session-start nudge counts open entries, but not
   how long each has been open, nor whether its named home exists.
 - **Enforcement home if changed:** hook (the nudge names any entry open past one observer pass). The backlog itself
-  is `docs/plans/2026-11-18-enforce-recorded-lessons.md`.
+  is a plan the operator keeps locally (not in the repo).
 
 ## 2026-11-15 — Joining continuation lines exposed the read builder's guesses about groups
 - **What happened:** the parser now joins each entry's continuation lines (the follow-up the 2026-11-14 entry asked
@@ -142,6 +142,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Would a rule have caught it?** Only if enforced differently: a tripwire over `web/routes/` for a `Response` or JSON
   answer built from a caught exception, or a pre-commit item for route changes.
 - **Enforcement home if changed:** tripwire test (backstop), plus the build-packaging runbook's note on the gate.
+- **Resolved (2026-11-18):** `tests/test_route_error_text.py` (every handler in `web/routes/` classified; no bare
+  `Exception` or `OSError` text reaches the operator), and the rule in the web-server-security runbook.
 
 ## 2026-10-16 — improve-rules pass: the mock-lies rule named one mock; the fakes that lied were others
 - **What happened:** the observer pass over the window since 2026-10-01: fix commits b6feae3, 383100a,

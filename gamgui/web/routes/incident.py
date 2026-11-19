@@ -7,6 +7,8 @@ GamGUI signs in as, and each scheduled email held still scheduled. Rules: ``core
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from dataclasses import dataclass
 from typing import Annotated, FrozenSet, List, Tuple, Optional
@@ -28,6 +30,8 @@ from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from .incident_kept import reopen_remembered
 from ._common import open_incident_record, NOT_CONNECTED, error_partial
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/incident")
 
@@ -266,7 +270,9 @@ async def secure_apply(request: Request) -> HTMLResponse:
     try:
         conn.audit.record("incident_secure", target=held.user, ok=True, extra={"planned": [s.key for s in held.steps]})
     except OSError as exc:
-        return error_partial(request, f"The audit log couldn't record this ({exc.strerror or type(exc).__name__}), so nothing ran.")
+        logger.warning("the audit log refused an incident_secure record", exc_info=exc)
+        return error_partial(request, "The audit log couldn't record this, so nothing ran. Check the disk has room, then "
+                             "try again.")
     st.incident_check = None          # its lists are from before the run: it's read again when the run ends
     st.incident_lock_ran = any(s.key in ("password", "revoke") for s in held.steps)
     job = start_job(st.jobs, len(held.steps), kind="incident_secure", title=f"Securing {held.user}" if st.incident_lock_ran else f"A fix on {held.user}")

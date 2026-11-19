@@ -32,6 +32,9 @@ client_secrets.json
 !.claude/skills/
 !.claude/agents/
 
+# Plans the operator keeps local (working backlogs, not public docs)
+docs/plans/2026-11-18-enforce-recorded-lessons.md
+
 # macOS
 .DS_Store
 

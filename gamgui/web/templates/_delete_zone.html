@@ -14,9 +14,16 @@
     <em>completed</em> before deleting.
   </div>
   {% endif %}
+  {% if transfers_unknown %}
+  <div id="del-transfer-unknown" class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+    ⚠ <strong>Couldn't check for a data transfer</strong> from {{ email }}, so one may still be running. Deleting
+    before it completes <strong>permanently loses</strong> whatever hasn't transferred yet. Check Data transfers in
+    the Admin console first.
+  </div>
+  {% endif %}
   <label for="del-confirm-email" class="block text-sm text-red-700"><strong>Permanently delete {{ email }}?</strong> Recoverable for ~20 days, then gone. Type the email to confirm:</label>
   <input id="del-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ email }}" data-focus
-         {% if pending_transfers or error %}aria-describedby="{% if error %}del-confirm-error {% endif %}{% if pending_transfers %}del-transfer-warning{% endif %}"{% endif %}
+         {% if pending_transfers or transfers_unknown or error %}aria-describedby="{% if error %}del-confirm-error {% endif %}{% if pending_transfers %}del-transfer-warning {% endif %}{% if transfers_unknown %}del-transfer-unknown{% endif %}"{% endif %}
          {% if error %}aria-invalid="true"{% endif %}
          class="w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
   {% if error %}<p id="del-confirm-error" class="text-xs text-red-700">{{ error }}</p>{% endif %}

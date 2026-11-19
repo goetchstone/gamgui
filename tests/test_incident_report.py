@@ -619,7 +619,9 @@ def test_evidence_that_can_t_be_listed_is_said_not_a_500(client, state, tmp_path
 
     monkeypatch.setattr(IncidentStore, "saved_about", refused)
     r = client.get("/incident/report")
-    assert r.status_code == 200 and "The saved reads couldn't be listed: Permission denied" in unescape(r.text)
+    shown = unescape(r.text)
+    assert r.status_code == 200 and "The saved reads couldn't be listed: the incident's folder couldn't be read" in shown
+    assert "Permission denied" not in shown      # the OS's own words go to the log (tests/test_route_error_text.py)
     assert client.get("/incident/report/list?id=gotIt").status_code == 200
 
 
