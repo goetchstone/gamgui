@@ -1,0 +1,38 @@
+{#- Remove several members (roadmap 3.5): the confirm step. It posts what was ticked as one `picks` value, which keys the
+    held preview: a selection changed since is refused. The members are the ticked ones the group still held when this
+    preview read it, held under a single-use token; Remove takes exactly those. A retry (plan U5) is the same step for a
+    finished run's failed members. -#}
+<div class="mb-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm">
+  {% if not still %}
+  <p tabindex="-1" data-focus class="text-red-800">None of them is in {{ group }} any more, read again just now. Nothing to remove.</p>
+  {% else %}
+  <p tabindex="-1" data-focus class="font-medium text-red-800">Remove {{ still | length }} {{ "member" if still | length == 1 else "members" }} from {{ group }}?</p>
+  <p class="mt-1 text-red-700">They stop getting the group's mail and lose what is shared with it. You can add them back.</p>
+  {% if owners %}
+  <p class="mt-1 text-red-700"><b>{{ owners | length }} {{ "is an owner" if owners | length == 1 else "are owners" }}</b>: {{ owners | join(", ") }}. Make sure the group keeps one.</p>
+  {% endif %}
+  <ul class="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-red-900">
+    {% for m in still %}<li>{{ m.email }} <span class="text-xs text-red-700">({{ m.role | lower }})</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if gone %}<p class="mt-2 text-xs text-red-700">Not in the group any more, left out: {{ gone | join(", ") }}.</p>{% endif %}
+  {% if still %}
+  <form class="mt-3 flex flex-wrap items-end gap-2" hx-post="/groups/members/remove-many" hx-target="#member-job" hx-swap="innerHTML"
+        hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="group" value="{{ group }}" />
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    {% if retry %}<input type="hidden" name="retry" value="{{ retry }}" />
+    {% else %}<input type="hidden" name="picks" value="{{ picked | join(',') }}" />{% endif %}
+    {% if decision.requires_typed_count %}
+    <label class="block text-sm text-red-800">Type <strong>{{ still | length }}</strong> to confirm:
+      <input name="confirm_count" inputmode="numeric" autocomplete="off"
+             class="mt-1 block w-24 rounded-lg border border-brand-field bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+    </label>
+    {% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Remove {{ still | length }}</button>
+    <button type="button" data-action="clear" data-clear="member-confirm"
+            class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors">Cancel</button>
+  </form>
+  {% endif %}
+</div>

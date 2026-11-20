@@ -204,7 +204,7 @@ school domain is the most useful one of all.
 | Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
-| Remove group member | Groups, Users, Builder | **confirmed** |
+| Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
 | Remove delegate | Users, Builder | **confirmed** |
 | Set vacation (auto-reply) | Users, Offboarding, Builder | **confirmed**, including the explicit `contactsonly false domainonly false` and dated `start`/`end` the user page sends; and offboarding's "starts now, no end" `start Started end NotSpecified` (the first live offboarding, 2026-10-07, GAM 7.48.14) |

@@ -1,0 +1,26 @@
+{#- Remove several members (roadmap 3.5): the running job and its result, in the group panel's #member-job. The feed is
+    the job's bounded window (invariant 9). When it ends, the member list is read again. -#}
+{% from "_job_failures.html" import failures, retry %}
+{% import "_job_live.html" as live %}
+{% if job and not job.finished %}
+<div hx-get="/groups/members/remove-many/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
+     hx-target="#member-job" hx-swap="innerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2">
+    <span class="spinner"></span>{{ live.progress(job, "Removing") }}
+    <span>Removing from {{ group }}… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
+    {{ live.stop(job) }}
+  </div>
+</div>
+{% elif job %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>Removed {{ job.applied }} of {{ job.total }} before stopping.
+  {% else %}Removed {{ job.applied }} of {{ job.total }} from {{ group }}.{% endif %}</p>
+  {% if job.failed_total %}
+  <div class="mt-1 text-xs">Not removed ({{ job.failed_total }}):</div>
+  {{ failures(job) }}
+  {{ retry(job, "/groups/members/remove-many/retry") }}
+  {% endif %}
+</div>
+<div hx-get="/groups/members/list?group={{ group | urlencode }}" hx-trigger="load" hx-target="#member-list" hx-swap="innerHTML"></div>
+{% endif %}
