@@ -35,6 +35,7 @@ class OffboardTemplate:
     days: int = 30
     invitee: str = ""                  # also invited to the reminder
     services: FrozenSet[str] = DEFAULT_SERVICES   # what the transfer moves
+    release_resources: bool = False               # free the rooms their events booked (Calendar only)
 
     @property
     def runs(self) -> List[str]:
@@ -59,6 +60,8 @@ class OffboardTemplate:
             return f"The reminder is between {MIN_DAYS} and {MAX_DAYS:,} days out."
         if not self.services and "transfer" not in self.leave_out:
             return "The transfer moves nothing: pick Drive, Calendar or Looker Studio, or leave the transfer out."
+        if self.release_resources and "calendar" not in self.services and "transfer" not in self.leave_out:
+            return "Releasing the rooms their events booked is part of the Calendar transfer: tick Calendar too."
         if unknown := self.services - {key for key, _ in SERVICE_CHOICES}:
             return f"“{sorted(unknown)[0]}” isn't something the transfer moves."
         invitee = self.invitee.strip()
@@ -68,7 +71,8 @@ class OffboardTemplate:
 
     def as_json(self) -> Dict[str, Any]:
         return {"leave_out": sorted(self.leave_out), "add": sorted(self.add), "subject": self.subject, "message": self.message,
-                "days": self.days, "invitee": self.invitee, "services": [k for k, _ in SERVICE_CHOICES if k in self.services]}
+                "days": self.days, "invitee": self.invitee, "services": [k for k, _ in SERVICE_CHOICES if k in self.services],
+                "release_resources": self.release_resources}
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> "OffboardTemplate":
@@ -77,11 +81,14 @@ class OffboardTemplate:
         leave_out, add, days = data.get("leave_out", []), data.get("add", []), data.get("days", 30)
         subject, message, invitee = data.get("subject", DEFAULT_SUBJECT), data.get("message", DEFAULT_MESSAGE), data.get("invitee", "")
         services = data.get("services", sorted(DEFAULT_SERVICES))
+        release = data.get("release_resources", False)   # added within version 3: a file without it releases nothing
+        if not isinstance(release, bool):
+            raise ValueError("not a template")
         if (not isinstance(leave_out, list) or not isinstance(add, list) or not isinstance(days, int) or isinstance(days, bool)
                 or not isinstance(services, list)
                 or not all(isinstance(v, str) for v in (*leave_out, *add, *services, subject, message, invitee))):
             raise ValueError("not a template")
-        return cls(frozenset(leave_out), frozenset(add), subject, message, days, invitee, frozenset(services))
+        return cls(frozenset(leave_out), frozenset(add), subject, message, days, invitee, frozenset(services), release)
 
 
 # The templates on first use, all the operator's to change or delete. The form opens as it always has, all eight steps,

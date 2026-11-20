@@ -79,10 +79,11 @@ def _added(form) -> FrozenSet[str]:
 def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str,
               done: FrozenSet[str], not_applicable: FrozenSet[str] = frozenset(),
               added: FrozenSet[str] = frozenset(), recipient: str = "",
-              services: FrozenSet[str] = lifecycle.DEFAULT_SERVICES, autoreply_end: str = "") -> tuple:
+              services: FrozenSet[str] = lifecycle.DEFAULT_SERVICES, autoreply_end: str = "",
+              release: bool = False) -> tuple:
     return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
             tuple(sorted(done)), tuple(sorted(not_applicable)), tuple(sorted(added)), recipient.strip().lower(),
-            tuple(sorted(services)), autoreply_end.strip())
+            tuple(sorted(services)), autoreply_end.strip(), release)
 
 
 def _running(st, user: str):
@@ -191,7 +192,7 @@ def _template_store(request: Request) -> OffboardTemplateStore:
 def _fields(template: OffboardTemplate, user: str = "", manager: str = "") -> dict:
     return {"values": {"user": user, "manager": manager, "subject": template.subject, "message": template.message,
                        "days": template.days, "invitee": template.invitee, "leave_out": template.leave_out, "add": template.add,
-                       "services": template.services},
+                       "services": template.services, "release_resources": template.release_resources},
             "service_choices": lifecycle.SERVICE_CHOICES, "step_names": lifecycle.STEP_NAMES, "optional_steps": lifecycle.OPTIONAL_STEPS, "addable_steps": lifecycle.ADDABLE_STEPS,
             "added_notes": lifecycle.ADDED_NOTES, "routine": lifecycle.ROUTINE}
 
@@ -221,7 +222,8 @@ async def template_save(request: Request) -> HTMLResponse:
     name = str(form.get("template_name") or "").strip()
     template = OffboardTemplate(leave_out=_not_applicable(form), add=_added(form), subject=str(form.get("subject") or ""),
                                 message=str(form.get("message") or ""), days=_days(str(form.get("days") or "30")),
-                                invitee=str(form.get("notify") or "").strip(), services=_services(form))
+                                invitee=str(form.get("notify") or "").strip(), services=_services(form),
+                                release_resources=form.get("release_resources") == "1")
     if store.get(name) is not None and form.get("replace") != "1":
         return _templates_panel(request, error=f"There's already a template called “{name}”.", replacing=name, typed_name=name)
     try:
@@ -260,7 +262,9 @@ async def offboard_preview(
         return error_partial(request, NOT_CONNECTED)
     posted = await request.form()
     done, na, added, services = _done(posted), _not_applicable(posted), _added(posted), _services(posted)
-    form = _form_key(user, manager, subject, message, days, notify, done, na, added, recipient, services, autoreply_end)
+    release = posted.get("release_resources") == "1"
+    form = _form_key(user, manager, subject, message, days, notify, done, na, added, recipient, services, autoreply_end,
+                     release)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return error_partial(request, "Enter both the departing user and the manager email.")
@@ -272,6 +276,8 @@ async def offboard_preview(
     autoreply_end = autoreply_end.strip() if "vacation" not in done | na else ""
     if problem := lifecycle.autoreply_end_problem(autoreply_end, date.today()):
         return error_partial(request, problem)
+    if release and "transfer" not in done | na and "calendar" not in services:
+        return error_partial(request, "Releasing the rooms their events booked is part of the Calendar transfer: tick Calendar too.")
     if not services and "transfer" not in done | na:
         return error_partial(request, "The transfer moves nothing: tick Drive, Calendar or Looker Studio, or leave the transfer out.")
     check = await _check(st, user, manager, recipient)
@@ -339,7 +345,8 @@ async def offboard_preview(
             manager_contact=await _manager_contact(st, manager), not_applicable=na, added=added,
             calendars=calendars, filters=filters, recipient=recipient,
             # None ticked passed the check above only with the transfer left out or done: never run, so the routine's own.
-            services=services or lifecycle.DEFAULT_SERVICES, autoreply_end=autoreply_end)
+            services=services or lifecycle.DEFAULT_SERVICES, autoreply_end=autoreply_end,
+            release_resources=release and "transfer" not in done | na)
     except ValueError as exc:    # an ID GAM couldn't take as one: the builders refuse it
         return error_partial(request, f"Couldn't plan the added steps: {exc}.")
     to_run = [s for s in steps if s.key not in done | na]
@@ -396,7 +403,8 @@ async def offboard_run(
     # Single use: a second Run, or a Run after the form was edited, needs a new preview.
     held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
                                                                _done(form), _not_applicable(form), _added(form),
-                                                               recipient, _services(form), autoreply_end),
+                                                               recipient, _services(form), autoreply_end,
+                                                               form.get("release_resources") == "1"),
                                      again="click Preview steps again")
     if refusal:
         return error_partial(request, refusal)

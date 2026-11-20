@@ -473,6 +473,7 @@ def build_offboard_steps(
     not_applicable: FrozenSet[str] = frozenset(), added: FrozenSet[str] = frozenset(),
     calendars: Sequence[OwnedCalendar] = (), filters: Sequence[ForwardingFilter] = (),
     recipient: str = "", services: Iterable[str] = DEFAULT_SERVICES, autoreply_end: str = "",
+    release_resources: bool = False,
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence).
 
@@ -503,6 +504,8 @@ def build_offboard_steps(
     services = frozenset(services)
     service_list = transfer_services(services)
     privacy = TRANSFER_PRIVACY if "drive" in services else ""
+    if release_resources and "calendar" not in services:
+        raise ValueError("releasing the rooms their events booked is part of the Calendar transfer: transfer Calendar too")
     moving = services_named(services)
     transfer_label = ("Transfer Drive & Calendar ownership" if services == DEFAULT_SERVICES
                       else f"Transfer {moving} ownership")
@@ -544,9 +547,11 @@ def build_offboard_steps(
         OffboardStep("transfer", transfer_label,
                      (f"Transfer {user}'s Drive/Docs (private and shared files) and calendars to {manager}"
                       if (to, services) == (manager, DEFAULT_SERVICES) else
-                      f"Transfer {user}'s {moving} to {to}" + (" (private and shared Drive files)" if "drive" in services else "")),
-                     lambda c: c.transfer_data(user, service_list, to, privacy=privacy),
-                     [GAMCommands.create_datatransfer(user, service_list, to, privacy=privacy)]),
+                      f"Transfer {user}'s {moving} to {to}" + (" (private and shared Drive files)" if "drive" in services else ""))
+                     + ("; the rooms and resources their events booked are released" if release_resources else ""),
+                     lambda c: c.transfer_data(user, service_list, to, privacy=privacy, release_resources=release_resources),
+                     [GAMCommands.create_datatransfer(user, service_list, to, privacy=privacy,
+                                                      release_resources=release_resources)]),
         OffboardStep("calacls", "Remove from everyone's calendars",
                      f"Remove {user}'s access to every active user's primary calendar — one "
                      f"domain-wide call that visits every user, so it can take many minutes (stopped and "
