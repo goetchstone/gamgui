@@ -87,7 +87,8 @@ and have only run offline: see
   editing (title/department and the phone a signature shows — location is shown but not editable) with a bulk "set department"
   tool, mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
   (grant/revoke access to that person's own calendar), **sign out everywhere**, a guarded
-  **suspend**, and a **move to another org unit** (the tree read when asked, from and to previewed).
+  **suspend**, and a **move to another org unit** (the tree read when asked, from and to previewed) — one person from
+  their page, or many from a group or a pasted list as a job with Stop and a retry of the ones that failed.
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
@@ -205,7 +206,7 @@ school domain is the most useful one of all.
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
-| Move to an org unit (`update org <ou> move user <email>`) | Users | not yet: the tenant has no org units, so the check creates one first |
+| Move to an org unit (`update org <ou> move user <email>`) | Users (one person, or many as a job) | not yet: the tenant has no org units, so the check creates one first |
 | Create, rename, delete an org unit | Builder | not yet: the check creates a throwaway unit, renames it, then deletes it |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |

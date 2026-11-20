@@ -47,6 +47,9 @@ class _Conn:
     async def create_user(self, email, *a, **k):
         return await self._write(email)
 
+    async def move_user_to_org_unit(self, email, org_unit):
+        return await self._write(email)
+
 
 class _Kept:
     """A backup run that keeps every copy (the real one writes them to disk: tests/test_signature_backups.py)."""
@@ -99,7 +102,16 @@ async def _onboard(conn):
     return job
 
 
-LOOPS = {"signatures": _signatures, "department": _department, "subscribe": _subscribe, "onboard": _onboard}
+async def _org_unit(conn):
+    from gamgui.core.bulk import move_users
+    from gamgui.web.jobs import BatchJob
+    job = BatchJob(id="j", total=len(EMAILS))
+    await move_users(job, conn, EMAILS, "/Sales")
+    return job
+
+
+LOOPS = {"signatures": _signatures, "department": _department, "subscribe": _subscribe, "onboard": _onboard,
+         "org_unit": _org_unit}
 
 
 @pytest.mark.parametrize("loop", sorted(LOOPS))

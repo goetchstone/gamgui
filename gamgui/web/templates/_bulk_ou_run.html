@@ -1,0 +1,29 @@
+{#- Move many to an org unit (roadmap 4.2): the running job and its result. The feed is the job's bounded window
+    (invariant 9). -#}
+{% from "_job_failures.html" import failures, retry %}
+{% import "_job_live.html" as live %}
+{% if job and not job.finished %}
+<div hx-get="/users/bulk-ou/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
+     hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2">
+    <span class="spinner"></span>{{ live.progress(job, "Moving") }}
+    <span>Moving to {{ job.retry }}… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
+    {{ live.stop(job) }}
+  </div>
+  <div class="mt-2 h-1.5 w-full overflow-hidden rounded bg-brand-gray/20">
+    <div class="h-full bg-brand-blue transition-all" style="width: {{ (job.done * 100 // job.total) if job.total else 100 }}%"></div>
+  </div>
+</div>
+{% elif job %}
+{# Finished, or stopped (at Stop, or a failure every later one would share): job.error says why. #}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>Moved {{ job.applied }} of {{ job.total }} before stopping.
+  {% else %}Moved {{ job.applied }} of {{ job.total }} to {{ job.retry }}.{% endif %}</p>
+  {% if job.failed_total %}
+  <div class="mt-1 text-xs">Not moved ({{ job.failed_total }}):</div>
+  {{ failures(job) }}
+  {{ retry(job, "/users/bulk-ou/retry") }}
+  {% endif %}
+</div>
+{% endif %}
