@@ -179,6 +179,16 @@ begins and the first day allowed is tomorrow (`lifecycle.autoreply_end_problem`:
 years out). An auto-reply left out or already done ignores it. Templates don't hold it: a date is one leaver's, like the
 addresses. Tests: `tests/test_autoreply_end.py`. Not run on a real tenant.
 
+### No manager, when nothing needs one (roadmap 3.4, plan P1.3)
+The manager is asked for only when a step that runs acts on them (`lifecycle.needs_manager`): the delegate, the
+auto-reply (it names them as the contact), the reminder, and the transfer and the secondary-calendars hand-over when no
+transfer recipient takes them. A step left out, ticked as done, or handed to the recipient doesn't count. With the manager
+empty and one of those running, the preview names them ("Enter the manager: “Set delegate” needs one. Or leave it out.")
+and holds nothing; with none running, nobody is looked up (`check_addresses` skips an empty manager), the preview holds
+`manager=""`, and the run checks the same. The reminder's label reads "for the manager" when it has none. The field has no
+`required`, and the routes default it to empty: FastAPI reads an empty form field as missing, so a required one would
+have answered a blank manager with a 422. Tests: `tests/test_manager_optional.py`.
+
 ### Leaving a step out ("doesn't apply")
 Not every org hands a leaver's mailbox to the manager or moves their data. The form's "Doesn't apply to this leaver" boxes
 (posted as `na`) list `lifecycle.OPTIONAL_STEPS` only — delegate, auto-reply, transfer, calendar
