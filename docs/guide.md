@@ -341,7 +341,11 @@ offboarding asks first, and marks the steps after it "not run: stopped". Jobs li
 
 **Audit** lists every change GamGUI has made, newest first: when, what, to whom, and the result.
 That includes a domain removed on Setup (`remove_domain`), with whether its credentials were
-deleted or kept. Filter by action, target or error text, tick **Failures only** to see what went wrong, and **Export
+deleted or kept. It also lists every read you run in the Builder (`read`, or `sensitive_read` for backup
+codes, browser tokens and downloads): the command, on whom, and how many rows came back, never what
+they said. Each record names its domain; pick one under **Domain** to see only its records. Records
+from before the app named domains show as **Unknown**, never under a domain. Filter by action, target,
+domain or error text, tick **Failures only** to see what went wrong, and **Export
 CSV** for a record (the export takes the search and filter on the screen; clear them for the whole log). Passwords never appear in
 it. The log stays on this Mac; Google's own Admin console audit log is separate and worth checking
 for the changes that matter.

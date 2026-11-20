@@ -32,7 +32,7 @@ from ..classroom import Course, Roster, courses_from, owned_by, roster_from
 from ..roster_plan import Managed, managed_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
 from ..mail_review import MailReview, account_for, delegations_from, forwarding_from
-from ..gam.parser import parse_one, parse_records
+from ..gam.parser import parse_one, parse_records, table_records
 from ..phishing import Incomplete, MessageCopies, MessageRecipients, SpamCopies, read_copies, read_recipients, read_spam_copies
 from ..incident.check import (
     ACCOUNT_FIELDS,
@@ -84,6 +84,12 @@ _DOMAIN_KEYS = {"domainName", "domainAliasName", "parentDomainName"}
 # True whether it came during the call (the runner has stopped gam) or while waiting for the write lock.
 INTERRUPTED = ("interrupted (the app quit or the job was cancelled) before GAM reported a result; "
                "it may have done part of its work")
+
+# Where a recorded catalog read was started (`extra.origin` of a `read` / `sensitive_read` record):
+# the Builder's Run, or a read step of a Builder sequence. Audit runs and schedules add theirs.
+READ_ORIGIN_BUILDER = "builder"
+READ_ORIGIN_SEQUENCE = "sequence"
+READ_ORIGINS = (READ_ORIGIN_BUILDER, READ_ORIGIN_SEQUENCE)
 
 # The per-user lines the offboarding calendar sweep expects (remove_from_all_calendars): a user who
 # never shared with the leaver, a user without Calendar, the leaver's own calendar. Nothing else.
@@ -886,11 +892,11 @@ class GAMConnector(Connector):
             out = await self.runner.run_authenticated(self.domain, argv, serialize=True)
         except asyncio.CancelledError:
             self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=False,
-                              extra={"title": title, "error": INTERRUPTED, "tasks": 0})
+                              extra={"title": title, "error": INTERRUPTED, "tasks": 0}, domain=self.domain)
             raise
         except Exception as exc:  # noqa: BLE001 — record the attempt before it propagates
             self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=False,
-                              extra={"title": title, "error": str(exc)})
+                              extra={"title": title, "error": str(exc)}, domain=self.domain)
             raise
         lines = [ln.strip() for ln in (out or "").splitlines() if ln.strip()]
         tasklist_id = lines[-1] if lines else ""
@@ -904,12 +910,12 @@ class GAMConnector(Connector):
                 except asyncio.CancelledError:
                     self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=False,
                                       extra={"title": title, "error": INTERRUPTED, "tasks": created,
-                                             "tasklist_id": tasklist_id})
+                                             "tasklist_id": tasklist_id}, domain=self.domain)
                     raise
                 except Exception:  # noqa: BLE001 — report per-step, keep going
                     failed.append(step)
         self.audit.record("onboard_runbook", target=assignee, argv=argv, ok=bool(tasklist_id),
-                          extra={"title": title, "tasks": created, "failed": failed})
+                          extra={"title": title, "tasks": created, "failed": failed}, domain=self.domain)
         return {"tasklist_id": tasklist_id, "created": created, "failed": failed, "total": len(steps)}
 
     async def send_welcome_email(self, to: str, subject: str, body: str) -> ChangeResult:
@@ -966,32 +972,40 @@ class GAMConnector(Connector):
         return await self._run_write("delete_user", email, GAMCommands.delete_user(email), RiskLevel.DESTRUCTIVE)
 
     # --- the Builder's catalog reads ---------------------------------------------------
-    async def catalog_read(self, cmd, argv: List[str], target: str = "") -> str:
+    async def catalog_read(self, cmd, argv: List[str], target: str = "", origin: str = READ_ORIGIN_BUILDER) -> str:
         """Run a Builder catalog read and return its output. Refuses anything the catalog doesn't mark
         READ_ONLY (the Builder sends a write to ``apply``), so this can't become a second write path.
 
-        A ``cmd.sensitive`` read (backup codes, browser tokens, any ``get`` download) is audited as
-        ``sensitive_read``: which command, on whom, whether it ran — never the output, which is the
-        secret itself."""
+        Every read is recorded, never its output: ``read``, or ``sensitive_read`` for a ``cmd.sensitive``
+        read (backup codes, browser tokens, any ``get`` download: the output is the secret itself).
+        Both hold the catalog id (``command``), the domain, where it was started (``origin``, one of
+        ``READ_ORIGINS``) and, when the output is a table, how many rows it had (``rows``). A read that
+        failed has ``error`` and no ``rows``; output that isn't a table has no ``rows`` either, since
+        "not a table" is not "no rows"."""
         _require_read(cmd)
-        if not cmd.sensitive:
-            return await self.runner.run_authenticated(self.domain, argv)
-        extra = {"command": cmd.id}
+        if origin not in READ_ORIGINS:
+            raise ValueError(f"unknown read origin {origin!r}")
+        action = "sensitive_read" if cmd.sensitive else "read"
+        extra: Dict[str, Any] = {"command": cmd.id, "origin": origin}
         try:
             out = await self.runner.run_authenticated(self.domain, argv)
-        except Exception as exc:
-            self.audit.record("sensitive_read", target=target, argv=argv, ok=False,
-                              extra={**extra, "error": str(exc)})
+        except BaseException as exc:   # a cancelled read is recorded too, then the cancel finishes
+            error = INTERRUPTED if isinstance(exc, asyncio.CancelledError) else str(exc)
+            self.audit.record(action, target=target, argv=argv, ok=False,
+                              extra={**extra, "error": error}, domain=self.domain)
             raise
-        self.audit.record("sensitive_read", target=target, argv=argv, ok=True, extra=extra)
+        records = table_records(out)
+        if records is not None:
+            extra["rows"] = len(records)
+        self.audit.record(action, target=target, argv=argv, ok=True, extra=extra, domain=self.domain)
         return out
 
     def audit_sensitive_csv(self, command: str, argv: List[str], target: str, rows: int) -> None:
         """The Builder's CSV download of a sensitive read's result: the secret leaves the app as a file,
-        so it is recorded as ``sensitive_csv_export`` — the catalog command, on whom, how many rows.
+        so it is recorded as ``sensitive_csv_export``: the catalog command, on whom, how many rows.
         Never the rows. No GAM call: the rows are the ones ``catalog_read`` already returned."""
         self.audit.record("sensitive_csv_export", target=target, argv=argv, ok=True,
-                          extra={"command": command, "rows": rows})
+                          extra={"command": command, "rows": rows}, domain=self.domain)
 
     async def export_to_sheet(self, cmd, argv: List[str], owner: str = "", title: str = "") -> ChangeResult:
         """Run a Builder read with ``todrive``: GAM writes the result to a new Google Sheet in
@@ -1148,7 +1162,7 @@ class GAMConnector(Connector):
             refusal = f"Couldn't check whose account this is ({exc}), so nothing ran."
         if refusal:
             self.audit.record(action, target=target, argv=shown, ok=False,
-                              extra={**named, "error": refusal, "tolerated": False}, secrets=secrets)
+                              extra={**named, "error": refusal, "tolerated": False}, secrets=secrets, domain=self.domain)
             refusal = redact_secrets(refusal, secrets)
             return ChangeResult(preview=preview, ok=False, detail=refusal, remediation=refusal)
         try:
@@ -1161,7 +1175,7 @@ class GAMConnector(Connector):
             self.audit.record(
                 action, target=target, argv=shown, ok=False,
                 extra={**named, "error": INTERRUPTED, "tolerated": False},
-                secrets=secrets,
+                secrets=secrets, domain=self.domain,
             )
             raise
         except Exception as exc:
@@ -1173,7 +1187,7 @@ class GAMConnector(Connector):
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,
                 extra={**named, "error": error, "tolerated": tolerated},
-                secrets=secrets,
+                secrets=secrets, domain=self.domain,
             )
             if tolerated:
                 return ChangeResult(preview=preview, ok=True,
@@ -1183,14 +1197,14 @@ class GAMConnector(Connector):
             return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation,
                                 kind=exc.kind if isinstance(exc, GAMError) else None)
         if verify is not None and (short := redact_secrets(verify(out), secrets)):
-            self.audit.record(action, target=target, argv=shown, ok=False, extra={**named, "error": short, "tolerated": False}, secrets=secrets)
+            self.audit.record(action, target=target, argv=shown, ok=False, extra={**named, "error": short, "tolerated": False}, secrets=secrets, domain=self.domain)
             return ChangeResult(preview=preview, ok=False, detail=short, remediation=short)
         unrecorded = ""
         try:
             self.audit.record(
                 action, target=target, argv=shown, ok=True,
                 extra=named or None,
-                secrets=secrets,
+                secrets=secrets, domain=self.domain,
             )
         except OSError as exc:
             # The write happened, so it must not read as failed: a temporary password would be lost with nobody told.

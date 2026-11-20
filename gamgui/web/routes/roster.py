@@ -172,7 +172,7 @@ async def _keep(request: Request, st, snap: Snapshot, label: str, bodies: List[b
         return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": str(exc)})
     st.connector.audit.record("roster_import", connector="local", target=domain, ok=True,
                               extra={"source": snap.source, "label": label, "sha256": digest, "counts": meta["counts"],
-                                     "issues": snap.issue_counts, **(extra or {})})
+                                     "issues": snap.issue_counts, **(extra or {})}, domain=domain)
     return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "just_read": True})
 
 
@@ -301,7 +301,8 @@ async def purge(request: Request) -> HTMLResponse:
         gone = await asyncio.to_thread(roster_store(st).purge, st.audit_domain)
     except StoreError as exc:
         return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": str(exc)})
-    st.connector.audit.record("roster_purge", connector="local", target=st.audit_domain, ok=True, extra={"deleted": gone})
+    st.connector.audit.record("roster_purge", connector="local", target=st.audit_domain, ok=True, extra={"deleted": gone},
+                              domain=st.audit_domain)
     return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "purged": gone})
 
 
@@ -494,6 +495,7 @@ async def handover(request: Request, include: Annotated[Optional[List[str]], Que
     for change in kept:
         counts[change.kind] = counts.get(change.kind, 0) + 1
     st.connector.audit.record("roster_handover", connector="local", target=st.audit_domain, ok=True,
-                              extra={"compared": held["when"], "counts": counts, "included_flagged": chosen})
+                              extra={"compared": held["when"], "counts": counts, "included_flagged": chosen},
+                              domain=st.audit_domain)
     return Response(out.getvalue(), media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{_zip_name(st.audit_domain, held["when"])}"'})

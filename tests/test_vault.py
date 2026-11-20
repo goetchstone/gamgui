@@ -347,7 +347,8 @@ def test_removing_a_case_twin_on_a_store_that_folds_case_keeps_the_items_they_sh
     removal = _remove(v, "Example.com", "example.com", log)
     assert removal.outcome == "forgotten" and removal.twin == "example.com" and "were kept" in removal.message
     assert v.list_domains() == ["example.com"] and v.has_credentials("example.com")
-    assert log.tail()[-1]["extra"] == {"outcome": "forgotten", "detail": removal.detail, "twin": "example.com"}
+    assert log.tail()[-1]["extra"] == {"outcome": "forgotten", "detail": removal.detail, "twin": "example.com",
+                                      "domain": "example.com"}   # the domain whose entry it removed
 
 
 def test_an_unlisted_active_spelling_still_counts_as_the_twin(tmp_path):

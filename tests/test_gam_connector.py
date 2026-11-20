@@ -98,10 +98,11 @@ async def test_a_writes_other_party_is_audited_under_the_key_that_names_it(conne
     await connector.transfer_data("alice@example.com", "drive", "bob@example.com")
     await connector.apply(connector.plan_suspend(["bob@example.com"], suspend=False))
     group, scope, transfer, suspend = connector.audit.tail()[-4:]
-    assert group["extra"] == {"group": "sales@example.com"}
-    assert scope["extra"] == {"scope": "user:carol@example.com"}
-    assert transfer["extra"] == {"new_owner": "bob@example.com"}
-    assert (suspend["action"], suspend.get("extra")) == ("apply", None)   # no catalog command to name
+    d = {"domain": "example.com"}   # every record names its domain
+    assert group["extra"] == {"group": "sales@example.com", **d}
+    assert scope["extra"] == {"scope": "user:carol@example.com", **d}
+    assert transfer["extra"] == {"new_owner": "bob@example.com", **d}
+    assert (suspend["action"], suspend["extra"]) == ("apply", d)   # no catalog command to name
 
 
 async def test_connection_test_ok(connector):

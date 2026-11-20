@@ -466,7 +466,8 @@ AUDITED_OUTSIDE_RUN_WRITE = {
 }
 # Reads that record() — never the output (plan S9, operator decision D3).
 AUDITED_READS = {
-    "catalog_read": "records `sensitive_read` for a sensitive command (SECRET_READS, DOWNLOAD_VERB)",
+    "catalog_read": "records every Builder read: `read`, or `sensitive_read` for a sensitive command "
+                    "(SECRET_READS, DOWNLOAD_VERB) — the command, domain, origin and row count",
     "audit_sensitive_csv": "records `sensitive_csv_export` for the CSV download of a sensitive read's "
                            "result — no GAM call",
 }
@@ -490,6 +491,24 @@ AUDITED_OUTSIDE_CONNECTOR = {
     ("gamgui/web/routes/roster.py", "handover"): "`roster_handover`: the change list handed over as files run outside "
                                                  "GamGUI — counts, never rows",
 }
+
+
+def test_every_audit_record_names_its_domain():
+    """F1: every record says which domain it belongs to (``extra.domain``), so the Audit screen can
+    filter by it and an audit run's reads file under the tenant they read. Every ``audit.record(``
+    in the app passes ``domain=``, a record written without one being unknown, never some domain."""
+    import ast
+    missing = []
+    for path in sorted((ROOT / "gamgui").rglob("*.py")):
+        src = path.read_text()
+        if ".record(" not in src:
+            continue
+        for node in ast.walk(ast.parse(src)):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "record"
+                    and "audit" in ast.unparse(node.func.value)
+                    and not any(k.arg == "domain" for k in node.keywords)):
+                missing.append(f"{path.relative_to(ROOT)}:{node.lineno}")
+    assert not missing, f"audit.record() without domain=: {missing}"
 
 
 def test_audit_record_outside_the_connector_only_in_its_allowlist():

@@ -1,3 +1,5 @@
+{# The filters every link here carries along: search, failures only, domain. #}
+{% set filters = "q=" ~ (q | urlencode) ~ ("&failed=1" if failed else "") ~ ("&domain=" ~ (domain | urlencode) if domain else "") %}
 <div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-hidden">
   <table class="w-full text-sm">
     <thead>
@@ -5,6 +7,7 @@
         <th class="font-medium px-5 py-2 eyebrow">Time</th>
         <th class="font-medium px-5 py-2 eyebrow">Action</th>
         <th class="font-medium px-5 py-2 eyebrow">Target</th>
+        <th class="font-medium px-5 py-2 eyebrow">Domain</th>
         <th class="font-medium px-5 py-2 eyebrow">Result</th>
         <th class="font-medium px-5 py-2 eyebrow">Detail</th>
       </tr>
@@ -21,6 +24,8 @@
               {{ r.target or "—" }}
             {% endif %}
           </td>
+          {% set rdomain = ((r.extra.domain if r.extra is mapping else "") or "") | lower %}
+          <td class="px-5 py-2 text-brand-blueink">{% if rdomain %}{{ rdomain }}{% else %}<span class="text-brand-grayink">Unknown</span>{% endif %}</td>
           <td class="px-5 py-2">
             {% if r.ok == false %}
               <span class="text-[11px] uppercase tracking-wide rounded px-2 py-0.5 bg-amber-50 text-amber-700">Failed</span>
@@ -36,6 +41,7 @@
               <span class="font-mono text-xs break-words">{{ err[:160] }}{{ "…" if err|length > 160 else "" }}</span>
             {% elif r.argv %}
               <span class="font-mono text-xs break-words">{{ (r.argv | join(" "))[:160] }}{{ "…" if (r.argv | join(" "))|length > 160 else "" }}</span>
+              {% if r.extra is mapping and r.extra.rows is number %}<span class="text-xs text-brand-grayink whitespace-nowrap">· {{ r.extra.rows }} row{{ "s" if r.extra.rows != 1 else "" }}</span>{% endif %}
             {% elif r.extra is mapping and r.extra.detail %}
               {# A change with no gam argv (removing a domain's Keychain credentials) says what it did. #}
               <span class="text-xs break-words">{{ (r.extra.detail | string)[:160] }}</span>
@@ -46,8 +52,8 @@
         </tr>
       {% else %}
         <tr>
-          <td colspan="5" class="px-5 py-8 text-center text-brand-grayink">
-            {% if q or failed %}
+          <td colspan="6" class="px-5 py-8 text-center text-brand-grayink">
+            {% if q or failed or domain %}
               No matches.
               <div class="mt-2">
                 <button class="rounded border border-brand-gray/50 px-2 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors"
@@ -63,17 +69,17 @@
   </table>
 </div>
 <div class="mt-2 flex items-center justify-between text-xs text-brand-grayink">
-  <span>{{ total }} total{% if q or failed %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}
-    · <a href="/audit/export.csv?q={{ q | urlencode }}{% if failed %}&amp;failed=1{% endif %}" download class="font-medium text-brand-blueink hover:text-brand-black">{% if q or failed %}Export matches{% else %}Export CSV{% endif %} ↓</a></span>
+  <span>{{ total }} total{% if q or failed or domain %} (filtered){% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}
+    · <a href="/audit/export.csv?{{ filters }}" download class="font-medium text-brand-blueink hover:text-brand-black">{% if q or failed or domain %}Export matches{% else %}Export CSV{% endif %} ↓</a></span>
   {% if pages > 1 %}
   <div class="flex items-center gap-2">
     {% if page > 1 %}
     <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/audit/rows?q={{ q | urlencode }}{% if failed %}&failed=1{% endif %}&page={{ page - 1 }}" hx-target="#audit-rows">Prev</button>
+            hx-get="/audit/rows?{{ filters }}&page={{ page - 1 }}" hx-target="#audit-rows">Prev</button>
     {% endif %}
     {% if page < pages %}
     <button class="rounded border border-brand-gray/50 px-2 py-1 text-brand-blueink hover:bg-paper transition-colors"
-            hx-get="/audit/rows?q={{ q | urlencode }}{% if failed %}&failed=1{% endif %}&page={{ page + 1 }}" hx-target="#audit-rows">Next</button>
+            hx-get="/audit/rows?{{ filters }}&page={{ page + 1 }}" hx-target="#audit-rows">Next</button>
     {% endif %}
   </div>
   {% endif %}
