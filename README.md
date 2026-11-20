@@ -203,6 +203,7 @@ school domain is the most useful one of all.
 | Reminder email (No 2SV, No recovery) | Reports | not yet; the same `sendemail` as the welcome email, one per person |
 | Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
+| Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Move to an org unit (`update org <ou> move user <email>`) | Users | not yet: the tenant has no org units, so the check creates one first |
 | Create, rename, delete an org unit | Builder | not yet: the check creates a throwaway unit, renames it, then deletes it |
