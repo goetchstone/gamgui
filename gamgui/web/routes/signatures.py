@@ -16,6 +16,7 @@ from ...core import signature_backups as backups
 from ...core import signatures as sig
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
+from ...core.gam.commands import signature_read_as_file
 from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
 from ..jobs import Job, register_job, retry_key, retry_of
@@ -181,6 +182,13 @@ async def preview(
     except Exception as exc:  # noqa: BLE001 - who is in scope is unknown: said, never "0 users"
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {
             "error": f"Couldn't read the members of {scope_value}, so who it applies to isn't known. {friendly(exc)}"})
+    # A render that is one of GAM's file keywords would be read as "load a file", not set (failure log 2026-11-20).
+    as_file = [(u.primary_email, word) for u in matched if (word := signature_read_as_file(sig.render_signature(template, u)))]
+    if as_file:
+        who = ", ".join(email for email, _ in as_file[:5]) + (f" and {len(as_file) - 5} more" if len(as_file) > 5 else "")
+        return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": (
+            f"For {who} this template's signature is “{as_file[0][1]}”, and GAM reads it as a file to load, not a "
+            "signature. Change the text.")})
     return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL,
                                       _preview_ctx(st, template, matched, _form_key(template, scope_type, scope_value),
                                                    tenant))

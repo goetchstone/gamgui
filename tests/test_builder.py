@@ -134,7 +134,7 @@ def test_export_offered_exactly_for_todrive_reads(client):
     assert cat.by_id("build.search_messages").supports_export
     assert "Export to a Google Sheet" in client.get("/builder/command/build.search_messages").text
     # a non-read curated command never offers export
-    assert not cat.by_id("build.set_signature").supports_export
+    assert not cat.by_id("build.set_organization").supports_export
 
 
 def test_hardening_csp_and_local_assets(client):
@@ -159,8 +159,8 @@ def test_dense_pages_use_full_window_width(client):
     # Dense screens drop the centered 1024px cap so the catalog/results use the whole window.
     assert "max-w-none" in client.get("/builder").text
     assert "max-w-none" in client.get("/users").text
-    r = client.get("/builder/catalog", params={"q": "signature"})
-    assert "Set Gmail signature" in r.text and "Build" in r.text
+    r = client.get("/builder/catalog", params={"q": "delegate"})
+    assert "Add mailbox delegate" in r.text and "Build" in r.text
 
 
 # --- generic read builder: every read-only command is runnable ------------------------
@@ -630,9 +630,9 @@ def test_row_action_prefills_group_slot(client):
 
 
 def test_buildable_form_has_slots(client):
-    r = client.get("/builder/command/build.set_signature")
+    r = client.get("/builder/command/build.set_organization")
     assert r.status_code == 200
-    assert 'name="email"' in r.text and 'name="signature"' in r.text and 'name="cid"' in r.text
+    assert 'name="email"' in r.text and 'name="title"' in r.text and 'name="cid"' in r.text
 
 
 def test_preview_shows_assembled_gam_and_guard(client):
@@ -685,7 +685,7 @@ def test_builder_run_executes_only_the_previewed_command(client, gam_calls, prev
 
 
 def test_builder_run_is_single_use(client, gam_calls):
-    form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
+    form = {"cid": "build.set_organization", "email": "alice@example.com", "title": "Lead"}
     _, token = _builder_preview(client, **form)
     assert "done" in _builder_run(client, token, **form).text
     r = _builder_run(client, token, **form)                          # a replayed click
@@ -695,9 +695,17 @@ def test_builder_run_is_single_use(client, gam_calls):
 
 def test_builder_mutation_runs_only_from_its_preview(client, gam_calls):
     # Even a single-target LOW write: a POST that didn't come from a preview shows the preview instead.
-    r = client.post("/builder/run", data={"cid": "build.set_signature", "email": "alice@example.com",
-                                          "signature": "Hi", "confirmed": "1"})
+    r = client.post("/builder/run", data={"cid": "build.set_organization", "email": "alice@example.com",
+                                          "title": "Lead", "confirmed": "1"})
     assert "Will run" in r.text and "done" not in r.text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_the_builder_has_no_signature_write(client, gam_calls):
+    # Roadmap 4.1: Signatures and the Users page keep each old signature before replacing it, so it can be put back. A
+    # Builder signature write walked around that. Reads of a signature stay.
+    assert load_catalog().by_id("build.set_signature") is None
+    assert "can&#39;t be built" in client.post("/builder/preview", data={"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}).text
     assert gam_writes(gam_calls()) == []
 
 
@@ -729,17 +737,17 @@ def test_a_data_transfer_is_confirmed_like_a_destructive_change(client, gam_call
 
 
 def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
-    form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
+    form = {"cid": "build.set_organization", "email": "alice@example.com", "title": "Lead"}
     _, token = _builder_preview(client, **form)
     r = _builder_run(client, token, **form)
     assert_ok_partial(r)
-    assert "Set Gmail signature — done" in r.text
-    argv = ["user", "alice@example.com", "signature", "Hi", "html"]
+    assert "Set title / department — done" in r.text
+    argv = ["update", "user", "alice@example.com", "organization", "title", "Lead", "department", "", "primary"]
     assert gam_writes(gam_calls()) == [argv]
     rec = client.app.state.gamgui.connector.audit.tail()[-1]
     assert (rec["action"], rec["target"], rec["ok"]) == ("apply", "alice@example.com", True)
-    assert rec["extra"] == {"command": "build.set_signature"}   # which catalog command, not just `apply`
-    assert rec["argv"] == ["user", "alice@example.com", "signature", "***redacted***", "html"]  # body kept out of the log
+    assert rec["extra"] == {"command": "build.set_organization"}   # which catalog command, not just `apply`
+    assert rec["argv"] == argv   # (a signature body's redaction: tests/test_audit.py, tests/test_gam_connector.py)
 
 
 def test_a_failed_run_leads_with_words_and_keeps_gam_s_line_below(client, monkeypatch):
@@ -753,11 +761,11 @@ def test_a_failed_run_leads_with_words_and_keeps_gam_s_line_below(client, monkey
         return [ChangeResult(preview=previews[0], ok=False, detail=raw, remediation="Check the address and try again.")]
 
     monkeypatch.setattr(conn, "apply", failed)
-    form = {"cid": "build.set_signature", "email": "alice@example.com", "signature": "Hi"}
+    form = {"cid": "build.set_organization", "email": "alice@example.com", "title": "Lead"}
     _, token = _builder_preview(client, **form)
     r = _builder_run(client, token, **form)
     headline = r.text.split("<details", 1)[0]
-    assert "Set Gmail signature failed. Check the address and try again." in headline
+    assert "Set title / department failed. Check the address and try again." in headline
     assert raw not in headline and raw in r.text
 
 
@@ -973,11 +981,11 @@ def test_browse_only_command_cannot_run(client):
 
 
 def test_sequence_add_remove_and_run(client, gam_calls):
-    client.post("/builder/sequence/add", data={"cid": "build.set_signature",
-                                               "email": "alice@example.com", "signature": "Hi"})
+    client.post("/builder/sequence/add", data={"cid": "build.set_organization",
+                                               "email": "alice@example.com", "title": "Lead"})
     r = client.post("/builder/sequence/add", data={"cid": "build.add_delegate",
                                                    "email": "alice@example.com", "delegate": "bob@example.com"})
-    assert "Set Gmail signature" in r.text and "Add mailbox delegate" in r.text
+    assert "Set title / department" in r.text and "Add mailbox delegate" in r.text
     _, token = _seq_preview(client)
     run = client.post("/builder/sequence/run", data={"preview": token})
     m = re.search(r"/builder/sequence/status\?job=([A-Za-z0-9_\-]+)", run.text)
@@ -988,12 +996,12 @@ def test_sequence_add_remove_and_run(client, gam_calls):
     wait_for_job(client, job)
     assert (job.applied, job.failed) == (2, [])
     assert gam_writes(gam_calls()) == [
-        ["user", "alice@example.com", "signature", "Hi", "html"],
+        ["update", "user", "alice@example.com", "organization", "title", "Lead", "department", "", "primary"],
         ["user", "alice@example.com", "add", "delegate", "bob@example.com"],
     ]
     steps = client.app.state.gamgui.connector.audit.tail()[-2:]
     assert [(e["action"], e["ok"], e["extra"]) for e in steps] == [
-        ("apply", True, {"command": "build.set_signature"}), ("apply", True, {"command": "build.add_delegate"})]
+        ("apply", True, {"command": "build.set_organization"}), ("apply", True, {"command": "build.add_delegate"})]
     done = client.get("/builder/sequence/status", params={"job": job.id})
     assert_ok_partial(done)
     assert "Sequence complete — 2 of 2 steps succeeded." in done.text
@@ -1035,8 +1043,8 @@ def _seq_preview(client):
 def test_sequence_run_executes_only_the_previewed_sequence(client, gam_calls):
     # The sequence lives on the server, so the stale case is a step added (or removed or moved) after
     # Preview: Run once ran whatever the sequence held at click time.
-    client.post("/builder/sequence/add", data={"cid": "build.set_signature", "email": "alice@example.com",
-                                               "signature": "Hi"})
+    client.post("/builder/sequence/add", data={"cid": "build.set_organization", "email": "alice@example.com",
+                                               "title": "Lead"})
     _, token = _seq_preview(client)
     client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "carol@example.com"})
     r = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
@@ -1045,8 +1053,8 @@ def test_sequence_run_executes_only_the_previewed_sequence(client, gam_calls):
 
 
 def test_sequence_run_is_single_use(client, gam_calls):
-    client.post("/builder/sequence/add", data={"cid": "build.set_signature", "email": "alice@example.com",
-                                               "signature": "Hi"})
+    client.post("/builder/sequence/add", data={"cid": "build.set_organization", "email": "alice@example.com",
+                                               "title": "Lead"})
     _, token = _seq_preview(client)
     run = client.post("/builder/sequence/run", data={"preview": token})
     job = client.app.state.gamgui.jobs[re.search(r"status\?job=([A-Za-z0-9_\-]+)", run.text).group(1)]
