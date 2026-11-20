@@ -1888,6 +1888,14 @@ fi
 #  [name <String>] [primary]` — the signature text is required (an empty string clears it).
 if [ "${1:-}" = "user" ] && { [ "${3:-}" = "signature" ] || [ "${3:-}" = "sig" ]; }; then
   [ $# -ge 4 ] || missing_arg "String"
+  # getStringOrFile (read from the vendored build): a value that is one of SORF_FILE_ARGUMENTS (stripped, lowercased, `_`
+  # removed) isn't the signature — GAM reads the next argument as a file or document to load, and a missing one ends
+  # it with FILE_ERROR_RC (6). The app's next argument is `html`. Wording approximate; a real file of that name would be
+  # read as the signature, which the app must never risk.
+  case "$(printf '%s' "$4" | tr '[:upper:]' '[:lower:]' | tr -d '_' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" in
+    file|htmlfile|textfile|gdoc|ghtml|gcsdoc|gcshtml)
+      printf "ERROR: File: %s, Read Failed: [Errno 2] No such file or directory: '%s'\n" "${5:-}" "${5:-}" 1>&2; exit 6 ;;
+  esac
   user="$2"; sig_value="$4"; shift 4
   while [ $# -gt 0 ]; do
     case "$1" in

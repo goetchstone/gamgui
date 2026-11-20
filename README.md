@@ -131,8 +131,8 @@ and have only run offline: see
   password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
   OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
   setup, and a templated welcome email — for one person, or a CSV of hires as a background job.
-- **Command Builder** — browse/search the full categorized GAM catalog (1,077 commands, 540 of them
-  runnable: 25 hand-curated, the only ones that can change anything, plus 515 read-only commands
+- **Command Builder** — browse/search the full categorized GAM catalog (1,076 commands, 539 of them
+  runnable: 24 hand-curated, the only ones that can change anything, plus 515 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
   preview → run, linear sequencing, and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
@@ -202,7 +202,7 @@ school domain is the most useful one of all.
 | Tasks checklist (a task list, one task per step) | Onboard | **confirmed** |
 | Welcome email | Onboard | **confirmed** |
 | Reminder email (No 2SV, No recovery) | Reports | not yet; the same `sendemail` as the welcome email, one per person |
-| Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
+| Set signature | Signatures (bulk), Users, Onboard | **confirmed** (the Builder no longer sets one: roadmap 4.1) |
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
