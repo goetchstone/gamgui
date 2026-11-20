@@ -64,7 +64,7 @@
           </tbody>
         </table>
       </div>
-      <p class="mt-1 text-xs text-brand-grayink">{% if f.rows | length > shown %}Showing the first {{ shown }} of {{ f.rows | length }}. {% endif %}<a class="underline hover:text-brand-black" download href="/reports/runs/table.csv?run={{ run.key | urlencode }}&amp;finding={{ f.key | urlencode }}">Download {{ "all " ~ (f.rows | length) if f.rows | length > 1 else "it" }} as CSV<span class="sr-only">: {{ f.title }}</span></a></p>
+      <p class="mt-1 text-xs text-brand-grayink">{% if f.rows | length > shown %}Showing the first {{ shown }} of {{ f.rows | length }}. {% endif %}<a class="underline hover:text-brand-black" download href="/reports/runs/table.csv?run={{ run.key | urlencode }}&amp;finding={{ f.key | urlencode }}">Download as CSV<span class="sr-only">: {{ f.title }}</span></a> ({{ f.rows | length }} row{{ "s" if f.rows | length != 1 }})</p>
       {% endif %}
       {% else %}
       <p class="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ f.why }}</p>
