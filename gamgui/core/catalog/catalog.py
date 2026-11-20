@@ -94,6 +94,14 @@ def _cmd(cid, category, subcategory, name, risk, slots, build, raw, desc="") -> 
     )
 
 
+def _org_unit(value: str) -> str:
+    """A Builder org-unit slot, refused when it names the root: GAM's getOrgUnitItem reads `root` (and `/`) as the
+    top-level unit, so a unit someone means to call "root" would rename or delete the whole organization's."""
+    if value.strip() in ("/", "") or value.strip().lower() == "root":
+        raise ValueError("That is the top-level org unit. Name the unit by its full path, such as /Sales/East.")
+    return value
+
+
 def _curated() -> List[CatalogCommand]:
     U = SlotKind.TARGET_USER
     return [
@@ -221,6 +229,26 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.create_group(s.get("email", ""), s.get("name", ""), s.get("description", "")),
              "gam create group <email> name <name> description <desc>",
              "Create a new Google Group; optionally set its display name and description."),
+        # Org units (roadmap 4.2). Moving people is on Users (one from their page, many as a job); these shape the tree.
+        _cmd("build.create_org_unit", "Organizational Units", "", "Create an org unit", RiskLevel.LOW,
+             [_slot("path", "Path", SlotKind.TEXT, placeholder="/Sales/East"),
+              _slot("description", "Description", SlotKind.TEXT, required=False)],
+             lambda s: GAMCommands.create_org_unit(_org_unit(s.get("path", "")), s.get("description", "")),
+             "gam create org <path> description <desc>",
+             "Create an org unit at a full path. Its parent must already exist; settings it inherits come from that parent."),
+        _cmd("build.rename_org_unit", "Organizational Units", "", "Rename an org unit", RiskLevel.LOW,
+             [_slot("org_unit", "Org unit", SlotKind.TEXT, placeholder="/Sales/East"),
+              _slot("name", "New name", SlotKind.TEXT)],
+             lambda s: GAMCommands.rename_org_unit(_org_unit(s.get("org_unit", "")), s.get("name", "")),
+             "gam update org <org unit> name <name>",
+             "Rename an org unit. Its path changes, and so do the paths of the units inside it."),
+        # DESTRUCTIVE: the unit's own settings go with it. Google refuses one that still holds people, devices or units.
+        _cmd("build.delete_org_unit", "Organizational Units", "", "Delete an org unit", RiskLevel.DESTRUCTIVE,
+             [_slot("org_unit", "Org unit", SlotKind.TEXT, placeholder="/Sales/East")],
+             lambda s: GAMCommands.delete_org_unit(_org_unit(s.get("org_unit", ""))),
+             "gam delete org <org unit>",
+             "Delete an empty org unit, and the settings made on it. Google refuses one that still holds people, devices "
+             "or other units: move them out first."),
         _cmd("build.set_organization", "Users", "Profile", "Set title / department", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("title", "Title", SlotKind.TEXT, required=False),
               _slot("department", "Department", SlotKind.TEXT, required=False)],

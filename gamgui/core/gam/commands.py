@@ -484,6 +484,27 @@ class GAMCommands:
         # route offers only paths the tree read just returned.
         return ["update", "org", org_unit, "move", "user", email]
 
+    # Create, rename and delete an org unit (roadmap 4.2): curated Builder commands, not a screen. Each value is one
+    # element; GAM reads the unit as a path (an `id:` prefix names one by ID) and makes it absolute itself.
+    @staticmethod
+    def create_org_unit(path: str, description: str = "") -> List[str]:
+        # `create org <OrgUnitPath> [description <String>]` (doCreateOrg): the parent is the path's own, and must exist —
+        # no `buildpath`, so a mistyped parent is refused rather than created along the way.
+        argv = ["create", "org", path]
+        if description:
+            argv += ["description", description]
+        return argv
+
+    @staticmethod
+    def rename_org_unit(org_unit: str, name: str) -> List[str]:
+        # `update org <OrgUnitItem> name <String>` (_doUpdateOrgs): its path changes with its name, and so do its children's.
+        return ["update", "org", org_unit, "name", name]
+
+    @staticmethod
+    def delete_org_unit(org_unit: str) -> List[str]:
+        # `delete org <OrgUnitItem>` (_doDeleteOrgs): Google refuses a unit that still holds people, devices or units.
+        return ["delete", "org", org_unit]
+
     @staticmethod
     def print_tokens() -> List[str]:
         # Every account's OAuth grants, suspended accounts aside (GAM's default entity): one Directory API call

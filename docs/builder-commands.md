@@ -6,7 +6,7 @@ two tiers by whether they can run (the current counts are in CLAUDE.md invariant
 
 - **Buildable**: has typed slots and a `build()` returning an injection-safe argv. Two sources, and
   the difference matters:
-  - the 25 **hand-curated** commands in `_curated()` (`core/catalog/catalog.py`). argv comes from a
+  - the 28 **hand-curated** commands in `_curated()` (`core/catalog/catalog.py`). argv comes from a
     `GAMCommands` static method; the `RiskLevel` is **authoritative** — hand-set to match the real
     mutation — and the slots are friendly (labels, hints, drag targets).
   - the **auto-promoted reads** (over 500). `load_catalog()` calls `_make_reads_buildable()`, which
@@ -89,7 +89,7 @@ already is.
 
 ## What runs today
 
-The 25 curated commands, by area (several have no other screen in the app, so this is the only way to
+The 28 curated commands, by area (several have no other screen in the app, so this is the only way to
 reach them). If the count here drifts from `_curated()`, this list is stale:
 
 - **Users — Gmail:** set signature; set / turn off vacation auto-reply; add, remove and list mailbox
@@ -100,6 +100,7 @@ reach them). If the count here drifts from `_curated()`, this list is stale:
   Vault hold or an owned secondary calendar, which a Builder delete would walk around; roadmap 2.9.)
 - **Aliases:** add an alias to a user; remove an alias.
 - **Groups:** create a group; add member to group; remove member from group.
+- **Org units:** create, rename and delete an org unit (moving people is on Users, one or many; roadmap 4.2).
 - **ChromeOS Devices:** find Chromebooks.
 - **Drive:** find a user's Drive files.
 - **Data Transfers:** transfer Drive/Calendar ownership.

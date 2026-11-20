@@ -130,8 +130,8 @@ and have only run offline: see
   password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
   OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
   setup, and a templated welcome email — for one person, or a CSV of hires as a background job.
-- **Command Builder** — browse/search the full categorized GAM catalog (1,077 commands, 540 of them
-  runnable: 25 hand-curated, the only ones that can change anything, plus 515 read-only commands
+- **Command Builder** — browse/search the full categorized GAM catalog (1,080 commands, 543 of them
+  runnable: 28 hand-curated, the only ones that can change anything, plus 515 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
   preview → run, linear sequencing, and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
@@ -205,6 +205,7 @@ school domain is the most useful one of all.
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Move to an org unit (`update org <ou> move user <email>`) | Users | not yet: the tenant has no org units, so the check creates one first |
+| Create, rename, delete an org unit | Builder | not yet: the check creates a throwaway unit, renames it, then deletes it |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
