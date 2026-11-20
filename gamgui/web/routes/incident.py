@@ -268,7 +268,8 @@ async def secure_apply(request: Request) -> HTMLResponse:
     if _running(st, st.incident_run_job) or _running(st, st.incident_check_job):
         return error_partial(request, "A check or a run is going on: wait for it to finish, then preview again. Nothing ran.")
     try:
-        conn.audit.record("incident_secure", target=held.user, ok=True, extra={"planned": [s.key for s in held.steps]})
+        conn.audit.record("incident_secure", target=held.user, ok=True, extra={"planned": [s.key for s in held.steps]},
+                          domain=conn.domain)
     except OSError as exc:
         logger.warning("the audit log refused an incident_secure record", exc_info=exc)
         return error_partial(request, "The audit log couldn't record this, so nothing ran. Check the disk has room, then "

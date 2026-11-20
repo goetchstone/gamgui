@@ -261,6 +261,7 @@ def test_the_audit_s_changes_stop_at_the_attack_and_leave_out_phishing(tmp_path)
     audit.record("sign_out", target=DANA, ok=False)
     audit.record("no_target", ok=True)
     audit.record("sensitive_read", target=CAROL, ok=True)
+    audit.record("read", target=DANA, ok=True, domain="example.com")
     found, cut_at = runs.changes_since(audit.path, datetime.now(timezone.utc) - timedelta(hours=1), lambda a: a.upper())
     assert [(c.what, c.target, c.ok) for c in found] == [("SIGN_OUT", DANA, False), ("RESET_PASSWORD", CAROL, True)] and cut_at is None, "a read changes nothing"
     assert runs.changes_since(audit.path, datetime.now(timezone.utc) + timedelta(hours=1), str) == ([], None)

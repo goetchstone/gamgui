@@ -12,15 +12,25 @@
   </div>
   <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads what the search and filter show, every page of it.</p>
 
-  <form class="flex flex-wrap items-center gap-3" hx-get="/audit/rows" hx-target="#audit-rows" hx-trigger="keyup changed delay:300ms from:input[name='q'], change from:input[name='failed']">
-    <input type="search" name="q" aria-label="Filter the audit log" placeholder="Filter by action, target, or error…"
+  <form class="flex flex-wrap items-center gap-3" hx-get="/audit/rows" hx-target="#audit-rows" hx-trigger="keyup changed delay:300ms from:input[name='q'], change from:input[name='failed'], change from:select[name='domain']">
+    <input type="search" name="q" aria-label="Filter the audit log" placeholder="Filter by action, target, domain, or error…"
            class="flex-1 min-w-[16rem] rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-[15px] text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    {# A record written before records named their domain is "Unknown", never filed under a domain. #}
+    <label class="flex items-center gap-2 text-sm text-brand-blueink">Domain
+      <select name="domain" aria-label="Show records for one domain"
+              class="rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm text-ink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
+        <option value=""{% if not domain %} selected{% endif %}>All domains</option>
+        {% for d in domains %}
+          <option value="{{ d }}"{% if d == domain %} selected{% endif %}>{{ "Unknown (older records)" if d == unknown_domain else d }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label class="flex items-center gap-2 text-sm text-brand-blueink">
       <input type="checkbox" name="failed" value="1"{% if failed %} checked{% endif %} /> Failures only
     </label>
   </form>
 
-  <div id="audit-rows" hx-get="/audit/rows" hx-trigger="load" hx-include="[name='q'],[name='failed']">
+  <div id="audit-rows" hx-get="/audit/rows" hx-trigger="load" hx-include="[name='q'],[name='failed'],[name='domain']">
     {% include "_audit_rows.html" %}
   </div>
 </div>

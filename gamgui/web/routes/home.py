@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import reports as reports_mod
-from ...core.audit import iter_records
+from ...core.audit import READ_ACTIONS, iter_records
 from ..jobs import tray
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, as_of, friendly
@@ -42,11 +42,12 @@ def _directory(st, users) -> Dict[str, Any]:
 
 
 def recent_failures(request: Request, n: int = HOME_FAILURES, days: int = HOME_FAILURE_DAYS) -> List[Dict[str, Any]]:
-    """The newest ``n`` failed audit records from the last ``days``, newest first. The log streams
+    """The newest ``n`` failed writes in the audit log from the last ``days``, newest first. A failed read
+    (``READ_ACTIONS``) changed nothing, so it isn't one; the Audit screen lists it. The log streams
     newest-first, so reading stops at the first record older than the window (or once ``n`` are found)."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     recent = takewhile(lambda r: str(r.get("ts") or "") >= cutoff, iter_records(_audit_path(request)))
-    return list(islice((r for r in recent if r.get("ok") is False), n))
+    return list(islice((r for r in recent if r.get("ok") is False and r.get("action") not in READ_ACTIONS), n))
 
 
 @router.get("/", response_class=HTMLResponse)

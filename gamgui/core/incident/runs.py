@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..audit import iter_records
+from ..audit import READ_ACTIONS, iter_records
 from .logs import parse_time
 from .reader import Pulled
 from .report import Change
@@ -41,7 +41,7 @@ def latest_runs(path: Optional[Path], domain: str, limit: int = SCAN_LIMIT) -> L
     return [Pulled(message_id, one["at"], one["by"], one["steps"], one["trashed"], one["failed"], len(one["mailboxes"]), one["searched"]) for message_id, one in seen.items()]
 
 
-NOT_WRITES = frozenset({"sensitive_read", "sensitive_csv_export"})      # audited, and changing nothing
+NOT_WRITES = READ_ACTIONS | {"sensitive_csv_export"}      # audited, and changing nothing
 
 
 def changes_since(path: Optional[Path], since: datetime, words: Callable[[str], str], limit: int = SCAN_LIMIT) -> Tuple[List[Change], Optional[datetime]]:

@@ -440,7 +440,8 @@ async def offboard_run(
         conn.audit.record("offboard_plan", target=user, ok=True,
                           extra={"not_applicable": sorted(held.not_applicable),
                                  "added": [k for k in step_keys if k in lifecycle.ADDABLE_STEPS],
-                                 "detail": lifecycle.left_out_line(held.not_applicable) if held.not_applicable else ""})
+                                 "detail": lifecycle.left_out_line(held.not_applicable) if held.not_applicable else ""},
+                          domain=conn.domain)
     job.task = asyncio.create_task(_run_offboard(st, job, conn, steps, held.done, held.not_applicable))
     st.invalidate_users()  # password/org/etc. are about to change
     return _panel(request, job, user)

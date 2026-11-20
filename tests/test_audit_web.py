@@ -41,6 +41,10 @@ def client(tmp_path, monkeypatch):
     return c
 
 
+# New columns go last, so the earlier ones keep their places.
+HEADER = "ts,action,target,ok,exit_code,error,argv,detail,domain,origin,rows"
+
+
 def _seed(path: Path, lines: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
@@ -222,7 +226,7 @@ def test_a_change_with_no_argv_shows_searches_and_exports_its_detail(client):
     assert "Credentials deleted from the Keychain." in rows and "remove_domain" in rows
     assert "Example.com" in client.get("/audit/rows", params={"q": "deleted from the keychain"}).text
     lines = client.get("/audit/export.csv").text.splitlines()
-    assert lines[1].endswith(",Credentials deleted from the Keychain.")
+    assert lines[1].endswith(",Credentials deleted from the Keychain.,unknown,,")
 
 
 def test_audit_rows_query_filter(client):
@@ -303,7 +307,7 @@ def test_audit_export_csv(client):
     assert "attachment" in r.headers["content-disposition"]
     assert "audit-export.csv" in r.headers["content-disposition"]
     lines = r.text.splitlines()
-    assert lines[0] == "ts,action,target,ok,exit_code,error,argv,detail"
+    assert lines[0] == HEADER
     assert "alice@example.com" in lines[1]
 
 
@@ -420,7 +424,7 @@ def test_audit_export_csv_no_records_still_200(client):
     r = client.get("/audit/export.csv")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
-    assert r.text.splitlines()[0] == "ts,action,target,ok,exit_code,error,argv,detail"
+    assert r.text.splitlines()[0] == HEADER
 
 
 # --- unconnected: routes shouldn't 500 even with no connector -----------------------------
@@ -473,3 +477,63 @@ def test_the_export_is_what_the_filter_shows(client):
     whole = client.get("/audit/export.csv").text.splitlines()
     assert 1 < len(shown) < len(whole)
 
+
+
+# --- the domain filter (F1): every record names its domain; an older one is unknown -------------
+
+def _two_domains_and_an_old_record(client):
+    _seed(client.audit_path, [
+        {"ts": "2026-11-01T10:00:00+00:00", "action": "set_vacation", "target": "old@example.com", "ok": True},
+        {"ts": "2026-11-20T10:00:00+00:00", "action": "apply", "target": "alice@example.com", "ok": True,
+         "extra": {"command": "build.set_signature", "domain": "example.com"}},
+        {"ts": "2026-11-20T11:00:00+00:00", "action": "read", "target": "bob@example.org", "ok": True,
+         "argv": ["user", "bob@example.org", "print", "delegates"],
+         "extra": {"command": "build.print_delegates", "origin": "builder", "rows": 3, "domain": "example.org"}},
+    ])
+
+
+def test_the_audit_page_offers_each_domain_and_unknown(client):
+    _two_domains_and_an_old_record(client)
+    page = client.get("/audit").text
+    assert '<option value="example.com"' in page and '<option value="example.org"' in page
+    assert '<option value="unknown"' in page and "Unknown (older records)" in page
+
+
+def test_the_domain_filter_shows_one_domain_and_never_files_an_old_record_under_it(client):
+    _two_domains_and_an_old_record(client)
+    rows = client.get("/audit/rows", params={"domain": "example.org"}).text
+    assert "bob@example.org" in rows and "alice@example.com" not in rows and "old@example.com" not in rows
+    rows = client.get("/audit/rows", params={"domain": "Example.COM"}).text   # a domain matches in any case
+    assert "alice@example.com" in rows and "old@example.com" not in rows
+    unknown = client.get("/audit/rows", params={"domain": "unknown"}).text
+    assert "old@example.com" in unknown and "alice@example.com" not in unknown and "bob@example.org" not in unknown
+    every = client.get("/audit/rows").text
+    assert all(t in every for t in ("old@example.com", "alice@example.com", "bob@example.org"))
+    assert "Unknown" in every                         # the old record's Domain cell says so
+
+
+def test_a_read_record_shows_its_row_count_and_its_domain_is_searchable(client):
+    _two_domains_and_an_old_record(client)
+    rows = client.get("/audit/rows", params={"q": "example.org"}).text
+    assert "bob@example.org" in rows and "3 rows" in rows and "alice@example.com" not in rows
+
+
+def test_the_pager_and_export_keep_the_domain_filter(client):
+    _seed(client.audit_path, [
+        {"ts": f"t{i}", "action": "apply", "target": f"u{i}@example.com", "ok": True,
+         "extra": {"domain": "example.com" if i % 2 else "example.org"}} for i in range(60)])
+    page1 = client.get("/audit/rows", params={"domain": "example.com"})
+    page2 = client.get(_hx_get(page1.text, "Next"))
+    assert "domain=example.com" in _hx_get(page1.text, "Next")
+    assert "@example.com" in page2.text and "page 2 of 2" in page2.text
+    export = re.search(r'href="(/audit/export\.csv\?[^"]*)"', page1.text).group(1)
+    lines = client.get(html.unescape(export)).text.splitlines()
+    assert len(lines) == 31 and all(line.split(",")[8] == "example.com" for line in lines[1:])
+
+
+def test_the_export_names_each_record_s_domain_origin_and_rows(client):
+    _two_domains_and_an_old_record(client)
+    lines = client.get("/audit/export.csv").text.splitlines()
+    assert lines[1].endswith(",example.org,builder,3")    # newest first: the read
+    assert lines[2].endswith(",example.com,,")
+    assert lines[3].endswith(",unknown,,")                # written before records named a domain

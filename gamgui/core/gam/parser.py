@@ -18,7 +18,7 @@ import io
 import json
 import threading
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, List
+from typing import Any, Dict, Iterator, List, Optional
 
 _JSON_COLUMN = "JSON"
 
@@ -79,6 +79,21 @@ def parse_records(stdout: str, json_column: bool = True) -> List[Dict[str, Any]]
 
     # 3) CSV (possibly with an embedded JSON column).
     return _parse_csv(text, json_column)
+
+
+def table_records(stdout: str) -> Optional[List[Dict[str, Any]]]:
+    """The rows of a read's output when it is a table (CSV with a comma in its header, or JSON), else None.
+
+    ``info``/``show`` print human text, and a table of that would be garbage, so the Builder shows
+    those verbatim; the read's audit record counts rows only when this returns a list. None means
+    "not a table", never "no rows": a header with no rows is ``[]``."""
+    text = (stdout or "").strip()
+    if not text:
+        return None
+    first = text.splitlines()[0]
+    if not (text[:1] in "[{" or "," in first):
+        return None
+    return parse_records(stdout)
 
 
 def parse_one(stdout: str) -> Dict[str, Any]:

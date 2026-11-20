@@ -1,7 +1,9 @@
 """Append-only local audit log (JSONL).
 
-Every mutation (and optionally reads) is recorded with a redacted copy of the gam argument vector
-so there is a durable, reviewable record of what the tool did. Secrets are never written: a caller
+Every mutation, and every catalog read the operator runs (``read`` / ``sensitive_read``: the command,
+never its output), is recorded with a redacted copy of the gam argument vector so there is a durable,
+reviewable record of what the tool did. Each record names its domain (``extra.domain``); one written
+before records did has none, and reads as unknown. Secrets are never written: a caller
 that knows the secret it sent passes it as ``secrets=`` and every occurrence is masked by value;
 values following sensitive keys (e.g. ``password``) are masked positionally as a second layer.
 """
@@ -21,6 +23,11 @@ from typing import Any, BinaryIO, Dict, Iterator, List, Optional, Sequence, over
 # gam argument keys whose following value must be masked in the log.
 _SENSITIVE_KEYS = {"password", "notifypassword", "signature", "recoveryemail", "recoveryphone", "alternateemail"}
 _MASK = "***redacted***"
+# The ``extra`` key that names a record's domain. A record without it predates it: unknown, never a domain.
+DOMAIN_KEY = "domain"
+# The actions of a read record: a catalog read the operator ran, sensitive or not. They change nothing,
+# so a screen about writes (Home's failures, the incident report's changes) passes them over.
+READ_ACTIONS = frozenset({"read", "sensitive_read"})
 
 # Roll the log past this size. A single bulk apply appends thousands of records and readers walk
 # the file, so it can't grow forever — but rolling is the only moment history can be lost, so the
@@ -118,7 +125,12 @@ class AuditLog:
         actor: Optional[str] = None,
         extra: Optional[Dict[str, Any]] = None,
         secrets: Sequence[str] = (),
+        domain: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Append one record. ``domain`` is the Workspace domain the record belongs to, kept lowercased
+        as ``extra.domain``; every call in the app passes it (``test_every_audit_record_names_its_domain``)."""
+        if domain and domain.strip():
+            extra = {**(extra or {}), DOMAIN_KEY: domain.strip().lower()}
         entry: Dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "connector": connector,

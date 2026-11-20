@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -519,7 +520,8 @@ def test_a_sensitive_read_is_audited_without_its_output(client):
     assert "11112222" in r.text                              # the operator still sees the codes
     [entry] = _audit(client)
     assert (entry["action"], entry["target"], entry["ok"]) == ("sensitive_read", "alice@example.com", True)
-    assert entry["extra"] == {"command": cmd.id}
+    # rows is what the Builder's table showed: GAM's header line has a comma, so it is read as one
+    assert entry["extra"] == {"command": cmd.id, "origin": "builder", "rows": 2, "domain": "example.com"}
     assert entry["argv"] == ["user", "alice@example.com", "show", "backupcodes"]
     log = client.app.state.gamgui.connector.audit.path.read_text()
     assert "11112222" not in log and "33334444" not in log   # never the output
@@ -560,7 +562,7 @@ def test_a_sensitive_read_in_a_sequence_is_audited_as_one(client):
     assert (job.applied, job.failed) == (1, [])
     [entry] = _audit(client)
     assert (entry["action"], entry["target"], entry["ok"]) == ("sensitive_read", "alice@example.com", True)
-    assert entry["extra"] == {"command": cmd.id}
+    assert entry["extra"] == {"command": cmd.id, "origin": "sequence", "rows": 2, "domain": "example.com"}
     assert "11112222" not in client.app.state.gamgui.connector.audit.path.read_text()
 
 
@@ -581,20 +583,86 @@ def test_the_csv_download_of_a_sensitive_result_is_audited(client, monkeypatch):
     assert e.status_code == 200 and "11112222" in e.text
     read, export = _audit(client)
     assert read["action"] == "sensitive_read"
+    assert read["extra"] == {"command": cmd.id, "origin": "builder", "rows": 1, "domain": "example.com"}
     assert (export["action"], export["target"], export["ok"]) == ("sensitive_csv_export", "alice@example.com", True)
     assert export["argv"] == ["user", "alice@example.com", "print", "backupcodes"]
-    assert export["extra"] == {"command": cmd.id, "rows": 1}
+    assert export["extra"] == {"command": cmd.id, "rows": 1, "domain": "example.com"}
     assert "11112222" not in client.app.state.gamgui.connector.audit.path.read_text()
 
 
 def test_the_csv_download_of_a_plain_result_is_not_audited(client):
     client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
-    assert client.get("/builder/export.csv").status_code == 200 and _audit(client) == []
+    assert client.get("/builder/export.csv").status_code == 200
+    assert [e["action"] for e in _audit(client)] == ["read"]   # the read itself; the download adds nothing
 
 
-def test_a_plain_read_writes_no_audit_entry(client):
+def test_a_plain_read_is_recorded_without_its_output(client):
+    # F1: every catalog read leaves a record — the command, the domain, where it was started and its
+    # row count — never the rows. (It once left none.)
     r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
-    assert "assistant@example.com" in r.text and _audit(client) == []
+    assert "assistant@example.com" in r.text
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("read", "alice@example.com", True)
+    assert entry["argv"][:3] == ["user", "alice@example.com", "print"]
+    assert entry["extra"] == {"command": "build.print_delegates", "origin": "builder", "rows": 2,
+                              "domain": "example.com"}
+    assert "assistant@example.com" not in client.app.state.gamgui.connector.audit.path.read_text()
+
+
+@pytest.mark.parametrize("out, rows", [
+    ("User,delegateAddress\n", 0),            # a table with a header and no rows: 0 is the answer
+    ("[]", 0),
+    ("Alice has no delegates set up\n", None),  # text, not a table: no count, never "0 rows"
+    ("", None),                                # nothing printed: unknown, never "0 rows"
+])
+def test_a_read_record_counts_rows_only_for_a_table(client, monkeypatch, out, rows):
+    async def printed(domain, argv, **kw):
+        return out
+
+    monkeypatch.setattr(client.app.state.gamgui.connector.runner, "run_authenticated", printed)
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    [entry] = _audit(client)
+    assert entry["ok"] is True and entry["extra"].get("rows") == rows and ("rows" in entry["extra"]) == (rows is not None)
+
+
+def test_a_failed_read_is_recorded_with_its_error_and_no_rows(client):
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "missing@example.com"})
+    [entry] = _audit(client)
+    assert (entry["action"], entry["target"], entry["ok"]) == ("read", "missing@example.com", False)
+    assert entry["extra"]["error"] and "rows" not in entry["extra"]
+    assert (entry["extra"]["origin"], entry["extra"]["domain"]) == ("builder", "example.com")
+
+
+async def test_a_cancelled_read_is_recorded_then_cancels(connector, monkeypatch):
+    async def cancelled(domain, argv, **kw):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", cancelled)
+    cmd = load_catalog().by_id("build.print_delegates")
+    with pytest.raises(asyncio.CancelledError):
+        await connector.catalog_read(cmd, cmd.build({"email": "alice@example.com"}), "alice@example.com")
+    [entry] = connector.audit.tail()
+    assert (entry["action"], entry["ok"]) == ("read", False) and "interrupted" in entry["extra"]["error"]
+
+
+async def test_a_read_from_an_unknown_origin_is_refused_before_it_runs(connector, gam_calls):
+    cmd = load_catalog().by_id("build.print_delegates")
+    with pytest.raises(ValueError):
+        await connector.catalog_read(cmd, cmd.build({"email": "alice@example.com"}), "alice@example.com", origin="elsewhere")
+    assert gam_calls() == [] and connector.audit.tail() == []
+
+
+def test_a_plain_read_in_a_sequence_is_recorded_as_a_read(client):
+    # A read step went through apply() and was filed as an `apply`, like a write.
+    client.post("/builder/sequence/add", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    _, token = _seq_preview(client)
+    run = client.post("/builder/sequence/run", data={"preview": token})
+    job = client.app.state.gamgui.jobs[re.search(r"status\?job=([A-Za-z0-9_\-]+)", run.text).group(1)]
+    wait_for_job(client, job)
+    assert (job.applied, job.failed) == (1, [])
+    [entry] = _audit(client)
+    assert (entry["action"], entry["ok"]) == ("read", True)
+    assert (entry["extra"]["command"], entry["extra"]["origin"]) == ("build.print_delegates", "sequence")
 
 
 async def test_catalog_read_and_export_refuse_a_write_command(connector, gam_calls):
@@ -738,7 +806,7 @@ def test_run_mutation_goes_through_guard_and_audit(client, gam_calls):
     assert gam_writes(gam_calls()) == [argv]
     rec = client.app.state.gamgui.connector.audit.tail()[-1]
     assert (rec["action"], rec["target"], rec["ok"]) == ("apply", "alice@example.com", True)
-    assert rec["extra"] == {"command": "build.set_signature"}   # which catalog command, not just `apply`
+    assert rec["extra"] == {"command": "build.set_signature", "domain": "example.com"}   # which command, not just `apply`
     assert rec["argv"] == ["user", "alice@example.com", "signature", "***redacted***", "html"]  # body kept out of the log
 
 
@@ -962,7 +1030,7 @@ def test_a_filtered_csv_of_a_sensitive_result_audits_the_rows_it_hands_out(clien
     client.post("/builder/run", data={"cid": cmd.id, "a0": "alice@example.com"})
     e = client.get("/builder/export.csv", params={"q": "bob"})
     assert "55556666" in e.text and "11112222" not in e.text
-    assert _audit(client)[-1]["extra"] == {"command": cmd.id, "rows": 1}
+    assert _audit(client)[-1]["extra"] == {"command": cmd.id, "rows": 1, "domain": "example.com"}
 
 
 def test_browse_only_command_cannot_run(client):
@@ -993,7 +1061,8 @@ def test_sequence_add_remove_and_run(client, gam_calls):
     ]
     steps = client.app.state.gamgui.connector.audit.tail()[-2:]
     assert [(e["action"], e["ok"], e["extra"]) for e in steps] == [
-        ("apply", True, {"command": "build.set_signature"}), ("apply", True, {"command": "build.add_delegate"})]
+        ("apply", True, {"command": "build.set_signature", "domain": "example.com"}),
+        ("apply", True, {"command": "build.add_delegate", "domain": "example.com"})]
     done = client.get("/builder/sequence/status", params={"job": job.id})
     assert_ok_partial(done)
     assert "Sequence complete — 2 of 2 steps succeeded." in done.text
