@@ -112,3 +112,13 @@ def test_recent_failures_are_the_last_thirty_days(client):  # noqa: F811
     audit.record("add_delegate", target="new@example.com", ok=False, extra={"error": "boom"})
     html = client.get("/").text
     assert "new@example.com" in html and "old@example.com" not in html
+
+
+def test_a_failed_read_is_not_a_failed_write_on_home(client):  # noqa: F811 — the imported fixture
+    # A Builder read that failed changed nothing; the Audit screen lists it, Home's failed writes don't.
+    audit = _state(client).connector.audit
+    audit.record("read", target="typo@example.com", ok=False, extra={"error": "Does not exist"}, domain="example.com")
+    audit.record("sensitive_read", target="gone@example.com", ok=False, extra={"error": "Does not exist"},
+                 domain="example.com")
+    html = client.get("/").text
+    assert "typo@example.com" not in html and "gone@example.com" not in html and "No failed writes" in html

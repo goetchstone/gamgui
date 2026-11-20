@@ -72,16 +72,18 @@ guarding them:
 - **Only read-only commands can become runnable automatically.** The Builder promotes
   grammar-derived commands to runnable *only* when they are confidently read-only; every write must
   be hand-curated. Anything uncertain stays inert. The reads whose output is itself a secret or a
-  file stay runnable but every run is audited (`sensitive_read`: the command and the target, never
+  file stay runnable and every run is audited as `sensitive_read` (the command and the target, never
   the output), as a Builder sequence step too, and so is downloading such a result as CSV
   (`sensitive_csv_export`, with the row count). Exactly two kinds: 2-Step Verification backup
   codes and Chrome browser enrollment tokens (`show`/`print backupcodes`, `show`/`print
   browsertokens`, named), and every read with GAM's download verb `get`, by rule — today a user's
   Drive file or Doc, their Keep note attachments, ChromeOS device files, and user and contact
   photos (`get drivefile`, `document`, `noteattachments`, `devicefile`, `photo`, `profilephoto`,
-  `contactphotos`). Other reads of a user's content (a mailbox search, Chat messages, Keep notes
-  listed as text) are not audited: reads are open by design. Exporting any read to a Google Sheet
-  is audited as the write it is.
+  `contactphotos`). Every other Builder read is recorded too, as `read` (the command, the domain and
+  the row count, never the output), so a mailbox search or a domain-wide listing leaves a trace; reads
+  stay open by design, and the reads screens make for themselves (a directory refresh, a person's
+  tabs) are not recorded. Exporting any read to a Google Sheet is audited as the write it is. Every
+  audit record names its domain (`extra.domain`).
 - **The loopback server rejects cross-origin callers and foreign hosts.** Cookies are not
   port-scoped, so a token cookie alone would let any page on another `127.0.0.1` port drive the app;
   and every request, even the health check, must carry a `Host` of `127.0.0.1:<port>` or

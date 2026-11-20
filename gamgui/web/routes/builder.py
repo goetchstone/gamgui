@@ -27,7 +27,8 @@ from ...core.catalog.catalog import AREA_ORDER
 from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.errors import GAMError
-from ...core.gam.parser import parse_records
+from ...core.connectors.gam_connector import READ_ORIGIN_SEQUENCE
+from ...core.gam.parser import table_records
 from ...core.bulk import stop_requested
 from ..csvutil import csv_safe
 from ..jobs import start_job
@@ -175,10 +176,7 @@ async def _render_read(request: Request, out: str, cmd, argv, target: str, tenan
     if app_state(request).tenant_key() != tenant:
         return error_partial(request, _SWITCHED)
     gam = _gam_str(argv)
-    text = (out or "").strip()
-    first = text.splitlines()[0] if text else ""
-    looks_tabular = text[:1] in "[{" or "," in first
-    records = parse_records(out) if looks_tabular else []
+    records = table_records(out) or []    # the same test the read's audit record counts rows by
     if records:
         # The whole result set stays here: the table's filter and pager work over every row of it
         # (plan U1 — a filter over only the rendered rows once hid row 101 on), and the CSV download
@@ -562,10 +560,10 @@ async def _run_sequence(job, conn, previews, catalog=None) -> None:
             job.current = p.summary
             cmd = catalog.by_id(p.meta.get("cid", "")) if catalog is not None else None
             try:
-                if cmd is not None and cmd.sensitive:
-                    # A sensitive read runs as the read it is, so it is audited as one (`sensitive_read`,
-                    # never its output) — through apply() it was filed as an `apply` like any write.
-                    await conn.catalog_read(cmd, list(p.argv), p.target)
+                if cmd is not None and cmd.risk == RiskLevel.READ_ONLY:
+                    # A read step runs as the read it is, so it is recorded as one (`read`, or `sensitive_read`,
+                    # never its output, origin `sequence`): through apply() it was filed as an `apply` like any write.
+                    await conn.catalog_read(cmd, list(p.argv), p.target, origin=READ_ORIGIN_SEQUENCE)
                     ok, why, detail = True, "", ""
                 else:
                     res = (await conn.apply([p]))[0]

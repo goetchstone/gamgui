@@ -739,13 +739,13 @@ class SetupService:
             gone = ", ".join(deleted) or "nothing"
             audit.record("remove_domain", connector="keychain", target=domain, ok=False,
                          extra={"error": str(exc), "deleted": deleted,
-                                "detail": f"The Keychain refused; deleted before it did: {gone}."})
+                                "detail": f"The Keychain refused; deleted before it did: {gone}."}, domain=domain)
             raise
         extra = {"outcome": removal.outcome, "detail": removal.detail}
         if removal.twin:
             extra["twin"] = removal.twin
         try:
-            audit.record("remove_domain", connector="keychain", target=domain, ok=True, extra=extra)
+            audit.record("remove_domain", connector="keychain", target=domain, ok=True, extra=extra, domain=domain)
         except OSError as exc:      # the removal happened: say so, and that its record didn't
             removal.message += f" The audit log couldn't record it ({exc})."
         return removal

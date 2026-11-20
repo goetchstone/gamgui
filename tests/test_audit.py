@@ -63,3 +63,14 @@ def test_audit_file_permissions_are_600(tmp_path):
     AuditLog(path).record("noop", ok=True)
     mode = os.stat(path).st_mode & 0o777
     assert mode == 0o600
+
+
+def test_a_record_names_its_domain_lowercased_and_one_without_names_none(tmp_path):
+    log = AuditLog(tmp_path / "audit.jsonl")
+    log.record("apply", target="a@e.com", ok=True, extra={"command": "build.x"}, domain=" Example.COM ")
+    log.record("remove_domain", ok=True, domain="example.org")      # no other extra: domain alone
+    log.record("noop", ok=True)                                     # as a record written before F1
+    named, alone, old = log.tail()
+    assert named["extra"] == {"command": "build.x", "domain": "example.com"}
+    assert alone["extra"] == {"domain": "example.org"}
+    assert "extra" not in old
