@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import asyncio
 from typing import Annotated
@@ -11,6 +12,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import guard
+from ...core import signature_backups as backups
 from ...core import signatures as sig
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
@@ -69,41 +71,52 @@ _NOT_KEPT = "Couldn't keep a copy of the old signatures on this Mac, so the run 
 
 
 async def _run_apply(job: Job, conn, matched, template: str, kept) -> None:
-    """Background task: for each user, read and keep their signature as it is (``kept``, a backup run), then set the new
-    one, updating ``job`` as it goes. A person whose signature can't be read isn't overwritten and is listed as failed;
-    one that can't be kept stops the run. Stops too at a failure every later user would share (``stop_reason``: sign-in
-    expired, a scope missing), or at Stop."""
+    """Background task: each matched user's template, rendered, through ``_run_writes``."""
+    await _run_writes(job, conn, [(u.primary_email, sig.render_signature(template, u), None) for u in matched], kept)
+
+
+_CHANGED_SINCE = "Changed since that run, so it's left as it is: put it back by hand if you mean to."
+
+
+async def _run_writes(job: Job, conn, items, kept) -> None:
+    """Background task: for each ``(email, body, expect)``, read and keep their signature as it is (``kept``, a backup run),
+    then set ``body``, updating ``job`` as it goes. With ``expect`` (Put Back: what the earlier run left there, as GAM
+    stored it), a signature that isn't that any more is left as it is. A person whose signature can't be read isn't
+    overwritten and is listed as failed; one that can't be kept stops the run. Stops too at a failure every later user would
+    share (``stop_reason``: sign-in expired, a scope missing), or at Stop."""
     try:
-        for u in matched:
+        for email, body, expect in items:
             if stop_requested(job):
                 break
-            job.current = u.primary_email
-            body = sig.render_signature(template, u)
+            job.current = email
             try:
-                previous = await conn.signature_exact(u.primary_email)
+                previous = await conn.signature_exact(email)
             except Exception as exc:  # noqa: BLE001 — unread is unknown: this person isn't overwritten
                 if not isinstance(exc, GAMError):
                     logger.warning("reading a signature to keep failed", exc_info=exc)
-                job.record(u.primary_email, False, _NOT_READ, gam_detail(exc))
+                job.record(email, False, _NOT_READ, gam_detail(exc))
                 stop = stop_reason(getattr(exc, "kind", None), friendly(exc), job.total - job.done)
                 if stop:
                     job.error = stop
                     break
                 continue
+            if expect is not None and previous != expect:
+                job.record(email, False, _CHANGED_SINCE)
+                continue
             try:
-                kept.keep(u.primary_email, previous, body)
+                kept.keep(email, previous, body)
             except OSError as exc:
                 logger.warning("keeping a signature copy failed", exc_info=exc)
                 job.error = _NOT_KEPT.format(left=job.total - job.done)
                 break
             try:
-                result = await conn.set_signature(u.primary_email, body, html=True)
-                job.record(u.primary_email, result.ok, result.remediation, result.detail)
+                result = await conn.set_signature(email, body, html=True)
+                job.record(email, result.ok, result.remediation, result.detail)
                 kind, why = (None if result.ok else result.kind), result.remediation
             except Exception as exc:  # noqa: BLE001 — _run_write reports GAM's failures; this is anything else
                 if not isinstance(exc, GAMError):
                     logger.warning("applying a signature failed", exc_info=exc)
-                job.record(u.primary_email, False, friendly(exc), gam_detail(exc))
+                job.record(email, False, friendly(exc), gam_detail(exc))
                 kind, why = getattr(exc, "kind", None), friendly(exc)
             stop = stop_reason(kind, why, job.total - job.done)
             if stop:
@@ -285,3 +298,70 @@ async def delete_template(request: Request, name: Annotated[str, Form()] = "") -
     store = signature_store(request)
     store.delete(name)
     return TEMPLATES.TemplateResponse(request, _TEMPLATES_PARTIAL, _tctx(store))
+
+
+# --- Put Back (roadmap 4.1) ------------------------------------------------------------------------------------------------
+# A kept run's old signatures, set again. The preview names who goes back and who can't (GAM would read the old one as a
+# file, or change it on the way in); the run reads each person's signature first, leaves alone anyone whose signature
+# isn't what that run left there any more, keeps what it replaces (so a Put Back can be put back too), and sets the old one.
+_PUTBACK_FLOW = "signature_putback"
+_PUTBACK_SHOWN = 200
+_KEPT_PARTIAL = "_sig_kept.html"
+_PUTBACK_PARTIAL = "_sig_putback.html"
+
+
+@router.get("/kept", response_class=HTMLResponse)
+async def kept_runs(request: Request) -> HTMLResponse:
+    """The kept runs, newest first: at most KEEP_RUNS, each with how many people it holds."""
+    st = request.app.state.gamgui
+    return TEMPLATES.TemplateResponse(request, _KEPT_PARTIAL, {"runs": signature_backups(st).runs(), "now": time.time()})
+
+
+@router.post("/putback/preview", response_class=HTMLResponse)
+async def putback_preview(request: Request, run: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _PUTBACK_PARTIAL, {"error": NOT_CONNECTED})
+    try:
+        kept = signature_backups(st).load(run)
+    except backups.BackupProblem as exc:
+        return TEMPLATES.TemplateResponse(request, _PUTBACK_PARTIAL, {"error": f"That run can't be put back: {exc}."})
+    puts, left_out = backups.put_back_plan(kept)
+    items = [(e.email, e.previous, backups.gam_stored(e.set)) for e in puts]
+    token = st.previews.hold(_PUTBACK_FLOW, ("putback", kept.id), (kept.what, items), tenant=tenant) if items else ""
+    decision = guard.evaluate(_previews_of([e.email for e in puts]), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    return TEMPLATES.TemplateResponse(request, _PUTBACK_PARTIAL, {
+        "run": kept, "puts": puts[:_PUTBACK_SHOWN], "count": len(puts), "left_out": left_out, "token": token,
+        "typed_count": decision.requires_typed_count})
+
+
+def _previews_of(emails):
+    return guard.changes(emails, RiskLevel.LOW, "Put back a signature")
+
+
+@router.post("/putback", response_class=HTMLResponse)
+async def putback(request: Request, run: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": NOT_CONNECTED})
+    form = await request.form()
+    held, refusal = st.previews.take(_PUTBACK_FLOW, str(form.get(TOKEN_FIELD) or ""), ("putback", run),
+                                     again="click Put back… again")
+    if refusal:
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
+    what, items = held
+    refusal = guard.enforce(_previews_of([email for email, _, _ in items]), form, confirm_step=True,
+                            typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    if refusal:
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
+    try:
+        kept = signature_backups(st).start(f"put back of {what}")
+    except OSError as exc:
+        logger.warning("making a signature backup failed", exc_info=exc)
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {
+            "error": "Couldn't make a place on this Mac to keep the current signatures, so nothing was put back."})
+    n = len(items)
+    job = register_job(st.jobs, Job(total=n, kind="signatures", title=f"Put back signatures — {n} user{'s' if n != 1 else ''}"))
+    job.task = asyncio.create_task(_run_writes(job, st.connector, items, kept))
+    return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})

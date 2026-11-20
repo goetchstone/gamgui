@@ -155,3 +155,35 @@ class RunWriter:
                 self.path.unlink()
             except OSError:
                 pass
+
+
+# --- Put Back: what a kept signature can be set to again --------------------------------------------------------------
+# GAM reads a signature argument that is one of these words (stripped, lowercased, `_` removed) as a file or document to
+# load, not as the signature (getStringOrFile, SORF_FILE_ARGUMENTS, read from the vendored build).
+GAM_FILE_KEYWORDS = frozenset({"file", "htmlfile", "textfile", "gdoc", "ghtml", "gcsdoc", "gcshtml"})
+
+
+def read_as_keyword(body: str) -> Optional[str]:
+    """The keyword GAM would read ``body`` as, or None when it takes it as the signature."""
+    word = body.strip().lower().replace("_", "")
+    return word if word in GAM_FILE_KEYWORDS else None
+
+
+def gam_stored(body: str) -> str:
+    """``body`` as GAM sends it with `html` (``_processSignature``, read from the vendored build): every CR removed and each
+    backslash-n pair made `<br/>`; with `html` a real line break is left alone."""
+    return body.replace("\r", "").replace("\\n", "<br/>") if body else body
+
+
+def put_back_plan(run: Run) -> "tuple[List[Entry], List[tuple]]":
+    """``run``'s people whose old signature can be set again exactly, and those left out with why, in words: one GAM would
+    read as a file, or change on the way in, can't go back as it was."""
+    puts, left_out = [], []
+    for entry in run.entries:
+        if read_as_keyword(entry.previous):
+            left_out.append((entry.email, "GAM would read it as a file to load, so it's left for you to put back by hand"))
+        elif gam_stored(entry.previous) != entry.previous:
+            left_out.append((entry.email, "GAM would change it on the way in, so it can't go back exactly"))
+        else:
+            puts.append(entry)
+    return puts, left_out
