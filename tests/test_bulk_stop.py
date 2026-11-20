@@ -35,6 +35,9 @@ class _Conn:
     async def set_signature(self, email, body, html=True):
         return await self._write(email)
 
+    async def signature_exact(self, email):   # read before each write (roadmap 4.1): reads answer, the writes fail
+        return ""
+
     async def set_organization(self, email, title="", department=""):
         return await self._write(email)
 
@@ -43,6 +46,15 @@ class _Conn:
 
     async def create_user(self, email, *a, **k):
         return await self._write(email)
+
+
+class _Kept:
+    """A backup run that keeps every copy (the real one writes them to disk: tests/test_signature_backups.py)."""
+    def keep(self, email, previous, new):
+        pass
+
+    def close(self):
+        pass
 
 
 USERS = [GAMUser(primary_email=f"u{i}@example.com", given_name="U", family_name=str(i)) for i in range(3)]
@@ -58,7 +70,7 @@ async def _signatures(conn):
     from gamgui.web.jobs import Job
     from gamgui.web.routes.signatures import _run_apply
     job = Job(id="j", total=len(USERS))
-    await _run_apply(job, conn, USERS, "{name}")
+    await _run_apply(job, conn, USERS, "{name}", _Kept())
     return job
 
 
