@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{#- Move many people to an org unit (roadmap 4.2): the unit from the tree read for this page, a group or pasted
+    addresses, then a preview that reads both again and holds who it found. -#}
+{% block title %}Bulk: move to an org unit — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+{% set fld = "mt-1 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="space-y-4">
+  <div>
+    <a href="/users" class="text-sm text-brand-blueink hover:text-brand-black">← Users</a>
+    <p class="eyebrow text-brand-blue mt-2">Directory</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Bulk: move to an org unit</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Move many people into one <strong>org unit</strong>. Settings and policies follow the org unit, so what applies to them changes with the move. Pick a group or paste addresses, preview, then move.</p>
+  </div>
+  {% if error %}<div class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+  {% else %}
+  <form id="bulk-ou-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-4">
+    <label class="block">
+      <span class="text-sm text-brand-blueink">Move to</span>
+      <select name="org_unit" class="{{ fld }}">
+        <option value="">— pick an org unit —</option>
+        {% for p in paths %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </label>
+    {% if paths | length == 1 %}<p class="text-xs text-brand-grayink">This domain has no org units below the root yet: create one in the Admin console or the Builder.</p>{% endif %}
+    <label class="block">
+      <span class="text-sm text-brand-blueink">Its members, from a group</span>
+      <select name="group" class="{{ fld }}">
+        <option value="">— or paste addresses below —</option>
+        {% for g in groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-sm text-brand-blueink">…or paste addresses (one per line)</span>
+      <textarea name="emails" rows="3" placeholder="person@example.com&#10;another@example.com" class="{{ fld }} font-mono text-[12.5px]"></textarea>
+    </label>
+    <button type="button"
+            class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
+            hx-post="/users/bulk-ou/preview" hx-include="#bulk-ou-form" hx-target="#bulk-ou-result" hx-swap="innerHTML">Preview</button>
+  </form>
+  {% endif %}
+
+  <div id="bulk-ou-result" class="max-h-[22rem] overflow-y-auto"></div>
+</div>
+{% endif %}
+{% endblock %}

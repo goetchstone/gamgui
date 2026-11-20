@@ -263,7 +263,7 @@ def test_every_job_a_screen_starts_has_a_kind_and_a_title():
     routes = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
     starts = [(p.name, m) for p in routes.glob("*.py")
               for m in re.findall(r"(?:start_job|register_job)\((?:[^()]|\([^()]*\))*\)", p.read_text(), re.S)]
-    assert len(starts) == 21, starts   # 17th: the roster compare (C3); 18th: the mail review (3.2); 19th, 20th: Inactive → suspend, reminders (3.3); 21st: remove several from a group (3.5)
+    assert len(starts) == 22, starts   # 17th: the roster compare (C3); 18th: the mail review (3.2); 19th, 20th: Inactive → suspend, reminders (3.3); 21st: remove several from a group (3.5); 22nd: move many to an org unit (4.2)
     assert [s for s in starts if "kind=" not in s[1] or "title=" not in s[1]] == []
 
 

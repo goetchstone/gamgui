@@ -38,6 +38,7 @@ PANELS = {
     "suspend_inactive": "/reports/inactive/status",
     "remind": "/reports/remind/status",
     "group_remove": "/groups/members/remove-many/status",
+    "org_unit_move": "/users/bulk-ou/status",
     "mail_review": "/reports/mail-review",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",
