@@ -1,0 +1,22 @@
+{#- The kept runs (roadmap 4.1), newest first: at most signature_backups.KEEP_RUNS. A run that can't be read whole is listed
+    as such, never hidden: its people's old signatures may still be in its file. -#}
+{% if not runs %}
+<p class="text-sm text-brand-grayink">Nothing kept yet: a run keeps the signatures it replaces.</p>
+{% else %}
+<ul class="divide-y divide-brand-gray/20 text-sm">
+  {% for r in runs %}
+  <li class="flex items-center justify-between gap-3 py-2">
+    {% if r.when %}
+    <span><span class="text-brand-black">{{ r.what }}</span> <span class="text-xs text-brand-grayink">— {{ r.entries | length }} {{ "person" if r.entries | length == 1 else "people" }}, {{ (now - r.when) | ago }}</span></span>
+    <form hx-post="/signatures/putback/preview" hx-target="#sig-putback" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="run" value="{{ r.id }}" />
+      <button type="submit" aria-label="Put back the signatures from {{ r.what }}…"
+              class="rounded-md border border-brand-gray/60 px-2 py-1 text-xs font-medium text-brand-blueink hover:bg-paper">Put back…</button>
+    </form>
+    {% else %}
+    <span class="text-amber-800">A kept run that can't be read whole ({{ r.what }}). Its file is in the app's data folder, under signature-backups.</span>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

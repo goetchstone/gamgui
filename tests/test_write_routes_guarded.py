@@ -55,6 +55,7 @@ PREVIEWS = {
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
     "/groups/members/remove/preview", "/users/groups/remove/preview",
     "/signatures/retry", "/users/bulk/retry",   # a finished run's failures, previewed (plan U5)
+    "/signatures/putback/preview",   # roadmap 4.1: a kept run's old signatures, previewed
     "/groups/members/remove-many/preview", "/groups/members/remove-many/retry",   # roadmap 3.5: read the group, hold who
     "/users/bulk-ou/preview", "/users/bulk-ou/retry",   # roadmap 4.2: read the tree and the group, hold the unit and who
 }
@@ -112,6 +113,19 @@ def _incident_checked(run: str):
     return setup
 
 
+KEPT_RUN = "0000000000001-guarded"
+
+
+def _kept_run(client) -> None:   # a Signatures run that kept alice's old signature (roadmap 4.1)
+    import json
+    from gamgui.web.routes._common import signature_backups
+    folder = signature_backups(client.app.state.gamgui).folder
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{KEPT_RUN}.jsonl").write_text(
+        json.dumps({"run": KEPT_RUN, "when": 1.0, "what": "alice@example.com"}) + "\n"
+        + json.dumps({"email": "alice@example.com", "previous": "Old", "set": "Best,<br>Alice"}) + "\n")
+
+
 def _sales_role(client) -> None:
     client.post("/onboard/role", data={"name": "Sales", "steps": "Set up POS", "org_unit": "/Sales"})
 
@@ -152,6 +166,8 @@ GATED = {
                                   edit={"email": "carol@example.com"}),
     # Reports' Inactive → suspend (roadmap 3.3): the preview reads the directory again and holds who it found.
     "/reports/inactive/apply": Case({}, "/reports/inactive/preview", preview_data={}, edit={"days": "30"}),
+    # Put Back (roadmap 4.1): a kept run's old signatures, held by the preview.
+    "/signatures/putback": Case({"run": KEPT_RUN}, "/signatures/putback/preview", setup=_kept_run, edit={"run": "another"}),
     # Remove several members (roadmap 3.5): the ticked ones the group still holds, held by the preview.
     "/groups/members/remove-many": Case({"group": "sales@example.com", "pick": ["alice@example.com", "bob@example.com"]},
                                         "/groups/members/remove-many/preview", edit={"picks": "alice@example.com"}),
