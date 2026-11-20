@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from .gam.commands import signature_read_as_file
 from .paths import app_data_dir
 
 KEEP_RUNS = 5
@@ -162,15 +163,9 @@ class RunWriter:
 
 
 # --- Put Back: what a kept signature can be set to again --------------------------------------------------------------
-# GAM reads a signature argument that is one of these words (stripped, lowercased, `_` removed) as a file or document to
-# load, not as the signature (getStringOrFile, SORF_FILE_ARGUMENTS, read from the vendored build).
-GAM_FILE_KEYWORDS = frozenset({"file", "htmlfile", "textfile", "gdoc", "ghtml", "gcsdoc", "gcshtml"})
-
-
-def read_as_keyword(body: str) -> Optional[str]:
-    """The keyword GAM would read ``body`` as, or None when it takes it as the signature."""
-    word = body.strip().lower().replace("_", "")
-    return word if word in GAM_FILE_KEYWORDS else None
+# GAM reads a signature argument that is one of its file keywords as a file or document to load, not as the signature:
+# `signature_read_as_file` (core/gam/commands.py) is the one list, and set_signature refuses such a value.
+read_as_keyword = signature_read_as_file
 
 
 def gam_stored(body: str) -> str:

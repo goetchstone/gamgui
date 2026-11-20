@@ -12,6 +12,7 @@ whose ``ok`` flag is always checked before reporting success.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import shlex
 from typing import Annotated
@@ -22,7 +23,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import bulk, guard, lifecycle, person_reads
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
-from ...core.gam.commands import GAMCommands
+from ...core.gam.commands import GAMCommands, signature_read_as_file
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.setup import classroom_readable
 from ...core.lifecycle import autoreply_html, autoreply_text
@@ -33,8 +34,9 @@ from ..jobs import retry_key, retry_of, start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, GAM_TROUBLE, as_of, connector, error_partial, friendly, write_failed
-from ._common import gam_detail, unread_why
+from ._common import gam_detail, signature_backups, unread_why
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users")
 
 PAGE_SIZES = (15, 25, 50)   # rows per page: 15 fit the fixed 13" window; a longer page scrolls inside the table
@@ -222,7 +224,29 @@ async def set_signature(
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
-    result = await conn.set_signature(email, signature, html=(html == "on"))
+    if word := signature_read_as_file(signature):   # GAM would load a file, not set this (failure log 2026-11-20)
+        return error_partial(request, f"“{word}” can't be a signature: GAM reads it as a file to load. Change the text.")
+    # Gmail keeps no copy of the one this replaces (roadmap 4.1): read it exactly and keep it first, as a Signatures run
+    # does. One that can't be read, or kept, isn't replaced.
+    try:
+        previous = await conn.signature_exact(email)
+    except Exception as exc:  # noqa: BLE001 — unread is unknown: nothing is replaced
+        return error_partial(request, "Couldn't read their current signature, so it wasn't replaced: there'd be nothing to "
+                                      "put back. " + unread_why(exc, _TRY_AGAIN), gam_detail(exc))
+    try:
+        kept = signature_backups(request.app.state.gamgui).start(email.strip())
+        try:
+            kept.keep(email.strip(), previous, signature)
+        except OSError:
+            kept.close()
+            raise
+    except OSError as exc:
+        logger.warning("keeping a signature copy failed", exc_info=exc)
+        return error_partial(request, "Couldn't keep a copy of their current signature on this Mac, so it wasn't replaced.")
+    try:
+        result = await conn.set_signature(email, signature, html=(html == "on"))
+    finally:
+        kept.close()
     if not result.ok:
         return TEMPLATES.TemplateResponse(
             request, "_action_result.html",
@@ -231,7 +255,8 @@ async def set_signature(
     note = smart_quote_warning(signature)
     return TEMPLATES.TemplateResponse(
         request, "_action_result.html",
-        {"ok": True, "message": "Signature updated." + (" " + note if note else "")},
+        {"ok": True, "message": "Signature updated. The old one is kept: Signatures → Kept signatures puts it back."
+                                + (" " + note if note else "")},
     )
 
 

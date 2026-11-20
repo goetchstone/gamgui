@@ -105,11 +105,8 @@ def _org_unit(value: str) -> str:
 def _curated() -> List[CatalogCommand]:
     U = SlotKind.TARGET_USER
     return [
-        _cmd("build.set_signature", "Users", "Gmail - Signature", "Set Gmail signature", RiskLevel.LOW,
-             [_slot("email", "User", U), _slot("signature", "Signature (HTML)", SlotKind.TEXT)],
-             lambda s: GAMCommands.set_signature(s["email"], s.get("signature", ""), html=True),
-             "gam user <email> signature <html>",
-             "Replace a user's Gmail signature with the HTML you provide."),
+        # No signature write here (roadmap 4.1): Signatures and the Users page keep each old signature before replacing
+        # it, so it can be put back. A Builder write would walk around that.
         _cmd("build.add_delegate", "Users", _SUBCAT_DELEGATES, "Add mailbox delegate", RiskLevel.LOW,
              [_slot("email", "User", U), _slot("delegate", "Delegate", SlotKind.EMAIL)],
              lambda s: GAMCommands.add_delegate(s["email"], s.get("delegate", "")),
