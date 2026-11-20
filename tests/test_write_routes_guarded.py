@@ -49,7 +49,7 @@ DOMAIN = "example.com"
 # Previews: they resolve and render the confirm step (a GAM read at most), never write.
 PREVIEWS = {
     "/users/password/preview", "/users/phone/preview", "/phishing/trash/preview", "/incident/secure/preview",
-    "/users/bulk/preview", "/users/suspend/preview", "/users/delete/confirm", "/reports/inactive/preview", "/reports/remind/preview",
+    "/users/bulk/preview", "/users/suspend/preview", "/users/delete/confirm", "/users/ou/preview", "/reports/inactive/preview", "/reports/remind/preview",
     "/calendars/delete/preview", "/calendars/event/preview",
     "/lifecycle/offboard/preview", "/lifecycle/offboard/autoreply", "/signatures/preview",
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
@@ -173,6 +173,9 @@ GATED = {
     # And its reminder email (No 2SV, No recovery): the card's form holds the text; Send posts it live with the token.
     "/reports/remind/apply": Case({"key": "no_2sv", "subject": "Turn on 2SV", "message": "Please turn it on."},
                                   "/reports/remind/preview", edit={"message": "Something else."}),
+    # Move one person to another org unit (roadmap 4.2): the preview reads their unit and the tree again, holds from → to.
+    "/users/ou/apply": Case({"email": "alice@example.com", "org_unit": "/Sales"}, "/users/ou/preview",
+                            edit={"org_unit": "/Students"}),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
                                 typed={"confirm_email": "alice@example.com"}, edit={"email": "carol@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},

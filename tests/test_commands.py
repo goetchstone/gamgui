@@ -256,3 +256,11 @@ def test_build_user_query():
     assert build_user_query("", include_suspended=False) == "isSuspended=false"
     q = build_user_query("jane")
     assert "email:jane*" in q and "givenName:jane*" in q
+
+
+def test_org_unit_commands():
+    assert GAMCommands.create_org_unit("/Sales/East") == ["create", "org", "/Sales/East"]
+    assert GAMCommands.create_org_unit("/Sales/East", "East team") == [
+        "create", "org", "/Sales/East", "description", "East team"]
+    assert GAMCommands.rename_org_unit("/Sales/West", "West Coast") == ["update", "org", "/Sales/West", "name", "West Coast"]
+    assert GAMCommands.delete_org_unit("/Sales/West") == ["delete", "org", "/Sales/West"]

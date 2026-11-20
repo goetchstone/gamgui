@@ -986,3 +986,76 @@ async def suspend_apply(request: Request, email: Annotated[str, Form()], suspend
     return TEMPLATES.TemplateResponse(
         request, "_suspend_zone.html", {"email": email, "suspended": want_suspend}
     )
+
+
+# --- org unit: move one person (roadmap 4.2) ----------------------------------------------------------------------------
+# The card reads the tree live and offers its paths; the preview reads the person's unit and the tree again, refuses a path
+# GAM doesn't know (as GAM would) or the one they're in, and holds from → to under a single-use token. Settings and policies
+# follow the org unit, so the move changes what applies to them, and the preview says so.
+_OU_FLOW = "move_org_unit"
+_OU_CARD = "_ou_card.html"
+_OU_CONFIRM = "_ou_confirm.html"
+
+
+@router.get("/ou", response_class=HTMLResponse)
+async def ou_card(request: Request, email: str = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    try:
+        paths = await st.connector.org_units()
+    except Exception as exc:  # noqa: BLE001 — unread: no choice offered, never "only /"
+        return TEMPLATES.TemplateResponse(request, _OU_CARD, {"email": email, "error": "Couldn't read the org units. "
+                                                              + unread_why(exc, _TRY_AGAIN)})
+    current = next((u.org_unit_path for u in (st.user_cache.cached or []) if u.primary_email.lower() == email.lower()), "")
+    return TEMPLATES.TemplateResponse(request, _OU_CARD, {"email": email, "paths": paths, "current": current})
+
+
+@router.post("/ou/preview", response_class=HTMLResponse)
+async def ou_preview(request: Request, email: Annotated[str, Form()] = "", org_unit: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    email, org_unit = email.strip(), org_unit.strip()
+    try:
+        paths = await conn.org_units()
+        person = await conn.get_user(email, fields=["primaryEmail", "orgUnitPath"])
+    except Exception as exc:  # noqa: BLE001 — either read failing offers nothing
+        return error_partial(request, "Couldn't read the org units or their account again, so nothing is offered. "
+                             + unread_why(exc, _TRY_AGAIN), gam_detail(exc))
+    # Their unit and address as GAM gave them, never a default: a record without them is unread, not "in /". The account's
+    # primary address is the one held, so an alias posted here audits and updates the list under the account it moves.
+    addr = str(person.raw.get("primaryEmail") or "").strip()
+    was = str(person.raw.get("orgUnitPath") or "").strip()
+    if not addr or not was.startswith("/"):
+        return error_partial(request, f"Couldn't read which org unit {email} is in, so nothing is offered. {_TRY_AGAIN}")
+    if org_unit not in paths:
+        return error_partial(request, f"“{org_unit}” isn't an org unit here: pick one from the list.")
+    if was == org_unit:
+        return error_partial(request, f"{addr} is already in {org_unit}.")
+    token = st.previews.hold(_OU_FLOW, (addr.lower(), org_unit), (addr, was, org_unit), tenant=tenant)
+    return TEMPLATES.TemplateResponse(request, _OU_CONFIRM, {"email": addr, "from": was, "to": org_unit, "token": token})
+
+
+@router.post("/ou/apply", response_class=HTMLResponse)
+async def ou_apply(request: Request, email: Annotated[str, Form()] = "", org_unit: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    held, refusal = st.previews.take(_OU_FLOW, str(form.get(TOKEN_FIELD) or ""), (email.strip().lower(), org_unit.strip()),
+                                     again="click Preview again")
+    if refusal:
+        return error_partial(request, refusal)
+    email, was, to = held
+    refusal = guard.enforce(guard.changes([email], RiskLevel.LOW, f"Move to {to}"), form, confirm_step=True)
+    if refusal:
+        return error_partial(request, refusal)
+    result = await conn.move_user_to_org_unit(email, to)
+    if not result.ok:
+        return write_failed(request, f"Couldn't move {email} to {to}.", result)
+    st.patch_user(email, org_unit_path=to)
+    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": f"Moved {email} from {was} to {to}."})
