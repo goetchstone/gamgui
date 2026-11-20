@@ -38,3 +38,7 @@ Offline suite only: `.venv/bin/python -m pytest -q tests/test_signatures.py test
 - **Add a scope type:** extend `match_scope` (in-memory) or `_matched` in the route (if it needs a live GAM lookup, like `group`); surface it in `scope_options` + the `signatures.html` dropdown JS.
 - **Change the live feed / bounds:** `_sig_apply.html` and the shared `failures` macro (`_job_failures.html`); the bounds themselves live in `web/jobs.py` (`Job.record`, `RECENT_WINDOW`, `FAILED_SAMPLE_CAP`, `DETAIL_CAP`) and change every bulk job at once. Keep it bounded (#9) — in rows *and* in the text kept per row.
 - **Change how the body is sent to GAM:** `GAMCommands.set_signature` only (argv-only, #1); never build a shell string.
+- **A file keyword is never a signature (failure log 2026-11-20).** GAM reads a `signature` value of `file`, `htmlfile`,
+  `textfile`, `gdoc`, `ghtml`, `gcsdoc` or `gcshtml` (stripped, lowercased, `_` removed) as "load the next argument as a
+  file". `GAMCommands.set_signature` refuses one (`signature_read_as_file`); the Signatures preview names who the template
+  renders it for, and the Users page and the Builder say so in words.

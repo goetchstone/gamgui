@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse
 
 from ...core import bulk, guard, lifecycle, person_reads
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
-from ...core.gam.commands import GAMCommands
+from ...core.gam.commands import GAMCommands, signature_read_as_file
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.setup import classroom_readable
 from ...core.lifecycle import autoreply_html, autoreply_text
@@ -222,6 +222,8 @@ async def set_signature(
     conn = connector(request)
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
+    if word := signature_read_as_file(signature):   # GAM would load a file, not set this (failure log 2026-11-20)
+        return error_partial(request, f"“{word}” can't be a signature: GAM reads it as a file to load. Change the text.")
     result = await conn.set_signature(email, signature, html=(html == "on"))
     if not result.ok:
         return TEMPLATES.TemplateResponse(
