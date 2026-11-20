@@ -119,7 +119,7 @@ async def test_offboard_steps_call_the_right_connector_methods():
         async def set_vacation(self, e, s, m):
             calls.append(("set_vacation", e)); return _R()
 
-        async def transfer_data(self, o, svc, n, privacy=""):
+        async def transfer_data(self, o, svc, n, privacy="", release_resources=False):   # the real signature
             calls.append(("transfer_data", o, svc, n, privacy)); return _R()
 
         async def remove_from_all_calendars(self, e):

@@ -668,7 +668,8 @@ class GAMCommands:
     TRANSFER_PRIVACY = ("private", "shared", "all")
 
     @staticmethod
-    def create_datatransfer(old_owner: str, service: str, new_owner: str, privacy: str = "") -> List[str]:
+    def create_datatransfer(old_owner: str, service: str, new_owner: str, privacy: str = "",
+                            release_resources: bool = False) -> List[str]:
         # `service` is a <DataTransferServiceList>: one service ("drive" | "calendar") OR a
         # comma-joined list ("drive,calendar") that rides as ONE argv element. Passing both in a
         # single transfer avoids Google's 409 "transfer already in progress" when two separate
@@ -679,6 +680,9 @@ class GAMCommands:
                 raise ValueError(f"invalid transfer privacy level {privacy!r}; expected one of "
                                  f"{GAMCommands.TRANSFER_PRIVACY}")
             argv.append(privacy)
+        # A Calendar parameter (RELEASE_RESOURCES): GAM refuses it, a usage error, when Calendar isn't in `service`.
+        if release_resources:
+            argv.append("release_resources")
         return argv
 
     @staticmethod

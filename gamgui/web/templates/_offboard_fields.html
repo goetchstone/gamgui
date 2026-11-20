@@ -34,6 +34,7 @@
             <label class="inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="service" value="{{ key }}"{% if key in values.services %} checked{% endif %} /> {{ name }}</label>
             {% endfor %}
           </div>
+          <label class="mt-2 inline-flex items-center gap-1.5 text-sm text-brand-blueink"><input type="checkbox" name="release_resources" value="1"{% if values.release_resources %} checked{% endif %} /> Release the rooms their events booked</label>
         </div>
       </div>
       <span class="text-xs text-brand-grayink">Left empty, the manager gets the files and the secondary calendars. Whoever gets them is checked against the directory, as the manager is. What isn't moved is deleted with the account.</span>

@@ -2356,7 +2356,14 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && { [ "${2:-}" = "datat
           *) usage_error "No data transfer application for key PRIVACY_LEVEL" ;;
         esac
         shift ;;
-      release_resources) shift ;;
+      # RELEASE_RESOURCES is a Calendar parameter: refused the same way when Calendar isn't listed (it was accepted alone,
+      # more permissive than GAM, until roadmap 3.4 offered it).
+      release_resources)
+        case ",$svcs," in
+          *,calendar,*) ;;
+          *) usage_error "No data transfer application for key RELEASE_RESOURCES" ;;
+        esac
+        shift ;;
       *) invalid_arg "$1" ;;
     esac
   done

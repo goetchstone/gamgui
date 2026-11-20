@@ -164,8 +164,10 @@ preview and again at the run from what the preview held (`_Preview.recipient`). 
 transfer is left out or done (`services_shown` marks a form that offers the choice; a post without it is the default).
 Every option is in `_form_key` (`test_changing_any_option_changes_the_form_key`, plan P1.5). Templates hold the services,
 not the recipient (one leaver's, like the addresses): `offboarding-templates.json` version 3; 1 and 2 read as Drive and
-Calendar. Still open in 3.4: the manager optional when no running step needs one, the auto-reply's end date, and
-`release_resources` (the mock still accepts it without Calendar, which GAM refuses the same way). Not run on a real
+Calendar. **Release the rooms their events booked** adds `release_resources`, last on the line: a Calendar parameter, so
+it needs Calendar ticked (refused at the preview, by `build_offboard_steps`, and by the mock as GAM refuses it: "No data
+transfer application for key RELEASE_RESOURCES"). Off by default; templates keep it (version 3 files without it release
+nothing; `tests/test_release_resources.py`). Still open in 3.4: the manager optional when no running step needs one. Not run on a real
 tenant: a transfer to someone other than the manager, or of anything but Drive and Calendar.
 
 ### Leaving a step out ("doesn't apply")
