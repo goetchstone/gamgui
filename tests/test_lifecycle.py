@@ -116,7 +116,7 @@ async def test_offboard_steps_call_the_right_connector_methods():
         async def add_delegate(self, e, d):
             calls.append(("add_delegate", e, d)); return _R()
 
-        async def set_vacation(self, e, s, m):
+        async def set_vacation(self, e, s, m, end=None):   # the real one takes the end date too
             calls.append(("set_vacation", e)); return _R()
 
         async def transfer_data(self, o, svc, n, privacy="", release_resources=False):   # the real signature
@@ -171,7 +171,7 @@ async def test_offboard_autoreply_substitutes_employee_and_manager():
         detail = ""
 
     class _FakeConn:
-        async def set_vacation(self, email, subject, message):
+        async def set_vacation(self, email, subject, message, end=None):
             captured.update(email=email, subject=subject, message=message)
             return _R()
 
