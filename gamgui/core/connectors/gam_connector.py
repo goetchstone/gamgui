@@ -347,9 +347,12 @@ class GAMConnector(Connector):
         if res.returncode != 0:
             raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
         rows = [r for r in parse_records(res.stdout) if str(r.get("User") or "").lower() == email.strip().lower()]
-        if len(rows) != 1 or "signature" not in rows[0] or "Getting Signature for" not in res.stderr:
+        # The person's one row, whole: a cell missing from it (cut-off output reads as None) is unknown, never "".
+        if len(rows) != 1 or any(v is None for v in rows[0].values()) or "Getting Signature for" not in res.stderr:
             raise Incomplete(f"GAM answered without reading {email}'s signature, so it can't be kept.")
-        return str(rows[0].get("signature") or "")
+        # GAM's titles hold no `signature` column of their own: it comes from Gmail's reply, which leaves an empty one out.
+        # With the person's whole row read, no column is no signature.
+        return str(rows[0].get("signature", ""))
 
     async def get_signature(self, email: str) -> str:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.show_signature(email))

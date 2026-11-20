@@ -7,7 +7,9 @@ read, or whose copy couldn't be kept, is not overwritten. Put Back sets a kept s
 One file per run, ``<run>.jsonl`` in a ``0700`` folder of the app's data folder, each ``0600``: a header line (the run's id,
 when, and what it applied to), then one line per person (``email``, ``previous``, ``set``), appended and flushed before
 that person's write, so a run cut off midway still holds every signature it replaced. Appending keeps a domain-wide run
-linear. Only the last ``KEEP_RUNS`` runs are kept: a new run removes the oldest beyond that.
+linear. Only the last ``KEEP_RUNS`` runs are kept: a new run removes the oldest beyond that, never one still being
+written (a long run would lose its copies to shorter ones started meanwhile), and a run that kept nobody is removed when
+it ends, so failed attempts can't push out the last copies that matter.
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ class Run:
 class SignatureBackups:
     def __init__(self, folder: Optional[Path] = None) -> None:
         self.folder = Path(folder) if folder is not None else app_data_dir() / "signature-backups"
+        self._open: set = set()   # runs still being written: never pruned
 
     # --- a run being written -------------------------------------------------------------------------------------------
     def start(self, what: str) -> "RunWriter":
@@ -55,7 +58,8 @@ class SignatureBackups:
         can't be made: the caller writes nothing without somewhere to keep the copies."""
         self.folder.mkdir(parents=True, exist_ok=True)
         os.chmod(self.folder, 0o700)
-        for old in self._files()[KEEP_RUNS - 1:]:
+        closed = [p for p in self._files() if p.stem not in self._open]
+        for old in closed[KEEP_RUNS - 1:]:
             try:
                 old.unlink()
             except FileNotFoundError:
@@ -63,8 +67,13 @@ class SignatureBackups:
         run_id = f"{int(time.time() * 1000):013d}-{secrets.token_hex(4)}"
         path = self.folder / f"{run_id}{_SUFFIX}"
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        writer = RunWriter(run_id, path, fd)
-        writer._line({"run": run_id, "when": time.time(), "what": what})
+        writer = RunWriter(run_id, path, fd, self._open)
+        self._open.add(run_id)
+        try:
+            writer._line({"run": run_id, "when": time.time(), "what": what})
+        except OSError:
+            writer.close()
+            raise
         return writer
 
     # --- the kept runs -------------------------------------------------------------------------------------------------
@@ -80,8 +89,10 @@ class SignatureBackups:
         return found
 
     def load(self, run_id: str) -> Run:
+        if not run_id or "/" in run_id or "\0" in run_id or run_id.startswith("."):
+            raise BackupProblem("not a kept run")
         path = self.folder / f"{run_id}{_SUFFIX}"
-        if path.parent != self.folder or not run_id or "/" in run_id or run_id.startswith("."):
+        if path.parent != self.folder:
             raise BackupProblem("not a kept run")
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
@@ -112,12 +123,14 @@ class SignatureBackups:
 class RunWriter:
     """One run's file, open for appending. ``keep`` before each write; ``close`` when the run ends."""
 
-    def __init__(self, run_id: str, path: Path, fd: int) -> None:
-        self.id, self.path, self._fd = run_id, path, fd
+    def __init__(self, run_id: str, path: Path, fd: int, open_runs: set) -> None:
+        self.id, self.path, self._fd, self._open_runs = run_id, path, fd, open_runs
+        self.kept = 0
 
     def keep(self, email: str, previous: str, new: str) -> None:
         """``email``'s signature as it was, on disk before its write. OSError when it can't be: then nothing is written."""
         self._line({"email": email, "previous": previous, "set": new})
+        self.kept += 1
 
     def _line(self, record: dict) -> None:
         data = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
@@ -127,7 +140,18 @@ class RunWriter:
         os.fsync(self._fd)
 
     def close(self) -> None:
+        """The run's end: its file closed, and removed if it kept nobody (a run stopped before anyone, or refused every read),
+        so empty runs don't use up the kept slots."""
+        if self._fd < 0:
+            return
         try:
             os.close(self._fd)
         except OSError:
             pass
+        self._fd = -1
+        self._open_runs.discard(self.id)
+        if not self.kept:
+            try:
+                self.path.unlink()
+            except OSError:
+                pass

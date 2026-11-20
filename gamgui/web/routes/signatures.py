@@ -49,7 +49,7 @@ async def _matched(st, users, scope_type: str, scope_value: str):
 
 
 def _previews(matched):
-    """What an apply changes, for the guard: it overwrites each matched signature (no backup)."""
+    """What an apply changes, for the guard: it overwrites each matched signature (each kept first, roadmap 4.1)."""
     return guard.changes([u.primary_email for u in matched], RiskLevel.LOW, "Set signature")
 
 

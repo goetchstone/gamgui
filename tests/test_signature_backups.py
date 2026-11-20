@@ -39,6 +39,7 @@ def test_only_the_last_runs_are_kept(tmp_path):
     ids = []
     for i in range(sb.KEEP_RUNS + 2):
         run = store.start(f"run {i}")
+        run.keep(f"p{i}@example.com", "old", "new")
         ids.append(run.id)
         run.close()
     assert [r.id for r in store.runs()] == sorted(ids, reverse=True)[:sb.KEEP_RUNS]
@@ -56,7 +57,33 @@ def test_a_run_that_cant_be_read_whole_is_listed_never_dropped(tmp_path):
         store.load(run.id)
 
 
-@pytest.mark.parametrize("bad", ["", "../escape", "a/b", ".hidden"])
+def test_a_run_still_being_written_is_never_pruned(tmp_path):
+    # Review of #163: a long run's file was deleted by five shorter runs started meanwhile, and its later copies went to
+    # a deleted inode without an error, so the people it overwrote afterwards had no copy on disk.
+    store = sb.SignatureBackups(tmp_path)
+    long_run = store.start("the whole company")
+    for i in range(sb.KEEP_RUNS + 1):
+        short = store.start(f"one person {i}")
+        short.keep(f"p{i}@example.com", "old", "new")
+        short.close()
+    long_run.keep(ALICE, "ORIGINAL", "new")
+    assert long_run.path.exists()
+    long_run.close()
+    assert store.load(long_run.id).entries == [sb.Entry(ALICE, "ORIGINAL", "new")]
+
+
+def test_runs_that_kept_nobody_dont_push_out_real_copies(tmp_path):
+    # Review of #163: five failed attempts (a sign-in expired, every read refused) used up the slots.
+    store = sb.SignatureBackups(tmp_path)
+    good = store.start("sales")
+    good.keep(ALICE, "ORIGINAL", "new")
+    good.close()
+    for _ in range(sb.KEEP_RUNS + 1):
+        store.start("an attempt that kept nobody").close()
+    assert [r.id for r in store.runs()] == [good.id]
+
+
+@pytest.mark.parametrize("bad", ["", "../escape", "a/b", ".hidden", "run\0id"])
 def test_only_a_kept_run_s_id_loads(tmp_path, bad):
     with pytest.raises(sb.BackupProblem):
         sb.SignatureBackups(tmp_path).load(bad)
@@ -70,7 +97,21 @@ async def test_the_read_gives_back_what_was_set_byte_for_byte(connector, gam_sta
 
 
 async def test_no_signature_reads_as_empty(connector):
+    # GAM's titles hold no `signature` column: Gmail leaves an empty one out, so the person's whole row without it is none.
     assert await connector.signature_exact("bob@example.com") == ""
+
+
+async def test_a_row_cut_short_is_incomplete_never_empty(connector, monkeypatch):
+    # Review of #163: a cell missing from the person's row read as None, and None read as "no signature".
+    from gamgui.core.gam.runner import RunResult
+
+    async def short(domain, argv, timeout=None):
+        return RunResult(stdout="User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature\n"
+                                f"{ALICE},,True,True,,{ALICE}\n", stderr=f"Getting Signature for {ALICE}\n", returncode=0)
+
+    monkeypatch.setattr(connector.runner, "run_any_exit", short)
+    with pytest.raises(Incomplete):
+        await connector.signature_exact(ALICE)
 
 
 async def test_a_read_gam_skipped_without_a_word_is_incomplete_never_empty(connector, gam_state):
@@ -119,7 +160,7 @@ def test_someone_whose_signature_cant_be_read_isnt_overwritten(client, gam_calls
     _, job = _apply(client, **ALICE_AND)
     assert (job.applied, job.failed_items) == (0, [ALICE]) and gam_writes(gam_calls()) == []
     assert "wasn't replaced" in job.failed[0].reason
-    assert client.app.state.gamgui.signature_backups.runs()[0].entries == []
+    assert client.app.state.gamgui.signature_backups.runs() == []     # a run that kept nobody leaves no file
 
 
 def test_a_copy_that_cant_be_kept_stops_the_run_before_its_write(client, gam_calls, monkeypatch):  # noqa: F811

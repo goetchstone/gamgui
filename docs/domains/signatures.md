@@ -45,8 +45,10 @@ person's first:
 - **The exact read:** `GAMConnector.signature_exact` runs `user X print signature` (`GAMCommands.print_signature`). GAM's
   print mode writes the stored value verbatim (`printShowSignature`: only `compact` strips line breaks; read from the
   vendored build), where `show signature` is the display form `_parse_signature` strips line by line. A read GAM skipped
-  without a word (the titles alone, exit 0, no "Getting Signature for" line) or without the person's row is `Incomplete`,
-  never "" (invariant 10); "" is a real empty signature.
+  without a word (the titles alone, exit 0, no "Getting Signature for" line, which print mode writes before each person),
+  without the person's row, or with a cell missing from that row (cut-off output) is `Incomplete`, never "" (invariant
+  10). GAM's titles hold no `signature` column: it comes from Gmail's reply, which leaves an empty one out, so the
+  person's whole row without that column is a real empty signature (the mock prints it that way).
 - **The order, per person:** read, then keep (`core/signature_backups.py`: the run's `.jsonl` gets one line, written and
   `fsync`ed), then set. A read that fails means that person isn't overwritten and is listed as failed ("there'd be
   nothing to put back"); an account-wide failure stops the run as before. A copy that can't be kept stops the run with
@@ -54,8 +56,10 @@ person's first:
 - **The store:** one append-only file per run, `<run>.jsonl` in `signature-backups/` of the app's data folder (`0700`
   folder, `0600` files, opened `O_NOFOLLOW`): a header (`run`, `when`, `what`), then `email`, `previous`, `set` per
   person. Appending keeps a domain-wide run linear, and a run cut off midway still holds every signature it replaced.
-  Only the last `KEEP_RUNS` (5) are kept. A file that can't be read whole is listed as unreadable, never dropped, and
-  never loaded in part (`BackupProblem`).
+  Only the last `KEEP_RUNS` (5) are kept, and pruning never touches a run still being written (`_open`: a long run lost
+  its file to shorter ones started meanwhile, found in review); a run that kept nobody is removed when it closes, so
+  failed attempts can't push out the copies that matter. A file that can't be read whole is listed as unreadable, never
+  dropped, and never loaded in part (`BackupProblem`).
 - **Its cost, said on the preview:** two GAM calls a person, so a run takes about twice as long.
 - **The mock** keeps a set signature byte for byte under `GAM_MOCK_STATE` and answers `print signature` with it (or each
   fixture user's canned one); its CSV writer now quotes a cell holding a line break and writes the break as GAM's dialect

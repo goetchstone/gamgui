@@ -753,11 +753,12 @@ canned_signature() {  # <user>
     carol@example.com) printf '%s' 'Carol Clark<br>Operations' ;;
   esac
 }
-if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && { [ "${4:-}" = "signature" ] || [ "${4:-}" = "sig" ]; }; then
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "signature" ]; then   # the grammar has no `print sig`
   [ $# -eq 4 ] || not_modelled "print signature with $5"
   user=$(lower "$2")
   known_user "$user" || not_a_user "$2" Print
-  titles="User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature,treatAsAlias,verificationStatus"
+  # GAM's own titles hold no `signature`: it is a column only when Gmail's reply has the field, which an empty one doesn't.
+  titles="User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,treatAsAlias,verificationStatus"
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then echo "$titles"; exit 0; fi
   printf 'Getting Signature for %s\n' "$user" 1>&2
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
@@ -768,8 +769,12 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && { [ "${4:-}" = "signature"
   else
     sig=$(canned_signature "$user")
   fi
-  echo "$titles"
-  gam_row "$user" "" "True" "True" "" "$user" "$sig" "False" "accepted"
+  if [ -z "$sig" ]; then
+    echo "$titles"; gam_row "$user" "" "True" "True" "" "$user" "False" "accepted"
+  else
+    echo "User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature,treatAsAlias,verificationStatus"
+    gam_row "$user" "" "True" "True" "" "$user" "$sig" "False" "accepted"
+  fi
   exit 0
 fi
 
