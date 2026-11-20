@@ -203,6 +203,7 @@ school domain is the most useful one of all.
 | Reminder email (No 2SV, No recovery) | Reports | not yet; the same `sendemail` as the welcome email, one per person |
 | Set signature | Signatures (bulk), Users, Onboard | **confirmed** (the Builder no longer sets one: roadmap 4.1) |
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
+| Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |

@@ -31,7 +31,7 @@ ROUTES = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
 # Domain errors whose message is written for the operator, matched by the last dotted name. GAMError's text is
 # GAM's, scrubbed of secrets before the error is built (gamgui/core/gam/errors.py).
 OURS = frozenset({
-    "Problem", "IncidentProblem", "StoreError", "PackageError", "NeedsMap", "Incomplete", "IncompleteList",
+    "Problem", "IncidentProblem", "StoreError", "PackageError", "NeedsMap", "Incomplete", "IncompleteList", "BackupProblem",
     "GAMError",
 })
 

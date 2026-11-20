@@ -63,7 +63,7 @@ person's first:
 - **Its cost, said on the preview:** two GAM calls a person, so a run takes about twice as long.
 - **The mock** keeps a set signature byte for byte under `GAM_MOCK_STATE` and answers `print signature` with it (or each
   fixture user's canned one); its CSV writer now quotes a cell holding a line break and writes the break as GAM's dialect
-  does. Tests: `tests/test_signature_backups.py`. Put Back (setting a kept run again) is the next PR.
+  does. Tests: `tests/test_signature_backups.py`.
 - **A file keyword is never a signature (failure log 2026-11-20).** GAM reads a `signature` value of `file`, `htmlfile`,
   `textfile`, `gdoc`, `ghtml`, `gcsdoc` or `gcshtml` (stripped, lowercased, `_` removed) as "load the next argument as a
   file". `GAMCommands.set_signature` refuses one (`signature_read_as_file`); the Signatures preview names who the template
@@ -72,3 +72,17 @@ person's first:
   as a one-person run, then sets the new one; one that can't be read or kept isn't replaced (GAM's error one click away).
   The result says Signatures → Kept signatures puts it back. The Builder has no signature write any more
   (`build.set_signature` removed, 24 curated commands): it would walk around the backup.
+
+## Put Back (roadmap 4.1)
+The Signatures page's **Kept signatures** panel (`/signatures/kept`) lists the kept runs, newest first, at most five; one
+that can't be read whole is listed as such. **Put back…** posts `/signatures/putback/preview`, which loads that run and
+splits it (`signature_backups.put_back_plan`): a person whose old signature GAM would read as a file to load
+(`read_as_keyword`, GAM's `SORF_FILE_ARGUMENTS`) or change on the way in (`gam_stored`: `_processSignature` with `html`
+removes every CR and makes each backslash-n `<br/>`; read from the vendored build) can't go back exactly and is left out
+and named. The rest, with each one's old signature and what that run left there as GAM stored it, are held under a
+single-use token (flow `signature_putback`, keyed on the run). **Put back** takes them, runs the guard (the count typed
+past 25), keeps the signatures it replaces in a new run ("put back of …", so a Put Back can be put back too) and sets the
+old ones through the same loop as Apply (`_run_writes`): read each first, and anyone whose signature isn't what that run
+left there any more is left as it is ("Changed since that run"). An empty old signature goes back as empty. Tests:
+`tests/test_signature_putback.py`. Not run on a real tenant: if Gmail stores a signature differently from what GAM sends,
+everyone would read as "changed since" and nothing would go back, which is safe but owed a live check.

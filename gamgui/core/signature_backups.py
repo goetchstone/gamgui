@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from .gam.commands import signature_read_as_file
 from .paths import app_data_dir
 
 KEEP_RUNS = 5
@@ -83,17 +84,21 @@ class SignatureBackups:
         found = []
         for path in self._files():
             try:
-                found.append(self.load(path.stem))
+                found.append(self._read(path))
             except BackupProblem as exc:
                 found.append(Run(id=path.stem, when=0.0, what=f"unreadable: {exc}"))
         return found
 
     def load(self, run_id: str) -> Run:
-        if not run_id or "/" in run_id or "\0" in run_id or run_id.startswith("."):
+        """The kept run named ``run_id``. The id the browser sends only picks among the files this folder lists: the path
+        opened is the listing's, never one built from the request (CodeQL py/path-injection)."""
+        path = next((p for p in self._files() if p.stem == run_id), None)
+        if path is None:
             raise BackupProblem("not a kept run")
-        path = self.folder / f"{run_id}{_SUFFIX}"
-        if path.parent != self.folder:
-            raise BackupProblem("not a kept run")
+        return self._read(path)
+
+    def _read(self, path: Path) -> Run:
+        run_id = path.stem
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
             with os.fdopen(fd, "r", encoding="utf-8") as f:
@@ -155,3 +160,29 @@ class RunWriter:
                 self.path.unlink()
             except OSError:
                 pass
+
+
+# --- Put Back: what a kept signature can be set to again --------------------------------------------------------------
+# GAM reads a signature argument that is one of its file keywords as a file or document to load, not as the signature:
+# `signature_read_as_file` (core/gam/commands.py) is the one list, and set_signature refuses such a value.
+read_as_keyword = signature_read_as_file
+
+
+def gam_stored(body: str) -> str:
+    """``body`` as GAM sends it with `html` (``_processSignature``, read from the vendored build): every CR removed and each
+    backslash-n pair made `<br/>`; with `html` a real line break is left alone."""
+    return body.replace("\r", "").replace("\\n", "<br/>") if body else body
+
+
+def put_back_plan(run: Run) -> "tuple[List[Entry], List[tuple]]":
+    """``run``'s people whose old signature can be set again exactly, and those left out with why, in words: one GAM would
+    read as a file, or change on the way in, can't go back as it was."""
+    puts, left_out = [], []
+    for entry in run.entries:
+        if read_as_keyword(entry.previous):
+            left_out.append((entry.email, "GAM would read it as a file to load, so it's left for you to put back by hand"))
+        elif gam_stored(entry.previous) != entry.previous:
+            left_out.append((entry.email, "GAM would change it on the way in, so it can't go back exactly"))
+        else:
+            puts.append(entry)
+    return puts, left_out
