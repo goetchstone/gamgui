@@ -11,6 +11,9 @@
     <label class="block"><span class="text-sm text-brand-blueink">Auto-reply message</span>
       <textarea class="{{ fld }}" name="message" rows="3">{{ values.message }}</textarea>
       <span class="text-xs text-brand-grayink"><code>{employee}</code> (the departing person) and <code>{manager}</code> (who to contact) are filled in automatically — see below.</span></label>
+    <label class="block sm:w-1/2"><span class="text-sm text-brand-blueink">Stop the auto-reply on — optional</span>
+      <input class="{{ fld }}" type="date" name="autoreply_end" value="{{ values.autoreply_end or '' }}" />
+      <span class="text-xs text-brand-grayink">It stops as that day begins. Left empty, it runs until someone turns it off.</span></label>
 
     <!-- Live preview: fills in as soon as the departing user + manager are entered. -->
     <div id="autoreply-preview" class="mt-1"

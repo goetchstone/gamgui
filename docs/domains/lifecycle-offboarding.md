@@ -164,9 +164,18 @@ preview and again at the run from what the preview held (`_Preview.recipient`). 
 transfer is left out or done (`services_shown` marks a form that offers the choice; a post without it is the default).
 Every option is in `_form_key` (`test_changing_any_option_changes_the_form_key`, plan P1.5). Templates hold the services,
 not the recipient (one leaver's, like the addresses): `offboarding-templates.json` version 3; 1 and 2 read as Drive and
-Calendar. Still open in 3.4: the manager optional when no running step needs one, the auto-reply's end date, and
+Calendar. Still open in 3.4: the manager optional when no running step needs one, and
 `release_resources` (the mock still accepts it without Calendar, which GAM refuses the same way). Not run on a real
 tenant: a transfer to someone other than the manager, or of anything but Drive and Calendar.
+
+### The auto-reply's end (roadmap 3.4, plan P1.4)
+"Stop the auto-reply on" (optional, a date input) ends the reply on that day: `set_vacation(..., end=YYYY-MM-DD)`, where
+the routine sends `end NotSpecified`. It is held as that date from the preview to the run (it is in `_form_key`, and the
+held steps carry the argv), never recomputed as "N days from whenever it runs". GAM sends the start of that day in this
+Mac's time zone (`getYYYYMMDD`: `time.mktime(...) * 1000`, read from the vendored build), so the reply stops as the day
+begins and the first day allowed is tomorrow (`lifecycle.autoreply_end_problem`: a YYYY-MM-DD after today, at most ten
+years out). An auto-reply left out or already done ignores it. Templates don't hold it: a date is one leaver's, like the
+addresses. Tests: `tests/test_autoreply_end.py`. Not run on a real tenant.
 
 ### Leaving a step out ("doesn't apply")
 Not every org hands a leaver's mailbox to the manager or moves their data. The form's "Doesn't apply to this leaver" boxes

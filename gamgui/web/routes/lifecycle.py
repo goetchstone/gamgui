@@ -79,10 +79,10 @@ def _added(form) -> FrozenSet[str]:
 def _form_key(user: str, manager: str, subject: str, message: str, days: str, notify: str,
               done: FrozenSet[str], not_applicable: FrozenSet[str] = frozenset(),
               added: FrozenSet[str] = frozenset(), recipient: str = "",
-              services: FrozenSet[str] = lifecycle.DEFAULT_SERVICES) -> tuple:
+              services: FrozenSet[str] = lifecycle.DEFAULT_SERVICES, autoreply_end: str = "") -> tuple:
     return (user.strip().lower(), manager.strip().lower(), subject, message, _days(days), notify.strip().lower(),
             tuple(sorted(done)), tuple(sorted(not_applicable)), tuple(sorted(added)), recipient.strip().lower(),
-            tuple(sorted(services)))
+            tuple(sorted(services)), autoreply_end.strip())
 
 
 def _running(st, user: str):
@@ -252,7 +252,7 @@ async def offboard_preview(
     user: Annotated[str, Form()], manager: Annotated[str, Form()],
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
-    recipient: Annotated[str, Form()] = "",
+    recipient: Annotated[str, Form()] = "", autoreply_end: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     tenant = st.tenant_key()   # before the address checks read the directory (web/previews.py)
@@ -260,7 +260,7 @@ async def offboard_preview(
         return error_partial(request, NOT_CONNECTED)
     posted = await request.form()
     done, na, added, services = _done(posted), _not_applicable(posted), _added(posted), _services(posted)
-    form = _form_key(user, manager, subject, message, days, notify, done, na, added, recipient, services)
+    form = _form_key(user, manager, subject, message, days, notify, done, na, added, recipient, services, autoreply_end)
     user, manager = user.strip(), manager.strip()
     if not user or not manager:
         return error_partial(request, "Enter both the departing user and the manager email.")
@@ -268,6 +268,10 @@ async def offboard_preview(
         return error_partial(request, f"“{both[0]}” is ticked both as already done and as doesn't apply — pick one.")
     if not (frozenset(lifecycle.ROUTINE) | added) - done - na:
         return error_partial(request, "Every step is ticked as already done or left out — there is nothing to run.")
+    # The end matters only for an auto-reply that runs; one left out or already done ignores it.
+    autoreply_end = autoreply_end.strip() if "vacation" not in done | na else ""
+    if problem := lifecycle.autoreply_end_problem(autoreply_end, date.today()):
+        return error_partial(request, problem)
     if not services and "transfer" not in done | na:
         return error_partial(request, "The transfer moves nothing: tick Drive, Calendar or Looker Studio, or leave the transfer out.")
     check = await _check(st, user, manager, recipient)
@@ -335,7 +339,7 @@ async def offboard_preview(
             manager_contact=await _manager_contact(st, manager), not_applicable=na, added=added,
             calendars=calendars, filters=filters, recipient=recipient,
             # None ticked passed the check above only with the transfer left out or done: never run, so the routine's own.
-            services=services or lifecycle.DEFAULT_SERVICES)
+            services=services or lifecycle.DEFAULT_SERVICES, autoreply_end=autoreply_end)
     except ValueError as exc:    # an ID GAM couldn't take as one: the builders refuse it
         return error_partial(request, f"Couldn't plan the added steps: {exc}.")
     to_run = [s for s in steps if s.key not in done | na]
@@ -377,6 +381,7 @@ async def offboard_run(
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
     preview: Annotated[str, Form()] = "", recipient: Annotated[str, Form()] = "",
+    autoreply_end: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     st = request.app.state.gamgui
     conn = st.connector
@@ -391,7 +396,7 @@ async def offboard_run(
     # Single use: a second Run, or a Run after the form was edited, needs a new preview.
     held, refusal = st.previews.take(_FLOW, preview, _form_key(user, manager, subject, message, days, notify,
                                                                _done(form), _not_applicable(form), _added(form),
-                                                               recipient, _services(form)),
+                                                               recipient, _services(form), autoreply_end),
                                      again="click Preview steps again")
     if refusal:
         return error_partial(request, refusal)

@@ -51,6 +51,31 @@ SERVICE_CHOICES: Tuple[Tuple[str, str], ...] = (("drive", "Drive"), ("calendar",
 DEFAULT_SERVICES: FrozenSet[str] = frozenset({"drive", "calendar"})
 
 
+# The auto-reply's end (roadmap 3.4, plan P1.4): a day, held as that date from the preview to the run, never "N days from
+# whenever it runs". GAM sends the start of that day in this Mac's time zone (getYYYYMMDD: `time.mktime(...) * 1000`, read
+# from the vendored build), so the reply stops as the day begins, and today's would switch it off as it's set: the first
+# day is tomorrow. Ten years is the far end, against a typo in the year.
+AUTOREPLY_END_MAX_DAYS = 3653
+
+
+def autoreply_end_problem(value: str, today: date) -> str:
+    """Why ``value`` can't end the auto-reply, in words; "" for an empty value (it never ends) or a good YYYY-MM-DD."""
+    value = value.strip()
+    if not value:
+        return ""
+    try:
+        end = date.fromisoformat(value)
+    except ValueError:
+        return f"The auto-reply's end “{value}” isn't a date: pick one, or leave it empty for no end."
+    if len(value) != 10:
+        return f"The auto-reply's end “{value}” isn't a date: pick one, or leave it empty for no end."
+    if end <= today:
+        return "The auto-reply's end has to be after today: Google switches it off at the start of that day."
+    if end > today + timedelta(days=AUTOREPLY_END_MAX_DAYS):
+        return "The auto-reply's end is more than ten years away: check the year, or leave it empty for no end."
+    return ""
+
+
 def transfer_services(chosen: Iterable[str]) -> str:
     """The <DataTransferServiceList> for ``chosen``, in SERVICE_CHOICES order: one argv element. ValueError for none, or for
     one GAM doesn't transfer."""
@@ -447,7 +472,7 @@ def build_offboard_steps(
     notify: str = "", employee_name: str = "", manager_contact: str = "",
     not_applicable: FrozenSet[str] = frozenset(), added: FrozenSet[str] = frozenset(),
     calendars: Sequence[OwnedCalendar] = (), filters: Sequence[ForwardingFilter] = (),
-    recipient: str = "", services: Iterable[str] = DEFAULT_SERVICES,
+    recipient: str = "", services: Iterable[str] = DEFAULT_SERVICES, autoreply_end: str = "",
 ) -> List[OffboardStep]:
     """Turn the offboard parameters into the ordered step list (the user's exact sequence).
 
@@ -461,6 +486,7 @@ def build_offboard_steps(
 
     ``recipient`` takes the transfer and the secondary calendars instead of the manager ("" is the manager), and ``services``
     are what the transfer moves; the privacy level is a Drive parameter, sent only with Drive (GAM refuses it otherwise).
+    ``autoreply_end`` (YYYY-MM-DD, checked by :func:`autoreply_end_problem`) is the day the auto-reply stops; "" never.
     """
     if not added <= set(ADDABLE_STEPS):
         raise ValueError(f"only {', '.join(ADDABLE_STEPS)} can be added")
@@ -512,9 +538,9 @@ def build_offboard_steps(
                      lambda c: c.add_delegate(user, manager),
                      [GAMCommands.add_delegate(user, manager)]),
         OffboardStep("vacation", "Set auto-responder",
-                     f"Auto-reply — “{subject}”: {message}",
-                     lambda c: c.set_vacation(user, subject, body),
-                     [GAMCommands.set_vacation(user, subject, body)]),
+                     f"Auto-reply — “{subject}”: {message}" + (f" (until {autoreply_end})" if autoreply_end else ""),
+                     lambda c: c.set_vacation(user, subject, body, end=autoreply_end or None),
+                     [GAMCommands.set_vacation(user, subject, body, end=autoreply_end or None)]),
         OffboardStep("transfer", transfer_label,
                      (f"Transfer {user}'s Drive/Docs (private and shared files) and calendars to {manager}"
                       if (to, services) == (manager, DEFAULT_SERVICES) else
