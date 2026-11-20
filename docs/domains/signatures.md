@@ -68,3 +68,7 @@ person's first:
   `textfile`, `gdoc`, `ghtml`, `gcsdoc` or `gcshtml` (stripped, lowercased, `_` removed) as "load the next argument as a
   file". `GAMCommands.set_signature` refuses one (`signature_read_as_file`); the Signatures preview names who the template
   renders it for, and the Users page and the Builder say so in words.
+- **The Users page keeps the old one too (roadmap 4.1).** `/users/signature` reads the person's signature exactly, keeps it
+  as a one-person run, then sets the new one; one that can't be read or kept isn't replaced (GAM's error one click away).
+  The result says Signatures → Kept signatures puts it back. The Builder has no signature write any more
+  (`build.set_signature` removed, 24 curated commands): it would walk around the backup.

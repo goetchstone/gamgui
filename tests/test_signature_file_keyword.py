@@ -42,6 +42,3 @@ def test_the_user_page_refuses_one_in_words(client, gam_calls):  # noqa: F811
     assert "GAM reads it as a file" in unescape(r.text) and gam_writes(gam_calls()) == []
 
 
-def test_the_builder_says_so_before_any_preview(client, gam_calls):  # noqa: F811
-    r = client.post("/builder/preview", data={"cid": "build.set_signature", "email": ALICE, "signature": "File"})
-    assert "GAM reads it as a file" in unescape(r.text) and '"preview":' not in r.text and gam_writes(gam_calls()) == []

@@ -580,10 +580,12 @@ def test_signatures_apply_stops_when_the_sign_in_has_expired(client, gam_calls, 
 
 
 def test_signature_set_failure_says_why_with_gams_error_expandable(client):
+    # The old signature is read first (roadmap 4.1): an account GAM can't read isn't written, and says so in words.
     r = client.post("/users/signature", data={"email": "gone-missing@example.com", "signature": "Hi"})
     headline, _, raw = r.text.partition("<details")
-    assert "Couldn&#39;t set the signature. The requested user, group, or resource was not found." in headline
-    assert "GAM failed" not in headline and "Does not exist" in raw
+    assert "Couldn&#39;t read their current signature, so it wasn&#39;t replaced" in headline
+    assert "The requested user, group, or resource was not found." in headline
+    assert "GAM failed" not in headline and "Print Failed" in raw
 
 
 def test_signatures_preview_user_scope(client):
