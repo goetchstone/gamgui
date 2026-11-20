@@ -79,17 +79,18 @@ def test_a_signature_retry_is_the_preview_and_confirm_step_for_exactly_the_faile
     r = client.post("/signatures/apply", data={"retry": job.id, "preview": _token(shown)})
     assert "apply/status" not in r.text and len(gam_writes(gam_calls())) == ran
 
-    # The whole confirm step writes the run's template to the one who failed, and nobody else.
+    # The whole confirm step runs the run's template for the one who failed, and nobody else: their signature is read
+    # first (roadmap 4.1), and GAM still can't read it, so nothing is written over it.
     shown = client.post("/signatures/retry", data={"job": job.id}).text
     r = client.post("/signatures/apply", data={"retry": job.id, "confirmed": "1", "preview": _token(shown)})
     again = _job(client, r.text, "/signatures/apply/status")
     wait_for_job(client, again)
-    assert gam_writes(gam_calls())[ran:] == [GAMCommands.set_signature(DAN.primary_email, "Dan Missing")]
+    assert gam_writes(gam_calls())[ran:] == [] and GAMCommands.print_signature(DAN.primary_email) in gam_calls()
     assert again.title == "Signature retry — 1 user" and again.retry == "{name}"
     assert again.failed_items == [DAN.primary_email]     # GAM still refuses: it can be retried again
     # A replayed click is refused, the token spent.
     r = client.post("/signatures/apply", data={"retry": job.id, "confirmed": "1", "preview": _token(shown)})
-    assert "expired or was already run" in r.text and len(gam_writes(gam_calls())) == ran + 1
+    assert "expired or was already run" in r.text and len(gam_writes(gam_calls())) == ran
 
 
 def test_a_department_retry_is_the_preview_and_confirm_step_for_exactly_the_failed(client, gam_calls, monkeypatch):  # noqa: F811

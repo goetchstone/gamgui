@@ -764,6 +764,13 @@ class GAMCommands:
         return argv
 
     @staticmethod
+    def print_signature(email: str) -> List[str]:
+        # The stored signature verbatim (printShowSignature's print mode; `compact` would strip its line breaks): what a
+        # signature run keeps before it overwrites, and what Put Back sets again (roadmap 4.1). `show signature` is the
+        # display form, which the app's parser strips line by line.
+        return ["user", email, "print", "signature"]
+
+    @staticmethod
     def show_signature(email: str) -> List[str]:
         # `show signature` returns text (no formatjson).
         return ["user", email, "show", "signature"]

@@ -11,6 +11,7 @@ from ...core.phishing import Incomplete
 from ...core.incident.known import KnownSignIns, NobodyHasChecks
 from ...core.incident.store import IncidentStore
 from ...core.incident.store import Problem as IncidentProblem
+from ...core.signature_backups import SignatureBackups
 from ...core.signatures import SignatureStore
 from ..server import TEMPLATES
 
@@ -111,6 +112,13 @@ def open_incident_record(st):
     """The incident open here, if any, for the header above the incident screens."""
     kept, _ = incident_store(st)
     return kept.get(st.incident_open) if kept and st.incident_open else None
+
+
+def signature_backups(st) -> SignatureBackups:
+    """Where a signature run keeps the signatures it replaces (roadmap 4.1), created on first use."""
+    if st.signature_backups is None:
+        st.signature_backups = SignatureBackups()
+    return st.signature_backups
 
 
 def signature_store(request: Request) -> SignatureStore:

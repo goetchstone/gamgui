@@ -539,17 +539,19 @@ def test_signatures_apply_failure_keeps_a_reason_per_user(client):
     job = Job(id="whytest", total=2)
     st.jobs[job.id] = job
     matched = [GAMUser("alice@example.com", "Alice"), GAMUser("gone-missing@example.com", "Gone")]
-    client.portal.call(_run_apply, job, st.connector, matched, "{name}")
-    not_found = "The requested user, group, or resource was not found."
+    from .test_bulk_stop import _Kept
+    client.portal.call(_run_apply, job, st.connector, matched, "{name}", _Kept())
+    # Their signature is read first (roadmap 4.1): one GAM can't read isn't overwritten, and says so.
+    not_found = "Couldn't read their current signature, so it wasn't replaced: there'd be nothing to put back."
     assert (job.applied, job.failed_total) == (1, 1)
     assert (job.failed[0].item, job.failed[0].reason) == ("gone-missing@example.com", not_found)
-    assert "Does not exist" in job.failed[0].detail
+    assert "Print Failed" in job.failed[0].detail          # the read's own error, GAM's words
     done = client.get("/signatures/apply/status", params={"job": job.id}).text
-    assert f'gone-missing@example.com</span> — {not_found}' in done
-    assert "<details" in done and "Does not exist" in done
+    assert f'gone-missing@example.com</span> — {not_found}' in unescape(done)
+    assert "<details" in done and "Print Failed" in done
     job.finished = False                                  # the same job, as the live feed shows it
     live = client.get("/signatures/apply/status", params={"job": job.id}).text
-    assert "✗" in live and f"— {not_found}" in live and "Does not exist" not in live
+    assert "✗" in live and f"— {not_found}" in unescape(live) and "Print Failed" not in live
 
 
 def test_signatures_apply_stops_when_the_sign_in_has_expired(client, gam_calls, monkeypatch):

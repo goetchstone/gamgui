@@ -20,7 +20,7 @@ from ...core.signatures import SignatureStore
 from ..jobs import Job, register_job, retry_key, retry_of
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, friendly, signature_store, gam_detail
+from ._common import NOT_CONNECTED, friendly, gam_detail, signature_backups, signature_store
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ async def _matched(st, users, scope_type: str, scope_value: str):
 
 
 def _previews(matched):
-    """What an apply changes, for the guard: it overwrites each matched signature (no backup)."""
+    """What an apply changes, for the guard: it overwrites each matched signature (each kept first, roadmap 4.1)."""
     return guard.changes([u.primary_email for u in matched], RiskLevel.LOW, "Set signature")
 
 
@@ -64,16 +64,41 @@ def _form_key(template: str, scope_type: str, scope_value: str) -> tuple:
     return (template, scope_type, scope_value.strip())
 
 
-async def _run_apply(job: Job, conn, matched, template: str) -> None:
-    """Background task: set each user's signature, updating ``job`` as it goes. Stops at a failure
-    every later user would share (``stop_reason``: sign-in expired, a scope missing), or at Stop."""
+# Gmail keeps no copy of a replaced signature (roadmap 4.1): each person's stored one is read and kept on disk first.
+_NOT_READ = "Couldn't read their current signature, so it wasn't replaced: there'd be nothing to put back."
+_NOT_KEPT = "Couldn't keep a copy of the old signatures on this Mac, so the run stopped. {left} not attempted."
+
+
+async def _run_apply(job: Job, conn, matched, template: str, kept) -> None:
+    """Background task: for each user, read and keep their signature as it is (``kept``, a backup run), then set the new
+    one, updating ``job`` as it goes. A person whose signature can't be read isn't overwritten and is listed as failed;
+    one that can't be kept stops the run. Stops too at a failure every later user would share (``stop_reason``: sign-in
+    expired, a scope missing), or at Stop."""
     try:
         for u in matched:
             if stop_requested(job):
                 break
             job.current = u.primary_email
+            body = sig.render_signature(template, u)
             try:
-                result = await conn.set_signature(u.primary_email, sig.render_signature(template, u), html=True)
+                previous = await conn.signature_exact(u.primary_email)
+            except Exception as exc:  # noqa: BLE001 — unread is unknown: this person isn't overwritten
+                if not isinstance(exc, GAMError):
+                    logger.warning("reading a signature to keep failed", exc_info=exc)
+                job.record(u.primary_email, False, _NOT_READ, gam_detail(exc))
+                stop = stop_reason(getattr(exc, "kind", None), friendly(exc), job.total - job.done)
+                if stop:
+                    job.error = stop
+                    break
+                continue
+            try:
+                kept.keep(u.primary_email, previous, body)
+            except OSError as exc:
+                logger.warning("keeping a signature copy failed", exc_info=exc)
+                job.error = _NOT_KEPT.format(left=job.total - job.done)
+                break
+            try:
+                result = await conn.set_signature(u.primary_email, body, html=True)
                 job.record(u.primary_email, result.ok, result.remediation, result.detail)
                 kind, why = (None if result.ok else result.kind), result.remediation
             except Exception as exc:  # noqa: BLE001 — _run_write reports GAM's failures; this is anything else
@@ -88,6 +113,7 @@ async def _run_apply(job: Job, conn, matched, template: str) -> None:
     except Exception as exc:  # whole-batch failure (e.g. auth expired mid-run)
         job.error = friendly(exc)
     finally:
+        kept.close()
         job.finish()
 
 
@@ -218,9 +244,15 @@ async def apply(
     # so the UI never looks frozen on a large apply.
     n, who = len(matched), "the whole company" if scope_type == "company" else scope_value.strip()
     users_n = f"{n} user{'s' if n != 1 else ''}"
+    try:
+        kept = signature_backups(st).start(f"retry of {who}" if retried else who)
+    except OSError as exc:
+        logger.warning("making a signature backup failed", exc_info=exc)
+        return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {
+            "error": "Couldn't make a place on this Mac to keep the old signatures, so nothing was replaced."})
     job = register_job(st.jobs, Job(total=n, kind="signatures", retry=template,
                                      title=f"Signature retry — {users_n}" if retried else f"Signature for {who} — {users_n}"))
-    job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template))
+    job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template, kept))
     return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})
 
 
