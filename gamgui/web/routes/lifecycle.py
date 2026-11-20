@@ -249,7 +249,7 @@ async def template_default(request: Request, name: Annotated[str, Form()] = "") 
 @router.post("/offboard/preview", response_class=HTMLResponse)
 async def offboard_preview(
     request: Request,
-    user: Annotated[str, Form()], manager: Annotated[str, Form()],
+    user: Annotated[str, Form()], manager: Annotated[str, Form()] = "",
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
     recipient: Annotated[str, Form()] = "", autoreply_end: Annotated[str, Form()] = "",
@@ -262,8 +262,12 @@ async def offboard_preview(
     done, na, added, services = _done(posted), _not_applicable(posted), _added(posted), _services(posted)
     form = _form_key(user, manager, subject, message, days, notify, done, na, added, recipient, services, autoreply_end)
     user, manager = user.strip(), manager.strip()
-    if not user or not manager:
-        return error_partial(request, "Enter both the departing user and the manager email.")
+    if not user:
+        return error_partial(request, "Enter the departing user's email.")
+    # The manager only when a step that runs acts on them (roadmap 3.4): one left out, done, or handed to the recipient doesn't.
+    if not manager and (need := lifecycle.needs_manager(done, na, added, recipient)):
+        return error_partial(request, f"Enter the manager: {', '.join(f'“{n}”' for n in need)} "
+                                      f"{'needs' if len(need) == 1 else 'need'} one. Or leave {'it' if len(need) == 1 else 'them'} out.")
     if both := [lifecycle.STEP_NAMES[k] for k in lifecycle.ROUTINE if k in done & na]:
         return error_partial(request, f"“{both[0]}” is ticked both as already done and as doesn't apply — pick one.")
     if not (frozenset(lifecycle.ROUTINE) | added) - done - na:
@@ -277,8 +281,8 @@ async def offboard_preview(
     check = await _check(st, user, manager, recipient)
     if check.errors:
         return error_partial(request, " ".join(check.errors))
-    assert check.user and check.manager  # check_addresses: no errors means both were found
-    user, manager = check.user.primary_email, check.manager.primary_email
+    assert check.user and (check.manager or not manager)  # check_addresses: no errors means each one asked for was found
+    user, manager = check.user.primary_email, check.manager.primary_email if check.manager else ""
     recipient = check.recipient.primary_email if check.recipient else ""   # "" is the manager
     if running := _running(st, user):
         return _already_running(request, running, user)
@@ -377,7 +381,7 @@ async def offboard_autoreply(
 @router.post("/offboard/run", response_class=HTMLResponse)
 async def offboard_run(
     request: Request,
-    user: Annotated[str, Form()], manager: Annotated[str, Form()],
+    user: Annotated[str, Form()], manager: Annotated[str, Form()] = "",
     subject: Annotated[str, Form()] = "", message: Annotated[str, Form()] = "",
     days: Annotated[str, Form()] = "30", notify: Annotated[str, Form()] = "",
     preview: Annotated[str, Form()] = "", recipient: Annotated[str, Form()] = "",

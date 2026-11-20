@@ -1576,8 +1576,10 @@ def test_lifecycle_offboard_preview_shows_each_exact_command(client):
 
 
 def test_lifecycle_offboard_preview_requires_both_emails(client):
+    # The routine's delegate, auto-reply, transfer and reminder act on the manager: without one, nothing previews.
     r = client.post("/lifecycle/offboard/preview", data={"user": LEAVER, "manager": "  "})
-    assert "Enter both" in r.text
+    assert "Enter the manager: “Set delegate”" in unescape(r.text) and '"preview":' not in r.text
+    assert "Enter the departing user" in client.post("/lifecycle/offboard/preview", data={"user": " ", "manager": MGR}).text
 
 
 @pytest.mark.parametrize("user, manager, expected", [

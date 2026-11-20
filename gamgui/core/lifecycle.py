@@ -76,6 +76,18 @@ def autoreply_end_problem(value: str, today: date) -> str:
     return ""
 
 
+def needs_manager(done: FrozenSet[str], not_applicable: FrozenSet[str], added: FrozenSet[str], recipient: str) -> List[str]:
+    """The steps that will run and act on the manager, by name, in run order: the delegate, the auto-reply (it names them
+    as the contact), the reminder, and the transfer and the secondary-calendars hand-over when nobody else takes them.
+    Empty: this offboarding needs no manager (roadmap 3.4, plan P1.3)."""
+    skipped = done | not_applicable
+    keys = {k for k in ("delegate", "vacation", "reminder") if k not in skipped}
+    if not recipient.strip():
+        keys |= {k for k in ("transfer",) if k not in skipped}
+        keys |= {k for k in ("secondary_calendars",) if k in added and k not in done}
+    return [STEP_NAMES[k] for k in RUN_ORDER if k in keys]
+
+
 def transfer_services(chosen: Iterable[str]) -> str:
     """The <DataTransferServiceList> for ``chosen``, in SERVICE_CHOICES order: one argv element. ValueError for none, or for
     one GAM doesn't transfer."""
@@ -318,7 +330,8 @@ def check_addresses(directory: Sequence[GAMUser], user: str, manager: str,
                 f"last few minutes shows after Users → Refresh).")
         return found
 
-    check.user, check.manager = find(user, "departing user"), find(manager, "manager")
+    # No manager is allowed when no step that runs needs one (needs_manager): then there's nobody to look up.
+    check.user, check.manager = find(user, "departing user"), find(manager, "manager") if manager.strip() else None
     # A transfer recipient other than the manager is checked as the manager is: in the directory, by primary address.
     if recipient.strip() and recipient.strip().lower() != manager.strip().lower():
         check.recipient = find(recipient.strip(), "transfer recipient")
@@ -554,7 +567,7 @@ def build_offboard_steps(
                      f"shared with {user}, and suspended users' calendars, are not swept",
                      lambda c: c.remove_from_all_calendars(user),
                      [GAMCommands.remove_all_calendar_acls(user)]),
-        OffboardStep("reminder", f"{days}-day reminder for {manager}",
+        OffboardStep("reminder", f"{days}-day reminder for {manager or 'the manager'}",
                      f"Add a calendar reminder on {manager}"
                      + (f" (also invites {notify}, who gets an invitation email)" if notify else "")
                      + f" for {due.isoformat()} to confirm deletion",
