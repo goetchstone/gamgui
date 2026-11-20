@@ -83,17 +83,21 @@ class SignatureBackups:
         found = []
         for path in self._files():
             try:
-                found.append(self.load(path.stem))
+                found.append(self._read(path))
             except BackupProblem as exc:
                 found.append(Run(id=path.stem, when=0.0, what=f"unreadable: {exc}"))
         return found
 
     def load(self, run_id: str) -> Run:
-        if not run_id or "/" in run_id or "\0" in run_id or run_id.startswith("."):
+        """The kept run named ``run_id``. The id the browser sends only picks among the files this folder lists: the path
+        opened is the listing's, never one built from the request (CodeQL py/path-injection)."""
+        path = next((p for p in self._files() if p.stem == run_id), None)
+        if path is None:
             raise BackupProblem("not a kept run")
-        path = self.folder / f"{run_id}{_SUFFIX}"
-        if path.parent != self.folder:
-            raise BackupProblem("not a kept run")
+        return self._read(path)
+
+    def _read(self, path: Path) -> Run:
+        run_id = path.stem
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
             with os.fdopen(fd, "r", encoding="utf-8") as f:
