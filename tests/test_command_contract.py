@@ -470,11 +470,15 @@ AUDITED_READS = {
                     "(SECRET_READS, DOWNLOAD_VERB) — the command, domain, origin and row count",
     "audit_sensitive_csv": "records `sensitive_csv_export` for the CSV download of a sensitive read's "
                            "result — no GAM call",
+    "audit_read": "records every audit-run step (plan F3): `read` of origin `audit_run`, the run and step, the "
+                  "domain and the row count — never the output",
 }
 # Functions that run an argv the tripwire can't trace to one builder, each proven a read another way.
 READ_BY_CONTRACT = {
     "catalog_read": "refuses a non-READ_ONLY catalog command "
                     "(test_builder.py::test_catalog_read_and_export_refuse_a_write_command)",
+    "audit_read": "runs only a `print` read without `todrive`, built by core/audit_runs.step_argv "
+                  "(test_audit_runs.py::test_an_audit_read_refuses_anything_but_a_print_read_before_gam_runs)",
 }
 
 

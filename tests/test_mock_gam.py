@@ -104,6 +104,7 @@ READS = {
     "print_filelist": [C.print_filelist("alice@example.com", "name contains 'x'")],
     "report_users": [C.report_users("2026-06-16", ["accounts:used_quota_in_mb"])],
     "print_tokens": [C.print_tokens()],
+    "print_licenses": [C.print_licenses()],
     "print_user_tokens": [C.print_user_tokens("carol@example.com")],
     "print_script_projects": [C.print_script_projects("carol@example.com")],
     "print_owned_calendars": [C.print_owned_calendars("carol@example.com")],

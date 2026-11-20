@@ -400,6 +400,14 @@ def _screens(p: Page, st):
     p.settle("/Read again/.test(document.querySelector('#connected-apps-panel')?.innerText ?? '')")
     yield "reports/connected-apps"                 # the read: its summary and the list of apps
 
+    p.goto("/reports/runs")
+    yield "reports/runs"
+    p.click("#run-license_usage button", "Run")
+    p.settle("/Run again/.test(document.querySelector('#run-license_usage')?.innerText ?? '')")
+    p.click("#run-inactive_users button", "Run")
+    p.settle("/Suspend these/.test(document.querySelector('#run-inactive_users')?.innerText ?? '')")
+    yield "reports/runs/finished"                  # each run's steps and tables, and Suspend these…
+
     p.goto("/audit", "!/Loading/.test(document.querySelector('#audit-rows')?.innerText ?? 'Loading')")
     yield "audit"
 
@@ -515,7 +523,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
 RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/classroom", "/classroom/import", "/signatures", "/calendars",
-             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/incident/report", "/phishing", "/reports", "/audit", "/setup")
+             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/incident/report", "/phishing", "/reports", "/reports/runs", "/audit", "/setup")
 
 
 @pytest.mark.a11y

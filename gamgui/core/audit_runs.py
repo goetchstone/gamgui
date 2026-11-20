@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from .gam.commands import CACHE_FIELDS, GAMCommands
 from .gam.models import GAMUser
 from .reports import INACTIVE_DAYS, _parse_dt, build_reports
 
@@ -81,6 +82,7 @@ class StepRead:
     state: str
     why: str = ""
     rows: int = 0
+    detail: str = ""   # GAM's own error, for a collapsed "GAM's error"
 
 
 @dataclass
@@ -91,10 +93,11 @@ class Finding:
     title: str
     summary: str
     columns: Tuple[str, ...]
-    rows: List[Tuple[str, ...]] = field(default_factory=list)
+    rows: Sequence[Tuple[str, ...]] = field(default_factory=list)
     known: bool = True
     why: str = ""
     note: str = ""
+    links: bool = False   # the first column is an account's address in the directory: it opens the person
 
 
 @dataclass
@@ -114,9 +117,14 @@ class RunResult:
         return next((f for f in self.findings if f.key == key), None)
 
 
-def has_column(stdout_first_line: str, column: str) -> bool:
-    """Whether a CSV's title line names ``column`` (GAM's titles are plain words, never quoted)."""
-    return column in [c.strip() for c in (stdout_first_line or "").split(",")]
+def step_argv(step: Step) -> List[str]:
+    """The GAM read a step runs, from its GAMCommands builder. The directory is the user cache's own read (CACHE_FIELDS,
+    suspended accounts included); the seats are `print licenses` with no product named."""
+    if step is DIRECTORY:
+        return GAMCommands.print_users(fields=CACHE_FIELDS)
+    if step is LICENSES:
+        return GAMCommands.print_licenses()
+    raise ValueError(f"no read for step {step.key!r}")
 
 
 def implausibly_empty(step: Step, rows: int) -> str:
@@ -182,7 +190,7 @@ def inactive_finding(users: List[GAMUser], days: int, now: datetime) -> Finding:
                + (f"; {new} of them {'was' if new == 1 else 'were'} made inside the window, or when isn't known." if new else "."))
     if not n:
         summary = f"Every active account has signed in within {days} days."
-    return Finding("inactive", f"Inactive {days}+ days", summary, INACTIVE_COLUMNS, rows,
+    return Finding("inactive", f"Inactive {days}+ days", summary, INACTIVE_COLUMNS, rows, links=True,
                    note="Suspended accounts are left out. Suspend these… reads the directory again before anything is suspended.")
 
 
@@ -235,7 +243,7 @@ def license_findings(seats: List[dict], users: Optional[List[GAMUser]], reads: S
         Finding("on_suspended", "Seats on suspended accounts",
                 (f"{n_susp} seat{'' if n_susp == 1 else 's'} {'is' if n_susp == 1 else 'are'} held by a suspended account."
                  if n_susp else f"None of the {total} seats read is held by a suspended account."),
-                SUSPENDED_SEAT_COLUMNS, suspended_rows, known=not join_why, why=join_why,
+                SUSPENDED_SEAT_COLUMNS, suspended_rows, known=not join_why, why=join_why, links=True,
                 note="A suspended account keeps its seat until the license is removed."),
         Finding("not_in_directory", "Seats on an address the directory read doesn't list",
                 (f"{n_stray} seat{'' if n_stray == 1 else 's'} {'is' if n_stray == 1 else 'are'} on an address the directory "

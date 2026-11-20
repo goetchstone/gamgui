@@ -115,6 +115,8 @@ class AppState:
     connected_apps_job_id: str = ""  # the last connected-apps read's job (guards a second domain-wide read)
     mail_review: Optional[tuple] = None  # (MailReview, when) from the last mail review on this connector (roadmap 3.2)
     mail_review_job_id: str = ""  # the last mail review's job (guards a second domain-wide read)
+    audit_runs: dict = field(default_factory=dict)      # run key -> core.audit_runs.RunResult, the last finished run on this connector (F3)
+    audit_run_jobs: dict = field(default_factory=dict)  # run key -> its last job id (guards a second run of the same kind)
     offboard_jobs: dict = field(default_factory=dict)  # leaver (lowercase) -> their running offboarding's job id
     catalog: object = None  # the GAM command catalog (lazy-loaded by the Builder route)
     builder_sequence: list = field(default_factory=list)  # the working drag-built command sequence
@@ -204,6 +206,8 @@ class AppState:
         self.connected_apps_job_id = ""
         self.mail_review = None        # read with the connector being replaced
         self.mail_review_job_id = ""
+        self.audit_runs = {}           # read with the connector being replaced
+        self.audit_run_jobs = {}
         self.incident_open = ""        # opens only while connected to its domain
         self.incident_open_job = ""
         self.incident_evidence = None
@@ -483,6 +487,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
 
     # Imported here (not at module top) to avoid a cycle: routes import TEMPLATES from this module.
     from .routes.audit import router as audit_router
+    from .routes.audit_runs import router as audit_runs_router
     from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
     from .routes.classroom import router as classroom_router
@@ -510,6 +515,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(incident_report_router)
     app.include_router(incident_router)
     app.include_router(phishing_router)
+    app.include_router(audit_runs_router)
     app.include_router(reports_router)
     app.include_router(groups_router)
     app.include_router(signatures_router)

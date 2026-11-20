@@ -417,6 +417,16 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "users" ]; then
   # `id` gets none (once every record came whole, and a read that never asked for `id` passed a test matching on it).
   pu_fields=""; pu_prev=""
   for pu_arg in "$@"; do [ "$pu_prev" = fields ] && pu_fields=$pu_arg; pu_prev=$pu_arg; done
+  # GAM_MOCK_STATE/directory_fails: Google refused a page mid-list. doPrintUsers warns (entityActionFailedWarning,
+  # ACTION_FAILED_RC 50), carries on, and writes the rows it had: a partial table and exit 50, never the directory.
+  # Read at the 7.52.04 tag; the stderr wording is approximate.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/directory_fails" ]; then
+    printf 'primaryEmail,JSON\n'
+    pu_first=$(head -n 1 "$GAM_MOCK_FIXTURES/print_users.json")
+    gam_row "$(json_text primaryEmail "$pu_first")" "$pu_first"
+    printf 'User: , Print Failed: Invalid Input\n' 1>&2
+    exit 50
+  fi
   case ",$(lower "$pu_fields")," in
     ,,|*,id,*) print_formatjson primaryEmail print_users.json ;;
     *)
@@ -2580,6 +2590,26 @@ if [ "${1:-}" = "print" ] && { [ "${2:-}" = "tokens" ] || [ "${2:-}" = "token" ]
     case " $active " in *" $user "*) printf '%s\n' "$line" ;; esac
   done
   exit $rc
+fi
+
+# `gam print licenses` -> GAM's CSV (doPrintLicenses, read at the 7.52.04 tag): `userId,productId,productDisplay,skuId,
+# skuDisplay`, userId lowercased, the seats in licenses.csv (left@example.com holds one and isn't in the directory; bob,
+# suspended, holds two). Only the bare command is modelled: the app names no product or SKU. With none named GAM lists
+# every product it knows and passes over one Google refuses (invalid, forbidden, invalidArgument) without a word or a
+# code: GAM_MOCK_STATE/licenses_silent is every product refused, the titles alone and exit 0. GAM_MOCK_STATE/nolicensing
+# is an admin token without the License Manager scope (buildGAPIObject: NO_SCOPES_FOR_API_RC, 15, before any read).
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "licenses" ]; then
+  [ $# -eq 2 ] || not_modelled "print licenses with $3"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nolicensing" ]; then
+    printf '\nERROR: There are no scopes authorized for the API(s): License Manager API\n' 1>&2
+    exit 15
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/licenses_silent" ]; then
+    head -n 1 "$GAM_MOCK_FIXTURES/licenses.csv"
+    exit 0
+  fi
+  cat "$GAM_MOCK_FIXTURES/licenses.csv"
+  exit 0
 fi
 
 # `gam print chromeprofiles filter user_email="<address>" fields <ChromeProfileFieldNameList> formatjson` -> GAM's CSV,

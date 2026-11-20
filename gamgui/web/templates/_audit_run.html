@@ -1,0 +1,99 @@
+{#- One audit run (plan F3): its button, its steps while it runs (the poll draws no table: invariant 9), or the last run's
+    tables. A step that failed, or never ran, is unknown, and so is every table that needs it: never "none". Values from
+    Google are autoescaped text. Carries its own id, because it also shows inside a job's page. -#}
+{% import "_job_live.html" as live %}
+<section id="run-{{ run.key }}" aria-labelledby="run-{{ run.key }}-title" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+  <h2 id="run-{{ run.key }}-title" class="font-medium text-brand-black">{{ run.title }}</h2>
+  <p class="mt-0.5 text-sm text-brand-blueink">{{ run.what }}</p>
+  <p class="mt-0.5 text-xs text-brand-grayink">Reads: {% for s in run.steps %}{{ s.title | lower if not loop.first else s.title }}{{ "; " if not loop.last else "." }}{% endfor %}</p>
+{% if job and not job.finished %}
+  <div class="mt-3" hx-get="/reports/runs/status?job={{ job.id }}" hx-trigger="load delay:1500ms"
+       hx-target="#run-{{ run.key }}" hx-swap="outerHTML">
+    {{ live.progress(job, run.title) }}
+    <div class="flex items-center gap-2 text-sm text-brand-grayink">
+      <span class="spinner"></span>
+      <span>{{ "Stopping after this step…" if job.cancel_requested else "Step " ~ (job.done + 1) ~ " of " ~ job.total ~ ": " ~ job.current ~ "…" }}</span>
+      {{ live.stop(job) }}
+    </div>
+    {% if job.recent %}
+    <ul class="mt-2 space-y-0.5 text-sm text-brand-black">
+      {% for o in job.recent %}<li>{{ live.mark(o.ok) }}{{ o.item }}{% if not o.ok %} — {{ o.reason }}{% endif %}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+{% elif not connected %}
+  <p class="mt-3 text-sm text-brand-grayink">Connect a domain on Setup first.</p>
+{% else %}
+  {% if job and job.error %}
+  <p {{ live.ended(job) }} class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800"{% if announce %} data-announce="{{ job.id }}"{% endif %}>{{ job.error }}</p>
+  {% endif %}
+  {% if result %}
+  <div class="mt-3"{% if announce and job and not job.error %} data-announce="{{ job.id }}"{% endif %}>
+    <p class="text-xs text-brand-grayink" {% if job and not job.error %}{{ live.ended(job) }}{% endif %}>Read {{ age | ago }}{% if result.days %}, with a {{ result.days }}-day window{% endif %}.{% if result.complete %} Every step was read.{% else %} Part of this run is unknown: each table that needs it says so.{% endif %}</p>
+    <ul class="mt-2 space-y-1 text-sm">
+      {% for r in result.reads %}
+      <li class="text-brand-black">{{ live.mark(r.state == "read") }}{{ r.step.title }}:
+        {% if r.state == "read" %}<span class="text-brand-blueink">{{ r.rows }} row{{ "s" if r.rows != 1 }}</span>
+        {% elif r.state == "not_run" %}<span class="text-brand-grayink">not run. {{ r.why }}</span>
+        {% else %}<span class="text-amber-800">unknown. {{ r.why }}</span>
+          {% if r.detail %}<details class="mt-1"><summary class="cursor-pointer text-xs text-brand-grayink">GAM’s error</summary><pre class="mt-1 whitespace-pre-wrap break-all text-xs text-brand-grayink">{{ r.detail }}</pre></details>{% endif %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% for f in result.findings %}
+    <div id="run-{{ run.key }}-{{ f.key }}" class="mt-5">
+      <h3 class="text-sm font-medium text-brand-black">{{ f.title }}{% if f.known %} ({{ f.rows | length }}){% endif %}</h3>
+      {% if f.known %}
+      <p class="mt-0.5 text-sm text-brand-blueink">{{ f.summary }}</p>
+      {% if f.rows %}
+      <div class="mt-2 max-h-96 overflow-auto rounded-xl border border-brand-gray/30">
+        <table class="w-full text-sm">
+          <caption class="sr-only">{{ f.title }}{% if f.rows | length > shown %}, the first {{ shown }} of {{ f.rows | length }}{% endif %}</caption>
+          <thead class="sticky top-0 bg-brand-white text-left text-xs text-brand-grayink">
+            <tr>{% for c in f.columns %}<th scope="col" class="px-3 py-2 font-medium">{{ c }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for row in f.rows[:shown] %}
+            <tr class="border-t border-brand-gray/20 align-top">
+              {% for cell in row %}
+              <td class="px-3 py-1.5{% if loop.first %} break-all{% endif %}">{% if loop.first and f.links %}<a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ cell | urlencode }}">{{ cell }}</a>{% else %}{{ cell }}{% endif %}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-1 text-xs text-brand-grayink">{% if f.rows | length > shown %}Showing the first {{ shown }} of {{ f.rows | length }}. {% endif %}<a class="underline hover:text-brand-black" download href="/reports/runs/table.csv?run={{ run.key | urlencode }}&amp;finding={{ f.key | urlencode }}">Download {{ "all " ~ (f.rows | length) if f.rows | length > 1 else "it" }} as CSV<span class="sr-only">: {{ f.title }}</span></a></p>
+      {% endif %}
+      {% else %}
+      <p class="mt-1 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ f.why }}</p>
+      {% endif %}
+      {% if f.note %}<p class="mt-1 text-xs text-brand-grayink">{{ f.note }}</p>{% endif %}
+      {% if run.key == inactive_run and f.key == "inactive" and f.known and f.rows %}
+      {#- The one write this run leads to: Reports' preview, which reads the directory again for the same window, holds
+          exactly who it found, and leaves the connected admin out. Its Apply targets #inactive-suspend. -#}
+      <div id="inactive-suspend" class="mt-3">
+        <form hx-post="/reports/inactive/preview" hx-target="#inactive-suspend" hx-swap="innerHTML" hx-disabled-elt="find button">
+          <input type="hidden" name="days" value="{{ result.days }}" />
+          <button type="submit" class="inline-flex items-center rounded-lg border border-red-700 bg-brand-white px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors">Suspend these…<span class="sr-only"> the accounts inactive {{ result.days }}+ days, after a preview</span></button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <form class="mt-4 flex flex-wrap items-end gap-3" hx-post="/reports/runs/start" hx-target="#run-{{ run.key }}" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="run" value="{{ run.key }}" />
+    {% if run.key == inactive_run %}
+    <label class="text-sm text-brand-blueink">No sign-in for
+      <select name="days" class="ml-1 rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
+        {% for w in windows %}<option value="{{ w }}"{% if w == days %} selected{% endif %}>{{ w }} days</option>{% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">{{ "Run again" if result else ("Try again" if job and job.error else "Run") }}<span class="sr-only"> {{ run.title }}</span></button>
+  </form>
+{% endif %}
+</section>

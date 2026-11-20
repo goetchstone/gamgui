@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from ...core import bulk, clock, guard
 from ...core import reports as reports_mod
+from ...core.audit_runs import INACTIVE_WINDOWS
 from ...core.catalog.catalog import load_catalog
 from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError, GAMErrorKind
@@ -178,13 +179,24 @@ def _suspend_key(days) -> tuple:
     return ("inactive", str(days or "").strip())
 
 
+def _window(value) -> int:
+    """The preview's window: the Reports card's (none posted), or one an audit run offers (plan F3). 0: neither."""
+    text = str(value or "").strip()
+    if not text:
+        return reports_mod.INACTIVE_DAYS
+    return int(text) if text.isdigit() and int(text) in INACTIVE_WINDOWS else 0
+
+
 @router.post("/inactive/preview", response_class=HTMLResponse)
-async def inactive_preview(request: Request) -> HTMLResponse:
+async def inactive_preview(request: Request, days: Annotated[str, Form()] = "") -> HTMLResponse:
     st = request.app.state.gamgui
     tenant = st.tenant_key()   # before the reads: what the preview is bound to
     conn = st.connector
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
+    window = _window(days)
+    if not window:
+        return error_partial(request, "Pick one of the windows the run offers, then preview again.")
     admin, admin_id, _why_not = await conn.connected_admin()
     if not admin:
         return error_partial(request, _ADMIN_UNCONFIRMED)
@@ -192,14 +204,14 @@ async def inactive_preview(request: Request) -> HTMLResponse:
         users = await st.users(force=True)   # read now: the card counted a cached list
     except Exception as exc:  # noqa: BLE001 — a failed read is said, and nothing is offered
         return error_partial(request, "Couldn't read the directory again, so nothing is offered. " + friendly(exc))
-    targets, left_out = reports_mod.inactive_to_suspend(users, admin, admin_id)
+    targets, left_out = reports_mod.inactive_to_suspend(users, admin, admin_id, inactive_days=window)
     emails = [t.email for t in targets]
     # Keyed on the window the preview used, posted back with Apply: a form edited since is refused, never re-read.
-    token = st.previews.hold(_SUSPEND_FLOW, _suspend_key(reports_mod.INACTIVE_DAYS), emails, tenant=tenant) if emails else ""
+    token = st.previews.hold(_SUSPEND_FLOW, _suspend_key(window), emails, tenant=tenant) if emails else ""
     decision = guard.evaluate(conn.plan_suspend(emails), typed_count_above=guard.COUNT_CONFIRM_ABOVE)
     return TEMPLATES.TemplateResponse(request, _SUSPEND_PARTIAL, {
         "targets": targets[:_SUSPEND_SHOWN], "count": len(targets), "new": sum(t.new for t in targets),
-        "left_out": left_out, "days": reports_mod.INACTIVE_DAYS, "decision": decision, "token": token})
+        "left_out": left_out, "days": window, "decision": decision, "token": token})
 
 
 @router.post("/inactive/apply", response_class=HTMLResponse)
