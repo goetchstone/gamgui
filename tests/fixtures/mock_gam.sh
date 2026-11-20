@@ -2608,6 +2608,12 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "licenses" ]; then
     head -n 1 "$GAM_MOCK_FIXTURES/licenses.csv"
     exit 0
   fi
+  # GAM_MOCK_STATE/licenses_partial: Google refused one product (Google Vault), passed over the same way: the other
+  # products' seats and exit 0, nothing to tell it from a whole read.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/licenses_partial" ]; then
+    grep -v ',Google-Vault,' "$GAM_MOCK_FIXTURES/licenses.csv"
+    exit 0
+  fi
   cat "$GAM_MOCK_FIXTURES/licenses.csv"
   exit 0
 fi

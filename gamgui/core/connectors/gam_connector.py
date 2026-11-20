@@ -1009,7 +1009,8 @@ class GAMConnector(Connector):
         raises, and so does output without the step's table (titles naming ``key_column``): GAM writes the titles even
         with no row, so a missing table is never "none" (invariant 10). Parsed off the event loop: a large domain's
         directory is tens of thousands of rows."""
-        if argv[:1] != ["print"] or "todrive" in argv:
+        # GAM reads an argument lowercased with its underscores dropped (getArgument), so `to_drive` and `ToDrive` are todrive.
+        if argv[:1] != ["print"] or any(str(a).lower().replace("_", "") == "todrive" for a in argv):
             raise ValueError("an audit run reads with a print command, and never exports")
         extra: Dict[str, Any] = {"command": command, "origin": READ_ORIGIN_AUDIT_RUN}
         try:

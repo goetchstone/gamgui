@@ -233,23 +233,27 @@ def license_findings(seats: List[dict], users: Optional[List[GAMUser]], reads: S
     suspended_rows.sort(key=lambda r: (r[2].lower(), r[0].lower()))
     stray_rows.sort(key=lambda r: (r[1].lower(), r[0].lower()))
     total, n_susp, n_stray = sum(per_sku.values()), len(suspended_rows), len(stray_rows)
+    # Every table built on the seats says so: with no product named GAM passes over one Google refuses, exit 0, so even
+    # a clean run may be missing a product's seats, and an all-clear covers only the seats read.
+    skipped = "GAM passes over a product Google won't let it read without saying so, so this covers only the seats read."
     gam_note = ("GAM passes over a product Google won't let it read without saying so: a product missing here may be one "
                 "it couldn't read. Check the counts against the Admin console (Billing → Licenses).")
+    seats_word = f"{total} seat{'' if total == 1 else 's'}"
     return [
         Finding("per_sku", "Seats per license",
-                f"{total} seat{'' if total == 1 else 's'} across {len(per_sku)} license{'' if len(per_sku) == 1 else 's'}.",
+                f"{seats_word} across {len(per_sku)} license{'' if len(per_sku) == 1 else 's'}.",
                 PER_SKU_COLUMNS, sku_rows, known=not seats_why, why=seats_why,
                 note=gam_note + ("" if joined else " The directory couldn't be read, so the last two columns are unknown.")),
         Finding("on_suspended", "Seats on suspended accounts",
                 (f"{n_susp} seat{'' if n_susp == 1 else 's'} {'is' if n_susp == 1 else 'are'} held by a suspended account."
-                 if n_susp else f"None of the {total} seats read is held by a suspended account."),
+                 if n_susp else f"No suspended account holds any of the {seats_word} read."),
                 SUSPENDED_SEAT_COLUMNS, suspended_rows, known=not join_why, why=join_why, links=True,
-                note="A suspended account keeps its seat until the license is removed."),
+                note="A suspended account keeps its seat until the license is removed. " + skipped),
         Finding("not_in_directory", "Seats on an address the directory read doesn't list",
                 (f"{n_stray} seat{'' if n_stray == 1 else 's'} {'is' if n_stray == 1 else 'are'} on an address the directory "
                  "read didn't list." if n_stray else "Every seat read is on an account the directory read listed."),
                 STRAY_SEAT_COLUMNS, stray_rows, known=not join_why, why=join_why,
-                note="An account made, renamed or deleted between the two reads shows here too."),
+                note="An account made, renamed or deleted between the two reads shows here too. " + skipped),
     ]
 
 

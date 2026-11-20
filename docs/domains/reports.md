@@ -169,7 +169,8 @@ shared drive permissions, Classroom and admin tokens come next.
   to `primaryEmail`, lowercased: seats per SKU, seats held by a `suspended` account, seats on an address the directory
   read didn't list. A directory that's unknown leaves the per-SKU counts with "unknown" in the last two columns.
 - **The mock.** `print licenses` (bare only) prints `licenses.csv`; `GAM_MOCK_STATE/nolicensing` exits 15 as a token without
-  the License Manager scope; `licenses_silent` is titles alone, exit 0. `print users` with `directory_fails` writes one
+  the License Manager scope; `licenses_silent` is titles alone, exit 0; `licenses_partial` drops one product, exit 0 (a
+  clean-looking partial read, so every license table carries the caveat). `print users` with `directory_fails` writes one
   row and exits 50.
 - **Not run on a real domain yet.** `print licenses` has never run live: check the counts against Billing → Licenses on
   its first run. The directory read is the cache's own, which has.

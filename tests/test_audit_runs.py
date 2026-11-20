@@ -86,6 +86,16 @@ def test_seats_per_license_on_suspended_accounts_and_on_addresses_the_directory_
     assert per_sku.summary == "5 seats across 2 licenses." and "2 seats are held by a suspended account" in suspended.summary
 
 
+def test_an_all_clear_covers_only_the_seats_read_and_says_so():
+    # GAM passes over a product Google refuses, exit 0: a clean run may still miss one, so no all-clear stands alone.
+    reads = [_read(runs.LICENSES), _read(runs.DIRECTORY)]
+    per_sku, suspended, stray = runs.license_findings([_seat(ALICE)], [_user(ALICE)], reads)
+    assert suspended.summary == "No suspended account holds any of the 1 seat read."
+    assert stray.summary == "Every seat read is on an account the directory read listed."
+    for f in (per_sku, suspended, stray):
+        assert "passes over a product Google won't let it read without saying so" in f.note
+
+
 def test_the_join_matches_google_s_current_primary_address_whatever_its_case():
     reads = [_read(runs.LICENSES), _read(runs.DIRECTORY)]
     _, suspended, stray = runs.license_findings([_seat("Bob@Example.com")], [_user(BOB, suspended=True)], reads)
@@ -128,7 +138,8 @@ def _records(client, command=None):  # noqa: F811
 def test_an_audit_read_refuses_anything_but_a_print_read_before_gam_runs(client, gam_calls):  # noqa: F811
     conn = client.app.state.gamgui.connector
     before = len(gam_calls())
-    for argv in (["update", "user", ALICE, "suspended", "on"], ["print", "licenses", "todrive"]):
+    for argv in (["update", "user", ALICE, "suspended", "on"], ["user", ALICE, "print", "tokens"],
+                 *(["print", "licenses", spelling] for spelling in ("todrive", "to_drive", "ToDrive", "TODRIVE"))):
         with pytest.raises(ValueError):
             client.portal.call(conn.audit_read, "x/y", argv, "userId")
     assert len(gam_calls()) == before and _records(client) == []
@@ -228,7 +239,7 @@ def test_a_refused_license_read_is_unknown_never_no_seats(client, gam_state):  #
     assert not failed["ok"] and "rows" not in failed["extra"] and "License Manager API" in failed["extra"]["error"]
     page = _page(client)
     assert ">unknown. A required API scope is not authorized" in page and "GAM’s error" in page and "Part of this run is unknown" in page
-    assert "seats across" not in page and "None of the" not in page and "Every seat read" not in page
+    assert "seats across" not in page and "No suspended account holds" not in page and "Every seat read" not in page
     r = client.get("/reports/runs/table.csv?run=license_usage&finding=on_suspended")
     assert r.status_code == 409 and "Not known" in r.text and "Email" not in r.text
 
@@ -238,7 +249,17 @@ def test_titles_alone_mean_gam_passed_over_every_product_unknown_not_none(client
     _start(client, "license_usage")
     assert _records(client, "license_usage/licenses")[-1]["extra"]["rows"] == 0     # what GAM did, recorded as it was
     page = _page(client)
-    assert "GAM listed no license seat at all" in page and "None of the" not in page
+    assert "GAM listed no license seat at all" in page and "No suspended account holds" not in page
+
+
+def test_a_product_gam_passed_over_reads_as_a_clean_run_so_every_table_carries_the_caveat(client, gam_state):  # noqa: F811
+    (gam_state / "licenses_partial").touch()
+    _, job = _start(client, "license_usage")
+    assert job.failed_total == 0      # nothing in GAM's answer tells it apart from a whole read
+    result = client.app.state.gamgui.audit_runs["license_usage"]
+    assert [r[1] for r in result.finding("per_sku").rows] == [STANDARD]     # Google Vault's seat is simply not there
+    page = _page(client)
+    assert page.count("covers only the seats read") == 2 and "Check the counts against the Admin console" in page
 
 
 def test_a_directory_that_stopped_short_is_unknown_and_its_partial_table_is_never_used(client, gam_state, gam_calls):  # noqa: F811
