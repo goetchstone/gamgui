@@ -83,7 +83,7 @@ def test_load_catalog_has_buildable_and_browse():
     assert cat.version  # stamped from the committed JSON
     assert len(cat.commands) > 900
     assert len(cat.buildable()) >= 10
-    assert cat.by_id("build.set_signature") is not None
+    assert cat.by_id("build.set_signature") is None   # signatures are set where the old one is kept (roadmap 4.1)
     assert cat.by_id("build.suspend_user").risk == RiskLevel.DESTRUCTIVE
     assert cat.by_id("build.delete_user") is None   # deleted only from Users (roadmap 2.9)
 

@@ -233,6 +233,17 @@ def filter_address(address: str) -> str:
     return lowered
 
 
+# getStringOrFile's SORF_FILE_ARGUMENTS (read from the vendored build): a `signature` value that is one of these, stripped,
+# lowercased and with `_` removed, is a request to load the next argument as a file or Google Doc, not the signature.
+GAM_FILE_KEYWORDS = frozenset({"file", "htmlfile", "textfile", "gdoc", "ghtml", "gcsdoc", "gcshtml"})
+
+
+def signature_read_as_file(body: str) -> Optional[str]:
+    """The file keyword GAM would read ``body`` as, or None when GAM takes it as the signature."""
+    word = (body or "").strip().lower().replace("_", "")
+    return word if word in GAM_FILE_KEYWORDS else None
+
+
 class GAMCommands:
     # GAM's REPORT_CHOICE_MAP keys, as `report` takes them. Not `gplus` or `jamboard`, whose services have ended.
     REPORT_APPLICATIONS = ("login", "token", "saml", "gmail", "accessevaluation", "chat", "useraccounts", "takeout", "mobile", "chrome", "drive", "calendar",
@@ -757,6 +768,9 @@ class GAMCommands:
     # --- gmail: signature / delegate / forwarding / vacation --------------------------
     @staticmethod
     def set_signature(email: str, signature: str, html: bool = True) -> List[str]:
+        # GAM reads a value that is one of its file keywords as "load the next argument as a file" (failure log 2026-11-20).
+        if word := signature_read_as_file(signature):
+            raise ValueError(f"“{word}” can't be a signature: GAM reads it as a file to load. Change the text.")
         argv = ["user", email, "signature", signature]
         if html:
             argv.append("html")
