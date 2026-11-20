@@ -10,6 +10,7 @@ import pytest
 
 from gamgui.core.gam.commands import GAMCommands
 from gamgui.core.gam.errors import GAMError
+from gamgui.core.gam.models import GAMUser
 from gamgui.core.phishing import Incomplete
 
 from .helpers import gam_writes
@@ -42,6 +43,30 @@ async def test_no_answer_at_all_is_incomplete_never_the_root_alone(connector, mo
     monkeypatch.setattr(connector.runner, "run_authenticated", silent)
     with pytest.raises(Incomplete):
         await connector.org_units()
+
+
+async def test_a_notice_before_the_titles_is_skipped_not_read_as_the_header(connector, gam_state):
+    (gam_state / "org_units_notice").write_text("")
+    assert await connector.org_units() == ["/", "/Sales", "/Sales/West", "/Staff", "/Students"]
+
+
+@pytest.mark.parametrize("out", ["A notice GAM printed\n", "path,name\n/Sales,Sales\n"])
+async def test_output_without_the_titles_is_incomplete_never_the_root_alone(connector, monkeypatch, out):
+    async def no_titles(domain, argv, timeout=None, serialize=False):
+        return out
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", no_titles)
+    with pytest.raises(Incomplete):
+        await connector.org_units()
+
+
+async def test_a_line_separator_in_a_cell_is_not_a_row_of_its_own(connector, monkeypatch):
+    # GAM's csv writer quotes a cell for \r or \n, not for U+2028: it reaches stdout raw inside the description.
+    async def separator(domain, argv, timeout=None, serialize=False):
+        return "orgUnitPath,name,description\n/Staff,Staff,Moved from /Old/Interns\n/Sales EU,Sales EU,\n"
+
+    monkeypatch.setattr(connector.runner, "run_authenticated", separator)
+    assert await connector.org_units() == ["/", "/Sales EU", "/Staff"]
 
 
 async def test_the_mock_refuses_an_unknown_unit_before_anyone_moves(runner, domain):
@@ -96,6 +121,29 @@ def test_a_unit_edited_after_the_preview_moves_nobody(client, gam_calls):  # noq
     _, token = _preview(client, "/Sales")
     r = _apply(client, token, "/Students")
     assert "changed after the preview" in r.text and gam_writes(gam_calls()) == []
+
+
+def _person(monkeypatch, client, record):  # noqa: F811
+    async def get_user(email, fields=None):
+        return GAMUser.from_json(record)
+
+    monkeypatch.setattr(client.app.state.gamgui.connector, "get_user", get_user)
+
+
+def test_a_record_without_their_unit_is_unread_never_the_root(client, monkeypatch):  # noqa: F811
+    _person(monkeypatch, client, {"primaryEmail": ALICE})    # from_json would default the unit to "/"
+    page, token = _preview(client, "/Sales")
+    assert f"Couldn't read which org unit {ALICE} is in" in page and not token
+
+
+def test_an_alias_moves_and_audits_the_account_it_belongs_to(client, monkeypatch, gam_calls):  # noqa: F811
+    _person(monkeypatch, client, {"primaryEmail": ALICE, "orgUnitPath": "/Staff"})
+    page, token = _preview(client, "/Sales", email="a.anders@example.com")
+    assert f"Move {ALICE} from /Staff to /Sales?" in page and token
+    r = _apply(client, token, "/Sales")
+    assert f"Moved {ALICE} from /Staff to /Sales." in r.text
+    assert gam_writes(gam_calls()) == [GAMCommands.move_user_to_org_unit("/Sales", ALICE)]
+    assert client.app.state.gamgui.connector.audit.tail()[-1]["target"] == ALICE
 
 
 def test_a_tree_that_cant_be_read_offers_nothing(client, gam_state):  # noqa: F811

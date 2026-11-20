@@ -1000,13 +1000,18 @@ async def ou_preview(request: Request, email: Annotated[str, Form()] = "", org_u
     except Exception as exc:  # noqa: BLE001 — either read failing offers nothing
         return error_partial(request, "Couldn't read the org units or their account again, so nothing is offered. "
                              + unread_why(exc, _TRY_AGAIN), gam_detail(exc))
+    # Their unit and address as GAM gave them, never a default: a record without them is unread, not "in /". The account's
+    # primary address is the one held, so an alias posted here audits and updates the list under the account it moves.
+    addr = str(person.raw.get("primaryEmail") or "").strip()
+    was = str(person.raw.get("orgUnitPath") or "").strip()
+    if not addr or not was.startswith("/"):
+        return error_partial(request, f"Couldn't read which org unit {email} is in, so nothing is offered. {_TRY_AGAIN}")
     if org_unit not in paths:
         return error_partial(request, f"“{org_unit}” isn't an org unit here: pick one from the list.")
-    if person.org_unit_path == org_unit:
-        return error_partial(request, f"{email} is already in {org_unit}.")
-    token = st.previews.hold(_OU_FLOW, (email.lower(), org_unit), (email, person.org_unit_path, org_unit), tenant=tenant)
-    return TEMPLATES.TemplateResponse(request, _OU_CONFIRM, {"email": email, "from": person.org_unit_path, "to": org_unit,
-                                                             "token": token})
+    if was == org_unit:
+        return error_partial(request, f"{addr} is already in {org_unit}.")
+    token = st.previews.hold(_OU_FLOW, (addr.lower(), org_unit), (addr, was, org_unit), tenant=tenant)
+    return TEMPLATES.TemplateResponse(request, _OU_CONFIRM, {"email": addr, "from": was, "to": org_unit, "token": token})
 
 
 @router.post("/ou/apply", response_class=HTMLResponse)

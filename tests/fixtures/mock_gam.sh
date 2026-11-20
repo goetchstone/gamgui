@@ -319,7 +319,8 @@ fi
 
 # Read commands -> echo the matching fixture.
 # The org unit tree (roadmap 4.2): the fixture users' units and two more. GAM_MOCK_STATE/no_org_units is a tenant with
-# none below the root (the operator's), GAM_MOCK_STATE/org_units_refused a read Google refused.
+# none below the root (the operator's), GAM_MOCK_STATE/org_units_refused a read Google refused, GAM_MOCK_STATE/org_units_notice
+# a line GAM printed on stdout before the titles (as it prints a config banner there).
 org_units() { printf '/Sales\n/Sales/West\n/Staff\n/Students\n'; }
 is_org_unit() { [ "$1" = "/" ] || org_units | grep -qxF -- "$1"; }
 # `gam print orgs fields <OrgUnitFieldNameList>` (doPrintOrgs, read from the vendored build): plain CSV, no formatjson, the
@@ -331,6 +332,7 @@ if [ "${1:-}" = "print" ] && { [ "${2:-}" = "orgs" ] || [ "${2:-}" = "ous" ]; };
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/org_units_refused" ]; then
     printf "\nERROR: Not Authorized to access this resource/api\n" 1>&2; exit 12
   fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/org_units_notice" ]; then echo "A notice GAM printed"; fi
   echo "orgUnitPath,name,description"
   if [ -z "${GAM_MOCK_STATE:-}" ] || [ ! -e "$GAM_MOCK_STATE/no_org_units" ]; then
     for path in $(org_units); do gam_row "$path" "${path##*/}" ""; done
