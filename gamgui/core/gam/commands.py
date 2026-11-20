@@ -523,6 +523,14 @@ class GAMCommands:
         return ["print", "tokens"]
 
     @staticmethod
+    def print_licenses() -> List[str]:
+        # Audit runs' license usage (F3): every seat, `gam print licenses` with no product named (grammar 4498; read in
+        # doPrintLicenses at the 7.52.04 tag). CSV `userId,productId,productDisplay,skuId,skuDisplay`, userId lowercased. With
+        # no product named GAM lists every product it knows and passes over one Google refuses (invalid, forbidden) without a
+        # word or a code, so a missing product isn't "no seats". No scope for the License Manager API exits 15.
+        return ["print", "licenses"]
+
+    @staticmethod
     def all_users_print_forward() -> List[str]:
         # Reports' mail review (roadmap 3.2): every active account's forwarding that is on (grammar `<UserTypeEntity> print
         # forward [enabledonly]`). No formatjson: CSV `User,forwardEnabled,forwardTo,disposition`. One account at a time,
