@@ -22,8 +22,8 @@ Each of these exists because something went wrong. Several have tests guarding t
    ran on a bare POST — against what the preview showed: a confirm step that posts the live form
    runs the changes its preview held (single-use `web/previews.py` token), never a rebuild of that
    form. `tests/test_write_routes_guarded.py` holds every POST route to this or a stated exemption.
-3. **Only read-only commands may become runnable automatically.** Of 1077 catalog entries, 540 run:
-   25 hand-curated (the only ones that can change an existing object) plus 515 grammar-derived commands
+3. **Only read-only commands may become runnable automatically.** Of 1076 catalog entries, 539 run:
+   24 hand-curated (the only ones that can change an existing object) plus 515 grammar-derived commands
    auto-promoted by `core/catalog/readbuilder.py` **because they are confidently `READ_ONLY` and not
    flagged uncertain**. Everything else is inert, syntax display only. Adding write coverage is a
    deliberate act of curation. A runnable read makes one write: its export to a *new* Google Sheet

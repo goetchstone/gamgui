@@ -405,7 +405,6 @@ ROW_ACTIONS = [
     {"cid": "build.print_delegates", "label": "Delegates", "risk": "read", "param": "email", "group": "user"},
     {"cid": "build.print_forwarding", "label": "Forwarding", "risk": "read", "param": "email", "group": "user"},
     {"cid": "build.set_vacation", "label": "Set vacation", "risk": "change", "param": "email", "group": "user"},
-    {"cid": "build.set_signature", "label": "Set signature", "risk": "change", "param": "email", "group": "user"},
     {"cid": "build.set_organization", "label": "Title / dept", "risk": "change", "param": "email", "group": "user"},
     {"cid": "build.reset_password", "label": "Reset password", "risk": "change", "param": "email", "group": "user"},
     {"cid": "build.suspend_user", "label": "Suspend", "risk": "destructive", "param": "email", "group": "user"},
