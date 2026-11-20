@@ -79,10 +79,12 @@ in_directory() { grep -qF "\"primaryEmail\": \"$1\"" "$GAM_MOCK_FIXTURES/print_u
 # Python's csv writer in GAM's dialect. A value here is one line; one with CR or LF isn't modelled.
 CR=$(printf '\r')
 gam_cell() {  # <value>: one CSV field as GAM writes it
-  case "$1" in *"$CR"*|*'
-'*) echo "ERROR: mock: a CSV value with a line break isn't modelled" 1>&2; exit 2 ;; esac
-  escaped=$(printf '%s' "$1" | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/""/g')
-  case "$1" in *[,\"]*) printf '"%s"' "$escaped" ;; *) printf '%s' "$escaped" ;; esac
+  # GAM's dialect (Python's csv writer: doubled quotes, a backslash escape character): a field holding a delimiter, a
+  # quote or a line break is quoted, its line breaks written as they are (a stored signature, roadmap 4.1). The `x`
+  # rides through sed so `$(…)` keeps the value's own trailing newline, whatever sed does with the last line.
+  escaped=$(printf '%sx' "$1" | LC_ALL=C sed -e 's/\\/\\\\/g' -e 's/"/""/g'); escaped=${escaped%x}
+  case "$1" in *[,\"]*|*"$CR"*|*'
+'*) printf '"%s"' "$escaped" ;; *) printf '%s' "$escaped" ;; esac
 }
 gam_row() {  # <value>...: one CSV row as GAM writes it
   separator=""
@@ -737,6 +739,42 @@ groupsenterprise|enterprisegroups|profile|ldap|directorysync|gcp|cloud|cloudsear
       | head -n "$max"
   done
   [ -z "$missing" ] || exit "$rc"
+  exit 0
+fi
+
+# `gam user <email> print signature` (printShowSignature in print mode, read from the vendored build): the primary send-as
+# address's row, its `signature` the stored value verbatim (only `compact` would strip line breaks, and the app never
+# sends it); an empty signature is an empty cell. With GAM_MOCK_STATE a `signature` write is kept byte for byte and read
+# back here; otherwise each fixture user's canned one. Gmail off is GAM's warning and exit 73 after the titles; a
+# refused token (GAM_MOCK_STATE/quiet/<u>) is GAM skipping the user without a word: the titles alone, exit 0.
+canned_signature() {  # <user>
+  case "$1" in
+    alice@example.com) printf '%s' 'Best,<br>Alice' ;;
+    carol@example.com) printf '%s' 'Carol Clark<br>Operations' ;;
+  esac
+}
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "signature" ]; then   # the grammar has no `print sig`
+  [ $# -eq 4 ] || not_modelled "print signature with $5"
+  user=$(lower "$2")
+  known_user "$user" || not_a_user "$2" Print
+  # GAM's own titles hold no `signature`: it is a column only when Gmail's reply has the field, which an empty one doesn't.
+  titles="User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,treatAsAlias,verificationStatus"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then echo "$titles"; exit 0; fi
+  printf 'Getting Signature for %s\n' "$user" 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+    echo "$titles"; printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/signatures/$user" ]; then
+    sig=$(cat "$GAM_MOCK_STATE/signatures/$user"; printf x); sig=${sig%x}   # keep a trailing newline
+  else
+    sig=$(canned_signature "$user")
+  fi
+  if [ -z "$sig" ]; then
+    echo "$titles"; gam_row "$user" "" "True" "True" "" "$user" "False" "accepted"
+  else
+    echo "User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature,treatAsAlias,verificationStatus"
+    gam_row "$user" "" "True" "True" "" "$user" "$sig" "False" "accepted"
+  fi
   exit 0
 fi
 
@@ -1816,7 +1854,7 @@ fi
 #  [name <String>] [primary]` — the signature text is required (an empty string clears it).
 if [ "${1:-}" = "user" ] && { [ "${3:-}" = "signature" ] || [ "${3:-}" = "sig" ]; }; then
   [ $# -ge 4 ] || missing_arg "String"
-  user="$2"; shift 4
+  user="$2"; sig_value="$4"; shift 4
   while [ $# -gt 0 ]; do
     case "$1" in
       html) shift; if is_bool "${1:-}"; then shift; fi ;;
@@ -1828,6 +1866,10 @@ if [ "${1:-}" = "user" ] && { [ "${3:-}" = "signature" ] || [ "${3:-}" = "sig" ]
   done
   check_exists "User" "$user"
   if still_provisioning "$user"; then not_ready_token "$user" "User Set"; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then   # kept byte for byte for `print signature` (roadmap 4.1's Put Back)
+    mkdir -p "$GAM_MOCK_STATE/signatures"
+    printf '%s' "$sig_value" > "$GAM_MOCK_STATE/signatures/$(lower "$user")"
+  fi
   echo "User: $user, SendAs Address: <$user>, Updated"
   exit 0
 fi

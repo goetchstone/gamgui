@@ -64,7 +64,8 @@ async def test_stop_ends_the_signature_apply_after_the_write_in_flight(connector
     from gamgui.web.routes.signatures import _run_apply
 
     job = Job(total=3, kind="signatures")
-    await _run_apply(job, _StopDuring(connector, job, "set_signature"), USERS, "<b>{name}</b>")
+    from .test_bulk_stop import _Kept
+    await _run_apply(job, _StopDuring(connector, job, "set_signature"), USERS, "<b>{name}</b>", _Kept())
     _stopped_after_one(job)
     assert gam_writes(gam_calls()) == [GAMCommands.set_signature("alice@example.com", "<b>Alice Doe</b>")]
 

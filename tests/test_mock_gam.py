@@ -125,6 +125,7 @@ READS = {
     "get_event": [C.get_event(CAL, "evt-allhands")],
     "print_datatransfers": [C.print_datatransfers("carol@example.com")],
     "show_signature": [C.show_signature("alice@example.com")],
+    "print_signature": [C.print_signature("alice@example.com")],
     "print_delegates": [C.print_delegates("alice@example.com")],
     "print_forwarding_addresses": [C.print_forwarding_addresses("alice@example.com")],
     "search_messages": [C.search_messages("alice@example.com", "from:x")],

@@ -38,3 +38,29 @@ Offline suite only: `.venv/bin/python -m pytest -q tests/test_signatures.py test
 - **Add a scope type:** extend `match_scope` (in-memory) or `_matched` in the route (if it needs a live GAM lookup, like `group`); surface it in `scope_options` + the `signatures.html` dropdown JS.
 - **Change the live feed / bounds:** `_sig_apply.html` and the shared `failures` macro (`_job_failures.html`); the bounds themselves live in `web/jobs.py` (`Job.record`, `RECENT_WINDOW`, `FAILED_SAMPLE_CAP`, `DETAIL_CAP`) and change every bulk job at once. Keep it bounded (#9) — in rows *and* in the text kept per row.
 - **Change how the body is sent to GAM:** `GAMCommands.set_signature` only (argv-only, #1); never build a shell string.
+
+## Backups before a run overwrites (roadmap 4.1)
+Gmail keeps no copy of a replaced signature, so a Signatures run (`/signatures/apply`, one person or many) keeps each
+person's first:
+- **The exact read:** `GAMConnector.signature_exact` runs `user X print signature` (`GAMCommands.print_signature`). GAM's
+  print mode writes the stored value verbatim (`printShowSignature`: only `compact` strips line breaks; read from the
+  vendored build), where `show signature` is the display form `_parse_signature` strips line by line. A read GAM skipped
+  without a word (the titles alone, exit 0, no "Getting Signature for" line, which print mode writes before each person),
+  without the person's row, or with a cell missing from that row (cut-off output) is `Incomplete`, never "" (invariant
+  10). GAM's titles hold no `signature` column: it comes from Gmail's reply, which leaves an empty one out, so the
+  person's whole row without that column is a real empty signature (the mock prints it that way).
+- **The order, per person:** read, then keep (`core/signature_backups.py`: the run's `.jsonl` gets one line, written and
+  `fsync`ed), then set. A read that fails means that person isn't overwritten and is listed as failed ("there'd be
+  nothing to put back"); an account-wide failure stops the run as before. A copy that can't be kept stops the run with
+  that person unwritten; no place to keep copies at all replaces nothing.
+- **The store:** one append-only file per run, `<run>.jsonl` in `signature-backups/` of the app's data folder (`0700`
+  folder, `0600` files, opened `O_NOFOLLOW`): a header (`run`, `when`, `what`), then `email`, `previous`, `set` per
+  person. Appending keeps a domain-wide run linear, and a run cut off midway still holds every signature it replaced.
+  Only the last `KEEP_RUNS` (5) are kept, and pruning never touches a run still being written (`_open`: a long run lost
+  its file to shorter ones started meanwhile, found in review); a run that kept nobody is removed when it closes, so
+  failed attempts can't push out the copies that matter. A file that can't be read whole is listed as unreadable, never
+  dropped, and never loaded in part (`BackupProblem`).
+- **Its cost, said on the preview:** two GAM calls a person, so a run takes about twice as long.
+- **The mock** keeps a set signature byte for byte under `GAM_MOCK_STATE` and answers `print signature` with it (or each
+  fixture user's canned one); its CSV writer now quotes a cell holding a line break and writes the break as GAM's dialect
+  does. Tests: `tests/test_signature_backups.py`. Put Back (setting a kept run again) is the next PR.

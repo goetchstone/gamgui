@@ -155,6 +155,7 @@ IDENTIFIERS = (
     Spec("delete_user", ("email",)),
     Spec("undelete_user", ("email",)),
     Spec("show_signature", ("email",)),
+    Spec("print_signature", ("email",)),
     Spec("add_delegate", ("email", "delegate")),
     Spec("remove_delegate", ("email", "delegate")),
     Spec("print_delegates", ("email",)),

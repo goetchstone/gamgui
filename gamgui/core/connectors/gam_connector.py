@@ -338,6 +338,22 @@ class GAMConnector(Connector):
         return await self._run_write("create_user", email, argv, RiskLevel.LOW, audit_argv=redacted,
                                      secrets=[password])
 
+    async def signature_exact(self, email: str) -> str:
+        """``email``'s stored Gmail signature, byte for byte ("" for none): what a signature run keeps before it overwrites
+        (roadmap 4.1). GAM skips a refused token without a word (the titles alone, exit 0, no "Getting Signature for"
+        line), and a read without the person's row isn't "no signature": both raise Incomplete, never "" (invariant 10)."""
+        argv = GAMCommands.print_signature(email)
+        res = await self.runner.run_any_exit(self.domain, argv)
+        if res.returncode != 0:
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        rows = [r for r in parse_records(res.stdout) if str(r.get("User") or "").lower() == email.strip().lower()]
+        # The person's one row, whole: a cell missing from it (cut-off output reads as None) is unknown, never "".
+        if len(rows) != 1 or any(v is None for v in rows[0].values()) or "Getting Signature for" not in res.stderr:
+            raise Incomplete(f"GAM answered without reading {email}'s signature, so it can't be kept.")
+        # GAM's titles hold no `signature` column of their own: it comes from Gmail's reply, which leaves an empty one out.
+        # With the person's whole row read, no column is no signature.
+        return str(rows[0].get("signature", ""))
+
     async def get_signature(self, email: str) -> str:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.show_signature(email))
         return _parse_signature(out)
