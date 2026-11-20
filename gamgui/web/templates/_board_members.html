@@ -10,15 +10,22 @@
   {% if q %}{{ total }} of {{ all_count }} member{{ "s" if all_count != 1 }} match “{{ q }}”{% else %}{{ total }} member{{ "s" if total != 1 }}{% endif %}{% if pages > 1 %} · showing {{ start + 1 }}–{{ start + shown }}{% endif %}
 </p>
 {% if members %}
+{# Tick members, then preview removing them (roadmap 3.5): the boxes belong to this form wherever they sit in the table. #}
+<form id="remove-many-form" class="mb-1 flex justify-end" hx-post="/groups/members/remove-many/preview" hx-target="#member-confirm"
+      hx-swap="innerHTML" hx-disabled-elt="find button">
+  <input type="hidden" name="group" value="{{ group }}" />
+  <button type="submit" class="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50">Remove selected…</button>
+</form>
 <div class="max-h-[calc(100vh-29rem)] overflow-y-auto rounded-xl border border-brand-gray/30">
   <table class="w-full text-sm">
     <caption class="sr-only">Members of {{ group }}</caption>
     <thead class="sticky top-0 bg-paper text-left text-xs text-brand-grayink">
-      <tr><th scope="col" class="px-3 py-1.5 font-medium">Member</th><th scope="col" class="px-3 py-1.5 font-medium">Role</th><th scope="col" class="px-3 py-1.5"><span class="sr-only">Remove</span></th></tr>
+      <tr><th scope="col" class="w-8 px-3 py-1.5"><span class="sr-only">Select</span></th><th scope="col" class="px-3 py-1.5 font-medium">Member</th><th scope="col" class="px-3 py-1.5 font-medium">Role</th><th scope="col" class="px-3 py-1.5"><span class="sr-only">Remove</span></th></tr>
     </thead>
     <tbody class="divide-y divide-brand-gray/20">
       {% for m in members %}
       <tr>
+        <td class="w-8 px-3 py-1.5">{% if m.email %}<input type="checkbox" name="pick" value="{{ m.email }}" form="remove-many-form" aria-label="Select {{ m.email }}" />{% endif %}</td>
         <td class="max-w-0 truncate px-3 py-1.5">
           {% if m.member_type == "GROUP" %}<a href="/groups?group={{ m.email | urlencode }}" class="text-brand-black hover:underline">{{ m.email }}</a> <span class="text-xs text-brand-grayink">(group)</span>
           {% elif m.member_type == "USER" %}<a href="/users/detail?email={{ m.email | urlencode }}" class="text-brand-black hover:underline">{{ m.email }}</a>

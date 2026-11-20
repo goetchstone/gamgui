@@ -124,3 +124,30 @@ async def send_reminders(job, conn, emails, subject: str, body: str) -> None:
         job.error = _why(exc)
     finally:
         job.finish()
+
+
+async def remove_members(job, conn, group: str, emails) -> None:
+    """Remove each of ``emails`` from ``group`` through the chokepoint (``remove_group_member`` → ``_run_write``, roadmap 3.5).
+    Stops at a failure every later one would share (``stop_reason``), or at Stop."""
+    try:
+        for email in emails:
+            if stop_requested(job):
+                break
+            job.current = email
+            kind, why, detail = None, "", ""
+            try:
+                res = await conn.remove_group_member(group, email)
+                ok = bool(getattr(res, "ok", False))
+                if not ok:
+                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
+            except Exception as exc:  # noqa: BLE001 — one member must not stop the rest
+                ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc) if isinstance(exc, GAMError) else ""
+            job.record(email, ok, why, detail)
+            stop = stop_reason(kind, why, job.total - job.done)
+            if stop:
+                job.error = stop
+                break
+    except Exception as exc:
+        job.error = _why(exc)
+    finally:
+        job.finish()

@@ -11,15 +11,18 @@ that isn't one full address is refused in words before GAM (``looks_like_email``
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import guard
+from ...core import bulk, guard
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import GROUP_ROLES
 from ...core.onboarding import looks_like_email
+from ..jobs import retry_key, retry_of, start_job
+from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly
 
@@ -213,3 +216,114 @@ async def remove_member(
         return _list(request, await _list_ctx(conn, group, q, page, details=result.detail,
                                               error=f"Couldn't remove {email} from {group}. {result.remediation}".strip()))
     return _list(request, await _list_ctx(conn, group, q, page, message=f"Removed {email} from {group}."))
+
+
+# --- remove several members (roadmap 3.5) ------------------------------------------------------------------------------
+# Tick members on the list, then "Remove selected…": the preview reads the group again and holds the ticked people who are
+# still in it, with their roles, under a single-use token (web/previews.py). Remove takes exactly those, through the
+# chokepoint one at a time, as a stoppable job with "Retry the N that failed" (the bulk department's mechanism, 2.1).
+_REMOVE_FLOW = "group_remove_many"
+_REMOVE_PREVIEW = "_group_remove_many.html"
+_REMOVE_RUN = "_group_remove_run.html"
+
+
+def _picked(form) -> list:
+    """The ticked members: the confirm step's ``picks`` (one comma-joined value) when it is posted, else the list's boxes
+    (``pick``, one each). Never both: the confirm step's own record of the selection is what its preview was keyed on."""
+    values = str(form.get("picks")).split(",") if form.get("picks") is not None else form.getlist("pick")
+    return sorted({str(v).strip().lower() for v in values if looks_like_email(str(v).strip())})
+
+
+def _remove_key(group: str, picked: list) -> tuple:
+    return (group.strip().lower(), tuple(picked))
+
+
+async def _held_members(conn, group: str, wanted: set):
+    """``group``'s members read now, those in ``wanted``: ``(still, gone)`` — each still a member with their role, and the
+    ticked addresses the group no longer holds. A failed read raises: it is never "nobody to remove"."""
+    members = await conn.list_group_members(group)
+    by_email = {m.email.lower(): m for m in members if m.email}
+    still = [by_email[e] for e in sorted(wanted) if e in by_email]
+    return still, sorted(wanted - set(by_email))
+
+
+def _remove_preview_page(request: Request, group: str, still, gone, token: str, retry: str = "", picked=()) -> HTMLResponse:
+    decision = guard.evaluate(guard.changes([m.email for m in still], RiskLevel.LOW, f"Remove from {group}"),
+                              typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    return TEMPLATES.TemplateResponse(request, _REMOVE_PREVIEW, {
+        "group": group, "still": still, "gone": gone, "token": token, "retry": retry, "decision": decision, "picked": picked,
+        "owners": [m.email for m in still if m.role == "OWNER"]})
+
+
+@router.post("/members/remove-many/preview", response_class=HTMLResponse)
+async def remove_many_preview(request: Request, group: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = app_state(request)
+    tenant = st.tenant_key()   # before the read: what the preview is bound to
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    group = group.strip()
+    picked = _picked(await request.form())
+    if not looks_like_email(group) or not picked:
+        return error_partial(request, "Tick the members to remove first.")
+    try:
+        still, gone = await _held_members(conn, group, set(picked))
+    except Exception as exc:  # noqa: BLE001 — a failed read offers nothing
+        return error_partial(request, f"Couldn't read {group}'s members again, so nothing is offered. " + friendly(exc))
+    token = (st.previews.hold(_REMOVE_FLOW, _remove_key(group, picked), (group, [m.email for m in still]), tenant=tenant)
+             if still else "")
+    return _remove_preview_page(request, group, still, gone, token, picked=picked)
+
+
+@router.post("/members/remove-many", response_class=HTMLResponse)
+async def remove_many(request: Request, group: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = app_state(request)
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    retried = str(form.get("retry") or "")   # a retry's preview held its people under the failed job
+    key = retry_key(retried) if retried else _remove_key(group, _picked(form))
+    held, refusal = st.previews.take(_REMOVE_FLOW, str(form.get(TOKEN_FIELD) or ""), key,
+                                     again="click Retry again" if retried else "click Remove selected… again", what="selection")
+    if refusal:
+        return error_partial(request, refusal)
+    group, emails = held
+    refusal = guard.enforce(guard.changes(emails, RiskLevel.LOW, f"Remove from {group}"), form, confirm_step=True,
+                            typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    if refusal:
+        return error_partial(request, refusal)
+    n = len(emails)
+    title = f"Remove {n} from {group}, retried" if retried else f"Remove {n} from {group}"
+    job = start_job(st.jobs, n, kind="group_remove", title=title)
+    job.retry = group   # "Retry the N that failed" removes the failed ones from the same group
+    job.task = asyncio.create_task(bulk.remove_members(job, conn, group, emails))
+    return TEMPLATES.TemplateResponse(request, _REMOVE_RUN, {"job": job, "group": group})
+
+
+@router.post("/members/remove-many/retry", response_class=HTMLResponse)
+async def remove_many_retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLResponse:
+    """The confirm step again for exactly a finished run's failed members, still in the group (plan U5). Writes nothing."""
+    st = app_state(request)
+    tenant = st.tenant_key()
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    done, refusal = retry_of(st.jobs, job, "group_remove")
+    if done is None:
+        return error_partial(request, refusal or "That run is no longer available.")
+    group = str(done.retry)
+    try:
+        still, gone = await _held_members(st.connector, group, {e.lower() for e in done.failed_items})
+    except Exception as exc:  # noqa: BLE001 — a failed read offers nothing
+        return error_partial(request, f"Couldn't read {group}'s members again, so nothing is offered. " + friendly(exc))
+    token = (st.previews.hold(_REMOVE_FLOW, retry_key(done.id), (group, [m.email for m in still]), tenant=tenant)
+             if still else "")
+    return _remove_preview_page(request, group, still, gone, token, retry=done.id)
+
+
+@router.get("/members/remove-many/status", response_class=HTMLResponse)
+async def remove_many_status(request: Request, job: str = "") -> HTMLResponse:
+    found = app_state(request).jobs.get(job)
+    if found is None or found.kind != "group_remove":
+        return error_partial(request, "That run is no longer here.")
+    return TEMPLATES.TemplateResponse(request, _REMOVE_RUN, {"job": found, "group": str(found.retry)})

@@ -55,6 +55,7 @@ PREVIEWS = {
     "/onboard/preview", "/onboard/bulk/preview", "/builder/preview", "/builder/sequence/preview",
     "/groups/members/remove/preview", "/users/groups/remove/preview",
     "/signatures/retry", "/users/bulk/retry",   # a finished run's failures, previewed (plan U5)
+    "/groups/members/remove-many/preview", "/groups/members/remove-many/retry",   # roadmap 3.5: read the group, hold who
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -150,6 +151,9 @@ GATED = {
                                   edit={"email": "carol@example.com"}),
     # Reports' Inactive → suspend (roadmap 3.3): the preview reads the directory again and holds who it found.
     "/reports/inactive/apply": Case({}, "/reports/inactive/preview", preview_data={}, edit={"days": "30"}),
+    # Remove several members (roadmap 3.5): the ticked ones the group still holds, held by the preview.
+    "/groups/members/remove-many": Case({"group": "sales@example.com", "pick": ["alice@example.com", "bob@example.com"]},
+                                        "/groups/members/remove-many/preview", edit={"picks": "alice@example.com"}),
     # And its reminder email (No 2SV, No recovery): the card's form holds the text; Send posts it live with the token.
     "/reports/remind/apply": Case({"key": "no_2sv", "subject": "Turn on 2SV", "message": "Please turn it on."},
                                   "/reports/remind/preview", edit={"message": "Something else."}),
