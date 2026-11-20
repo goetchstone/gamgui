@@ -472,6 +472,19 @@ class GAMCommands:
         return ["delete", "deviceuser", name]
 
     @staticmethod
+    def print_org_units() -> List[str]:
+        # The org unit tree (roadmap 4.2, grammar `print orgs|ous ... fields <OrgUnitFieldNameList>`): plain CSV, no
+        # formatjson. GAM lists every unit below the root; the root `/` is never a row.
+        return ["print", "orgs", "fields", "orgunitpath,name,description"]
+
+    @staticmethod
+    def move_user_to_org_unit(org_unit: str, email: str) -> List[str]:
+        # `update org <OrgUnitItem> move <UserTypeEntity>` (grammar; doUpdateOrgs): GAM resolves the org unit first and
+        # refuses one it can't find before touching anyone, where `update user ... org` would leave that to Google. The
+        # route offers only paths the tree read just returned.
+        return ["update", "org", org_unit, "move", "user", email]
+
+    @staticmethod
     def print_tokens() -> List[str]:
         # Every account's OAuth grants, suspended accounts aside (GAM's default entity): one Directory API call
         # per account. CSV `user,clientId,displayText,anonymous,nativeApp,userKey,scopes`. SwiftGamGui's printTokens.

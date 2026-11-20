@@ -318,6 +318,38 @@ if [ -n "$td_read" ]; then
 fi
 
 # Read commands -> echo the matching fixture.
+# The org unit tree (roadmap 4.2): the fixture users' units and two more. GAM_MOCK_STATE/no_org_units is a tenant with
+# none below the root (the operator's), GAM_MOCK_STATE/org_units_refused a read Google refused.
+org_units() { printf '/Sales\n/Sales/West\n/Staff\n/Students\n'; }
+is_org_unit() { [ "$1" = "/" ] || org_units | grep -qxF -- "$1"; }
+# `gam print orgs fields <OrgUnitFieldNameList>` (doPrintOrgs, read from the vendored build): plain CSV, no formatjson, the
+# root never a row. With no unit below the root `_getOrgUnits` gives [] and GAM still writes the titles; when the read
+# fails it gives None and GAM writes nothing (the error and its code come first).
+if [ "${1:-}" = "print" ] && { [ "${2:-}" = "orgs" ] || [ "${2:-}" = "ous" ]; }; then
+  [ "${3:-}" = "fields" ] && [ $# -eq 4 ] || not_modelled "print orgs without exactly one fields list"
+  [ "$(lower "$4")" = "orgunitpath,name,description" ] || not_modelled "print orgs fields $4"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/org_units_refused" ]; then
+    printf "\nERROR: Not Authorized to access this resource/api\n" 1>&2; exit 12
+  fi
+  echo "orgUnitPath,name,description"
+  if [ -z "${GAM_MOCK_STATE:-}" ] || [ ! -e "$GAM_MOCK_STATE/no_org_units" ]; then
+    for path in $(org_units); do gam_row "$path" "${path##*/}" ""; done
+  fi
+  exit 0
+fi
+
+# `gam update org <OrgUnitItem> move user <email>` (doUpdateOrgs): GAM resolves the unit first and refuses one it can't
+# find before moving anyone; then the user, who must exist. Wording approximate.
+if [ "${1:-}" = "update" ] && { [ "${2:-}" = "org" ] || [ "${2:-}" = "ou" ]; }; then
+  [ -n "${3:-}" ] || missing_arg "OrgUnitItem"
+  { [ "${4:-}" = "move" ] || [ "${4:-}" = "add" ]; } && [ "${5:-}" = "user" ] && [ $# -eq 6 ] \
+    || not_modelled "update org other than move user <email>"
+  is_org_unit "$3" || does_not_exist_exit "Organizational Unit" "$3"
+  known_user "$(lower "$6")" || does_not_exist "User" "$6"
+  echo "User: $6, Organizational Unit: $3, Moved"
+  exit 0
+fi
+
 # `gam print users … formatjson` -> GAM's CSV, a `primaryEmail` and a `JSON` column per user, escaped as GAM
 # escapes it (carol's title and department need it). Every formatjson read below prints GAM's own key columns,
 # read from its source at 7.50.00 (failure log 2026-11-04, the mock's reads and writes).

@@ -299,6 +299,19 @@ class GAMConnector(Connector):
         walk(parse_records(stdout))
         return list(dict.fromkeys(found))
 
+    async def org_units(self) -> List[str]:
+        """Every org unit path, the root `/` first then the rest in order (roadmap 4.2). GAM writes the CSV's titles even
+        with no unit below the root; a run without them never answered, and is Incomplete, never "only /"."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_org_units())
+        if not out.strip():
+            raise Incomplete("GAM answered without the org units, so where people can go can't be told.")
+        paths = {str(r.get("orgUnitPath") or "").strip() for r in parse_records(out)}
+        return ["/"] + sorted(p for p in paths if p.startswith("/") and p != "/")
+
+    async def move_user_to_org_unit(self, email: str, org_unit: str) -> ChangeResult:
+        argv = GAMCommands.move_user_to_org_unit(org_unit, email)
+        return await self._run_write("move_org_unit", email, argv, RiskLevel.LOW, about={"org_unit": org_unit})
+
     async def list_group_members(self, group: str) -> List[GroupMember]:
         argv = GAMCommands.print_group_members(group)
         stdout = await self.runner.run_authenticated(self.domain, argv)

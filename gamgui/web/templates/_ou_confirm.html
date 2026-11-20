@@ -1,0 +1,12 @@
+{#- Move one person to another org unit (roadmap 4.2): the confirm step, from and to as read just now. -#}
+<div class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm">
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">Move {{ email }} from {{ from }} to {{ to }}?</p>
+  <p class="mt-1 text-xs text-brand-blueink">Settings and policies follow the org unit: what applies to them in Gmail, Drive, devices and sign-in changes with the move. You can move them back.</p>
+  <form class="mt-2" hx-post="/users/ou/apply" hx-target="#ou-confirm" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="email" value="{{ email }}" />
+    <input type="hidden" name="org_unit" value="{{ to }}" />
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Move</button>
+  </form>
+</div>

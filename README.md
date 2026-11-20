@@ -86,8 +86,8 @@ and have only run offline: see
   column; 15–50 a page; opening a person and coming back keeps your place) and detail, profile
   editing (title/department and the phone a signature shows — location is shown but not editable) with a bulk "set department"
   tool, mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
-  (grant/revoke access to that person's own calendar), **sign out everywhere**, and a guarded
-  **suspend**.
+  (grant/revoke access to that person's own calendar), **sign out everywhere**, a guarded
+  **suspend**, and a **move to another org unit** (the tree read when asked, from and to previewed).
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
@@ -204,6 +204,7 @@ school domain is the most useful one of all.
 | Set signature | Signatures (bulk), Users, Onboard, Builder | **confirmed** |
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
+| Move to an org unit (`update org <ou> move user <email>`) | Users | not yet: the tenant has no org units, so the check creates one first |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |

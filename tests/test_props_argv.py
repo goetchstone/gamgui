@@ -71,6 +71,7 @@ FREE_TEXT = (
     Spec("create_user", ("email", "first_name", "last_name", "password"), ("org_unit",),
          {"change_password": BOOL, "notify": st.none()}),
     Spec("update_organization", ("email", "title", "department")),
+    Spec("move_user_to_org_unit", ("org_unit", "email")),
     Spec("add_calendar_event", ("calendar", "summary", "start", "end"), ("description", "attendee")),
     Spec("create_tasklist", ("assignee", "title")),
     Spec("create_task", ("assignee", "tasklist_id", "title"), ("notes",)),
