@@ -1,0 +1,40 @@
+{#- Put Back (roadmap 4.1): the confirm step for setting a kept run's old signatures again. Its people and their old
+    signatures are held under a single-use token; the run reads each again first and leaves alone anyone whose signature
+    isn't what that run left there any more. -#}
+{% if error %}
+<div tabindex="-1" data-focus class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ error }}</div>
+{% else %}
+<div class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm">
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">Put back the signatures “{{ run.what }}” replaced: {{ count }} {{ "person" if count == 1 else "people" }}.</p>
+  <p class="mt-1 text-xs text-brand-blueink">Each is read first: anyone whose signature changed since that run is left as it is. What's there now is kept too, so this can be put back as well. An empty old signature goes back as empty.</p>
+  {% if left_out %}
+  <p class="mt-2 text-xs text-amber-800">Left out: {% for email, why in left_out %}{{ email }} ({{ why }}){{ "; " if not loop.last }}{% endfor %}.</p>
+  {% endif %}
+  {% if puts %}
+  <details class="mt-2">
+    <summary class="cursor-pointer text-xs text-brand-blueink hover:text-brand-black">View {{ count }}</summary>
+    <ul class="mt-1 max-h-48 space-y-1 overflow-y-auto">
+      {% for e in puts %}
+      <li class="text-xs"><span class="text-brand-black">{{ e.email }}</span> <span class="text-brand-grayink">— {{ "no signature" if not e.previous else (e.previous | length) ~ " characters" }}</span></li>
+      {% endfor %}
+    </ul>
+    {% if count > puts | length %}<p class="mt-1 text-xs text-brand-grayink">… and {{ count - puts | length }} more.</p>{% endif %}
+  </details>
+  <form class="mt-3 flex flex-wrap items-end gap-2" hx-post="/signatures/putback" hx-target="#sig-putback" hx-swap="innerHTML"
+        hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="run" value="{{ run.id }}" />
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    {% if typed_count %}
+    <label class="block text-sm text-brand-blueink">Type <strong>{{ count }}</strong> to confirm:
+      <input name="confirm_count" inputmode="numeric" autocomplete="off"
+             class="mt-1 block w-24 rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    </label>
+    {% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Put back {{ count }}</button>
+  </form>
+  {% else %}
+  <p class="mt-2 text-sm text-brand-grayink">Nothing in this run can go back as it was.</p>
+  {% endif %}
+</div>
+{% endif %}
