@@ -523,6 +523,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
 
     # Imported here (not at module top) to avoid a cycle: routes import TEMPLATES from this module.
     from .routes.audit import router as audit_router
+    from .routes.files import router as files_router
     from .routes.audit_runs import router as audit_runs_router
     from .routes.builder import router as builder_router
     from .routes.calendars import router as calendars_router
@@ -564,5 +565,6 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(builder_router)
     app.include_router(audit_router)
+    app.include_router(files_router)
     app.include_router(jobs_router)
     return app

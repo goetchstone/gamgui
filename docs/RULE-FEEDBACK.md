@@ -30,6 +30,23 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-21 — Invariant #3's text no longer matches the read export it describes
+- **What happened:** plan F4 (#174) made a read's export to a Google Sheet a curated write run only from its own preview
+  (the read's argv plus `todrive tdtitle <t> tdnobrowser true tdnoemail true`, a single-use token, `guard.enforce` with
+  the confirm step, then `_run_write`), always in the connected admin's own Drive (no `tduser`). #3 still says the export
+  goes "in a named user's Drive, one click", and cites `test_a_read_s_export_is_the_one_write_a_bare_post_can_make`, which
+  #174 renamed to `test_a_read_s_export_runs_only_from_its_preview` (a bare POST can no longer make it). #174 first
+  edited #3's text directly; that was reverted, since sessions don't reword the numbered invariants.
+- **Invariant in force:** #3 (only read-only commands may become runnable automatically) and #2 (the chokepoint).
+- **Why it didn't hold:** not a broken guard: the code moved under the text. Three facts in #3 are now stale: the test
+  it names, "one click" (now: run only from its preview), and "a named user's Drive" (now: the connected admin's Drive,
+  shared with nobody). `tests/test_polish.py::test_runbooks_name_only_tests_that_exist` checks the runbooks' test names,
+  not CLAUDE.md's, so nothing failed on the stale name.
+- **Would a rule have caught it?** only if enforced differently: a tripwire that CLAUDE.md names only tests that exist
+  would have failed #174 until the ledger entry was written.
+- **Enforcement home if changed:** CLAUDE.md wording for #3 (the three facts above); optionally widen
+  `test_runbooks_name_only_tests_that_exist` to CLAUDE.md (tripwire).
+
 ## 2026-11-18 — improve-rules pass: the window held; the overdue #3 wording goes in
 - **What happened:** the observer pass over the window since 2026-11-14: no fix or revert commits on main, the ledger
   entries since then, and the four invariant-10 bugs found on 2026-11-18 by the swallowed-read ratchet (in review as

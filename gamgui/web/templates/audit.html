@@ -10,7 +10,7 @@
       <p class="text-brand-blueink mt-1 text-sm">{{ total }} action{{ "s" if total != 1 else "" }} logged · {{ failures }} failure{{ "s" if failures != 1 else "" }}</p>
     </div>
   </div>
-  <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads what the search and filter show, every page of it.</p>
+  <p class="text-xs text-brand-grayink -mt-2">Read-only — this screen only reads the local audit log; it never calls gam. Export downloads what the search and filter show, every page of it. The Google Sheets the Builder exported, and each incident's evidence, are listed on <a href="/files" class="underline">Files</a>.</p>
 
   <form class="flex flex-wrap items-center gap-3" hx-get="/audit/rows" hx-target="#audit-rows" hx-trigger="keyup changed delay:300ms from:input[name='q'], change from:input[name='failed'], change from:select[name='domain']">
     <input type="search" name="q" aria-label="Filter the audit log" placeholder="Filter by action, target, domain, or error…"

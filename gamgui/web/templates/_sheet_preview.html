@@ -1,0 +1,32 @@
+{# Export to a Google Sheet… (plan F4): what will run, where the Sheet goes, that it is a fresh read, and the scope check.
+   Its Export button posts only the table's id, the preview's token and the confirmation: the server runs what it held. #}
+<div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-4 shadow-sm space-y-2 text-sm">
+  <h3 tabindex="-1" {% if not error %}data-focus{% endif %} class="font-serif text-base text-brand-black">Export {{ cmd.name }} to a Google Sheet</h3>
+  <p class="eyebrow text-brand-grayink">Will run</p>
+  <pre class="whitespace-pre-wrap break-all rounded bg-paper p-2 text-xs text-brand-black">{{ gam }}</pre>
+  <ul class="list-disc space-y-1 pl-5 text-brand-black">
+    <li>A new Sheet named <strong>{{ name }}</strong> in {% if owner %}<strong>{{ owner }}</strong>'s{% else %}the connected admin's{% endif %} own Drive. It is shared with nobody, GAM opens no browser and sends no email.</li>
+    <li>It holds a <strong>fresh read</strong>: GAM runs this read again and uploads what it gets then, so its rows can differ from the {{ "{:,}".format(rows) }} row{{ "" if rows == 1 else "s" }} on screen, and it has every row, not only those a filter shows.</li>
+    {% if cmd.sensitive %}<li class="text-red-700">This read is sensitive: the Sheet will hold what it shows. Its export is audited as a sensitive export.</li>{% endif %}
+  </ul>
+  <div>
+    <p class="eyebrow text-brand-grayink">The service account, acting for the admin</p>
+    <ul class="mt-1 space-y-0.5 text-xs">
+      {% for scope, what, ok in scopes %}
+      <li><span class="{{ 'text-emerald-700' if ok else ('text-red-700' if ok is false else 'text-amber-800') }} font-medium">{{ 'Allowed' if ok else ('Not allowed' if ok is false else 'Not checked') }}</span> · {{ what }} <code class="text-brand-grayink">{{ scope }}</code></li>
+      {% endfor %}
+    </ul>
+    {% if scope_words %}<p class="mt-1 text-xs {{ 'text-red-700' if not token else 'text-amber-800' }}">{{ scope_words }}</p>{% endif %}
+    {% if dwd_link %}<p class="mt-1 text-xs"><a href="{{ dwd_link }}" target="_blank" rel="noopener" class="font-medium text-brand-blueink underline">Authorize it in the Admin console ↗</a> (Domain-Wide Delegation, every scope GamGUI uses), then preview the export again.</p>{% endif %}
+  </div>
+  {% if error %}<p tabindex="-1" data-focus class="text-xs font-medium text-red-700">{{ error }}</p>{% endif %}
+  <div class="flex gap-2 pt-1">
+    {% if token %}
+    <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-blueink transition-colors"
+            hx-post="/builder/sheet/export" hx-vals='{"rid": {{ rid | tojson }}, "preview": {{ token | tojson }}, "confirmed": "1"}'
+            hx-disabled-elt="this" hx-target="#rt-sheet" hx-swap="innerHTML">Export to a new Sheet</button>
+    {% endif %}
+    <button type="button" class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
+            data-action="clear" data-clear="rt-sheet">Cancel</button>
+  </div>
+</div>

@@ -1723,10 +1723,6 @@ video {
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
 }
 
-.bg-white\/70 {
-  background-color: rgb(255 255 255 / 0.7);
-}
-
 .p-2 {
   padding: 0.5rem;
 }
@@ -2334,6 +2330,10 @@ video {
 .placeholder\:text-brand-grayink::placeholder {
   --tw-text-opacity: 1;
   color: rgb(109 110 117 / var(--tw-text-opacity, 1));
+}
+
+.empty\:hidden:empty {
+  display: none;
 }
 
 .hover\:border-brand-blue:hover {

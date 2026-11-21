@@ -134,10 +134,20 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   wording/exit codes are GAM7's conventions written by hand, not a live capture. The sweep's
   `SWEEPBENIGN`/`SWEEPMIXED` triggers emit a multi-line, multi-entity stderr (all tolerable / one real
   failure among them) for the per-line classification. A Builder export's `todrive` tail passes only
-  on a print/report read and only in the shape `GAMCommands.todrive_args` emits — `todrive [tduser
-  <EmailAddress>] [tdtitle <String>]`, each once, in that order, a non-empty `tduser` (GAM's
-  `GetTodriveParameters` reads it with `getString`, which refuses an empty value; `tdtitle` takes
-  `minLen=0`; read from the vendored build). The `info user` handler ignores trailing words
+  on a print/report read and only in the shape `GAMCommands.todrive_args` emits — `todrive [tdtitle
+  <String>] tdnobrowser true tdnoemail true`, in that order (`tdtitle` takes `minLen=0`). Then it does
+  what GAM's `writeCSVToDrive` does (read from GAM's source at 7.52.04, plan F4): the read runs as a
+  call of its own (not logged twice), and its CSV is uploaded, never printed — "Data uploaded to Drive
+  File:" and a `docs.google.com/spreadsheets/d/<id>/edit?usp=drivesdk` link on stdout, the read's exit
+  code kept; a scope listed in `GAM_MOCK_STATE/dwd_missing` refuses it as GAM does ("User: <admin>,
+  Drive API v3 Service/App not enabled", 73, nothing made; or "… Sheets API Service/App not enabled",
+  73, the file made with no link printed), and `check serviceaccount` reads the same list. Each file
+  made is a line in `GAM_MOCK_STATE/drive_files`. `GAM_MOCK_STATE/drive_full` is a refused create ("Drive Folder:
+  root, Create Failed: …", 50, nothing made) and `sheets_fail` a Sheets step refused after the create ("ERROR: User:
+  <admin>, Drive File ID: <id>, Not Created: …", 50, the file made). A read whose account's token is refused
+  (`not_a_user`) prints its titles before exiting 50 where GAM's loop goes on to `writeCSVfile` (`print delegates`,
+  `print forwardingaddresses`), so its export uploads a Sheet of headers only. It once printed the read's CSV and
+  accepted any tail (failure-log 2026-11-21). The `info user` handler ignores trailing words
   (`check serviceaccount` takes only `scope|scopes <APIScopeURLList>` of service-account scopes), so a
   `todrive` after them (or a `show`) is refused before the handler runs.
 - **Seeing what GAM received:** an autouse fixture (`tests/conftest.py` `_gam_argv_log`) points

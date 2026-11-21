@@ -101,7 +101,7 @@ Directory API query string (prefix `email:tok* givenName:tok* …`); `_validate_
   `info user` accept only the argv the app sends, so `print delegates`, `show vacation` and `show signature` reject
   `formatjson` as GAM does (and `print groups member` any option — stricter than the grammar, the
   safe direction). `print domains` (the Builder's External-only lens) accepts only `formatjson [quotechar <c>]` and refuses the flattened no-`formatjson` form rather than answer it in a guessed shape. Every other `formatjson` read does the same and prints GAM's own key columns; `tests/test_mock_gam_shapes.py` holds each (failure log 2026-11-04). A `todrive` tail is accepted only on a print/report read and only in the shape
-  the Builder emits (`todrive [tduser <addr>] [tdtitle <title>]`, see gam-runner). (Its *write* handlers are strict:
+  the Builder emits (`todrive [tdtitle <title>] tdnobrowser true tdnoemail true`, and prints the Sheet's link as GAM does, see gam-runner). (Its *write* handlers are strict:
   a new mutating builder needs a handler that accepts only its grammar shape, or the mock fails it —
   and `tests/test_mock_gam.py` fails until the builder is classified there.)
 - The module docstring flags the mutating sub-syntax (group membership, signature flags) as

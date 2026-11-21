@@ -83,7 +83,7 @@ FREE_TEXT = (
     Spec("set_vacation", ("email", "subject", "message"), ("start", "end"),
          {"html": BOOL, "contacts_only": BOOL, "domain_only": BOOL}),
     Spec("create_group", ("email",), ("name", "description")),
-    Spec("todrive_args", (), ("user", "title")),
+    Spec("todrive_args", (), ("title",)),
     Spec("print_events", ("calendar_id",), ("query", "after", "before")),
     Spec("search_messages", ("email",), ("query",), {"detail": st.sampled_from(G.MESSAGE_DETAIL)}),
     Spec("print_users", (), ("query",)),

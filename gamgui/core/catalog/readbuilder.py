@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from typing import Callable, Dict, List, Tuple
 
+from ..gam.commands import as_keyword
 from .models import CommandSlot, SlotKind
 
 # A literal keyword (`print`, `course-participants`, `3lo`) or an alternation of them
@@ -167,7 +168,7 @@ def make_build(template: List[TemplatePart]) -> Callable[[Dict[str, str]], List[
 
     def build(values: Dict[str, str]) -> List[str]:
         for value in (values.get(k) or "" for k in keys):
-            if value.strip().lower() in WRITE_KEYWORDS:
+            if as_keyword(value) in WRITE_KEYWORDS:   # as GAM reads it: `to_drive` is `todrive`
                 raise ValueError(f"“{value.strip()}” is a GAM option, not a value this read can take.")
         argv: List[str] = []
         for part in template:

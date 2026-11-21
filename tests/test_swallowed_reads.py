@@ -29,6 +29,9 @@ HARMLESS: Dict[Tuple[str, str], str] = {
     ("core/catalog/catalog.py", "_make_reads_buildable"): "an unparseable line stays browse-only: fails closed",
     ("core/connectors/gam_connector.py", "resolve"): "the connector interface's lookup; nothing in the app calls it",
     ("core/connectors/gam_connector.py", "_admin_identity"): "returns why it couldn't confirm the admin, never an answer",
+    ("core/connectors/gam_connector.py", "sheet_owner"): "a blank owner makes the scope check unknown and the export's target "
+                                                          "'(admin Drive)': GAM picks the admin itself",
+    ("core/connectors/gam_connector.py", "sheet_export_scopes"): "None is said as unknown on the preview, never as authorized",
     ("core/connectors/gam_connector.py", "create_onboarding_runbook"): "a failed task is added to `failed` and audited",
     ("core/incident/pull.py", "paged"): "a page that failed marks the pull stopped, which the screen says as capped",
     ("core/incident/pull.py", "complete"): "returns the day it stopped at, which the screen says as unread",

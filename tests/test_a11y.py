@@ -316,6 +316,12 @@ def _screens(p: Page, st):
     p.click("#builder-result button", "Run")
     p.settle("document.querySelector('#builder-result table')")
     yield "builder"
+    p.click("#builder-result button", "Export to a Google Sheet")          # plan F4: its preview, then its result
+    p.settle("document.querySelector('#rt-sheet button[hx-post=\"/builder/sheet/export\"]')")
+    yield "builder/sheet-preview"
+    p.click("#rt-sheet button", "Export to a new Sheet")
+    p.settle("/Open .* ↗|can't be told|Nothing was made/.test(document.querySelector('#rt-sheet').innerText)")
+    yield "builder/sheet-export"
     p.c.js("htmx.ajax('GET', '/builder/command/build.add_delegate', {target: '#cmd-form', swap: 'innerHTML'})")
     p.settle("document.getElementById('slot-email')")
     p.click("#slot-email", action="focus")
@@ -410,6 +416,9 @@ def _screens(p: Page, st):
 
     p.goto("/audit", "!/Loading/.test(document.querySelector('#audit-rows')?.innerText ?? 'Loading')")
     yield "audit"
+
+    p.goto("/files")
+    yield "files"                                  # plan F4: the Sheet exported above, read back from its record
 
     p.goto("/setup")
     yield "setup"
@@ -535,7 +544,7 @@ def test_no_new_serious_or_critical_axe_violations(page, st):
 
 # Screens whose every Tab stop must show a focus indicator (plan A5).
 RING_WALK = ("/", "/users", "/users/detail?email=alice%40example.com", "/groups", "/classroom", "/classroom/import", "/signatures", "/calendars",
-             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/incident/report", "/phishing", "/reports", "/reports/runs", "/audit", "/setup")
+             "/builder", "/onboard", "/lifecycle", "/incident", "/incident/logs", "/incident/kept", "/incident/report", "/phishing", "/reports", "/reports/runs", "/audit", "/files", "/setup")
 
 
 @pytest.mark.a11y

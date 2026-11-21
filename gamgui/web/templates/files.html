@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Files — GamGUI Console{% endblock %}
+{% block content %}
+<div class="space-y-8">
+  <div>
+    <p class="eyebrow text-brand-blue">Files</p>
+    <h1 class="mt-2 font-serif text-3xl text-brand-black tracking-tight">What this app made</h1>
+    <p class="mt-1 text-sm text-brand-blueink">Read-only: this page reads the audit log and the incidents kept on this Mac. It runs no gam and changes nothing in your domain.</p>
+  </div>
+
+  <section aria-labelledby="files-sheets" class="space-y-2">
+    <h2 id="files-sheets" class="font-serif text-xl text-brand-black">Google Sheets</h2>
+    <p class="text-sm text-brand-blueink">Each export to a Google Sheet from the Builder, newest first, read back from its audit record, in the Drive named.</p>
+    {% if sheets.problem %}
+    <p class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">{{ sheets.problem }}</p>
+    {% elif not sheets.made %}
+    <p class="text-sm text-brand-grayink">No export to a Google Sheet is in the audit log{% if not sheets.scanned_all %}'s newest {{ "{:,}".format(scanned) }} records{% endif %}.</p>
+    {% else %}
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white shadow-sm overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-brand-grayink border-b border-brand-gray/30">
+            <th scope="col" class="font-medium px-4 py-2 eyebrow">Time</th>
+            <th scope="col" class="font-medium px-4 py-2 eyebrow">Domain</th>
+            <th scope="col" class="font-medium px-4 py-2 eyebrow">Read</th>
+            <th scope="col" class="font-medium px-4 py-2 eyebrow">Drive</th>
+            <th scope="col" class="font-medium px-4 py-2 eyebrow">Sheet</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sheets.made %}
+          <tr class="border-b border-brand-gray/15 align-top">
+            <td class="px-4 py-2 whitespace-nowrap font-mono text-xs text-brand-blueink">{{ s.when or "—" }}</td>
+            <td class="px-4 py-2 text-brand-blueink">{% if s.domain %}{{ s.domain }}{% else %}<span class="text-brand-grayink">Unknown</span>{% endif %}</td>
+            <td class="px-4 py-2 text-brand-black">{{ names.get(s.command) or "—" }}{% if s.sensitive %} <span class="text-[11px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-red-100 text-red-700">sensitive</span>{% endif %}
+              {% if s.argv %}<code class="mt-0.5 block break-all text-xs text-brand-grayink">{{ s.gam }}</code>{% endif %}</td>
+            <td class="px-4 py-2 text-brand-blueink">{{ s.owner or "—" }}</td>
+            <td class="px-4 py-2">
+              {% if s.outcome.url %}
+              <a href="{{ s.outcome.url }}" target="_blank" rel="noopener" class="font-medium text-brand-blueink underline">Open ↗</a>
+              {% endif %}
+              {% if s.outcome.made != "yes" or not s.outcome.url %}<span class="block text-xs {{ 'text-amber-800' if s.outcome.made != 'no' else 'text-brand-grayink' }}">{{ s.outcome.said }}</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if sheets.more %}<p class="text-xs text-brand-grayink">The newest {{ shown }} are listed. Search the <a href="/audit?q=export" class="underline">audit log</a> for the rest.</p>
+    {% elif not sheets.scanned_all %}<p class="text-xs text-brand-grayink">From the audit log's newest {{ "{:,}".format(scanned) }} records. Search the <a href="/audit?q=export" class="underline">audit log</a> for older ones.</p>{% endif %}
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="files-evidence" class="space-y-2">
+    <h2 id="files-evidence" class="font-serif text-xl text-brand-black">Incident evidence</h2>
+    <p class="text-sm text-brand-blueink">The reads of the logs kept with each incident on this Mac, a folder each. They name people and addresses: they stay here, readable only by you.</p>
+    {% if incidents_problem %}
+    <p class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">{{ incidents_problem }} What evidence is kept can't be told.</p>
+    {% elif not evidence %}
+    <p class="text-sm text-brand-grayink">No incident kept here has saved evidence.</p>
+    {% else %}
+    <ul class="space-y-2">
+      {% for e in evidence %}
+      <li class="rounded-xl border border-brand-gray/40 bg-brand-white px-4 py-2.5 text-sm copy-wrap">
+        {% if e.incident %}<span class="font-medium text-brand-black">{{ e.incident }}</span>{% else %}<span class="font-medium text-amber-900">An incident whose record couldn't be read</span>{% endif %}
+        <span class="text-brand-grayink"> · {{ e.domain or "domain unknown" }}{% if e.opened %} · opened {{ e.opened.strftime("%Y-%m-%d") }}{% endif %} ·
+          {% if e.reads is none %}<span class="text-amber-800">its evidence couldn't be read</span>{% else %}{{ e.reads }} saved read{{ "" if e.reads == 1 else "s" }}{% endif %}</span>
+        <code class="mt-1 block break-all text-xs text-brand-blueink">{{ e.path }}</code>
+        <button type="button" class="mt-1 rounded-lg border border-brand-gray/50 px-2.5 py-1 text-xs text-brand-blueink hover:bg-paper transition-colors" data-action="copy" aria-label="Copy path of the evidence folder for {{ e.incident or e.id }}">Copy path</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section aria-labelledby="files-saved" class="space-y-2">
+    <h2 id="files-saved" class="font-serif text-xl text-brand-black">Files you downloaded</h2>
+    <p class="text-sm text-brand-blueink">GamGUI keeps no list of them. A CSV or report you download is handed to this window, which saves it where its downloads go (your Downloads folder, unless you changed it); the app never learns where.</p>
+  </section>
+</div>
+{% endblock %}
