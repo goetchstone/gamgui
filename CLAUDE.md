@@ -27,8 +27,8 @@ Each of these exists because something went wrong. Several have tests guarding t
    auto-promoted by `core/catalog/readbuilder.py` **because they are confidently `READ_ONLY` and not
    flagged uncertain**. Everything else is inert, syntax display only. Adding write coverage is a
    deliberate act of curation. A runnable read makes one write: its export to a *new* Google Sheet
-   (`todrive`) in the connected admin's Drive, run only from its preview and audited through `_run_write`
-   (`test_a_read_s_export_runs_only_from_its_preview`). Which curated writes skip the confirm
+   (`todrive`) in a named user's Drive, one click, audited through `_run_write`
+   (`test_a_read_s_export_is_the_one_write_a_bare_post_can_make`). Which curated writes skip the confirm
    step is `core/guard.py`'s stated policy. (Two agent-facing docs once claimed only the 26 curated
    commands run — that was wrong, and it made a reviewer flag correct code.)
 4. **Secrets live in the Keychain.** They are materialized into a `0700` dir (`0600` files) for one
