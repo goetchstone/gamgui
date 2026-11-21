@@ -262,6 +262,7 @@ _SEATS_KIND = "suspended_licenses"
 _SEATS_KEY = ("suspended",)
 _SEATS_PARTIAL = "_suspended_licenses.html"
 _SEATS_RUN = "_suspended_licenses_run.html"
+_SEATS_SHOWN = 200   # seats the preview lists; the count is the whole of it (bounded page)
 
 
 def _seat_check(held):
@@ -290,7 +291,7 @@ async def suspended_licenses_preview(request: Request) -> HTMLResponse:
     changes, typed_address = _seat_check(held)
     decision = guard.evaluate(changes, typed_count_above=guard.COUNT_CONFIRM_ABOVE, typed_address=typed_address)
     return TEMPLATES.TemplateResponse(request, _SEATS_PARTIAL, {
-        "held": held[:_SUSPEND_SHOWN], "count": len(held), "people": len({email for email, _ in held}),
+        "held": held[:_SEATS_SHOWN], "count": len(held), "people": len({email for email, _ in held}),
         "unnameable": len(found) - len(held), "typed_address": typed_address, "decision": decision, "token": token,
         "might_lose": licenses.MIGHT_LOSE_DATA, "wait": licenses.REASSIGN_WAIT, "source": licenses.SOURCE,
         "only_read": licenses.ONLY_SEATS_READ})

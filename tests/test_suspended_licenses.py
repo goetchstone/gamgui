@@ -123,6 +123,7 @@ def test_apply_removes_exactly_the_held_seats_through_the_chokepoint(client, gam
     _, token, _ = _preview(client)
     r, job = _apply(client, token, confirm_email=BOB)
     assert job is not None and (job.applied, job.failed_total) == (2, 0)
+    assert 'hx-target="this"' in r.text     # the poll swaps itself: it runs on the job's own page, where the card isn't
     assert gam_writes(gam_calls()) == [GAMCommands.remove_license(BOB, *VAULT), GAMCommands.remove_license(BOB, *STANDARD)]
     audit = [(e["action"], e["target"], e["ok"]) for e in client.app.state.gamgui.connector.audit.tail()]
     assert audit.count(("remove_license", BOB, True)) == 2

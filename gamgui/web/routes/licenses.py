@@ -19,7 +19,6 @@ from fastapi.responses import HTMLResponse
 
 from ...core import guard, licenses
 from ...core.connectors.base import RiskLevel
-from ...core.gam.commands import license_sku
 from ...core.gam.models import LicenseSeat
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
@@ -67,10 +66,7 @@ def _refusal(action: str, addr: str, seats, product_id: str, sku_id: str, new_sk
     """``(refusal, seat, new)`` for the change the form names, judged on the seats just read, and refused here, before
     anything is held, when GAM can't be given its IDs as one seat (`license_sku`): the write would raise at the click."""
     refusal, seat, new = _judged(action, addr, seats, product_id, sku_id, new_sku_id)
-    try:
-        for s in (x for x in (seat, new) if x is not None):
-            license_sku(s.product_id, s.sku_id)
-    except ValueError:
+    if not all(licenses.nameable(x) for x in (seat, new) if x is not None):
         return ("GAM can't be given this license's IDs as one seat (they hold a character GAM splits on), so it can't be "
                 "changed here: use the Admin console."), None, None
     return refusal, seat, new
