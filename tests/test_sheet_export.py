@@ -167,6 +167,13 @@ def test_a_failed_export_says_whether_a_file_was_made(error, made):
         assert "can't be told" in shown.said or "probably" in shown.said
 
 
+def test_a_plain_csv_file_and_an_old_record_are_said_as_they_are():
+    big = sheet_export.outcome(True, "https://drive.google.com/file/d/abc/view?usp=drivesdk", "", ADMIN)
+    assert "plain CSV file" in big.said and "Google Sheet in" not in big.said
+    old = sheet_export.outcome(True, "", "", "boss@example.com")    # a record from before the link was kept
+    assert "No link was kept" in old.said and "shared with nobody" not in old.said
+
+
 def test_a_link_printed_before_a_failed_exit_is_a_made_file():
     shown = sheet_export.outcome(False, "https://docs.google.com/spreadsheets/d/a", "GAM failed (not_found, exit=56)", ADMIN)
     assert shown.made == "yes" and shown.url and "may not hold every row" in shown.said

@@ -23,8 +23,8 @@ async def page(request: Request) -> HTMLResponse:
     sheets = await asyncio.to_thread(files.sheets_made, _audit_path(request))
     store, problem = incident_store(st)
     evidence = await asyncio.to_thread(files.evidence_folders, store) if store is not None else []
-    if st.catalog is None:
-        st.catalog = load_catalog()
+    if st.catalog is None:   # parsed off the event loop: a first visit shouldn't stall every other request
+        st.catalog = await asyncio.to_thread(load_catalog)
     names = {s.command: (getattr(st.catalog.by_id(s.command), "name", "") or s.command) for s in sheets.made}
     return TEMPLATES.TemplateResponse(request, "files.html", {
         "sheets": sheets, "names": names, "shown": files.SHEETS_SHOWN, "scanned": files.RECORDS_SCANNED,

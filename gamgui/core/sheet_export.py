@@ -119,8 +119,12 @@ def outcome(ok: bool, url: str, error: str, owner: str) -> Outcome:
     """Read an export's result: ``ok`` and ``error`` are the write's (``ChangeResult.ok`` and ``.detail``, GAM's own
     line), ``url`` the link its record kept. Only a printed link is a made file; a failure that can't be placed is unknown."""
     who = owner or "the admin"
+    if ok and url and "/spreadsheets/" not in url:   # too large for a Sheet: GAM uploaded the CSV as a plain file
+        return Outcome(url, "yes", f"Exported to a new file in {who}'s Drive, shared with nobody: a plain CSV file, "
+                       "since the result was too large for a Google Sheet.")
     if ok:
-        return Outcome(url, "yes", f"Exported to a new Google Sheet in {who}'s Drive, shared with nobody.")
+        return Outcome(url, "yes", f"Exported to a new Google Sheet in {who}'s Drive, shared with nobody." if url else
+                       f"Exported to {who}'s Drive. No link was kept: the export was made before its link was recorded.")
     if url:   # printed, then a warning exit the read itself set: the file is there, its rows maybe short
         return Outcome(url, "yes", f"GAM made the Sheet in {who}'s Drive, then reported a problem, so it may not hold "
                        "every row.", "Check it against the table, or export again.")
