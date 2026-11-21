@@ -125,7 +125,10 @@ def test_each_step_is_one_print_read_from_its_builder():
     assert runs.step_argv(runs.LICENSES) == ["print", "licenses"]
     assert runs.step_argv(runs.DIRECTORY) == ["print", "users", "fields", ",".join(CACHE_FIELDS), "formatjson"]
     assert [runs.step_command(r, s) for r in runs.RUNS for s in r.steps] == [
-        "inactive_users/directory", "license_usage/licenses", "license_usage/directory"]
+        "inactive_users/directory", "shared_drive_permissions/drives", "shared_drive_permissions/drive_acls",
+        "shared_drive_permissions/domains", "shared_drive_permissions/directory", "license_usage/licenses", "license_usage/directory",
+        "classroom_courses/courses", "classroom_courses/directory", "admin_tokens/admins", "admin_tokens/directory",
+        "admin_tokens/admin_tokens"]
 
 
 # --- the connector's recorded read (F1) -----------------------------------------------------------------------------------
@@ -148,7 +151,7 @@ def test_an_audit_read_refuses_anything_but_a_print_read_before_gam_runs(client,
 def test_a_read_without_its_table_raises_and_is_recorded_as_failed(client, gam_state):  # noqa: F811
     (gam_state / "licenses_silent").touch()
     conn = client.app.state.gamgui.connector
-    assert client.portal.call(conn.audit_read, "license_usage/licenses", ["print", "licenses"], "userId") == []
+    assert client.portal.call(conn.audit_read, "license_usage/licenses", ["print", "licenses"], "userId") == ([], ())
     with pytest.raises(Incomplete):   # the titles are there, but not the column the step joins on
         client.portal.call(conn.audit_read, "license_usage/licenses", ["print", "licenses"], "primaryEmail")
     ok, failed = _records(client)[-2:]
@@ -292,8 +295,8 @@ def test_stop_between_steps_leaves_the_rest_not_run_and_unknown(client, gam_call
     conn = st.connector
     real = conn.audit_read
 
-    async def then_stop(command, argv, key):
-        rows = await real(command, argv, key)
+    async def then_stop(command, argv, key, **kw):
+        rows = await real(command, argv, key, **kw)
         st.jobs[st.audit_run_jobs["license_usage"]].cancel_requested = True     # Stop pressed during the first step
         return rows
     conn.audit_read = then_stop
@@ -312,8 +315,8 @@ def test_a_run_that_ends_after_a_switch_is_not_kept(client):  # noqa: F811
     conn = st.connector
     real = conn.audit_read
 
-    async def then_switch(command, argv, key):
-        rows = await real(command, argv, key)
+    async def then_switch(command, argv, key, **kw):
+        rows = await real(command, argv, key, **kw)
         st.connector = object()    # another tenant's connector took over mid-run
         return rows
     conn.audit_read = then_switch
@@ -326,9 +329,9 @@ def test_a_second_press_joins_the_running_run(client):  # noqa: F811
     gate = asyncio.Event()
     real = st.connector.audit_read
 
-    async def held(command, argv, key):
+    async def held(command, argv, key, **kw):
         await gate.wait()
-        return await real(command, argv, key)
+        return await real(command, argv, key, **kw)
     st.connector.audit_read = held
     first = client.post("/reports/runs/start", data={"run": "license_usage"})
     job = st.jobs[st.audit_run_jobs["license_usage"]]

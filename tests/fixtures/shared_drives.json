@@ -1,0 +1,4 @@
+{"createdTime": "2024-03-01T09:00:00Z", "hidden": false, "id": "0AFINANCEuk9PVA", "kind": "drive#drive", "name": "Finance", "orgUnitId": "03ph8a2z1", "restrictions": {"domainUsersOnly": false}}
+{"createdTime": "2025-06-11T09:00:00Z", "hidden": false, "id": "0ALEGALuk9PVA", "kind": "drive#drive", "name": "Legal hold", "orgUnitId": "03ph8a2z1", "restrictions": {"domainUsersOnly": true}}
+{"createdTime": "2022-01-15T09:00:00Z", "hidden": false, "id": "0AOLDuk9PVA", "kind": "drive#drive", "name": "Old projects", "orgUnitId": "03ph8a2z1", "restrictions": {"domainUsersOnly": false}}
+{"createdTime": "2026-02-02T09:00:00Z", "hidden": true, "id": "0AUNUSEDuk9PVA", "kind": "drive#drive", "name": "Unused", "orgUnitId": "03ph8a2z1", "restrictions": {"domainUsersOnly": false}}

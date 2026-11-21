@@ -531,6 +531,41 @@ class GAMCommands:
         return ["print", "licenses"]
 
     @staticmethod
+    def print_tokens_of(users: Sequence[str]) -> List[str]:
+        # Audit runs' admin token review (F3): these accounts' grants, suspended ones included (grammar `gam print tokens ...
+        # [<UserTypeEntity>]`; `users <list>` is convertEntityToList, no suspension filter; _printShowTokens at the 7.52.04 tag).
+        # The list is one element, comma-joined, each one address. CSV as print_tokens. An account Google doesn't know is
+        # entityUnknownWarning (56 in the domain, 73 outside it) and the rest are read; a refused token is 12.
+        if isinstance(users, str) or not users:
+            raise ValueError("a list of accounts is needed")
+        bad = [u for u in users if not is_one_address(u)]
+        if bad:
+            raise ValueError(f"Not one address: {bad[0]!r}")
+        return ["print", "tokens", "users", ",".join(dict.fromkeys(u.strip().lower() for u in users))]
+
+    @staticmethod
+    def print_all_admins() -> List[str]:
+        # Every admin role assignment, a group's expanded to its member users (grammar `gam print admins ... [recursive]`;
+        # doPrintShowAdmins at the 7.52.04 tag). Not `types user`: with `recursive` it drops a group's row, members and all,
+        # before expanding it. CSV PRINT_ADMIN_TITLES; an expanded row has assignedToUser and assignedToGroup both set.
+        return ["print", "admins", "recursive"]
+
+    @staticmethod
+    def print_shared_drives() -> List[str]:
+        # Every shared drive in the domain, as the admin (doPrintShowSharedDrives: admin access). `noorgunits`: no org-unit
+        # path lookup, one Directory read fewer. CSV `User,id,name,JSON`. No drive at all is exit 60 with the titles: GAM's none.
+        return ["print", "shareddrives", "noorgunits", "formatjson"]
+
+    @staticmethod
+    def print_shared_drive_acls() -> List[str]:
+        # Every shared drive's permissions, one row each (doPrintShowSharedDriveACLs, admin access): CSV `User,id,name,
+        # createdTime,JSON`, JSON {"permission": {...}}; a drive with none is one row with JSON {} (shownopermissionsdrives).
+        # GAM drops a drive whose permissions it can't read without a word or a code, so the run reads print_shared_drives too.
+        # The grammar's `gam print shareddriveacls` line omits shownopermissionsdrives (its `<UserTypeEntity>` form has it);
+        # printShowSharedDriveACLs, which both forms run, takes it.
+        return ["print", "shareddriveacls", "oneitemperrow", "shownopermissionsdrives", "true", "formatjson"]
+
+    @staticmethod
     def all_users_print_forward() -> List[str]:
         # Reports' mail review (roadmap 3.2): every active account's forwarding that is on (grammar `<UserTypeEntity> print
         # forward [enabledonly]`). No formatjson: CSV `User,forwardEnabled,forwardTo,disposition`. One account at a time,
@@ -1037,7 +1072,8 @@ class GAMCommands:
     # ENTITY_DOES_NOT_EXIST_RC (56). Read from the 7.51.00 build's doPrintCourses, doPrintCourseParticipants and _getCoursesInfo.
     @staticmethod
     def print_courses(teacher: str = "", student: str = "", states: Sequence[str] = (),
-                      course_ids: Sequence[str] = (), owner_email: bool = True, aliases: bool = False) -> List[str]:
+                      course_ids: Sequence[str] = (), owner_email: bool = True, aliases: bool = False,
+                      counts: bool = False) -> List[str]:
         """Classes, read only: by ID, or every class a teacher or a student is in, or every class, in the given states. CSV
         `id,JSON` (grammar 3328). `owner_email` has GAM look up each distinct owner's address, one Directory read per owner:
         off for a domain-wide read, whose owners the directory cache already names by `ownerId`."""
@@ -1062,7 +1098,11 @@ class GAMCommands:
                 raise ValueError(f"Not a Classroom state: {', '.join(bad)}")
             argv += ["states", ",".join(dict.fromkeys(states))]
         # `aliases` adds a `JSON-aliases` column (a JSON list) after `JSON`: one Classroom call per class, in GAM's run.
+        # `counts` (audit runs, F3): `show all countsonly` adds each class's teacher and student counts to its JSON (`teachers`,
+        # `students`), one Classroom list call each per class. GAM counts a roster Google won't return as 0, without a word
+        # (_getCourseAliasesMembers passes notFound and serviceNotAvailable), so a 0 is never "an empty class".
         return (argv + (["owneremail"] if owner_email else []) + (["aliases"] if aliases else [])
+                + (["show", "all", "countsonly"] if counts else [])
                 + ["fields", COURSE_FIELDS, "formatjson"])
 
     @staticmethod

@@ -47,6 +47,9 @@ guard; only its read side is adapted here.
 - **Never the join code.** `COURSE_FIELDS` leaves out `enrollmentcode`, which lets anyone with it join the class.
 - **`owneremail` costs a Directory read per owner.** `print_courses(owner_email=False)` leaves it off; the course index
   (C1.3) does, and names owners from the directory cache by `ownerId`.
+- **Counts (`print_courses(counts=True)`, `show all countsonly`, read at the 7.52.04 tag)** add `teachers` and `students` to
+  each class's JSON, one Classroom list call each per class. GAM counts a roster Google won't return as 0 without a word, so
+  a 0 is never an empty class. Used by Reports' Classroom audit run (reports runbook, "Audit runs").
 
 ## The screen (C1.3)
 - **One search box.** Text searches the cached index (name, section, room), paged server-side (`PAGE_SIZE`). An address

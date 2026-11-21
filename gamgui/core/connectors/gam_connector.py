@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -92,6 +93,9 @@ READ_ORIGIN_BUILDER = "builder"
 READ_ORIGIN_SEQUENCE = "sequence"
 READ_ORIGINS = (READ_ORIGIN_BUILDER, READ_ORIGIN_SEQUENCE)
 READ_ORIGIN_AUDIT_RUN = "audit_run"
+# An account GAM couldn't read and carried on past (entityUnknownWarning: "User: <u>, Does not exist (i/N)", or "Service not
+# applicable" outside the domain), as `audit_read` names it.
+_UNREAD_ACCOUNT = re.compile(r"^\s*User: ([^,\s]+@[^,\s]+), (?:Does not exist|Service not applicable)", re.M)
 
 # The per-user lines the offboarding calendar sweep expects (remove_from_all_calendars): a user who
 # never shared with the leaver, a user without Calendar, the leaver's own calendar. Nothing else.
@@ -1002,29 +1006,40 @@ class GAMConnector(Connector):
         self.audit.record(action, target=target, argv=argv, ok=True, extra=extra, domain=self.domain)
         return out
 
-    async def audit_read(self, command: str, argv: List[str], key_column: str) -> List[Dict[str, Any]]:
-        """One audit-run step's read (plan F3), its rows returned. Recorded as a ``read`` of origin ``audit_run`` holding
-        ``command`` (the run and step), the domain and ``rows``, or ``error`` when it failed or was cancelled: never the
-        output. Only a ``print`` read without ``todrive`` runs here, so this can't become a write path. Any exit but 0
-        raises, and so does output without the step's table (titles naming ``key_column``): GAM writes the titles even
-        with no row, so a missing table is never "none" (invariant 10). Parsed off the event loop: a large domain's
-        directory is tens of thousands of rows."""
+    async def audit_read(self, command: str, argv: List[str], key_column: str, ok_rcs: Sequence[int] = (0,),
+                         partial_rcs: Sequence[int] = ()) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+        """One audit-run step's read (plan F3): its rows, and the accounts GAM named as unread. Recorded as a ``read`` of origin
+        ``audit_run`` holding ``command`` (the run and step), the domain and ``rows`` (and ``partial`` when GAM skipped
+        accounts), or ``error`` when it failed or was cancelled: never the output. Only a ``print`` read without ``todrive``
+        runs here, so this can't become a write path. An exit in ``ok_rcs`` is the whole answer (60 is GAM's "none"); one in
+        ``partial_rcs`` keeps the rows and names who wasn't read (entityUnknownWarning's "User: <u>, Does not exist", "…,
+        Service not applicable"); any other raises, and so does output without the step's table (titles naming
+        ``key_column``): GAM writes the titles even with no row, so a missing table is never "none" (invariant 10). Parsed
+        off the event loop: a large domain's directory is tens of thousands of rows."""
         # GAM reads an argument lowercased with its underscores dropped (getArgument), so `to_drive` and `ToDrive` are todrive.
         if argv[:1] != ["print"] or any(str(a).lower().replace("_", "") == "todrive" for a in argv):
             raise ValueError("an audit run reads with a print command, and never exports")
         extra: Dict[str, Any] = {"command": command, "origin": READ_ORIGIN_AUDIT_RUN}
         try:
-            out = await self.runner.run_authenticated(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
-            text = (out or "").strip()
+            res = await self.runner.run_any_exit(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
+            if res.returncode not in ok_rcs and res.returncode not in partial_rcs:
+                raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+            text = (res.stdout or "").strip()
             if key_column not in [c.strip() for c in (text.splitlines()[0] if text else "").split(",")]:
                 raise Incomplete(f"GAM ended without writing the {key_column} table")
-            records = await asyncio.to_thread(parse_records, out)
+            unread: Tuple[str, ...] = ()
+            if res.returncode in partial_rcs:
+                unread = tuple(dict.fromkeys(m.group(1).lower() for m in _UNREAD_ACCOUNT.finditer(res.stderr or "")))
+                if not unread:   # a warning exit that names nobody: who wasn't read can't be told, so none of it stands
+                    raise Incomplete(f"GAM exited {res.returncode} without naming the account it couldn't read")
+                extra["partial"] = True
+            records = await asyncio.to_thread(parse_records, res.stdout)
         except BaseException as exc:   # a cancelled read is recorded too, then the cancel finishes
             error = INTERRUPTED if isinstance(exc, asyncio.CancelledError) else str(exc)
             self.audit.record("read", target="", argv=argv, ok=False, extra={**extra, "error": error}, domain=self.domain)
             raise
         self.audit.record("read", target="", argv=argv, ok=True, extra={**extra, "rows": len(records)}, domain=self.domain)
-        return records
+        return records, unread
 
     def audit_sensitive_csv(self, command: str, argv: List[str], target: str, rows: int) -> None:
         """The Builder's CSV download of a sensitive read's result: the secret leaves the app as a file,

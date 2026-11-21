@@ -268,10 +268,20 @@ Ready-made reads of the whole domain, each a fixed list of steps. A run changes 
 - **License usage:** seats per license, seats held by suspended accounts, and seats on an address the directory didn't
   list. GAM passes over a product Google won't let it read without saying so, so compare the counts with the Admin
   console (Billing → Licenses) the first time.
+- **Shared drive permissions:** every shared drive's members (users and groups: a drive has no other kind), members from
+  outside the domain first; drives no active organizer looks after (each organizer suspended, gone from the directory, or
+  being offboarded in GamGUI since it opened); and drives GAM listed but whose members it didn't read, which are unknown.
+  It reads each drive's members, not how the files inside are shared, so it doesn't find a file shared with anyone with
+  the link.
+- **Classroom:** every class with its owner, state and counts, classes owned by a suspended account, classes whose owner
+  the directory doesn't list, and active or provisioned classes not updated in a year. Read only; a 0 count may be a
+  roster GAM couldn't read. Not yet checked on a school domain.
+- **Admin token review:** every admin, suspended ones included, and the apps each has given access, AI by name and broad
+  access flagged. To take an app away, use **Incident** for that admin.
 
 A step that couldn't be read, or that a Stop kept from running, says so, and so does every table that needs it:
 unknown, never "none". Each step is recorded in the **Audit** log with how many rows it read, never what it read. The
-tables stay until you quit or connect to another domain. Neither run has been checked on a real domain yet.
+tables stay until you quit or connect to another domain. No run has been checked on a real domain yet.
 
 ## See where an account is signed in
 
