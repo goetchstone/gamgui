@@ -59,6 +59,7 @@ SCREENS = {
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "Run an audit": ["reports.html", "audit_runs.html", "_audit_run.html", "_job_live.html", "_inactive_suspend.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],
+    "Change a person's licenses": ["user_detail.html", "_license_card.html", "_license_confirm.html"],
     "Respond to an incident": ["_incident_nav.html", "_incident_logs.html", "_incident_reading.html"],
     "Make the incident's report": ["_incident_nav.html", "_incident_report.html", "_incident_report_list.html", "_incident_report_export.html"],
     "See what was left on the account": ["incident.html", "_incident_nav.html", "_incident_check.html"],
