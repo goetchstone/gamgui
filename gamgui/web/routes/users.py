@@ -1059,3 +1059,162 @@ async def ou_apply(request: Request, email: Annotated[str, Form()] = "", org_uni
         return write_failed(request, f"Couldn't move {email} to {to}.", result)
     st.patch_user(email, org_unit_path=to)
     return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": f"Moved {email} from {was} to {to}."})
+
+
+# --- org unit: move many (roadmap 4.2, the bulk department's mechanism, 2.1) ----------------------------------------------
+# Pick a unit from the tree, then a group or pasted addresses. The preview reads the tree again (a unit it doesn't hold is
+# refused, as GAM would) and the group's members if one was picked, matches them to the directory, suspended accounts
+# included (a leaver moved to a holding unit is the common case), and holds the unit and the people under a single-use
+# token. Apply takes exactly those, with the typed count above the guard's limit, as a stoppable job with a retry.
+_OU_MANY_FLOW = "move_org_unit_many"
+_OU_MANY_KIND = "org_unit_move"
+_OU_MANY_PAGE = "bulk_ou.html"
+_OU_MANY_PREVIEW = "_bulk_ou_preview.html"
+_OU_MANY_RUN = "_bulk_ou_run.html"
+
+
+def _ou_many_key(org_unit: str, group: str, emails_raw: str) -> tuple:
+    return (org_unit.strip(), group.strip().lower(), tuple(sorted(_pasted(emails_raw))))
+
+
+def _ou_many_page(request: Request, org_unit: str, people, missing, token: str, retry: str = "", st=None,
+                  nested=(), everyone: bool = False) -> HTMLResponse:
+    decision = guard.evaluate(guard.changes([u.primary_email for u in people], RiskLevel.LOW, f"Move to {org_unit}"),
+                              typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    ctx = {"org_unit": org_unit, "people": people[:200], "count": len(people), "missing": missing[:50],
+           "missing_n": len(missing), "token": token, "retry": retry, "decision": decision, "nested": nested,
+           "everyone": everyone}
+    if st is not None:
+        ctx.update(as_of(st.user_cache))
+    return TEMPLATES.TemplateResponse(request, _OU_MANY_PREVIEW, ctx)
+
+
+async def _ou_many_people(st, wanted: set):
+    """The directory's accounts among ``wanted`` (suspended ones too), and the addresses it has no account for."""
+    by_email = {u.primary_email.lower(): u for u in await st.users()}
+    return [by_email[e] for e in sorted(wanted) if e in by_email], sorted(wanted - set(by_email))
+
+
+async def _run_ou_many(job, st, conn, emails, org_unit: str) -> None:
+    """The job's task: ``bulk.move_users``, each move patched into the cached directory as it lands. A failed write's
+    outcome isn't known (a timeout may still have applied it), so any failure, or the loop dying, drops the whole list."""
+    clean = False
+    try:
+        await bulk.move_users(job, conn, emails, org_unit, on_set=lambda e: st.patch_user(e, org_unit_path=org_unit))
+        clean = not job.failed_total
+    finally:
+        if not clean:
+            st.invalidate_users()
+
+
+@router.get("/bulk-ou", response_class=HTMLResponse)
+async def ou_many_page(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return TEMPLATES.TemplateResponse(request, _OU_MANY_PAGE, {"connected": False})
+    try:
+        paths = await st.connector.org_units()
+        groups = [g.email for g in await st.connector.list_groups()]
+    except Exception as exc:  # noqa: BLE001 — unread: no unit offered, never "only /"
+        return TEMPLATES.TemplateResponse(request, _OU_MANY_PAGE, {"connected": True, "paths": [], "groups": [],
+                                                                   "error": "Couldn't read the org units or the groups. "
+                                                                   + unread_why(exc, _TRY_AGAIN)})
+    return TEMPLATES.TemplateResponse(request, _OU_MANY_PAGE, {"connected": True, "paths": paths, "groups": groups})
+
+
+@router.post("/bulk-ou/preview", response_class=HTMLResponse)
+async def ou_many_preview(request: Request, org_unit: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "",
+                          emails: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the reads: what the preview is bound to (web/previews.py)
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    org_unit, group = org_unit.strip(), group.strip()
+    if not org_unit:
+        return error_partial(request, "Pick the org unit to move them to first.")
+    if bool(group) == bool(_pasted(emails)):
+        return error_partial(request, "Pick a group or paste the addresses to move, not both." if group
+                             else "Pick a group or paste the addresses to move first.")
+    nested, everyone = [], False
+    try:
+        paths = await conn.org_units()
+        if org_unit not in paths:
+            return error_partial(request, f"“{org_unit}” isn't an org unit here: pick one from the list.")
+        if group:
+            members = await conn.list_group_members(group)
+            if not members:
+                return error_partial(request, f"{group} has no members, read just now: nobody to move.")
+            # A person is a USER row. A nested group and the whole-organization member (CUSTOMER, no address) are not
+            # expanded, and the preview says so: never read as "no account", never dropped without a word.
+            wanted = {m.email.lower() for m in members if m.member_type == "USER" and m.email}
+            nested = sorted({m.email.lower() for m in members if m.member_type == "GROUP" and m.email})
+            everyone = any(m.member_type not in ("USER", "GROUP") or not m.email for m in members)
+        else:
+            wanted = _pasted(emails)
+        people, missing = await _ou_many_people(st, wanted)
+    except Exception as exc:  # noqa: BLE001 — a failed read offers nothing, never "nobody to move"
+        return error_partial(request, "Couldn't read the org units, the group or the directory, so nothing is offered. "
+                             + unread_why(exc, _TRY_AGAIN), gam_detail(exc))
+    token = (st.previews.hold(_OU_MANY_FLOW, _ou_many_key(org_unit, group, emails),
+                              (org_unit, [u.primary_email for u in people]), tenant=tenant) if people else "")
+    return _ou_many_page(request, org_unit, people, missing, token, st=st, nested=nested, everyone=everyone)
+
+
+@router.post("/bulk-ou/apply", response_class=HTMLResponse)
+async def ou_many_apply(request: Request, org_unit: Annotated[str, Form()] = "", group: Annotated[str, Form()] = "",
+                        emails: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    retried = str(form.get("retry") or "")   # a retry's preview held its people under the failed job
+    key = retry_key(retried) if retried else _ou_many_key(org_unit, group, emails)
+    held, refusal = st.previews.take(_OU_MANY_FLOW, str(form.get(TOKEN_FIELD) or ""), key,
+                                     again="click Retry again" if retried else "click Preview again")
+    if refusal:
+        return error_partial(request, refusal)
+    to, held_emails = held
+    refusal = guard.enforce(guard.changes(held_emails, RiskLevel.LOW, f"Move to {to}"), form, confirm_step=True,
+                            typed_count_above=guard.COUNT_CONFIRM_ABOVE)
+    if refusal:
+        return error_partial(request, refusal)
+    n = len(held_emails)
+    people_n = f"{n} {'person' if n == 1 else 'people'}"
+    job = start_job(st.jobs, n, kind=_OU_MANY_KIND,
+                    title=f"Move {people_n} to {to}, retried" if retried else f"Move {people_n} to {to}")
+    job.retry = to   # "Retry the N that failed" moves the failed ones to the same unit
+    job.task = asyncio.create_task(_run_ou_many(job, st, conn, held_emails, to))
+    return TEMPLATES.TemplateResponse(request, _OU_MANY_RUN, {"job": job})
+
+
+@router.post("/bulk-ou/retry", response_class=HTMLResponse)
+async def ou_many_retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLResponse:
+    """The confirm step again for exactly a finished run's failed people (plan U5), the unit read again. Writes nothing."""
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()
+    if st.connector is None:
+        return error_partial(request, NOT_CONNECTED)
+    done, refusal = retry_of(st.jobs, job, _OU_MANY_KIND)
+    if done is None:
+        return error_partial(request, refusal or "That run is no longer available.")
+    to = str(done.retry)
+    try:
+        if to not in await st.connector.org_units():
+            return error_partial(request, f"“{to}” isn't an org unit here any more, so nothing is offered.")
+        people, missing = await _ou_many_people(st, {e.lower() for e in done.failed_items})
+    except Exception as exc:  # noqa: BLE001 — a failed read offers nothing
+        return error_partial(request, "Couldn't read the org units or the directory again, so nothing is offered. "
+                             + unread_why(exc, _TRY_AGAIN), gam_detail(exc))
+    token = (st.previews.hold(_OU_MANY_FLOW, retry_key(done.id), (to, [u.primary_email for u in people]), tenant=tenant)
+             if people else "")
+    return _ou_many_page(request, to, people, missing, token, retry=done.id, st=st)
+
+
+@router.get("/bulk-ou/status", response_class=HTMLResponse)
+async def ou_many_status(request: Request, job: str = "") -> HTMLResponse:
+    found = request.app.state.gamgui.jobs.get(job)
+    if found is None or found.kind != _OU_MANY_KIND:
+        return error_partial(request, "That run is no longer here.")
+    return TEMPLATES.TemplateResponse(request, _OU_MANY_RUN, {"job": found})

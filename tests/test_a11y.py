@@ -1375,6 +1375,7 @@ def test_each_tab_strip_is_an_aria_tablist():
 POLLED = {
     "_sig_apply.html": ("job", "Applying the signature", "signatures"),
     "_bulk_apply.html": ("job", "Setting department", "department"),
+    "_bulk_ou_run.html": ("job", "Moving", "org_unit_move"),
     "_calendar_subscribe_job.html": ("subscribe_job", "Adding to calendars", "subscribe"),
     "_offboard_run.html": ("job", "Offboarding", "offboard"),
     "_sequence_run.html": ("job", "Running the sequence", "sequence"),

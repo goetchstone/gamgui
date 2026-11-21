@@ -39,6 +39,7 @@ PANELS = {
     "audit_run": "/reports/runs/status",   # an audit run (plan F3): Stop between its steps
     "remind": "/reports/remind/status",
     "group_remove": "/groups/members/remove-many/status",
+    "org_unit_move": "/users/bulk-ou/status",
     "mail_review": "/reports/mail-review",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",

@@ -1,4 +1,4 @@
-"""Per-user bulk loops: the stop rules every one shares, and the bulk department.
+"""Per-user bulk loops: the stop rules every one shares, the bulk department, and the loops over addresses.
 
 A loop writes into the polled progress record the web layer starts it with (``web/jobs.py``: ``record``,
 ``current``, ``error``, ``finish``) — passed in, since core never imports web.
@@ -6,7 +6,7 @@ A loop writes into the polled progress record the web layer starts it with (``we
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from .gam.errors import ACCOUNT_WIDE_KINDS, GAMError
 
@@ -69,10 +69,10 @@ async def set_departments(job, conn, users, department: str,
         job.finish()
 
 
-async def suspend_users(job, conn, emails, on_set: Optional[Callable[[str], None]] = None) -> None:
-    """Suspend each of ``emails`` through the chokepoint (``plan_suspend`` → ``apply`` → ``_run_write``, which refuses the
-    admin GamGUI signs in as); ``on_set(email)`` after each write GAM accepted. Stops at a failure every later account
-    would share (``stop_reason``), or at Stop."""
+async def _each(job, emails, write: Callable[[str], Awaitable[Any]],
+                on_set: Optional[Callable[[str], None]] = None) -> None:
+    """Run ``write(email)`` for each of ``emails`` into ``job``; ``on_set(email)`` after each write GAM accepted. Stops at a
+    failure every later one would share (``stop_reason``), or at Stop. A failure of one never stops the rest."""
     try:
         for email in emails:
             if stop_requested(job):
@@ -80,11 +80,11 @@ async def suspend_users(job, conn, emails, on_set: Optional[Callable[[str], None
             job.current = email
             kind, why, detail = None, "", ""
             try:
-                res = (await conn.apply(conn.plan_suspend([email], suspend=True)))[0]
+                res = await write(email)
                 ok = bool(getattr(res, "ok", False))
                 if not ok:
                     kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
-            except Exception as exc:  # noqa: BLE001 — one account must not stop the rest
+            except Exception as exc:  # noqa: BLE001 — one target must not stop the rest
                 ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc) if isinstance(exc, GAMError) else ""
             job.record(email, ok, why, detail)
             if ok and on_set is not None:
@@ -99,55 +99,25 @@ async def suspend_users(job, conn, emails, on_set: Optional[Callable[[str], None
         job.finish()
 
 
+async def suspend_users(job, conn, emails, on_set: Optional[Callable[[str], None]] = None) -> None:
+    """Suspend each of ``emails`` through the chokepoint (``plan_suspend`` → ``apply`` → ``_run_write``, which refuses the
+    admin GamGUI signs in as)."""
+    async def write(email: str):
+        return (await conn.apply(conn.plan_suspend([email], suspend=True)))[0]
+    await _each(job, emails, write, on_set)
+
+
 async def send_reminders(job, conn, emails, subject: str, body: str) -> None:
-    """Email each of ``emails`` the same reminder through the chokepoint (``send_reminder_email`` → ``_run_write``). Stops
-    at a failure every later one would share (``stop_reason``), or at Stop."""
-    try:
-        for email in emails:
-            if stop_requested(job):
-                break
-            job.current = email
-            kind, why, detail = None, "", ""
-            try:
-                res = await conn.send_reminder_email(email, subject, body)
-                ok = bool(getattr(res, "ok", False))
-                if not ok:
-                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
-            except Exception as exc:  # noqa: BLE001 — one person must not stop the rest
-                ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc) if isinstance(exc, GAMError) else ""
-            job.record(email, ok, why, detail)
-            stop = stop_reason(kind, why, job.total - job.done)
-            if stop:
-                job.error = stop
-                break
-    except Exception as exc:
-        job.error = _why(exc)
-    finally:
-        job.finish()
+    """Email each of ``emails`` the same reminder through the chokepoint (``send_reminder_email`` → ``_run_write``)."""
+    await _each(job, emails, lambda email: conn.send_reminder_email(email, subject, body))
 
 
 async def remove_members(job, conn, group: str, emails) -> None:
-    """Remove each of ``emails`` from ``group`` through the chokepoint (``remove_group_member`` → ``_run_write``, roadmap 3.5).
-    Stops at a failure every later one would share (``stop_reason``), or at Stop."""
-    try:
-        for email in emails:
-            if stop_requested(job):
-                break
-            job.current = email
-            kind, why, detail = None, "", ""
-            try:
-                res = await conn.remove_group_member(group, email)
-                ok = bool(getattr(res, "ok", False))
-                if not ok:
-                    kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
-            except Exception as exc:  # noqa: BLE001 — one member must not stop the rest
-                ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc) if isinstance(exc, GAMError) else ""
-            job.record(email, ok, why, detail)
-            stop = stop_reason(kind, why, job.total - job.done)
-            if stop:
-                job.error = stop
-                break
-    except Exception as exc:
-        job.error = _why(exc)
-    finally:
-        job.finish()
+    """Remove each of ``emails`` from ``group`` through the chokepoint (``remove_group_member`` → ``_run_write``, roadmap 3.5)."""
+    await _each(job, emails, lambda email: conn.remove_group_member(group, email))
+
+
+async def move_users(job, conn, emails, org_unit: str, on_set: Optional[Callable[[str], None]] = None) -> None:
+    """Move each of ``emails`` to ``org_unit`` through the chokepoint (``move_user_to_org_unit`` → ``_run_write``, roadmap
+    4.2)."""
+    await _each(job, emails, lambda email: conn.move_user_to_org_unit(email, org_unit), on_set)

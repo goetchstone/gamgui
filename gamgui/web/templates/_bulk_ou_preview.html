@@ -1,0 +1,41 @@
+{#- Move many to an org unit (roadmap 4.2): the confirm step. The people are the directory's accounts the preview found,
+    held under a single-use token with the unit; Move takes exactly those. From is the directory's, with its age. A retry
+    (plan U5) is the same step for a finished run's failed people, in its button's place. -#}
+{% if retry %}<div id="retry-{{ retry }}" class="mt-2">{% endif %}
+<div class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm">
+  {% if not count %}
+  <p tabindex="-1" data-focus class="text-brand-blueink">Nobody to move: none of them is an account in the directory.</p>
+  {% else %}
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">Move {{ count }} {{ "person" if count == 1 else "people" }} to {{ org_unit }}?</p>
+  <p class="mt-1 text-xs text-brand-blueink">Settings and policies follow the org unit: what applies to them in Gmail, Drive, devices and sign-in changes with the move. You can move them back.</p>
+  <details class="mt-2"{% if count <= 10 %} open{% endif %}>
+    <summary class="cursor-pointer text-brand-blueink hover:text-brand-black">From → to, as the directory has them{% if as_of is defined %} ({% include "_as_of.html" %}){% endif %}</summary>
+    <ul class="mt-2 max-h-56 space-y-0.5 overflow-auto">
+      {% for u in people %}
+      <li><span class="text-brand-black">{{ u.primary_email }}</span> <span class="text-brand-grayink">— {{ u.org_unit_path or "?" }} → {{ org_unit }}{% if u.org_unit_path == org_unit %} (already there){% endif %}{% if u.suspended %} · suspended{% endif %}</span></li>
+      {% endfor %}
+      {% if count > people | length %}<li class="text-xs text-brand-grayink">…and {{ count - people | length }} more.</li>{% endif %}
+    </ul>
+  </details>
+  {% endif %}
+  {% if nested %}<p class="mt-2 text-xs text-brand-grayink">Nested groups, not expanded, so their members aren't moved: {{ nested | join(", ") }}.</p>{% endif %}
+  {% if everyone %}<p class="mt-2 text-xs text-brand-grayink">The group also has a member that stands for everyone in the organization. It isn't expanded, so only the people listed are moved.</p>{% endif %}
+  {% if missing_n %}<p class="mt-2 text-xs text-brand-grayink">No account in the directory, left out ({{ missing_n }}): {{ missing | join(", ") }}{% if missing_n > missing | length %}, …{% endif %}.</p>{% endif %}
+  {% if count %}
+  <form class="mt-3 flex flex-wrap items-end gap-2" hx-post="/users/bulk-ou/apply" hx-disabled-elt="find button[type=submit]"
+        {% if retry %}hx-target="#retry-{{ retry }}"{% else %}hx-include="#bulk-ou-form" hx-target="#bulk-ou-result"{% endif %} hx-swap="innerHTML">
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    {% if retry %}<input type="hidden" name="retry" value="{{ retry }}" />{% endif %}
+    {% if decision.requires_typed_count %}
+    <label class="block text-sm text-brand-black">Type <strong>{{ count }}</strong> to confirm:
+      <input name="confirm_count" inputmode="numeric" autocomplete="off"
+             class="mt-1 block w-24 rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    </label>
+    {% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Move {{ count }}</button>
+  </form>
+  <p class="mt-1 text-xs text-brand-grayink">{% if retry %}Move takes exactly this preview: that run's unit, for the people it failed for.{% else %}Move takes exactly this preview. Change the unit or the people and you'll need to preview again.{% endif %}</p>
+  {% endif %}
+</div>
+{% if retry %}</div>{% endif %}

@@ -57,6 +57,7 @@ PREVIEWS = {
     "/signatures/retry", "/users/bulk/retry",   # a finished run's failures, previewed (plan U5)
     "/signatures/putback/preview",   # roadmap 4.1: a kept run's old signatures, previewed
     "/groups/members/remove-many/preview", "/groups/members/remove-many/retry",   # roadmap 3.5: read the group, hold who
+    "/users/bulk-ou/preview", "/users/bulk-ou/retry",   # roadmap 4.2: read the tree and the group, hold the unit and who
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -171,6 +172,9 @@ GATED = {
     # Remove several members (roadmap 3.5): the ticked ones the group still holds, held by the preview.
     "/groups/members/remove-many": Case({"group": "sales@example.com", "pick": ["alice@example.com", "bob@example.com"]},
                                         "/groups/members/remove-many/preview", edit={"picks": "alice@example.com"}),
+    # Move many to an org unit (roadmap 4.2): the unit and the people, held by the preview.
+    "/users/bulk-ou/apply": Case({"org_unit": "/Sales", "emails": "alice@example.com\ncarol@example.com"},
+                                 "/users/bulk-ou/preview", edit={"org_unit": "/Students"}),
     # And its reminder email (No 2SV, No recovery): the card's form holds the text; Send posts it live with the token.
     "/reports/remind/apply": Case({"key": "no_2sv", "subject": "Turn on 2SV", "message": "Please turn it on."},
                                   "/reports/remind/preview", edit={"message": "Something else."}),
