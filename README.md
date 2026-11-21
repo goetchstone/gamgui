@@ -145,7 +145,10 @@ and have only run offline: see
   showed), admins, suspended accounts, and directory completeness (missing title/department/phone/location), plus a
   **storage & mail usage** panel: top users by Drive/Gmail storage with that day's sent/received counts, from the Reports API
   (which lags a few days). **Connected apps and AI agents**: every account's grants, read when you ask,
-  as a summary counted by code and each app with what it may do in words and who granted it.
+  as a summary counted by code and each app with what it may do in words and who granted it. **Audit runs**: ready-made
+  reads with Stop between steps, each step's table kept and exported as CSV: inactive users for a window you pick (new
+  accounts and admins flagged, then the same suspend preview), and license usage (seats per license, seats on suspended
+  accounts).
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.
 - **Jobs tray** — every one-step change since launch, and every background run (signatures, bulk department, onboarding CSV, offboarding,
   calendar fan-out, Builder sequence, calendar index) is listed in the header from any page, with
@@ -187,7 +190,9 @@ run were last confirmed separately: setup's scoped `check serviceaccount scopes 
 7.48.14), and `print domains` for the Builder's External-only filter and reading the connected admin and
 its granted scopes from `oauth2.txt` (2026-09-25, GAM 7.48.11). The Google Classroom reads (`print courses`, `print
 course-participants`) have **never run live**: their output shapes were read from the vendored GAM build, and the
-maintainer has no Workspace for Education domain to check them on. GamGUI doesn't write to Classroom at all. The
+maintainer has no Workspace for Education domain to check them on. GamGUI doesn't write to Classroom at all. The audit
+runs' `print licenses` has never run live either: its columns, and that it passes over a refused product without a word,
+were read from GAM's source at the pinned tag. The
 Builder's automatic reads aren't in the pass: since #132 (2026-11-17), 32 of them build a fuller command from GAM's
 grammar, and none of those 32 has run on a real domain yet.
 

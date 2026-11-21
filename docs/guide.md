@@ -252,6 +252,27 @@ again, and **Read again** refreshes it. Reading changes nothing. To take an app 
 Admin console, under Security → API controls → App access control. It's not yet verified live, so compare the list with
 the Admin console's Accessed apps the first time you use it.
 
+## Run an audit
+
+Ready-made reads of the whole domain, each a fixed list of steps. A run changes nothing.
+
+1. Open **Reports**, then **Open audit runs**. Nothing has been read yet.
+2. Pick a run and click **Run**. Inactive users asks for a window first (30 to 365 days without a sign-in). It runs
+   in the background, one step at a time, and **Stop** ends it before its next step.
+3. Read each step’s line, then its tables. Each table shows its first 100 rows; **Download as CSV** has all of them.
+
+- **Inactive users:** active accounts with no sign-in inside the window. An account made inside it is flagged *new
+  account* (a new hire who hasn't signed in yet looks inactive), and an administrator is flagged *admin*. **Suspend
+  these**… opens the same preview as the Inactive card on Reports: it reads the directory again, lists exactly who it
+  would suspend, and leaves out the account GamGUI is connected as.
+- **License usage:** seats per license, seats held by suspended accounts, and seats on an address the directory didn't
+  list. GAM passes over a product Google won't let it read without saying so, so compare the counts with the Admin
+  console (Billing → Licenses) the first time.
+
+A step that couldn't be read, or that a Stop kept from running, says so, and so does every table that needs it:
+unknown, never "none". Each step is recorded in the **Audit** log with how many rows it read, never what it read. The
+tables stay until you quit or connect to another domain. Neither run has been checked on a real domain yet.
+
 ## See where an account is signed in
 
 Open a person and choose **Security**. It reads three lists when you open the tab, and changes nothing.

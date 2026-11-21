@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Audit runs — GamGUI Console{% endblock %}
+{% block content %}
+{#- Audit runs (plan F3): ready-made lists of reads, each run when asked. Loading this page reads nothing. -#}
+<p class="eyebrow text-brand-blue"><a class="hover:text-brand-black" href="/reports">Reports</a></p>
+<h1 class="mt-1 font-serif text-2xl text-brand-black tracking-tight">Audit runs</h1>
+<p class="mt-1 text-sm text-brand-blueink">Each run is a fixed list of reads of the whole domain, run when you ask, with Stop between its steps. A run changes nothing. Each step is recorded in the <a class="underline hover:text-brand-black" href="/audit">Audit</a> log (the command and how many rows, never what it read), and its table is kept here until GamGUI quits or you switch domains.</p>
+{% if not connected %}
+  <div class="mt-6 rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="text-sm text-brand-black">Connect a domain first.</p>
+    <a href="/setup" class="mt-3 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+  <div class="mt-6 space-y-6">
+  {% for p in panels %}
+    {% with run=p.run, connected=p.connected, job=p.job, announce=p.announce, result=p.result, windows=p.windows, days=p.days, shown=p.shown, inactive_run=p.inactive_run, age=p.age %}
+    {% include "_audit_run.html" %}
+    {% endwith %}
+  {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

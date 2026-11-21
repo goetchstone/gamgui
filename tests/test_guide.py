@@ -56,6 +56,7 @@ SCREENS = {
                                       "_roster_kept.html", "_roster_plan.html", "_roster_changes.html", "_roster_map.html"],
     "Audit external sharing": ["builder.html", "_builder_*.html", "_read_output.html", "_records_*.html"],
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
+    "Run an audit": ["reports.html", "audit_runs.html", "_audit_run.html", "_job_live.html", "_inactive_suspend.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],
     "Respond to an incident": ["_incident_nav.html", "_incident_logs.html", "_incident_reading.html"],
     "Make the incident's report": ["_incident_nav.html", "_incident_report.html", "_incident_report_list.html", "_incident_report_export.html"],

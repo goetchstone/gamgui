@@ -930,6 +930,10 @@ video {
   max-height: 20rem;
 }
 
+.max-h-96 {
+  max-height: 24rem;
+}
+
 .max-h-\[22rem\] {
   max-height: 22rem;
 }
@@ -1566,6 +1570,11 @@ video {
 .border-red-500 {
   --tw-border-opacity: 1;
   border-color: rgb(239 68 68 / var(--tw-border-opacity, 1));
+}
+
+.border-red-700 {
+  --tw-border-opacity: 1;
+  border-color: rgb(185 28 28 / var(--tw-border-opacity, 1));
 }
 
 .border-transparent {

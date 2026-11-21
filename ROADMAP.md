@@ -57,7 +57,8 @@ Everything below is planned for both apps.
   school domain, through the [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml).
   Pulling straight from a SIS's API stays later.
 
-- **Audit runs, a domain menu and due schedules** (asked 2026-11-19). A record for every read and the
+- **Audit runs, a domain menu and due schedules** (asked 2026-11-19). First half of the audit runs built
+  (inactive users, license usage; 2026-11-20). A record for every read and the
   domain on every record; five ready-made audit runs, reads only (inactive users with a window picker,
   shared drive permissions, licence seats on suspended accounts, Classroom courses, admin tokens with
   suspended admins included); switching domains from the header; Sheet export owned by the admin and

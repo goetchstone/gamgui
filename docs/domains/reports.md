@@ -80,7 +80,8 @@ page's `cid`; an id the catalog doesn't hold opens none), where it runs, filters
 The one write on this screen. The Inactive card's **Suspend these…** posts `/reports/inactive/preview`, which:
 - **reads the directory again** (`st.users(force=True)`): the card counted a cached list, and the people a suspend acts on
   are the ones this read found (`reports.inactive_to_suspend`), held under a single-use token (flow `suspend_inactive`,
-  keyed on the window the preview used, posted back as `days`). Apply suspends exactly that held list, never a rebuilt one
+  keyed on the window the preview used, posted back as `days`: the card posts none, which is 90; an audit run posts its
+  own, one of `INACTIVE_WINDOWS`). Apply suspends exactly that held list, never a rebuilt one
   (`test_someone_who_went_inactive_since_the_preview_isnt_suspended`);
 - **flags new hires**: Inactive includes accounts that never signed in, so anyone made inside the window, or when isn't
   known, is marked *new* and the list opens. `creationTime` is in `CACHE_FIELDS` for this (`GAMUser.creation_time`);
@@ -138,3 +139,38 @@ dropped on a switch, and not kept when the connection changed mid-read). Each ro
 - **The mock** answers both as GAM does (`all users print forward|delegates`): the active users, each "Getting" line, Gmail
   off by name (`GAM_MOCK_STATE/nogmail/<u>`, exit 73), the silent skip (`quiet/<u>`), the titles even with no row.
 - **Not run on a real domain yet.** Read only; check the counts against the Admin console on its first run.
+
+## Audit runs (plan F3, first half)
+`/reports/runs` (linked from Reports): ready-made lists of reads, run when the operator asks. This half has two;
+shared drive permissions, Classroom and admin tokens come next.
+- **Files.** `core/audit_runs.py` (pure: `RUNS`, each step's argv `step_argv`, the joins and flags), `GAMConnector.audit_read`
+  (the one read path), `web/routes/audit_runs.py` (page, `/start`, `/status`, `/table.csv`), `_audit_run.html`,
+  `audit_runs.html`, `tests/test_audit_runs.py`, `tests/fixtures/licenses.csv`.
+- **A run never writes.** Each step is a `print` read without `todrive` (`audit_read` refuses anything else before GAM runs)
+  and leaves F1's record: action `read`, `extra` = `command` (`<run>/<step>`, e.g. `license_usage/licenses`), `origin`
+  `audit_run`, `domain`, and `rows` or `error`, never the output. `/reports/runs/start` is LOCAL_ONLY in the guard tripwire.
+  Inactive users' **Suspend these…** posts Reports' own `/reports/inactive/preview` with the run's `days` (one of
+  `INACTIVE_WINDOWS`; none posted is the card's 90): the directory is read again for that window and the token is keyed on
+  it, so Apply with another window is refused.
+- **The job.** Kind `audit_run`, the run's key in `job.bucket`, one step per `job.record`. Stop is checked before each step:
+  the step in flight finishes, the rest are `not_run`. A failed step is `unknown` and the run goes on. One of each run at a
+  time (a second press joins it). Kept per connector in `AppState.audit_runs` (dropped on `activate`); a run that ends
+  after a switch isn't kept.
+- **Unknown, never none (invariant 10).** Any exit but 0 is unknown: `print users` that loses a page warns, writes the rows
+  it had and exits 50 (doPrintUsers), and that partial table is never used. Output without the step's key column
+  (`primaryEmail`, `userId`) is unknown. A directory with no account, or no seat at all, is unknown: with no product named,
+  `print licenses` passes over a product Google refuses without a word or a code (doPrintLicenses, `suppressErrorMsg`).
+  Every table says which step it needs and why it's unknown; its CSV answers 409 in words, never a sheet of titles.
+- **Bounded (invariant 9).** The poll draws the steps only. A finished table draws `ROWS_SHOWN` (100) rows; its CSV
+  (`download` link, formula-safe) is the whole of it. Each step's table is kept whole in memory for the run.
+- **Joins, on Google's fields** (cited in the module docstring): Inactive is `build_reports`' bucket for the window, never
+  signed in first; `new account` when `creationTime` is inside the window or missing, `admin` for `isAdmin` or
+  `isDelegatedAdmin`. License usage joins `userId` (lowercased by GAM; Google: "the user's current primary email address")
+  to `primaryEmail`, lowercased: seats per SKU, seats held by a `suspended` account, seats on an address the directory
+  read didn't list. A directory that's unknown leaves the per-SKU counts with "unknown" in the last two columns.
+- **The mock.** `print licenses` (bare only) prints `licenses.csv`; `GAM_MOCK_STATE/nolicensing` exits 15 as a token without
+  the License Manager scope; `licenses_silent` is titles alone, exit 0; `licenses_partial` drops one product, exit 0 (a
+  clean-looking partial read, so every license table carries the caveat). `print users` with `directory_fails` writes one
+  row and exits 50.
+- **Not run on a real domain yet.** `print licenses` has never run live: check the counts against Billing → Licenses on
+  its first run. The directory read is the cache's own, which has.

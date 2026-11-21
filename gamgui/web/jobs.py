@@ -36,6 +36,7 @@ PANELS = {
     "roster_compare": "/classroom/import/compare/status",
     "connected_apps": "/reports/connected-apps",
     "suspend_inactive": "/reports/inactive/status",
+    "audit_run": "/reports/runs/status",   # an audit run (plan F3): Stop between its steps
     "remind": "/reports/remind/status",
     "group_remove": "/groups/members/remove-many/status",
     "org_unit_move": "/users/bulk-ou/status",

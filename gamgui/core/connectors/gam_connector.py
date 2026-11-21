@@ -86,10 +86,12 @@ INTERRUPTED = ("interrupted (the app quit or the job was cancelled) before GAM r
                "it may have done part of its work")
 
 # Where a recorded catalog read was started (`extra.origin` of a `read` / `sensitive_read` record):
-# the Builder's Run, or a read step of a Builder sequence. Audit runs and schedules add theirs.
+# the Builder's Run, or a read step of a Builder sequence. An audit run's step (plan F3) is `audit_run`, recorded by
+# `audit_read`, whose `command` is the run and step (`license_usage/licenses`). Schedules add theirs.
 READ_ORIGIN_BUILDER = "builder"
 READ_ORIGIN_SEQUENCE = "sequence"
 READ_ORIGINS = (READ_ORIGIN_BUILDER, READ_ORIGIN_SEQUENCE)
+READ_ORIGIN_AUDIT_RUN = "audit_run"
 
 # The per-user lines the offboarding calendar sweep expects (remove_from_all_calendars): a user who
 # never shared with the leaver, a user without Calendar, the leaver's own calendar. Nothing else.
@@ -999,6 +1001,30 @@ class GAMConnector(Connector):
             extra["rows"] = len(records)
         self.audit.record(action, target=target, argv=argv, ok=True, extra=extra, domain=self.domain)
         return out
+
+    async def audit_read(self, command: str, argv: List[str], key_column: str) -> List[Dict[str, Any]]:
+        """One audit-run step's read (plan F3), its rows returned. Recorded as a ``read`` of origin ``audit_run`` holding
+        ``command`` (the run and step), the domain and ``rows``, or ``error`` when it failed or was cancelled: never the
+        output. Only a ``print`` read without ``todrive`` runs here, so this can't become a write path. Any exit but 0
+        raises, and so does output without the step's table (titles naming ``key_column``): GAM writes the titles even
+        with no row, so a missing table is never "none" (invariant 10). Parsed off the event loop: a large domain's
+        directory is tens of thousands of rows."""
+        # GAM reads an argument lowercased with its underscores dropped (getArgument), so `to_drive` and `ToDrive` are todrive.
+        if argv[:1] != ["print"] or any(str(a).lower().replace("_", "") == "todrive" for a in argv):
+            raise ValueError("an audit run reads with a print command, and never exports")
+        extra: Dict[str, Any] = {"command": command, "origin": READ_ORIGIN_AUDIT_RUN}
+        try:
+            out = await self.runner.run_authenticated(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
+            text = (out or "").strip()
+            if key_column not in [c.strip() for c in (text.splitlines()[0] if text else "").split(",")]:
+                raise Incomplete(f"GAM ended without writing the {key_column} table")
+            records = await asyncio.to_thread(parse_records, out)
+        except BaseException as exc:   # a cancelled read is recorded too, then the cancel finishes
+            error = INTERRUPTED if isinstance(exc, asyncio.CancelledError) else str(exc)
+            self.audit.record("read", target="", argv=argv, ok=False, extra={**extra, "error": error}, domain=self.domain)
+            raise
+        self.audit.record("read", target="", argv=argv, ok=True, extra={**extra, "rows": len(records)}, domain=self.domain)
+        return records
 
     def audit_sensitive_csv(self, command: str, argv: List[str], target: str, rows: int) -> None:
         """The Builder's CSV download of a sensitive read's result: the secret leaves the app as a file,

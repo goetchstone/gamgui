@@ -83,6 +83,7 @@ LOCAL_ONLY = {
     # A spreadsheet held in memory while its columns are mapped, then read and kept like an export; a map saved by name.
     "/classroom/import/map/preview", "/classroom/import/map/read", "/classroom/import/map/delete", "/classroom/import/map/cancel",
     "/classroom/import/compare",   # reads Classroom only: the change list is never applied (plan 2026-11-11 E2)
+    "/reports/runs/start",   # an audit run (plan F3): reads only, its tables kept in memory; its one write is the Inactive preview
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe
