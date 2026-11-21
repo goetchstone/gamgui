@@ -13,6 +13,7 @@ the same product" (Licensing API, licenseAssignments.patch).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from .gam.models import LicenseSeat
@@ -28,11 +29,14 @@ def key(seat: LicenseSeat) -> Key:
     return (seat.product_id, seat.sku_id)
 
 
+def _by_name(s: LicenseSeat) -> Tuple[str, str]:
+    return (s.product.lower(), s.sku.lower())
+
+
 def held_by(seats: Sequence[LicenseSeat], email: str) -> List[LicenseSeat]:
     """The seats the read lists for ``email``, one per license, by product then license name."""
     who = email.strip().lower()
-    mine = {key(s): s for s in seats if s.user == who}
-    return sorted(mine.values(), key=lambda s: (s.product.lower(), s.sku.lower()))
+    return sorted({key(s): s for s in seats if s.user == who}.values(), key=_by_name)
 
 
 def in_domain(seats: Sequence[LicenseSeat]) -> Dict[Key, LicenseSeat]:
@@ -43,29 +47,44 @@ def in_domain(seats: Sequence[LicenseSeat]) -> Dict[Key, LicenseSeat]:
     return out
 
 
-def add_choices(seats: Sequence[LicenseSeat], email: str) -> List[LicenseSeat]:
-    """Licenses the domain holds that the read doesn't list for ``email``."""
-    mine = {key(s) for s in held_by(seats, email)}
-    return sorted((s for k, s in in_domain(seats).items() if k not in mine), key=lambda s: (s.product.lower(), s.sku.lower()))
+@dataclass(frozen=True)
+class Choices:
+    """What one read offers for one person, worked out in one pass: the seats they hold, each with what it can change to
+    (another license of the same product the domain holds), and what can be added (a license the domain holds of a product
+    they hold none of: the Licensing API moves a user to "a different SKU in the same product" with a patch, so another SKU
+    of a product they hold is offered as a change, not an add)."""
+    held: List[Tuple[LicenseSeat, List[LicenseSeat]]]
+    adds: List[LicenseSeat]
 
 
-def swap_choices(seats: Sequence[LicenseSeat], email: str, seat: LicenseSeat) -> List[LicenseSeat]:
-    """What ``seat`` can become: another license of the same product the domain holds, that ``email`` doesn't."""
-    return [s for s in add_choices(seats, email) if s.product_id == seat.product_id and s.sku_id != seat.sku_id]
+def choices(seats: Sequence[LicenseSeat], email: str) -> Choices:
+    mine = held_by(seats, email)
+    products, keys = {s.product_id for s in mine}, {key(s) for s in mine}
+    others = sorted((s for k, s in in_domain(seats).items() if k not in keys), key=_by_name)
+    return Choices(held=[(m, [s for s in others if s.product_id == m.product_id]) for m in mine],
+                   adds=[s for s in others if s.product_id not in products])
 
 
-def find(seats: Sequence[LicenseSeat], product_id: str, sku_id: str) -> Optional[LicenseSeat]:
-    return in_domain(seats).get((product_id, sku_id))
+def _failed(transfer: dict) -> bool:
+    return str(transfer.get("status", "")).strip().lower() == "failed"
 
 
 def transfer_refusal(email: str, pending: Optional[list]) -> str:
     """Why a removal is refused while a data transfer from ``email`` is unfinished, or can't be checked (``None``, as
-    ``incomplete_transfers_for`` answers a failed read): unknown is never a reason to go ahead (invariant 10)."""
+    ``incomplete_transfers_for`` answers a failed read): unknown is never a reason to go ahead (invariant 10). A transfer
+    that *failed* has stopped, and stays listed after a later one completes, so it doesn't refuse: the confirm step names
+    it (``failed_transfers``)."""
     if pending is None:
         return (f"Couldn't check whether a data transfer from {email} is still running, so the license isn't removed. "
                 "Try again in a moment.")
-    if pending:
-        what = ", ".join(f"{p.get('application', 'data')} ({p.get('status', 'unfinished')})" for p in pending)
+    running = [p for p in pending if not _failed(p)]
+    if running:
+        what = ", ".join(f"{p.get('application', 'data')} ({p.get('status', 'unfinished')})" for p in running)
         return (f"A data transfer from {email} hasn't finished ({what}), so the license isn't removed: "
                 "remove it once the transfer completes.")
     return ""
+
+
+def failed_transfers(pending: Optional[list]) -> List[str]:
+    """The applications whose transfer from them failed, for the confirm step to name."""
+    return [str(p.get("application") or "data") for p in (pending or []) if _failed(p)]

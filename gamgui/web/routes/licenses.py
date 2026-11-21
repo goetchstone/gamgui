@@ -10,6 +10,7 @@ checked, at the preview and again at the click.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Annotated, Optional
 
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/users/licenses")
 _FLOW = "license_change"
 _CARD = "_license_card.html"
 _CONFIRM = "_license_confirm.html"
+_DONE = "_license_done.html"
 _TRY_AGAIN = f"{GAM_TROUBLE} Please try again."
 ACTIONS = ("add", "swap", "remove")
 _RISK = {"add": RiskLevel.LOW, "swap": RiskLevel.LOW, "remove": RiskLevel.DESTRUCTIVE}
@@ -45,9 +47,8 @@ async def license_card(request: Request, email: str = "") -> HTMLResponse:
     except Exception as exc:  # noqa: BLE001 — unread: nothing offered, never "holds none"
         return TEMPLATES.TemplateResponse(request, _CARD, {"email": email, "error": "Couldn't read the license seats. "
                                                            + unread_why(exc, _TRY_AGAIN)})
-    return TEMPLATES.TemplateResponse(request, _CARD, {
-        "email": email, "adds": licenses.add_choices(seats, email),
-        "held": [(s, licenses.swap_choices(seats, email, s)) for s in licenses.held_by(seats, email)]})
+    offer = licenses.choices(seats, email)
+    return TEMPLATES.TemplateResponse(request, _CARD, {"email": email, "adds": offer.adds, "held": offer.held})
 
 
 def _key(email: str, action: str, product_id: str, sku_id: str, new_sku_id: str) -> tuple:
@@ -76,20 +77,23 @@ def _refusal(action: str, addr: str, seats, product_id: str, sku_id: str, new_sk
 
 
 def _judged(action: str, addr: str, seats, product_id: str, sku_id: str, new_sku_id: str):
-    mine = {licenses.key(s): s for s in licenses.held_by(seats, addr)}
-    seat = licenses.find(seats, product_id, sku_id)
+    offer = licenses.choices(seats, addr)
+    mine = {licenses.key(s): (s, swaps) for s, swaps in offer.held}
     if action == "add":
-        if seat is None:
-            return "That isn't a license anyone in this domain holds, so it isn't offered. Show their licenses again.", None, None
-        if licenses.key(seat) in mine:
-            return f"{addr} already holds {seat.sku}.", None, None
-        return "", seat, None
-    held = mine.get((product_id, sku_id))
-    if held is None:
+        seat = next((s for s in offer.adds if licenses.key(s) == (product_id, sku_id)), None)
+        if seat is not None:
+            return "", seat, None
+        if (product_id, sku_id) in mine:
+            return f"{addr} already holds {mine[product_id, sku_id][0].sku}.", None, None
+        if any(s.product_id == product_id for s, _ in offer.held):
+            return f"{addr} already holds a license of that product: change it instead.", None, None
+        return "That isn't a license anyone in this domain holds, so it isn't offered. Show their licenses again.", None, None
+    if (product_id, sku_id) not in mine:
         return f"The seats read just now don't list that license for {addr}, so nothing is changed. Show their licenses again.", None, None
+    held, swaps = mine[product_id, sku_id]
     if action == "remove":
         return "", held, None
-    new = next((s for s in licenses.swap_choices(seats, addr, held) if s.sku_id == new_sku_id), None)
+    new = next((s for s in swaps if s.sku_id == new_sku_id), None)
     if new is None:
         return (f"{held.sku} can only change to another {held.product} license this domain holds that {addr} doesn't: "
                 "pick one from the list."), None, None
@@ -111,9 +115,8 @@ async def license_preview(request: Request, email: Annotated[str, Form()] = "", 
         product_id, _, sku_id = picked.partition(":")
     if not (product_id and sku_id):
         return error_partial(request, "Pick a license first.")
-    try:
-        seats = await conn.license_seats()
-        person = await conn.get_user(email.strip(), fields=["primaryEmail"])
+    try:   # neither read needs the other
+        seats, person = await asyncio.gather(conn.license_seats(), conn.get_user(email.strip(), fields=["primaryEmail"]))
     except Exception as exc:  # noqa: BLE001 — either read failing offers nothing
         return error_partial(request, "Couldn't read the license seats or their account again, so nothing is offered. "
                              + unread_why(exc, _TRY_AGAIN), gam_detail(exc))
@@ -124,17 +127,21 @@ async def license_preview(request: Request, email: Annotated[str, Form()] = "", 
     refusal, seat, new = _refusal(action, addr, seats, product_id, sku_id, new_sku_id)
     if refusal:
         return error_partial(request, refusal)
-    if action == "remove" and (refusal := licenses.transfer_refusal(addr, await conn.incomplete_transfers_for(addr))):
-        return error_partial(request, refusal)
-    token = st.previews.hold(_FLOW, _key(addr, action, product_id, sku_id, new_sku_id), (addr, action, seat, new),
-                             tenant=tenant)
-    return _confirm(request, addr, action, seat, new, token)
+    failed: list = []
+    if action == "remove":
+        pending = await conn.incomplete_transfers_for(addr)
+        if refusal := licenses.transfer_refusal(addr, pending):
+            return error_partial(request, refusal)
+        failed = licenses.failed_transfers(pending)
+    held = (addr, action, seat, new, failed)
+    token = st.previews.hold(_FLOW, _key(addr, action, product_id, sku_id, new_sku_id), held, tenant=tenant)
+    return _confirm(request, held, token)
 
 
-def _confirm(request: Request, addr: str, action: str, seat: LicenseSeat, new: Optional[LicenseSeat], token: str,
-             error: str = "") -> HTMLResponse:
+def _confirm(request: Request, held: tuple, token: str, error: str = "") -> HTMLResponse:
+    addr, action, seat, new, failed = held
     return TEMPLATES.TemplateResponse(request, _CONFIRM, {
-        "email": addr, "action": action, "seat": seat, "new": new, "token": token, "error": error,
+        "email": addr, "action": action, "seat": seat, "new": new, "failed": failed, "token": token, "error": error,
         "might_lose": licenses.MIGHT_LOSE_DATA, "wait": licenses.REASSIGN_WAIT, "source": licenses.SOURCE})
 
 
@@ -152,13 +159,13 @@ async def license_apply(request: Request, email: Annotated[str, Form()] = "", ac
     held, refusal = st.previews.take(_FLOW, str(form.get(TOKEN_FIELD) or ""), key, again="click Preview again")
     if refusal:
         return error_partial(request, refusal)
-    addr, action, seat, new = held
+    addr, action, seat, new, _failed = held
     removing = action == "remove"
     refusal = guard.enforce(guard.changes([addr], _RISK[action], _summary(action, seat, new)), form, confirm_step=True,
                             typed_address=addr if removing else None)
     if refusal:   # a mistyped address: the same confirm step again, under a fresh token holding the same change
         token = st.previews.hold(_FLOW, key, held, tenant=tenant)
-        return _confirm(request, addr, action, seat, new, token, error=refusal)
+        return _confirm(request, held, token, error=refusal)
     if removing and (refusal := licenses.transfer_refusal(addr, await conn.incomplete_transfers_for(addr))):
         return error_partial(request, refusal)   # read again at the click: a transfer started since the preview
     if action == "add":
@@ -171,4 +178,4 @@ async def license_apply(request: Request, email: Annotated[str, Form()] = "", ac
         failed = {"add": f"Couldn't add {seat.sku} to {addr}.", "remove": f"Couldn't remove {seat.sku} from {addr}.",
                   "swap": f"Couldn't change {addr}'s {seat.sku}."}[action]
         return write_failed(request, failed, result)
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": done})
+    return TEMPLATES.TemplateResponse(request, _DONE, {"message": done, "email": addr})

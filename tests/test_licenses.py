@@ -108,13 +108,18 @@ def _seats(*rows):
 def test_what_they_hold_and_what_can_be_added_come_from_the_read():
     seats = _seats((ALICE, "Google-Apps", "A"), (BOB, "Google-Apps", "B"), (BOB, "Google-Vault", "V"))
     assert [s.sku_id for s in licenses.held_by(seats, " Alice@Example.com ")] == ["A"]
-    assert [(s.product_id, s.sku_id) for s in licenses.add_choices(seats, ALICE)] == [("Google-Apps", "B"), ("Google-Vault", "V")]
-    assert [s.sku_id for s in licenses.swap_choices(seats, ALICE, seats[0])] == ["B"]     # same product only
-    assert licenses.add_choices(seats, BOB) == [seats[0]]
+    alice = licenses.choices(seats, ALICE)
+    assert alice.held == [(seats[0], [seats[1]])]                 # B is a change of A: the same product
+    assert alice.adds == [seats[2]]                               # one SKU per product: B isn't an add for her
+    assert licenses.choices(seats, BOB).adds == [] and licenses.choices(seats, CAROL).adds == seats
 
 
-def test_a_transfer_unfinished_or_unknown_refuses_a_removal():
+def test_a_transfer_unfinished_or_unknown_refuses_a_removal_and_a_failed_one_is_named():
     assert licenses.transfer_refusal(ALICE, []) == ""
+    failed = [{"application": "Drive and Docs", "status": "failed"}]
+    assert licenses.transfer_refusal(ALICE, failed) == "" and licenses.failed_transfers(failed) == ["Drive and Docs"]
+    assert "hasn't finished (calendar (new))" in licenses.transfer_refusal(ALICE, [*failed, {"application": "calendar",
+                                                                                            "status": "new"}])
     assert "hasn't finished (drive (inProgress))" in licenses.transfer_refusal(ALICE, [{"application": "drive",
                                                                                        "status": "inProgress"}])
     assert "Couldn't check whether a data transfer" in licenses.transfer_refusal(ALICE, None)
@@ -171,7 +176,8 @@ def test_an_add_runs_once_from_its_preview_and_the_seats_then_list_it(client, ga
 
 @pytest.mark.parametrize("form, said", [
     ({"action": "add", "seat": "Google-Apps:1010020028"}, "alice@example.com already holds Google Workspace Business Standard."),
-    ({"action": "add", "seat": "Google-Apps:1010020025"}, "That isn't a license anyone in this domain holds"),
+    ({"action": "add", "seat": "Google-Apps:1010020025"}, "already holds a license of that product: change it instead"),
+    ({"action": "add", "seat": "Nope:1"}, "That isn't a license anyone in this domain holds"),
     ({"action": "remove", "product_id": VFE[0], "sku_id": VFE[1]}, "don't list that license for alice@example.com"),
     ({"action": "swap", "product_id": "Google-Apps", "sku_id": "1010020028", "new_sku_id": "1010020025"},
      "can only change to another Google Workspace license"),
@@ -214,6 +220,7 @@ def test_a_removal_is_destructive_says_google_s_words_and_needs_the_address_type
     fresh = re.search(r'name="preview" value="([^"]+)"', untyped).group(1)   # the same step again, a fresh token
     r = _apply(client, fresh, confirm_email=" Alice@Example.com ", **REMOVE)
     assert "Removed Google Workspace Business Standard from alice@example.com." in r.text and "24 hours" in r.text
+    assert "Show their licenses again" in r.text
     assert gam_writes(gam_calls()) == [GAMCommands.remove_license(ALICE, "Google-Apps", "1010020028")]
     rec = client.app.state.gamgui.connector.audit.tail()[-1]
     assert (rec["action"], rec["target"], rec["ok"]) == ("remove_license", ALICE, True)
@@ -236,6 +243,15 @@ def test_a_removal_is_refused_while_a_transfer_is_unfinished_or_unknown(client, 
     _transfers(monkeypatch, client, [answer])
     page, token = _preview(client, **REMOVE)
     assert said in page and not token and gam_writes(gam_calls()) == []
+
+
+def test_a_failed_transfer_is_named_on_the_confirm_step_not_a_refusal(client, monkeypatch, gam_state, gam_calls):  # noqa: F811
+    _transfers(monkeypatch, client, [[{"application": "Drive and Docs", "status": "failed"}], []])
+    page, token = _preview(client, **REMOVE)
+    assert "A data transfer from them <strong>failed</strong> (Drive and Docs)" in " ".join(page.split()) and token
+    r = _apply(client, token, confirm_email=ALICE, **REMOVE)
+    assert "Removed Google Workspace Business Standard" in r.text
+    assert gam_writes(gam_calls()) == [GAMCommands.remove_license(ALICE, "Google-Apps", "1010020028")]
 
 
 def test_a_transfer_started_after_the_preview_refuses_the_click(client, monkeypatch, gam_calls):  # noqa: F811

@@ -15,6 +15,10 @@
   <p id="license-remove-warning" class="mt-1 text-xs text-red-900"><strong>DESTRUCTIVE.</strong> Google says: “{{ might_lose }}”
     (<a href="{{ source }}" target="_blank" rel="noopener" class="underline">Assign, remove, and reassign licenses ↗</a>).
     {{ wait }} Checked just now: no data transfer from them is unfinished.</p>
+  {% if failed %}
+  <p id="license-failed-transfer" class="mt-1 text-xs text-red-900">⚠ A data transfer from them <strong>failed</strong>
+    ({{ failed | join(", ") }}): what it was moving may still be only on their account. Transfer it again first if it matters.</p>
+  {% endif %}
   {% endif %}
   <form class="mt-2 space-y-2" hx-post="/users/licenses/apply" hx-target="#license-confirm" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
     <input type="hidden" name="email" value="{{ email }}" />
@@ -27,7 +31,7 @@
     {% if removing %}
     <label for="license-confirm-email" class="block text-sm text-red-700">Type {{ email }} to confirm:</label>
     <input id="license-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ email }}"
-           aria-describedby="license-remove-warning{% if error %} license-confirm-error{% endif %}" {% if error %}aria-invalid="true"{% endif %}
+           aria-describedby="license-remove-warning{% if failed %} license-failed-transfer{% endif %}{% if error %} license-confirm-error{% endif %}" {% if error %}aria-invalid="true"{% endif %}
            class="w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
     {% endif %}
     {% if error %}<p id="license-confirm-error" class="text-xs text-red-700">{{ error }}</p>{% endif %}

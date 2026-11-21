@@ -1,0 +1,6 @@
+{#- A license change that landed (roadmap 4.3): the card above still shows the seats from before, so read them again here. -#}
+<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+  <p tabindex="-1" data-focus>{{ message }}</p>
+  <button type="button" hx-get="/users/licenses?email={{ email | urlencode }}" hx-target="#license-card" hx-swap="innerHTML"
+          hx-disabled-elt="this" class="mt-2 inline-flex items-center rounded-lg border border-emerald-400 px-3 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100 transition-colors">Show their licenses again</button>
+</div>

@@ -237,6 +237,19 @@ def _says_the_scope(result: ChangeResult) -> ChangeResult:
     return replace(result, detail=f"{DEVICE_WRITE_NOTE} {result.detail}".strip(), remediation=f"{DEVICE_WRITE_NOTE} {result.remediation}".strip())
 
 
+def _rows_from_titles(out: str, column: str, unanswered: str) -> List[dict]:
+    """A CSV read's rows from its titles line on: the line naming ``column``. The titles are the answer: a notice GAM
+    printed before them would otherwise be read as the header, and output without them (a banner alone) would read as
+    "none", so they are found here or the read is Incomplete with ``unanswered``. Split on "\\n" only, as parse_records
+    does: splitlines() also breaks on U+2028 and kin, which GAM's CSV leaves raw in a cell, so a cell holding one would
+    become a row of its own."""
+    lines = out.split("\n")
+    start = next((i for i, ln in enumerate(lines) if column in (c.strip() for c in ln.split(","))), None)
+    if start is None:
+        raise Incomplete(unanswered)
+    return parse_records("\n".join(lines[start:]), json_column=False)
+
+
 class GAMConnector(Connector):
     id = ConnectorID.GOOGLE_WORKSPACE
     capabilities = {Capability.DIRECTORY, Capability.GROUPS, Capability.MAIL}
@@ -316,15 +329,8 @@ class GAMConnector(Connector):
         """Every org unit path, the root `/` first then the rest in order (roadmap 4.2). GAM writes the CSV's titles even
         with no unit below the root; a run without them never answered, and is Incomplete, never "only /"."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_org_units())
-        # The titles line is the answer: a notice GAM printed before it would otherwise be read as the header, and output
-        # with no titles at all (a banner alone) would read as "no units", so both are found or refused here.
-        # Split on "\n" only, as parse_records does: splitlines() also breaks on U+2028 and kin, which GAM's CSV leaves raw
-        # in a cell, so a description holding one would become a row of its own.
-        lines = out.split("\n")
-        start = next((i for i, ln in enumerate(lines) if "orgUnitPath" in (c.strip() for c in ln.split(","))), None)
-        if start is None:
-            raise Incomplete("GAM answered without the org units, so where people can go can't be told.")
-        paths = {str(r.get("orgUnitPath") or "").strip() for r in parse_records("\n".join(lines[start:]), json_column=False)}
+        rows = _rows_from_titles(out, "orgUnitPath", "GAM answered without the org units, so where people can go can't be told.")
+        paths = {str(r.get("orgUnitPath") or "").strip() for r in rows}
         return ["/"] + sorted(p for p in paths if p.startswith("/") and p != "/")
 
     async def move_user_to_org_unit(self, email: str, org_unit: str) -> ChangeResult:
@@ -337,11 +343,8 @@ class GAMConnector(Connector):
         act on a seat this read found, never on one it didn't. A run without the titles never answered, and is
         Incomplete, never "no seats"; so is a seat listed without its IDs, which no write could name."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_licenses())
-        lines = out.split("\n")   # "\n" only, as parse_records does (org_units says why)
-        start = next((i for i, ln in enumerate(lines) if "userId" in (c.strip() for c in ln.split(","))), None)
-        if start is None:
-            raise Incomplete("GAM answered without the license seats, so who holds which license can't be told.")
-        seats = [LicenseSeat.from_row(r) for r in parse_records("\n".join(lines[start:]), json_column=False)]
+        seats = [LicenseSeat.from_row(r) for r in _rows_from_titles(
+            out, "userId", "GAM answered without the license seats, so who holds which license can't be told.")]
         if any(not (s.user and s.product_id and s.sku_id) for s in seats):
             raise Incomplete("GAM listed a license seat without its user, product or SKU, so the seats can't be told apart.")
         return seats
