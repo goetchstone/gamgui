@@ -1560,6 +1560,11 @@ video {
   border-color: rgb(110 231 183 / var(--tw-border-opacity, 1));
 }
 
+.border-emerald-400 {
+  --tw-border-opacity: 1;
+  border-color: rgb(52 211 153 / var(--tw-border-opacity, 1));
+}
+
 .border-red-200 {
   --tw-border-opacity: 1;
   border-color: rgb(254 202 202 / var(--tw-border-opacity, 1));
@@ -2370,6 +2375,11 @@ video {
 
 .hover\:bg-brand-gray\/10:hover {
   background-color: rgb(178 180 187 / 0.1);
+}
+
+.hover\:bg-emerald-100:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(209 250 229 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-paper:hover {

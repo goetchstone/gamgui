@@ -537,6 +537,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.incident_kept import router as incident_kept_router
     from .routes.incident_logs import router as incident_logs_router
     from .routes.incident_report import router as incident_report_router
+    from .routes.licenses import router as licenses_router
     from .routes.phishing import router as phishing_router
     from .routes.reports import router as reports_router
     from .routes.setup import router as setup_router
@@ -546,6 +547,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(home_router)
     app.include_router(setup_router)
     app.include_router(users_router)
+    app.include_router(licenses_router)
     app.include_router(incident_kept_router)
     app.include_router(incident_logs_router)
     app.include_router(incident_report_router)

@@ -1,0 +1,41 @@
+{#- One license change's confirm step (roadmap 4.3): exactly what the preview read and holds. A removal is DESTRUCTIVE in
+    Google's own words, so it asks for the address typed. -#}
+{% set removing = action == "remove" %}
+<div class="rounded-lg border {{ 'border-red-300 bg-red-50' if removing else 'border-brand-blue/30 bg-brand-blue/5' }} px-4 py-3 text-sm">
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">
+    {% if action == "add" %}Add {{ seat.sku }} ({{ seat.product }}) to {{ email }}?
+    {% elif action == "swap" %}Change {{ email }}'s {{ seat.sku }} to {{ new.sku }}?
+    {% else %}Remove {{ seat.sku }} ({{ seat.product }}) from {{ email }}?{% endif %}
+  </p>
+  {% if action == "add" %}
+  <p class="mt-1 text-xs text-brand-blueink">It takes one of the domain's seats for this license. Google refuses it if none are left.</p>
+  {% elif action == "swap" %}
+  <p class="mt-1 text-xs text-brand-blueink">One {{ seat.product }} license becomes the other, in one step: what they can use follows the new license.</p>
+  {% else %}
+  <p id="license-remove-warning" class="mt-1 text-xs text-red-900"><strong>DESTRUCTIVE.</strong> Google says: “{{ might_lose }}”
+    (<a href="{{ source }}" target="_blank" rel="noopener" class="underline">Assign, remove, and reassign licenses ↗</a>).
+    {{ wait }} Checked just now: no data transfer from them is unfinished.</p>
+  {% if failed %}
+  <p id="license-failed-transfer" class="mt-1 text-xs text-red-900">⚠ A data transfer from them <strong>failed</strong>
+    ({{ failed | join(", ") }}): what it was moving may still be only on their account. Transfer it again first if it matters.</p>
+  {% endif %}
+  {% endif %}
+  <form class="mt-2 space-y-2" hx-post="/users/licenses/apply" hx-target="#license-confirm" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="email" value="{{ email }}" />
+    <input type="hidden" name="action" value="{{ action }}" />
+    <input type="hidden" name="product_id" value="{{ seat.product_id }}" />
+    <input type="hidden" name="sku_id" value="{{ seat.sku_id }}" />
+    <input type="hidden" name="new_sku_id" value="{{ new.sku_id if new else '' }}" />
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    {% if removing %}
+    <label for="license-confirm-email" class="block text-sm text-red-700">Type {{ email }} to confirm:</label>
+    <input id="license-confirm-email" name="confirm_email" autocomplete="off" placeholder="{{ email }}"
+           aria-describedby="license-remove-warning{% if failed %} license-failed-transfer{% endif %}{% if error %} license-confirm-error{% endif %}" {% if error %}aria-invalid="true"{% endif %}
+           class="w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
+    {% endif %}
+    {% if error %}<p id="license-confirm-error" class="text-xs text-red-700">{{ error }}</p>{% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg {{ 'bg-red-700 hover:bg-red-800' if removing else 'bg-brand-blue hover:bg-brand-blueink' }} px-3.5 py-2 text-sm font-medium text-brand-white transition-colors">
+      {{ {"add": "Add", "swap": "Change", "remove": "Remove license"}[action] }}</button>
+  </form>
+</div>

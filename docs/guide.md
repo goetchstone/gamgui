@@ -305,6 +305,20 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Change a person's licenses
+
+Open a person and choose **Show their licenses**. It reads every license seat in the domain and shows theirs; nothing
+changes until you confirm.
+
+- **Add** a license someone in the domain already holds. Google refuses it if no seat is left.
+- **Change** one to another license of the same product, in one step (Business Standard to Business Plus, say).
+- **Remove** one. Google warns that you might lose their data, so you type their address to confirm, and GamGUI refuses
+  while a data transfer from them hasn't finished, or when it can't check. A seat you remove can take up to a day before
+  it can go to someone else.
+
+GAM skips a product Google won't let it read without saying so, so a license missing from the card may only be unread.
+Not yet verified live.
+
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.
