@@ -13,6 +13,7 @@ import asyncio
 import json
 import re
 import sys
+import threading
 from html import unescape
 from html.parser import HTMLParser
 
@@ -366,5 +367,167 @@ def test_records_written_during_and_after_a_switch_name_the_domain_each_ran_on(c
     assert len(writes) == 1 and writes[0]["extra"]["domain"] == "example.com"
     assert reads and all(r["extra"]["domain"] == OTHER for r in reads)
     assert all(r["extra"].get("domain") for r in records)               # nothing unnamed
+
+
+# --- review of #173: two checks at once, a run started during the check, records across an await --------------------
+
+def _switch_now(st) -> None:
+    """A switch to example.org landing inside a request's await (on the app's own loop, where no request can be made):
+    what the menu's passing switch does to the state."""
+    from gamgui.core.connectors.gam_connector import GAMConnector
+
+    st.activate(GAMConnector(runner=st.runner, domain=OTHER, audit=st.connector.audit))
+
+def _hold_the_check(client, st):  # noqa: F811
+    """Hold the first `check serviceaccount` in flight until released, the way a 5-15 s check runs: (reached, gate)."""
+    reached, gate, held = threading.Event(), client.portal.call(_event), []
+    real = st.runner.run_authenticated
+
+    async def waits(domain, argv, **kw):
+        if "serviceaccount" in argv and not held:
+            held.append(domain)
+            reached.set()
+            await gate.wait()
+        return await real(domain, argv, **kw)
+    st.runner.run_authenticated = waits
+    return reached, gate
+
+
+async def _event() -> asyncio.Event:
+    return asyncio.Event()
+
+
+def _in_thread(fn):
+    out: dict = {}
+    t = threading.Thread(target=lambda: out.setdefault("r", fn()))
+    t.start()
+    return t, out
+
+
+def test_a_second_switch_is_refused_while_a_check_runs(client):  # noqa: F811
+    """Two switches in flight once ended on whichever check finished last, after the menu had already sent the window to
+    the other domain. One check at a time: the second is refused in words and changes nothing."""
+    st = client.app.state.gamgui
+    _add_other(st)
+    third = "example.net"
+    st.vault.set_all(third, {"client_secrets": "{}", "oauth2": json.dumps({"decoded_id_token": {"email": f"boss@{third}"}}),
+                             "oauth2service": json.dumps({"client_id": "x"})})
+    reached, gate = _hold_the_check(client, st)
+    t, out = _in_thread(lambda: _menu_switch(client))
+    try:
+        assert reached.wait(10)
+        answers = [_menu_switch(client, tenant=third), client.post("/setup/switch", data={"tenant": third}),
+                   client.post("/setup/verify", data={"domain": third, "admin": f"boss@{third}"})]
+        meanwhile = st.connector.domain
+    finally:                                  # the held check always ends: a failed assert mustn't hang the client
+        client.portal.call(gate.set)
+        t.join(10)
+    for again in answers:
+        assert f"{OTHER}'s access is being checked. Wait for its answer" in unescape(again.text)
+        assert "HX-Redirect" not in again.headers
+    assert meanwhile == "example.com"
+    assert out["r"].headers.get("HX-Redirect") == "/users" and st.connector.domain == OTHER and st.switching == ""
+    assert _menu_switch(client, tenant=third).headers.get("HX-Redirect")       # free again once it answered
+
+
+def test_switch_anyway_drops_a_second_click_in_the_menu():
+    from gamgui.web.server import TEMPLATES
+    from gamgui.web.routes.setup import _Warn
+
+    warn = _Warn("/setup/switch", {"tenant": OTHER, "where": "menu", "back": "/"}, zone="domain-result", sync="#domain-panel")
+    html = TEMPLATES.env.get_template("_switch_warning.html").render(
+        tenant=OTHER, active="example.com", running=[], unstoppable=(), warn=warn, sync=warn.sync,
+        vals={**warn.vals, "confirmed": ""})
+    assert 'hx-sync="#domain-panel:drop"' in html                      # the domain buttons' own: one request at a time
+
+
+def test_a_run_started_during_the_check_is_warned_about_not_stopped(client):  # noqa: F811
+    """Nothing ran when the domain was clicked; an offboarding was started while its check ran. The pass once stopped it
+    after its first step, half done and never named. Now the pass answers with the warning and switches nothing."""
+    st = client.app.state.gamgui
+    _add_other(st)
+    reached, gate = _hold_the_check(client, st)
+    t, out = _in_thread(lambda: _menu_switch(client))
+    try:
+        assert reached.wait(10)
+        late = register_job(st.jobs, BatchJob(total=10, kind="offboard", title="Offboarding carol@example.com"))
+    finally:
+        client.portal.call(gate.set)
+        t.join(10)
+    page = unescape(out["r"].text)
+    assert "HX-Redirect" not in out["r"].headers and st.connector.domain == "example.com" and not late.cancel_requested
+    assert "Offboarding carol@example.com — stopped part-way, it is left half done" in page
+    assert _confirmed(page) == late.id
+    assert _menu_switch(client, confirmed=late.id).headers.get("HX-Redirect") and late.cancel_requested
+
+
+def test_an_imports_verify_that_would_stop_a_run_warns_first(client):  # noqa: F811
+    st = client.app.state.gamgui
+    _add_other(st)
+    run = _running(st, "Signature for the whole company — 3 users")
+    page = unescape(client.post("/setup/verify", data={"domain": OTHER, "admin": BOSS}).text)
+    assert st.connector.domain == "example.com" and not run.cancel_requested and 'hx-post="/setup/verify"' in page
+    assert 'hx-target="#wizard-next"' in page and _confirmed(page) == run.id
+    r = client.post("/setup/verify", data={"domain": OTHER, "admin": BOSS, "confirmed": run.id})
+    assert "All required scopes authorized." in r.text and st.connector.domain == OTHER and run.cancel_requested
+
+
+def test_a_sensitive_export_a_switch_lands_during_is_recorded_under_the_rows_domain(client, monkeypatch):  # noqa: F811
+    st = client.app.state.gamgui
+    _add_other(st)
+    st.builder_last_result = {"id": "r1", "records": [{"User": "alice@example.com", "verificationCodes": "11112222"}],
+                              "sensitive": {"command": "print_backupcodes", "argv": ["user", "alice@example.com",
+                                                                                     "print", "backupcodes"],
+                                            "target": "alice@example.com"}}
+    real = st.tenant_domains
+
+    async def read_then_switch():
+        domains = await real()
+        _switch_now(st)                                     # lands while External-only reads the domains
+        return domains
+    monkeypatch.setattr(st, "tenant_domains", read_then_switch)
+    client.get("/builder/export.csv?external=1")
+    exports = [r for r in _records(st) if r["action"] == "sensitive_csv_export"]
+    assert [(r["target"], r["extra"]["domain"]) for r in exports] == [("alice@example.com", "example.com")]
+
+
+def test_a_department_run_a_switch_lands_before_starts_nothing(client, monkeypatch, gam_calls):  # noqa: F811
+    st = client.app.state.gamgui
+    _add_other(st)
+    form = {"store": "Marketing", "group": "", "emails": "alice@example.com"}
+    token = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', client.post("/users/bulk/preview", data=form).text).group(1)
+    real = st.users
+
+    async def read_then_switch(**kw):
+        users = await real(**kw)                       # read on example.com, as previewed ...
+        monkeypatch.setattr(st, "users", real)
+        _switch_now(st)                                # ... and nothing was running to warn about
+        return users
+    monkeypatch.setattr(st, "users", read_then_switch)
+    before = len(gam_writes(gam_calls()))
+    r = client.post("/users/bulk/apply", data={**form, "confirmed": "1", "preview": token})
+    assert "The connection changed, so nothing ran." in r.text
+    assert not [j for j in st.jobs.values() if j.kind == "department"] and len(gam_writes(gam_calls())) == before
+
+
+def test_an_offboarding_a_switch_lands_before_starts_nothing(client, monkeypatch, gam_calls):  # noqa: F811
+    from gamgui.web.routes import lifecycle as lifecycle_route
+
+    st = client.app.state.gamgui
+    _add_other(st)
+    body = {"user": "carol@example.com", "manager": "alice@example.com", "subject": "s", "message": "m",
+            "days": "30", "notify": ""}
+    token = re.search(r'"preview": "([A-Za-z0-9_\-]+)"', client.post("/lifecycle/offboard/preview", data=body).text).group(1)
+    real = lifecycle_route._check
+
+    async def check_then_switch(*args, **kw):
+        found = await real(*args, **kw)
+        _switch_now(st)
+        return found
+    monkeypatch.setattr(lifecycle_route, "_check", check_then_switch)
+    before = len(gam_writes(gam_calls()))
+    r = client.post("/lifecycle/offboard/run", data={**body, "confirmed": "1", "preview": token})
+    assert "The connection changed, so nothing ran." in r.text
+    assert not [j for j in st.jobs.values() if j.kind == "offboard"] and len(gam_writes(gam_calls())) == before
 
 

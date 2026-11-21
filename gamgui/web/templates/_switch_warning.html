@@ -1,8 +1,9 @@
-{# What a switch to another domain stops (plan F6, routes/setup.switch), from the header's menu or Setup's switcher:
-   every run going now, after its current step, as Stop does. The step in hand finishes on the domain it started on and
-   is recorded under that domain. A one-call read finishes: most are dropped (st.connector is conn), and the calendar
-   index is kept stamped with the old domain, which the new one reads as not built. Said before the check, so nothing is
-   read until the operator says go. #}
+{# What making another domain active stops (plan F6, routes/setup): from the header's menu, Setup's switcher or an
+   import's verify. Every run going now stops after its current step, as Stop does. The step in hand finishes on the
+   domain it started on and is recorded under that domain. A one-call read finishes: most are dropped
+   (st.connector is conn), and the calendar index is kept stamped with the old domain, which the new one reads as not
+   built. Said before the check, and again after it passes if a run started meanwhile; "Switch anyway" posts back to the
+   route it came from (warn.post) naming exactly these runs, and drops a second click while one is asked (hx-sync). #}
 <div class="mt-2 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
   <p tabindex="-1" data-focus class="font-medium">Switching to {{ tenant }} stops what's running on {{ active }} after its current step:</p>
   <ul class="list-disc space-y-0.5 pl-5">
@@ -11,10 +12,10 @@
   <p>What already ran stays done. The steps after it won't run.</p>
   <div class="flex items-center gap-2 pt-1">
     <button type="button" class="inline-flex items-center rounded-lg bg-brand-blue px-3 py-1.5 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
-            hx-post="/setup/switch" hx-target="#{{ zone }}" hx-swap="innerHTML" hx-disabled-elt="this"
-            {% if where != "menu" %}hx-include="[name='admin']"{% endif %}
-            hx-vals='{"tenant": {{ tenant | tojson }}, "where": {{ where | tojson }}, "back": {{ back | tojson }}, "confirmed": {{ confirm | tojson }} }'>Switch anyway</button>
-    <button type="button" data-action="clear" data-clear="{{ zone }}" data-cancel
+            hx-post="{{ warn.post }}" hx-target="#{{ warn.zone }}" hx-swap="innerHTML" hx-sync="{{ sync }}:drop" hx-disabled-elt="this"
+            {% if warn.include_admin %}hx-include="[name='admin']"{% endif %}
+            hx-vals='{{ vals | tojson }}'>Switch anyway</button>
+    <button type="button" data-action="clear" data-clear="{{ warn.zone }}" data-cancel
             class="rounded-lg border border-amber-400 px-3 py-1.5 text-sm text-amber-900 hover:bg-amber-100 transition-colors">Cancel</button>
   </div>
 </div>

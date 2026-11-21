@@ -70,6 +70,37 @@ def test_cache_avoids_repeat_backend_reads():
     assert backend.reads == 0          # all served from the session cache -> no repeat Keychain prompts
 
 
+def test_the_domain_list_is_held_and_follows_an_add_and_a_remove(monkeypatch):
+    """Every page's header reads it (the domain menu, plan F6): held like a secret, so a locked Keychain doesn't ask on
+    each page, and dropped whenever a domain is added or removed here."""
+    from gamgui.core import clock
+
+    now = {"t": 1000.0}
+    monkeypatch.setattr(clock, "now", lambda: now["t"])
+    backend = _CountingBackend()
+    v = SecretsVault(backend=backend, cache_ttl=300)
+    v.set_all("a.com", {"oauth2": "tok", "oauth2service": "{}"})
+    assert v.list_domains() == ["a.com"]
+    backend.reads = 0
+    for _ in range(5):
+        assert v.list_domains() == ["a.com"]
+    assert backend.reads == 0                                # one read held, not one per page
+    v.set_all("b.com", {"oauth2": "tok", "oauth2service": "{}"})
+    assert v.list_domains() == ["a.com", "b.com"]            # an import shows at once
+    v.clear_domain("a.com")
+    assert v.list_domains() == ["b.com"]                     # and a removal
+    v.forget_domain("b.com")
+    assert v.list_domains() == []
+    v.set_all("c.com", {"oauth2": "tok", "oauth2service": "{}"})
+    v.list_domains()
+    backend.reads = 0
+    now["t"] += 301
+    assert v.list_domains() == ["c.com"] and backend.reads == 1     # read again once its time is up
+    v.clear_cache()
+    assert v.list_domains() == ["c.com"] and backend.reads == 2     # and after an explicit lock
+    assert SecretsVault(backend=backend, cache_ttl=0).list_domains() == ["c.com"]   # no cache: always the store
+
+
 def test_clear_cache_forces_reread():
     backend = _CountingBackend()
     v = SecretsVault(backend=backend, cache_ttl=300)

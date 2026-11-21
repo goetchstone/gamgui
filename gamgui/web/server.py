@@ -183,6 +183,7 @@ class AppState:
     domains_held: Optional[tuple] = None  # (connector, domains, read ok, when) — see tenant_domains
     gam_version_held: Optional[tuple] = None  # (the binary's stat key, `gam version`'s first line) — see gam_version
     switches: int = 0   # tenant switches so far — see tenant_key
+    switching: str = ""  # the domain whose access check a switch or verify is running: one at a time (routes/setup, F6)
 
     def __post_init__(self) -> None:
         self.previews.bind(self.tenant_key)

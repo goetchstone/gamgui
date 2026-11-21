@@ -12,7 +12,8 @@ from __future__ import annotations
 import logging
 
 import asyncio
-from typing import Annotated
+from dataclasses import dataclass
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
@@ -119,13 +120,16 @@ async def verify(
     request: Request,
     domain: Annotated[str, Form()] = "",
     admin: Annotated[str, Form()] = "",
+    confirmed: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     domain, admin = domain.strip().lower(), admin.strip()     # the key import stored
     if not domain or not admin:
         return TEMPLATES.TemplateResponse(
             request, "_error.html", {"message": "Domain and super-admin email are required to verify."}
         )
-    return await _verify_and_activate(request, domain, admin)
+    # A verify that passes activates the domain, so it stops what's running as a switch does: warned the same way.
+    warn = _Warn("/setup/verify", {"domain": domain, "admin": admin}, zone="wizard-next")
+    return await _verify_and_activate(request, domain, admin, confirmed=confirmed, warn=warn)
 
 
 @router.post("/switch", response_class=HTMLResponse)
@@ -145,10 +149,12 @@ async def switch(
     The header's domain menu (plan F6) posts here too, with ``where=menu``: its answers land in the menu, and a pass
     reloads ``back``, the screen it was on, for the new domain. From either place, a switch to another domain while a
     run is going says first what it stops (``_switch_warning.html``) and goes ahead only once ``confirmed`` names every
-    running job's ID."""
+    running job's ID — asked before the check, and again after it passes (``_verify_and_activate``)."""
     st = request.app.state.gamgui
     tenant, menu = tenant.strip(), where == "menu"
     active = st.connector.domain if st.connector else ""
+    if st.switching:
+        return _busy(request, st)
     try:
         # Keychain reads: a locked Keychain asks for its password here, as Setup's own verify does.
         listed = st.vault.list_domains()
@@ -165,15 +171,48 @@ async def switch(
         message = (f"{tenant}'s oauth2.txt names no admin, so switch to it on Setup, where you type its super-admin email."
                    if menu else f"Enter {tenant}'s super-admin email in \"Your domain\" above, then try again.")
         return TEMPLATES.TemplateResponse(request, "_error.html", {"message": message})
-    running = [j for j in st.jobs.values() if not j.finished and j.kind != ONE_STEP]
-    # Confirmed means "stop these": a run started since the warning (from another window) is warned about first.
-    unwarned = {j.id for j in running} - set(confirmed.split(","))
-    if unwarned and tenant.lower() != active.lower():
+    warn = _Warn("/setup/switch", {"tenant": tenant, "where": where, "back": back},
+                 zone="domain-result" if menu else "tenant-result", sync="#domain-panel" if menu else "#tenant-panel",
+                 include_admin=not menu)
+    if running := _unwarned(st, tenant, confirmed):
+        return warn.answer(request, st, tenant, running)
+    return await _verify_and_activate(request, tenant, admin, switched=True, menu=menu, back=back, confirmed=confirmed,
+                                      warn=warn)
+
+
+@dataclass(frozen=True)
+class _Warn:
+    """Where a switch's warning posts its "Switch anyway" (plan F6): the route it came from, with the same values."""
+
+    post: str
+    vals: dict
+    zone: str                    # the element its answer replaces, which Cancel empties
+    sync: str = ""               # a second click there while one is asked drops (hx-sync)
+    include_admin: bool = False  # Setup's switcher: the admin typed in "Your domain" goes with it
+
+    def answer(self, request: Request, st, domain: str, running: list) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, "_switch_warning.html", {
-            "tenant": tenant, "active": active.lower(), "running": running, "unstoppable": UNSTOPPABLE,
-            "where": where, "back": back, "zone": "domain-result" if menu else "tenant-result",
-            "confirm": ",".join(j.id for j in running)})
-    return await _verify_and_activate(request, tenant, admin, switched=True, menu=menu, back=back)
+            "tenant": domain, "active": (st.connector.domain if st.connector else "").lower(), "running": running,
+            "unstoppable": UNSTOPPABLE, "warn": self, "sync": self.sync or f"#{self.zone}",
+            "vals": {**self.vals, "confirmed": ",".join(j.id for j in running)}})
+
+
+def _unwarned(st, domain: str, confirmed: str) -> list:
+    """What making ``domain`` active would stop without a warning: every running job, when any of them isn't among the
+    IDs ``confirmed`` names (a run started since the warning, in another window or during the check), else none. A
+    re-check of the active domain stops nothing."""
+    active = st.connector.domain if st.connector else ""
+    running = [j for j in st.jobs.values() if not j.finished and j.kind != ONE_STEP]
+    if domain.lower() == active.lower() or not {j.id for j in running} - set(confirmed.split(",")):
+        return []
+    return running
+
+
+def _busy(request: Request, st) -> HTMLResponse:
+    """One check at a time (plan F6): two switches in flight once ended on whichever check finished last, while the
+    window had already been sent to the other."""
+    return TEMPLATES.TemplateResponse(request, "_error.html", {
+        "message": f"{st.switching}'s access is being checked. Wait for its answer, then try again. Nothing changed."})
 
 
 def _back_to(back: str) -> str:
@@ -199,19 +238,28 @@ def _not_checked(request: Request, domain: str, active: str, menu: bool, switche
 
 
 async def _verify_and_activate(request: Request, domain: str, admin: str, switched: bool = False, menu: bool = False,
-                               back: str = "") -> HTMLResponse:
+                               back: str = "", confirmed: str = "", warn: Optional[_Warn] = None) -> HTMLResponse:
     st = request.app.state.gamgui
+    if st.switching:
+        return _busy(request, st)
+    st.switching = domain            # set and checked with no await between: a second check is refused until this ends
     try:
-        result = await _service(request).verify(domain, admin)
-    except Exception as exc:  # noqa: BLE001 — GAM's own failures are verify's answer; anything else is said, not a 500
-        logger.warning("a domain check couldn't run", exc_info=exc)
-        return _not_checked(request, domain, st.connector.domain if st.connector else "", menu, switched,
-                            keychain=isinstance(exc, KeyringError))
-    if result.ok:
-        audit = st.connector.audit if st.connector else None          # one audit log across a switch
-        st.activate(GAMConnector(runner=st.runner, domain=domain, audit=audit))   # busts what the old tenant left
-        if menu:      # every screen read the old domain: reload this one, for the new domain
-            return HTMLResponse("", headers={"HX-Redirect": _back_to(back)})
+        try:
+            result = await _service(request).verify(domain, admin)
+        except Exception as exc:  # noqa: BLE001 — GAM's own failures are verify's answer; anything else is said, not a 500
+            logger.warning("a domain check couldn't run", exc_info=exc)
+            return _not_checked(request, domain, st.connector.domain if st.connector else "", menu, switched,
+                                keychain=isinstance(exc, KeyringError))
+        if result.ok:
+            # A run started while the check ran was never warned about: say so instead. No await from here to activate.
+            if warn is not None and (running := _unwarned(st, domain, confirmed)):
+                return warn.answer(request, st, domain, running)
+            audit = st.connector.audit if st.connector else None          # one audit log across a switch
+            st.activate(GAMConnector(runner=st.runner, domain=domain, audit=audit))   # busts what the old tenant left
+    finally:
+        st.switching = ""
+    if result.ok and menu:      # every screen read the old domain: reload this one, for the new domain
+        return HTMLResponse("", headers={"HX-Redirect": _back_to(back)})
     if menu:
         return TEMPLATES.TemplateResponse(request, "_switch_failed.html", {
             "result": result, "domain": domain, "active": st.connector.domain.lower() if st.connector else ""})

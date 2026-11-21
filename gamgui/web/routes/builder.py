@@ -293,16 +293,16 @@ async def export_csv(request: Request, rid: str = "", q: str = "", external: str
     connector to audit through, it is refused rather than served unrecorded."""
     st = app_state(request)
     last, why = _last_result(request, rid)
+    conn = st.connector      # with the result, before any await: its record names the domain the rows came from (F6)
     if last is None:
         return Response(why, media_type="text/plain", status_code=404)
     records = await _matching(request, last, q, _on(external))
     sensitive = last.get("sensitive")
     if sensitive:
-        if st.connector is None:
+        if conn is None:
             return Response("Not connected — this result can't be exported without an audit record.",
                             media_type="text/plain", status_code=409)
-        st.connector.audit_sensitive_csv(sensitive["command"], sensitive["argv"], sensitive["target"],
-                                         rows=len(records))
+        conn.audit_sensitive_csv(sensitive["command"], sensitive["argv"], sensitive["target"], rows=len(records))
     cols, _ = _columns_and_texts(last)
     buf = io.StringIO()
     writer = csv.writer(buf)
