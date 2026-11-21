@@ -1,0 +1,51 @@
+{#- Suspended → remove their licenses (roadmap 4.3, D3): the confirm step, swapped inside #suspended-licenses. The seats
+    are the ones the seats and directory read just now found on suspended accounts, held under a single-use token; Apply
+    removes exactly those. DESTRUCTIVE in Google's own words: one person's asks for their address typed, as their page
+    does, a destructive bulk change for the word, a large one for the count too (guard.enforce checks each). -#}
+<div class="mt-3">
+{% if not count %}
+  <p tabindex="-1" data-focus class="text-sm text-brand-grayink">Read again just now: no suspended account holds any of the seats read. Nothing to remove.</p>
+  {% if unnameable %}<p class="mt-1 text-xs text-brand-grayink">{{ unnameable }} seat{{ "s" if unnameable != 1 }} on a suspended account can't be given to GAM by {{ "its" if unnameable == 1 else "their" }} IDs, so {{ "it isn't" if unnameable == 1 else "they aren't" }} offered: use the Admin console.</p>{% endif %}
+  <p class="mt-1 text-xs text-brand-grayink">{{ only_read }}</p>
+{% else %}
+  <p tabindex="-1" data-focus class="text-sm text-brand-black">Remove <strong>{{ count }}</strong> license{{ "s" if count != 1 }} from {{ people }} suspended account{{ "s" if people != 1 }}, read again just now.</p>
+  <p id="suspended-licenses-warning" class="mt-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-sm text-red-900"><strong>DESTRUCTIVE.</strong> Google says: “{{ might_lose }}”
+    (<a href="{{ source }}" target="_blank" rel="noopener" class="underline">Assign, remove, and reassign licenses ↗</a>).
+    {{ wait }}</p>
+  <p class="mt-2 text-xs text-brand-blueink">Each person's data transfers are read just before their first license goes. If one hasn't finished, failed, or can't be read, their licenses stay and are listed as not removed.</p>
+  {% if unnameable %}<p class="mt-1 text-xs text-brand-grayink">Left out: {{ unnameable }} seat{{ "s" if unnameable != 1 }} GAM can't be given by {{ "its" if unnameable == 1 else "their" }} IDs. Use the Admin console for {{ "it" if unnameable == 1 else "them" }}.</p>{% endif %}
+  <p class="mt-1 text-xs text-brand-grayink">{{ only_read }}</p>
+  <details class="mt-2">
+    <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ count }}</summary>
+    <ul class="mt-2 space-y-1 max-h-56 overflow-auto">
+      {% for email, seat in held %}
+      <li class="text-sm"><a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ email | urlencode }}">{{ email }}</a>
+        <span class="text-brand-grayink">— {{ seat.sku }} ({{ seat.product }})</span></li>
+      {% endfor %}
+    </ul>
+    {% if count > held | length %}<p class="mt-1 text-xs text-brand-grayink">… and {{ count - held | length }} more.</p>{% endif %}
+  </details>
+  <form hx-post="/reports/suspended-licenses/apply" hx-target="#suspended-licenses" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" class="mt-3 space-y-2">
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    {% if typed_address %}
+    <label class="block text-sm text-red-700">Type {{ typed_address }} to confirm:
+      <input name="confirm_email" autocomplete="off" placeholder="{{ typed_address }}" aria-describedby="suspended-licenses-warning"
+             class="mt-1 block w-full rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm text-ink focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />
+    </label>
+    {% endif %}
+    {% if decision.requires_typed_confirmation %}
+    <label class="block text-sm text-brand-blueink">Type <strong>confirm</strong> to remove {{ "it" if count == 1 else "them" }}:
+      <input name="confirm" autocomplete="off" aria-describedby="suspended-licenses-warning" class="mt-1 block w-40 rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    </label>
+    {% endif %}
+    {% if decision.requires_typed_count %}
+    <label class="block text-sm text-brand-blueink">and type <strong>{{ count }}</strong>, the number of licenses:
+      <input name="confirm_count" inputmode="numeric" autocomplete="off" class="mt-1 block w-32 rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    </label>
+    {% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Remove {{ count }} license{{ "s" if count != 1 }}</button>
+    <p class="text-xs text-brand-grayink">Removes exactly this list, one license at a time, with a Stop. Preview again for a newer one.</p>
+  </form>
+{% endif %}
+</div>

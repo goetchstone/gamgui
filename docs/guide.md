@@ -284,7 +284,8 @@ Ready-made reads of the whole domain, each a fixed list of steps. A run changes 
   would suspend, and leaves out the account GamGUI is connected as.
 - **License usage:** seats per license, seats held by suspended accounts, and seats on an address the directory didn't
   list. GAM passes over a product Google won't let it read without saying so, so compare the counts with the Admin
-  console (Billing → Licenses) the first time.
+  console (Billing → Licenses) the first time. **Remove these licenses**… opens the same preview as the Suspended card on
+  Reports (see [Change a person's licenses](#change-a-persons-licenses)).
 - **Shared drive permissions:** every shared drive's members (users and groups: a drive has no other kind), members from
   outside the domain first; drives no active organizer looks after (each organizer suspended, gone from the directory, or
   being offboarded in GamGUI since it opened); and drives GAM listed but whose members it didn't read, which are unknown.
@@ -329,6 +330,12 @@ changes until you confirm.
 
 GAM skips a product Google won't let it read without saying so, so a license missing from the card may only be unread.
 Not yet verified live.
+
+To take the seats back from everyone suspended at once, choose **Remove their licenses**… on the Suspended card on
+**Reports** (or **Remove these licenses**… in the License usage audit run). It reads the seats and the directory again
+and lists each license it would remove; type what it asks, and it removes exactly those, one at a time, with a Stop.
+Each person's data transfers are read just before their first license goes: if one hasn't finished, failed, or can't be
+read, that person keeps their licenses and is listed as not removed. Not yet verified live.
 
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.

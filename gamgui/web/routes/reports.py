@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
-from ...core import bulk, clock, guard
+from ...core import bulk, clock, guard, licenses
 from ...core import reports as reports_mod
 from ...core.audit_runs import INACTIVE_WINDOWS
 from ...core.catalog.catalog import load_catalog
@@ -22,7 +22,7 @@ from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, as_of, error_partial, friendly, unread_why
+from ._common import NOT_CONNECTED, as_of, error_partial, friendly, gam_detail, unread_why
 
 router = APIRouter(prefix="/reports")
 
@@ -250,6 +250,81 @@ async def inactive_status(request: Request, job: str = "") -> HTMLResponse:
     if found is None or found.kind != "suspend_inactive":
         return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"error": "That run is no longer here."})
     return TEMPLATES.TemplateResponse(request, "_inactive_suspend_run.html", {"job": found})
+
+
+# --- Suspended → remove their licenses (roadmap 4.3, D3) ------------------------------------------------------------------
+# The Suspended card and the License usage run both come from earlier reads, so the preview reads the seats and the
+# directory again and holds each seat that read found on a suspended account, under a single-use token: Apply removes
+# exactly those, as a stoppable job. Each person's data transfers are read just before their first seat goes, and one
+# unfinished, failed or unread keeps their seats (licenses.many_refusal). A removal is DESTRUCTIVE in Google's words.
+_SEATS_FLOW = "remove_suspended_licenses"
+_SEATS_KIND = "suspended_licenses"
+_SEATS_KEY = ("suspended",)
+_SEATS_PARTIAL = "_suspended_licenses.html"
+_SEATS_RUN = "_suspended_licenses_run.html"
+_SEATS_SHOWN = 200   # seats the preview lists; the count is the whole of it (bounded page)
+
+
+def _seat_check(held):
+    """The guard's view of a removal run: one DESTRUCTIVE change a seat, and the address typed when they're one person's,
+    as their page asks."""
+    people = {email for email, _ in held}
+    return (guard.changes([email for email, _ in held], RiskLevel.DESTRUCTIVE, "Remove a license"),
+            next(iter(people)) if len(people) == 1 else None)
+
+
+@router.post("/suspended-licenses/preview", response_class=HTMLResponse)
+async def suspended_licenses_preview(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    tenant = st.tenant_key()   # before the reads: what the preview is bound to
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    try:   # read now, both: the card and the run counted earlier reads
+        seats, users = await asyncio.gather(conn.license_seats(), st.users(force=True))
+    except Exception as exc:  # noqa: BLE001 — either read failing offers nothing, never "none hold a seat"
+        return error_partial(request, "Couldn't read the license seats or the directory again, so nothing is offered. "
+                             + unread_why(exc), gam_detail(exc))
+    found = licenses.on_suspended(seats, users)
+    held = [(email, seat) for email, seat in found if licenses.nameable(seat)]
+    token = st.previews.hold(_SEATS_FLOW, _SEATS_KEY, held, tenant=tenant) if held else ""
+    changes, typed_address = _seat_check(held)
+    decision = guard.evaluate(changes, typed_count_above=guard.COUNT_CONFIRM_ABOVE, typed_address=typed_address)
+    return TEMPLATES.TemplateResponse(request, _SEATS_PARTIAL, {
+        "held": held[:_SEATS_SHOWN], "count": len(held), "people": len({email for email, _ in held}),
+        "unnameable": len(found) - len(held), "typed_address": typed_address, "decision": decision, "token": token,
+        "might_lose": licenses.MIGHT_LOSE_DATA, "wait": licenses.REASSIGN_WAIT, "source": licenses.SOURCE,
+        "only_read": licenses.ONLY_SEATS_READ})
+
+
+@router.post("/suspended-licenses/apply", response_class=HTMLResponse)
+async def suspended_licenses_apply(request: Request) -> HTMLResponse:
+    st = request.app.state.gamgui
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    held, refusal = st.previews.take(_SEATS_FLOW, str(form.get(TOKEN_FIELD) or ""), _SEATS_KEY,
+                                     again="click Remove their licenses… again")
+    if refusal:
+        return error_partial(request, refusal)
+    changes, typed_address = _seat_check(held)
+    refusal = guard.enforce(changes, form, confirm_step=True, typed_count_above=guard.COUNT_CONFIRM_ABOVE,
+                            typed_address=typed_address)
+    if refusal:
+        return error_partial(request, refusal)
+    n = len(held)
+    job = start_job(st.jobs, n, kind=_SEATS_KIND, title=f"Remove {n} license{'s' if n != 1 else ''} from suspended accounts")
+    job.task = asyncio.create_task(bulk.remove_licenses(job, conn, held))
+    return TEMPLATES.TemplateResponse(request, _SEATS_RUN, {"job": job, "wait": licenses.REASSIGN_WAIT})
+
+
+@router.get("/suspended-licenses/status", response_class=HTMLResponse)
+async def suspended_licenses_status(request: Request, job: str = "") -> HTMLResponse:
+    found = request.app.state.gamgui.jobs.get(job)
+    if found is None or found.kind != _SEATS_KIND:
+        return TEMPLATES.TemplateResponse(request, _SEATS_RUN, {"error": "That run is no longer here."})
+    return TEMPLATES.TemplateResponse(request, _SEATS_RUN, {"job": found, "wait": licenses.REASSIGN_WAIT})
 
 
 # --- No 2SV / No recovery → a reminder email (roadmap 3.3, D3) ---------------------------------------------------------

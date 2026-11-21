@@ -58,6 +58,7 @@ PREVIEWS = {
     "/signatures/putback/preview",   # roadmap 4.1: a kept run's old signatures, previewed
     "/groups/members/remove-many/preview", "/groups/members/remove-many/retry",   # roadmap 3.5: read the group, hold who
     "/users/bulk-ou/preview", "/users/bulk-ou/retry",   # roadmap 4.2: read the tree and the group, hold the unit and who
+    "/reports/suspended-licenses/preview",   # roadmap 4.3: read the seats and the directory, hold the suspended accounts' seats
     "/builder/sheet/preview",   # plan F4: a read's export to a Sheet, held; its one GAM call is the scope check, a read
     "/users/licenses/preview",   # roadmap 4.3: read the seats and their account, hold the one change
 }
@@ -153,6 +154,11 @@ def _another_step(client) -> None:  # the sequence lives on the server: its "edi
     client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "alice@example.com"})
 
 
+# A Case's edit when the confirm step posts only its token and what the operator types: nothing in it names what runs, so
+# no later edit of it can change that. The test holds such a step to exactly those fields.
+TOKEN_ONLY = "token only"
+
+
 @dataclass
 class Case:
     bare: dict                               # plausible form data (incl. what hx-include adds), no confirmation
@@ -180,6 +186,10 @@ GATED = {
                                   edit={"email": "carol@example.com"}),
     # Reports' Inactive → suspend (roadmap 3.3): the preview reads the directory again and holds who it found.
     "/reports/inactive/apply": Case({}, "/reports/inactive/preview", preview_data={}, edit={"days": "30"}),
+    # Suspended → remove their licenses (roadmap 4.3): the preview reads the seats and the directory again and holds each
+    # seat it found on a suspended account (bob's two: one person, so his address is typed). Nothing in the form names them.
+    "/reports/suspended-licenses/apply": Case({}, "/reports/suspended-licenses/preview", preview_data={},
+                                              typed={"confirm_email": "bob@example.com"}, edit=TOKEN_ONLY),
     # Put Back (roadmap 4.1): a kept run's old signatures, held by the preview.
     "/signatures/putback": Case({"run": KEPT_RUN}, "/signatures/putback/preview", setup=_kept_run, edit={"run": "another"}),
     # Remove several members (roadmap 3.5): the ticked ones the group still holds, held by the preview.
@@ -278,6 +288,7 @@ class _ConfirmStep(HTMLParser):
     def __init__(self, route: str) -> None:
         super().__init__(convert_charrefs=True)
         self.route, self.found, self.fields, self.includes = route, False, {}, ""
+        self.names = set()   # every named control the form posts, typed or not (TOKEN_ONLY holds a step to these)
         self._in_form, self._textarea = False, None
 
     def handle_starttag(self, tag, attrs):
@@ -288,6 +299,7 @@ class _ConfirmStep(HTMLParser):
             self.includes = a.get("hx-include") or ""
             self._in_form = tag == "form"
         elif self._in_form and a.get("name"):
+            self.names.add(a["name"])
             if tag == "input" and a.get("value") is not None:   # a typed field has no value: Case.typed
                 self.fields[a["name"]] = a["value"]
             elif tag == "textarea":
@@ -417,6 +429,12 @@ def test_a_confirm_step_that_posts_the_page_runs_only_its_preview(route, client,
         return
     assert "preview" in step.fields, f"{route}'s confirm step posts the live page but no preview token"
     assert case.edit is not None, f"{route}: name an edit made after the preview (it must write nothing)"
+    if case.edit == TOKEN_ONLY:   # nothing the page holds is posted: what runs can only be what the token held
+        posted = (set(step.fields) | step.names) - {"preview", guard.CONFIRMED_FIELD, guard.TYPED_FIELD, guard.COUNT_FIELD,
+                                                    guard.EMAIL_FIELD}
+        assert not posted and not step.includes, (f"{route}'s confirm step posts {sorted(posted)} {step.includes}: "
+                                                  "name an edit of them instead")
+        return
     edit = {}
     if callable(case.edit):
         case.edit(client)
