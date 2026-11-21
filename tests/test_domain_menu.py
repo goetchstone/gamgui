@@ -491,6 +491,80 @@ def test_a_sensitive_export_a_switch_lands_during_is_recorded_under_the_rows_dom
     assert [(r["target"], r["extra"]["domain"]) for r in exports] == [("alice@example.com", "example.com")]
 
 
+def _sheet_preview(client) -> tuple:  # noqa: F811
+    """A read's table and its held Export to a Google Sheet… preview (plan F4): (the table's id, the token)."""
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    rid = client.app.state.gamgui.builder_last_result["id"]
+    page = client.post("/builder/sheet/preview", data={"rid": rid}).text
+    return rid, re.search(r'"preview": "([^"]+)"', page).group(1)
+
+
+def _sheet_exports(audit) -> list:
+    return [e for e in audit.tail() if e["action"] in ("export_to_sheet", "sensitive_export")]
+
+
+def test_a_switch_drops_a_held_sheet_export(client, gam_calls, gam_state):  # noqa: F811
+    # A Sheet export's preview is held like every other (plan F4): a switch drops it, so the old domain's read never runs
+    # on the new one, nor makes a Sheet in the new admin's Drive.
+    st = client.app.state.gamgui
+    _add_other(st)
+    audit = st.connector.audit
+    rid, token = _sheet_preview(client)
+    assert st.previews.count("builder_sheet") == 1
+    assert _menu_switch(client).headers.get("HX-Redirect") and st.connector.domain == OTHER
+    assert st.previews.count("builder_sheet") == 0
+    r = client.post("/builder/sheet/export", data={"rid": rid, "preview": token, "confirmed": "1"})
+    assert "expired or was already run" in r.text and "Export to a Google Sheet" in r.text
+    assert not [a for a in gam_calls() if "todrive" in a] and not (gam_state / "drive_files").exists()
+    assert _sheet_exports(audit) == []
+
+
+def test_a_sheet_preview_a_switch_lands_during_is_held_for_the_old_domain(client, monkeypatch, gam_calls):  # noqa: F811
+    # The preview's scope check is a read: a switch landing during it clears the store before the hold, so the token is
+    # bound to the domain the preview started on and refused on this one.
+    st = client.app.state.gamgui
+    _add_other(st)
+    client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com"})
+    rid = st.builder_last_result["id"]
+    conn = st.connector
+    real = conn.sheet_export_scopes
+
+    async def check_then_switch():
+        checked = await real()
+        _switch_now(st)
+        return checked
+    monkeypatch.setattr(conn, "sheet_export_scopes", check_then_switch)
+    page = client.post("/builder/sheet/preview", data={"rid": rid}).text
+    assert "example.com - List mailbox delegates" in page        # named for the domain it was made on
+    token = re.search(r'"preview": "([^"]+)"', page).group(1)
+    r = client.post("/builder/sheet/export", data={"rid": rid, "preview": token, "confirmed": "1"})
+    assert "active domain changed after the preview" in r.text
+    assert not [a for a in gam_calls() if "todrive" in a] and _sheet_exports(conn.audit) == []
+
+
+def test_a_sheet_export_a_switch_lands_during_is_recorded_under_its_read_s_domain(client, monkeypatch, gam_state):  # noqa: F811
+    # The export runs on the connector taken with its token (plan F6's held connector): GAM reads and uploads on the
+    # previewed domain, and the record names it, though the switch has landed by the time it is written.
+    st = client.app.state.gamgui
+    _add_other(st)
+    audit = st.connector.audit
+    rid, token = _sheet_preview(client)
+    real, ran = st.runner.run_authenticated, []
+
+    async def switch_during_the_upload(domain, argv, **kw):
+        if "todrive" in argv:
+            ran.append(domain)
+            _switch_now(st)
+        return await real(domain, argv, **kw)
+    monkeypatch.setattr(st.runner, "run_authenticated", switch_during_the_upload)
+    r = client.post("/builder/sheet/export", data={"rid": rid, "preview": token, "confirmed": "1"})
+    assert st.connector.domain == OTHER and ran == ["example.com"] and "docs.google.com/spreadsheets" in r.text
+    assert [(e["action"], e["ok"], e["extra"]["domain"]) for e in _sheet_exports(audit)] == [
+        ("export_to_sheet", True, "example.com")]
+    assert [line.split("\t")[1] for line in (gam_state / "drive_files").read_text().splitlines()] == [
+        "example.com - List mailbox delegates"]
+
+
 def test_a_department_run_a_switch_lands_before_starts_nothing(client, monkeypatch, gam_calls):  # noqa: F811
     st = client.app.state.gamgui
     _add_other(st)

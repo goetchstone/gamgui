@@ -530,12 +530,13 @@ async def _sheet_page(request: Request, rid: str, error: str = "") -> HTMLRespon
         return error_partial(request, why)
     name = sheet_export.title(conn.domain, cmd.name)
     argv = list(read["argv"]) + GAMCommands.todrive_args(name)
+    rows = len((st.builder_last_result or {}).get("records") or [])   # before the check: a switch during it drops them
     checked = await conn.sheet_export_scopes()
     missing = checked is not None and not all(checked.values())
     token = "" if missing else st.previews.hold(_SHEET_FLOW, rid, (cmd.id, list(read["argv"]), name), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sheet_preview.html", {
         "cmd": cmd, "gam": "gam " + shlex.join(argv), "owner": conn.sheet_owner(), "name": name, "rid": rid,
-        "rows": len((st.builder_last_result or {}).get("records") or []),
+        "rows": rows,
         "scopes": [(scope, what, None if checked is None else checked.get(scope)) for scope, what in sheet_export.SCOPES],
         "scope_words": sheet_export.scope_state(checked), "dwd_link": _dwd_link(st, conn.domain) if missing else "",
         "token": token, "error": error,
@@ -549,12 +550,16 @@ async def sheet_preview(request: Request, rid: Annotated[str, Form()] = "") -> H
 
 @router.post("/sheet/export", response_class=HTMLResponse)
 async def sheet_export_run(request: Request, rid: Annotated[str, Form()] = "") -> HTMLResponse:
-    """Make the Sheet the preview showed, once: the held argv, never one rebuilt from the page."""
+    """Make the Sheet the preview showed, once: the held argv, never one rebuilt from the page.
+
+    The connector is taken with the token, no await between them or from there to the export (plan F6): the token is
+    bound to the domain its preview was made on, so this connector is that domain's, GAM runs the read there, and the
+    record (``export_to_sheet``, ``sensitive_export``) names it even when a switch lands while the export runs."""
     st = app_state(request)
+    form = await request.form()
     conn = st.connector
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
-    form = await request.form()
     token = str(form.get(TOKEN_FIELD) or "")
     held, refusal = st.previews.take(_SHEET_FLOW, token, rid, again=_SHEET_AGAIN, what="table")
     if refusal:

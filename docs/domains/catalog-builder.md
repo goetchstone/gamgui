@@ -32,7 +32,10 @@
   again; rows can differ from the table, and a filter doesn't apply). A scope known to be missing offers no Export,
   with Setup's Domain-Wide Delegation link; one that couldn't be checked is said and Export still offered.
   `/builder/sheet/export` takes the token, `guard.enforce(..., confirm_step=True)`, then `conn.export_to_sheet` →
-  `_run_write`; the result (`_export_result.html`, `core/sheet_export.outcome`) shows the link GAM printed, or whether a
+  `_run_write`. It takes the connector with the token, no await between them or from there to the export (plan F6):
+  the token is bound to the domain its preview was made on, so GAM reads and uploads there, and the record names that
+  domain even when a switch lands during the export; a switch before it drops the token like every held preview
+  (`tests/test_domain_menu.py`, the three `sheet` tests). The result (`_export_result.html`, `core/sheet_export.outcome`) shows the link GAM printed, or whether a
   file was made (yes / no / unknown) and what to do. The Builder's Run no longer exports: its old one-click
   `td_export`/`td_user` fields put a Sheet in any user's Drive, and opened it in the Mac's browser (GAM's
   `webbrowser.open`). GATED in `tests/test_write_routes_guarded.py`; `tests/test_sheet_export.py`.
