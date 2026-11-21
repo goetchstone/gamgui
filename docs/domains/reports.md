@@ -186,7 +186,10 @@ A step that reads for what an earlier step found (`step_argv(step, tables)` is N
   the domain (an address not in `print domains`' own domains or aliases) and claims nothing about "anyone with the link"
   or a whole domain: that is the sharing of files inside a drive, which it doesn't read (review of #172, 2026-11-21; the
   first fixture invented such members). printShowSharedDriveACLs drops a drive whose permissions Google refused WITHOUT a
-  word or a code, so a listed drive missing from the ACL table goes in "Drives whose members weren't read". A drive is
+  word or a code, so a listed drive missing from the ACL table goes in "Drives whose members weren't read" (every drive
+  dropped is GAM's 60, as for none). No row is "no drive" only at 60 (`Step.empty_rcs`): a service-account token Google
+  refuses silently (`REFRESH_PERM_ERRORS`) writes the titles alone at exit 0, and `audit_read` raises `NoRowUnsaid`
+  (failure-log 2026-11-21, a refused token read as no shared drive). A drive is
   flagged when every organizer is a user who is suspended, gone from the directory (or `deleted`), or being offboarded
   here ("leaving" = a key of `AppState.offboard_jobs`, an offboarding started since GamGUI opened); a group organizer isn't
   flagged; a drive with no organizer is.

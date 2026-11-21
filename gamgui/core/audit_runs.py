@@ -49,6 +49,7 @@ class Step:
     key_column: str  # the column the step's joins read: a table without it isn't the table asked for
     ok_rcs: Tuple[int, ...] = (0,)          # exits that are the step's whole answer
     partial_rcs: Tuple[int, ...] = ()       # exits whose rows stand, with accounts GAM named as unread
+    empty_rcs: Optional[Tuple[int, ...]] = None   # exits at which no row at all is an answer; None: any of ok_rcs
 
 
 @dataclass(frozen=True)
@@ -61,8 +62,12 @@ class Run:
 
 DIRECTORY = Step("directory", "The directory, suspended accounts included", "primaryEmail")
 LICENSES = Step("licenses", "Every license seat", "userId")
-DRIVES = Step("drives", "Every shared drive", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC))
-DRIVE_ACLS = Step("drive_acls", "Every shared drive's members", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC))
+# No row is "no drive" only with GAM's 60: a service-account token Google refuses silently (REFRESH_PERM_ERRORS) makes both
+# reads skip the admin, titles alone, exit 0 (buildGAPIServiceObject -> handleOAuthTokenError, then `continue` before the
+# none check, printShowSharedDrives / printShowSharedDriveACLs at the 7.52.04 tag).
+DRIVES = Step("drives", "Every shared drive", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC), empty_rcs=(NO_ENTITIES_FOUND_RC,))
+DRIVE_ACLS = Step("drive_acls", "Every shared drive's members", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC),
+                  empty_rcs=(NO_ENTITIES_FOUND_RC,))
 DOMAINS = Step("domains", "The domain's own domains and aliases", "domainName")
 COURSES = Step("courses", "Every Classroom class, with its counts", "id")
 ADMINS = Step("admins", "Every admin role, a group's members included", "roleAssignmentId")

@@ -118,6 +118,36 @@ def test_no_shared_drive_is_gam_s_own_none_and_a_refused_list_is_unknown(client,
     assert [r["ok"] for r in _records(client, "shared_drive_permissions/drives")] == [True, False]
 
 
+def test_titles_alone_at_exit_0_are_a_token_google_refused_silently_never_no_drive(client, gam_state):  # noqa: F811
+    # handleOAuthTokenError passes over REFRESH_PERM_ERRORS without a word; the read `continue`s before its none check, so
+    # it writes the titles alone and exits 0. GAM's own none is exit 60 (above): only that is "no shared drive".
+    (gam_state / "drive_token_silent").touch()
+    _, job = _start(client, "shared_drive_permissions")
+    result = client.app.state.gamgui.audit_runs["shared_drive_permissions"]
+    assert job.failed_total == 2 and not result.answered
+    assert [r.state for r in result.reads[:2]] == [runs.UNKNOWN, runs.UNKNOWN]
+    assert "didn't say there were none" in result.reads[0].why
+    assert not any(f.known for f in result.findings)
+    for command in ("shared_drive_permissions/drives", "shared_drive_permissions/drive_acls"):
+        failed = _records(client, command)[-1]
+        assert not failed["ok"] and "rows" not in failed["extra"] and "which isn't how it says there are none" in failed["extra"]["error"]
+    page = _page(client)
+    assert "GAM read every listed drive" not in page and "Every drive read has an active organizer" not in page
+
+
+def test_every_drive_dropped_is_gam_s_60_and_every_drive_is_named_unread(client, gam_state):  # noqa: F811
+    # printShowSharedDriveACLs sets 60 when its matched feed is empty, so a domain whose every drive was refused reads like
+    # one with none: the drive list, read first, names each drive as unread instead.
+    (gam_state / "acl_dropped").mkdir()
+    for drive in ("0AFINANCEuk9PVA", "0ALEGALuk9PVA", "0AOLDuk9PVA", "0AUNUSEDuk9PVA"):
+        (gam_state / "acl_dropped" / drive).touch()
+    _start(client, "shared_drive_permissions")
+    result = client.app.state.gamgui.audit_runs["shared_drive_permissions"]
+    unread = result.finding("unread")
+    assert result.reads[1].state == runs.READ and unread.known and len(unread.rows) == len(result.tables["drives"])
+    assert result.finding("permissions").partial and result.finding("orphaned").partial
+
+
 # --- 4. Classroom ---------------------------------------------------------------------------------------------------------
 
 def test_classes_join_their_owner_by_id_and_flag_suspended_owners_strays_and_stale_ones():

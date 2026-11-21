@@ -30,6 +30,7 @@ from ...core import audit_runs as runs_mod
 from ...core import clock
 from ...core import schedules as sched
 from ...core.bulk import stop_requested
+from ...core.connectors.gam_connector import NoRowUnsaid
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.gam.models import GAMUser
 from ...core.phishing import Incomplete
@@ -47,6 +48,8 @@ _PANEL = "_audit_run.html"
 KIND = "audit_run"
 # Fixed words, never an exception's own text (tests/test_route_error_text.py).
 _NO_TABLE = "GAM ended without writing the table, so this step has no answer."
+_NO_ROW_UNSAID = ("GAM wrote no row and didn't say there were none, which it does when there are. A service-account "
+                  "token Google refuses ends this way, so this step has no answer: check the domain's access on Setup.")
 _TIMED_OUT = "GAM didn't finish in the hour a read is allowed, so this step has no answer."
 _NOT_KEPT = "Not kept: the connection changed during the run. Run it again."
 _STOPPED_BEFORE = "The run was stopped before this step."
@@ -166,6 +169,8 @@ async def start_run(request: Request, run: Annotated[str, Form()] = "", days: An
 
 
 def _why(exc: Exception) -> str:
+    if isinstance(exc, NoRowUnsaid):
+        return _NO_ROW_UNSAID
     if isinstance(exc, Incomplete):
         return _NO_TABLE
     if isinstance(exc, GAMError) and exc.kind is GAMErrorKind.TIMEOUT:
@@ -192,7 +197,8 @@ async def _run(job, st, conn, run, days: int) -> None:
                 continue
             try:
                 rows, unread = await conn.audit_read(runs_mod.step_command(run, step), argv, step.key_column,
-                                                     ok_rcs=step.ok_rcs, partial_rcs=step.partial_rcs)
+                                                     ok_rcs=step.ok_rcs, partial_rcs=step.partial_rcs,
+                                                     empty_rcs=step.empty_rcs)
             except Exception as exc:  # noqa: BLE001 — a failed step is unknown, said in words; the run goes on
                 why = _why(exc)
                 reads.append(runs_mod.StepRead(step, runs_mod.UNKNOWN, why, detail=gam_detail(exc)))
