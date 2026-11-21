@@ -4,7 +4,10 @@
 {#- Audit runs (plan F3): ready-made lists of reads, each run when asked. Loading this page reads nothing. -#}
 <p class="eyebrow text-brand-blue"><a class="hover:text-brand-black" href="/reports">Reports</a></p>
 <h1 class="mt-1 font-serif text-2xl text-brand-black tracking-tight">Audit runs</h1>
-<p class="mt-1 text-sm text-brand-blueink">Each run is a fixed list of reads of the whole domain, run when you ask, with Stop between its steps. A run changes nothing. Each step is recorded in the <a class="underline hover:text-brand-black" href="/audit">Audit</a> log (the command and how many rows, never what it read), and its table is kept here until GamGUI quits or you switch domains.</p>
+<p class="mt-1 text-sm text-brand-blueink">Each run is a fixed list of reads of the whole domain, run when you ask, with Stop between its steps. A run changes nothing. Each step is recorded in the <a class="underline hover:text-brand-black" href="/audit">Audit</a> log (the command and how many rows, never what it read), and its table is kept here until GamGUI quits or you switch domains. A run can be given a schedule: it then says when it's due, here and on Home, and keeps its last runs on this Mac to say what changed. Nothing runs on its own.</p>
+{% if set_aside %}
+  <p class="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">The schedules file wasn't one GamGUI could read, so it was moved to <code class="break-all">{{ set_aside }}</code> and the schedules started empty.</p>
+{% endif %}
 {% if not connected %}
   <div class="mt-6 rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
     <p class="text-sm text-brand-black">Connect a domain first.</p>
@@ -13,7 +16,10 @@
 {% else %}
   <div class="mt-6 space-y-6">
   {% for p in panels %}
-    {% with run=p.run, connected=p.connected, job=p.job, announce=p.announce, result=p.result, windows=p.windows, days=p.days, shown=p.shown, inactive_run=p.inactive_run, age=p.age %}
+    {% with run=p.run, connected=p.connected, job=p.job, announce=p.announce, result=p.result, windows=p.windows, days=p.days, shown=p.shown, inactive_run=p.inactive_run, age=p.age,
+            notice=p.notice, notice_problem=p.notice_problem, scheduling=p.scheduling, domain=p.domain, schedule=p.schedule, due=p.due, due_line=p.due_line,
+            schedule_problem=p.schedule_problem, kept=p.kept, kept_problem=p.kept_problem, cadences=p.cadences, cadence_words=p.cadence_words,
+            keep_default=p.keep_default, keep_cap=p.keep_cap, when_words=p.when_words %}
     {% include "_audit_run.html" %}
     {% endwith %}
   {% endfor %}

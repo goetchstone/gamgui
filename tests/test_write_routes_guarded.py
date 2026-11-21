@@ -84,6 +84,8 @@ LOCAL_ONLY = {
     "/classroom/import/map/preview", "/classroom/import/map/read", "/classroom/import/map/delete", "/classroom/import/map/cancel",
     "/classroom/import/compare",   # reads Classroom only: the change list is never applied (plan 2026-11-11 E2)
     "/reports/runs/start",   # an audit run (plan F3): reads only, its tables kept in memory; its one write is the Inactive preview
+    # A run's schedule, and the tables its runs kept on this Mac (plan F7a): saved or deleted here. Nothing runs, nothing reaches Google.
+    "/reports/runs/schedule", "/reports/runs/kept/delete",
 }
 # Single-target LOW writes: one account/calendar, reversible, and guard.evaluate asks no confirmation
 # for them. (/calendars/share to a group under the bulk threshold also fans out an additive subscribe

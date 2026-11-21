@@ -32,7 +32,7 @@ ROUTES = Path(__file__).parent.parent / "gamgui" / "web" / "routes"
 # GAM's, scrubbed of secrets before the error is built (gamgui/core/gam/errors.py).
 OURS = frozenset({
     "Problem", "IncidentProblem", "StoreError", "PackageError", "NeedsMap", "Incomplete", "IncompleteList", "BackupProblem",
-    "GAMError",
+    "GAMError", "StoreProblem",
 })
 
 # (file, function) -> the validator that raises every ValueError its try body can.

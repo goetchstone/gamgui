@@ -207,3 +207,36 @@ A step that reads for what an earlier step found (`step_argv(step, tables)` is N
   `print tokens users` (unknown or `tokens_gone/<u>` 56, `denied/tokens` 12); `print courses … show all countsonly`
   (counts from course_participants.tsv; `roster_gone/<id>` the silent 0).
 - **Not run on a real domain yet**, none of them; the Classroom run can't be until an Education domain is there.
+
+### Schedules (plan F7a)
+A run can be given a cadence per domain: it then says when it's due, on Home and on its own panel. **Nothing runs on its
+own**: there is no background runner, and the run is the operator's Run button, recorded as ever (`read`, origin
+`audit_run`). No write, no sensitive read, no Sheet export.
+- **Files.** `core/schedules.py` (cadence, due, `ScheduleStore`, `KeptRuns`, `changes_since`, `after_run`), the panel's
+  `/reports/runs/schedule` and `/reports/runs/kept/delete` (both LOCAL_ONLY), `_audit_run_schedule.html`,
+  `_audit_run_changes.html`, Home's "Scheduled audit runs" (`routes/home._schedules`), Setup's Remove
+  (`routes/setup._forget_schedules`), `tests/test_schedules.py`.
+- **Cadence and due.** `daily`, `weekly`, `monthly`. A run *counts* when every step has an answer, `partial` included
+  (`RunResult.answered`); stopped, or a step unknown, doesn't. Due now when none has counted since the cadence was set;
+  else due from the local day 1 day, 7 days or one calendar month (clamped to the month's last day) after the day it last
+  counted. Changing the cadence keeps when it last counted. Words: `<Title> is due` + `<Cadence>; no run of it has read every
+  step since it was scheduled.` / `<Cadence>; its last run that read every step was on <Wed 18 Nov 2026>.`; not due:
+  `<Cadence>, next due <day>`.
+- **Kept runs.** Only a scheduled run that counts is kept: its findings (what the panel shows, never the steps' raw reads),
+  in `<app data>/schedules/kept/<sha256(domain)[:24]>/<run>/<ms>-<hex>.jsonl`, a header line then one line of rows per
+  kept table, written under a temp name and renamed. `keep` per run: default 5, 1 to 12; a table over 50,000 rows isn't
+  kept (its header says so). The oldest beyond `keep` go after each kept run and when the count is lowered; all go when the
+  run is unscheduled, on Delete the kept runs, or when Setup removes the domain (unless another spelling is still listed).
+- **Changed since.** Each table against the newest earlier kept run that holds it whole (known, not partial, kept) with the
+  same window (`days`; 0 for every run but Inactive users), passing over a kept run that can't be read. Rows compared
+  whole, as a multiset: a row with any cell changed is gone and new. A table unknown or partial now, or no earlier run to
+  compare with, says why and is never "no change". Each list draws 100 rows.
+- **Store rules.** `schedules.json` is read again on every look and change. No file is the empty store; a read the disk
+  failed is unknown, said (Home never says "Nothing is due" then) and never saved over; a file that isn't a store (not
+  UTF-8, not JSON, not this shape) is moved to `schedules.json.unreadable-<time>` before an empty one starts, said on Home
+  and the runs page; one that can't be moved stays, unknown, never saved over. A kept run that can't be read is listed as
+  such, never dropped.
+- **Per domain.** Everything is keyed by the active connector's domain, lowercased: a switch shows that domain's. A run
+  that ends after a switch isn't kept, as before. The poll of a running run reads no schedule.
+- **Not run on a real domain yet**, and not seen in the app window (WKWebView): headless Chrome only. Its Delete asks
+  through `hx-confirm`, as Stop does.

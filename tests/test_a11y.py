@@ -407,6 +407,23 @@ def _screens(p: Page, st):
     p.click("#run-inactive_users button", "Run")
     p.settle("/Suspend these/.test(document.querySelector('#run-inactive_users')?.innerText ?? '')")
     yield "reports/runs/finished"                  # each run's steps and tables, and Suspend these…
+    # Plan F7a: a run given a schedule (its due line, the saved notice, the open form), run twice (kept, then compared with
+    # the run kept before it), its kept runs listed, and Home's list of what's due.
+    p.fill("#run-license_usage select[name=cadence]", "weekly")
+    p.click("#run-license_usage button", "Save schedule")
+    p.settle("/Saved: weekly/.test(document.querySelector('#run-license_usage')?.innerText ?? '')")
+    yield "reports/runs/scheduled"
+    p.click("#run-license_usage button", "Run again")
+    p.settle("/Kept on this Mac, as one/.test(document.querySelector('#run-license_usage')?.innerText ?? '')")
+    p.click("#run-license_usage button", "Run again")
+    p.settle("/No change since/.test(document.querySelector('#run-license_usage')?.innerText ?? '')")
+    p.click("#run-license_usage summary", "Schedule")
+    yield "reports/runs/kept"                      # what changed since, and the runs kept on this Mac
+    p.fill("#run-classroom_courses select[name=cadence]", "monthly")
+    p.click("#run-classroom_courses button", "Save schedule")
+    p.settle("/Saved: monthly/.test(document.querySelector('#run-classroom_courses')?.innerText ?? '')")
+    p.goto("/")
+    yield "home/scheduled"                         # Classroom is due; License usage isn't yet
 
     p.goto("/audit", "!/Loading/.test(document.querySelector('#audit-rows')?.innerText ?? 'Loading')")
     yield "audit"

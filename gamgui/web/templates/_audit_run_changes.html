@@ -1,0 +1,32 @@
+{#- Plan F7a: what changed in one table since the run's last kept run that read it whole (core/schedules.changes_since).
+    A row counts by all its cells, so one with any cell changed is gone and new. A table not compared says why: never
+    "no change" (invariant 10). Each list draws `shown` rows (invariant 9). Context: change (a Change), f (its finding). -#}
+<div class="mt-2 rounded-xl border border-brand-gray/30 px-3 py-2">
+{% if not change.compared %}
+  <p class="text-xs text-brand-grayink">{{ change.why }}</p>
+{% elif not change.new and not change.gone %}
+  <p class="text-sm text-brand-black">No change since {{ when_words(change.since) }}.</p>
+{% else %}
+  <p class="text-sm text-brand-black">Since {{ when_words(change.since) }}: {{ change.new | length }} new, {{ change.gone | length }} gone.</p>
+  {% for label, rows in (("New", change.new), ("Gone", change.gone)) if rows %}
+  <details class="mt-1">
+    <summary class="cursor-pointer text-sm text-brand-blueink hover:text-brand-black">{{ label }} since then ({{ rows | length }})<span class="sr-only">: {{ f.title }}</span></summary>
+    <div class="mt-1 max-h-96 overflow-auto rounded-xl border border-brand-gray/30">
+      <table class="w-full text-sm">
+        <caption class="sr-only">{{ label }} in {{ f.title }} since {{ when_words(change.since) }}{% if rows | length > shown %}, the first {{ shown }} of {{ rows | length }}{% endif %}</caption>
+        <thead class="sticky top-0 bg-brand-white text-left text-xs text-brand-grayink">
+          <tr>{% for col in f.columns %}<th scope="col" class="px-3 py-2 font-medium">{{ col }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for row in rows[:shown] %}
+          <tr class="border-t border-brand-gray/20 align-top">{% for cell in row %}<td class="px-3 py-1.5{% if loop.first %} break-all{% endif %}">{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if rows | length > shown %}<p class="mt-1 text-xs text-brand-grayink">Showing the first {{ shown }} of {{ rows | length }}.</p>{% endif %}
+  </details>
+  {% endfor %}
+  <p class="mt-1 text-xs text-brand-grayink">A row counts by all its cells: one with any cell changed shows as gone and as new.</p>
+{% endif %}
+</div>

@@ -11,6 +11,7 @@ from ...core.phishing import Incomplete
 from ...core.incident.known import KnownSignIns, NobodyHasChecks
 from ...core.incident.store import IncidentStore
 from ...core.incident.store import Problem as IncidentProblem
+from ...core.schedules import KeptRuns, ScheduleStore
 from ...core.signature_backups import SignatureBackups
 from ...core.signatures import SignatureStore
 from ..server import TEMPLATES
@@ -119,6 +120,15 @@ def signature_backups(st) -> SignatureBackups:
     if st.signature_backups is None:
         st.signature_backups = SignatureBackups()
     return st.signature_backups
+
+
+def schedule_stores(st) -> "tuple[ScheduleStore, KeptRuns]":
+    """The audit runs' schedules and their kept runs (plan F7a), opened on first use. Each look reads the disk again."""
+    if st.schedules is None:
+        st.schedules = ScheduleStore()
+    if st.kept_runs is None:
+        st.kept_runs = KeptRuns()
+    return st.schedules, st.kept_runs
 
 
 def signature_store(request: Request) -> SignatureStore:

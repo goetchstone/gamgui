@@ -107,6 +107,14 @@ guarding them:
   overwrite it; FileVault is what protects it at rest. GamGUI never sends it anywhere and never writes to Classroom. The change list it hands over (a ZIP the operator
   downloads) holds the same people's addresses, and the GAM files in it run outside GamGUI's guard and audit log; the page
   says so before the download.
+- **A scheduled audit run keeps its last runs' tables on this Mac.** An audit run given a schedule keeps the tables of its
+  last runs, so the next run can say what changed: a count the operator picks per run (5 unless changed, at most 12), and
+  no table over 50,000 rows. Those tables are the domain's own data: names and addresses, licences, shared drive members,
+  classes, admins and the apps they granted. `core/schedules.py` keeps them per domain, each run one `0600` file in
+  `0700` folders under the app's data folder (`schedules/`), never the steps' raw reads, and deletes them when the count is
+  lowered, the run is no longer scheduled, on **Delete the kept runs**, or when Setup removes the domain. The run's screen
+  says this beside the schedule. A schedule only says a run is due: nothing runs unattended, writes, reads something
+  sensitive or exports to a Sheet. Deleting a file on an SSD doesn't overwrite it; FileVault is what protects it at rest.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no
   committed pin is refused, not installed. `scripts/bump_gam.py` writes a new pin only after
   `gh attestation verify` shows the asset was built by GAM-team/GAM's release workflow

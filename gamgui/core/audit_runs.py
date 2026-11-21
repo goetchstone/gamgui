@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .connected_apps import Reach, describe, grants_from, looks_like_ai
 from .gam.commands import CACHE_FIELDS, COURSE_STATES, GAMCommands, is_one_address
@@ -132,10 +132,20 @@ class RunResult:
     tables: Dict[str, list]   # each step's records, kept for the run (the directory as GAMUser, the rest as rows)
     when: float
     days: int = 0             # Inactive users: the window it was read with
+    # A scheduled run (plan F7a): each table against the last kept run that read it (core/schedules.Change, by finding
+    # key), and what happened to this run's keep, in words (``kept_problem``: that it went wrong).
+    changes: Dict[str, Any] = field(default_factory=dict)
+    kept_note: str = ""
+    kept_problem: bool = False
 
     @property
     def complete(self) -> bool:
         return all(r.state == READ for r in self.reads) and not any(f.partial for f in self.findings)
+
+    @property
+    def answered(self) -> bool:
+        """Every step has an answer, at most with accounts GAM named as unread: the run counts for its schedule (F7a)."""
+        return all(r.state in (READ, PARTIAL) for r in self.reads)
 
     def finding(self, key: str) -> Optional[Finding]:
         return next((f for f in self.findings if f.key == key), None)

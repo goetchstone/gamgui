@@ -3,11 +3,13 @@
 The counts come from the directory cache as it is — any age, labelled — and a cold cache shows a Load
 control instead of holding the page on ``gam print users``. Jobs come from the tray's registry and
 failures from the local audit log. The only ``gam`` on load is ``gam version``, which is local — and
-held on AppState (``gam_version``) until the binary changes or setup activates a tenant.
+held on AppState (``gam_version``) until the binary changes or setup activates a tenant. Scheduled audit
+runs (plan F7a) say which are due on the active domain, from the schedules file: nothing runs from here.
 """
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from itertools import islice, takewhile
 from typing import Any, Dict, List
@@ -16,10 +18,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from ...core import reports as reports_mod
+from ...core import schedules as sched
 from ...core.audit import READ_ACTIONS, iter_records
+from ...core.audit_runs import RUNS
 from ..jobs import tray
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, as_of, friendly
+from ._common import NOT_CONNECTED, as_of, friendly, schedule_stores
 from .audit import _audit_path
 
 router = APIRouter()
@@ -39,6 +43,26 @@ def _directory(st, users) -> Dict[str, Any]:
         "groups": None if groups is None else len(groups),
         "reports": reports_mod.build_reports(users), **as_of(st.user_cache),
     }
+
+
+def _schedules(st) -> Dict[str, Any]:
+    """Plan F7a: the active domain's scheduled audit runs, due ones first. Unreadable schedules are said, never "none due"."""
+    none: Dict[str, Any] = {"due_runs": [], "waiting_runs": [], "schedule_problem": "", "schedule_set_aside": None}
+    if st.connector is None:
+        return none
+    store, _ = schedule_stores(st)
+    try:
+        mine = store.schedules(st.connector.domain)
+    except sched.StoreProblem as exc:
+        return {**none, "schedule_problem": str(exc)}
+    now = time.time()
+    due: List[Dict[str, Any]] = []
+    waiting: List[Dict[str, Any]] = []
+    for run in RUNS:
+        if run.key in mine:
+            words = sched.due_words(run.title, mine[run.key], now)
+            (due if words.due else waiting).append({"run": run, "words": words})
+    return {**none, "due_runs": due, "waiting_runs": waiting, "schedule_set_aside": store.set_aside}
 
 
 def recent_failures(request: Request, n: int = HOME_FAILURES, days: int = HOME_FAILURE_DAYS) -> List[Dict[str, Any]]:
@@ -63,6 +87,7 @@ async def index(request: Request) -> HTMLResponse:
         "connected": st.connector is not None,
         "jobs": rows[:HOME_JOBS], "running": running, "jobs_more": max(0, len(st.jobs) - HOME_JOBS),
         "failures": recent_failures(request),
+        **_schedules(st),
         **_directory(st, st.user_cache.cached),
     })
 
