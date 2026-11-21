@@ -58,10 +58,11 @@ def _schedules(st) -> Dict[str, Any]:
     now = time.time()
     due: List[Dict[str, Any]] = []
     waiting: List[Dict[str, Any]] = []
-    for run in RUNS:
-        if run.key in mine:
-            words = sched.due_words(run.title, mine[run.key], now)
-            (due if words.due else waiting).append({"run": run, "words": words})
+    # The audit runs, then the named reports run on Audit runs (by their titles alone: Home loads no catalog).
+    for key, title in [(r.key, r.title) for r in RUNS] + [(n.key, n.title) for n in reports_mod.NAMED_REPORTS]:
+        if key in mine:
+            words = sched.due_words(title, mine[key], now)
+            (due if words.due else waiting).append({"key": key, "title": title, "words": words})
     return {**none, "due_runs": due, "waiting_runs": waiting, "schedule_set_aside": store.set_aside}
 
 

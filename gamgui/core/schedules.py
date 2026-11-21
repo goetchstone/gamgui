@@ -592,6 +592,7 @@ class Change:
     new: List[Tuple[str, ...]] = field(default_factory=list)
     gone: List[Tuple[str, ...]] = field(default_factory=list)
     why: str = ""
+    columns: Tuple[str, ...] = ()   # the columns ``new`` and ``gone`` are in, when not the table's own (see ``_aligned``)
 
     @property
     def compared(self) -> bool:
@@ -604,6 +605,21 @@ NOTHING_BEFORE = "No earlier run that read this table whole is kept, so there's 
 KEPT_RUN_UNREAD = ("A run kept before couldn't be read, so this table isn't compared. Delete the kept runs if it stays "
                    "that way.")
 NOT_ANSWERED = "A step of this run has no answer, so its tables aren't compared: one may hold \"unknown\" where it had a value."
+
+
+def _aligned(now_cols: Sequence[str], now_rows: List[Tuple[str, ...]], then_cols: Sequence[str],
+             then_rows: List[Tuple[str, ...]]) -> Tuple[Tuple[str, ...], List[Tuple[str, ...]], List[Tuple[str, ...]]]:
+    """Both tables in one set of columns: now's, then any only the earlier one had, a cell a table lacks being "". A read
+    whose JSON GAM flattens gets as many columns as its widest record needs (`permissions.5.role` once a drive has a sixth
+    member), so its columns can differ from run to run while the rows they share don't."""
+    now_cols, then_cols = tuple(now_cols), tuple(then_cols)
+    if now_cols == then_cols:
+        return now_cols, now_rows, then_rows
+    union = now_cols + tuple(c for c in then_cols if c not in now_cols)
+
+    def project(cols: Tuple[str, ...], rows: List[Tuple[str, ...]]) -> List[Tuple[str, ...]]:
+        return [tuple(dict(zip(cols, r, strict=False)).get(c, "") for c in union) for r in rows]
+    return union, project(now_cols, now_rows), project(then_cols, then_rows)
 
 
 def _difference(rows: Sequence[Tuple[str, ...]], minus: Sequence[Tuple[str, ...]]) -> List[Tuple[str, ...]]:
@@ -764,7 +780,9 @@ def changes_since(findings: Sequence, days: int, earlier: Sequence[KeptRun],
                 change = Change(f.key, why=f"The run kept on {when_words(head.when)} couldn't be read whole, so this "
                                            "table isn't compared.")
                 break
-            change = Change(f.key, head.when, _difference(now_rows, whole.rows), _difference(whole.rows, now_rows))
+            cols, now_cmp, then_cmp = _aligned(f.columns, now_rows, whole.columns, whole.rows)
+            change = Change(f.key, head.when, _difference(now_cmp, then_cmp), _difference(then_cmp, now_cmp),
+                            columns=cols if cols != tuple(f.columns) else ())
             break
         out[f.key] = change
     return out

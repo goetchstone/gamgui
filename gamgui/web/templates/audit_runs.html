@@ -15,7 +15,13 @@
   </div>
 {% else %}
   <div class="mt-6 space-y-6">
-  {% for p in panels %}
+  {% for p in panels + named %}
+    {% if p.run.named and (loop.first or not loop.previtem.run.named) %}
+    <div class="pt-4">
+      <h2 class="font-serif text-xl text-brand-black tracking-tight">Named reports</h2>
+      <p class="mt-1 text-sm text-brand-blueink">The domain-wide reads Reports names, each run here as the Builder runs it with no options, so it can be scheduled and say what changed. Each is recorded in the Audit log as a named report.</p>
+    </div>
+    {% endif %}
     {% with run=p.run, connected=p.connected, job=p.job, announce=p.announce, result=p.result, windows=p.windows, days=p.days, shown=p.shown, inactive_run=p.inactive_run, age=p.age,
             notice=p.notice, notice_problem=p.notice_problem, scheduling=p.scheduling, domain=p.domain, schedule=p.schedule, due=p.due, due_line=p.due_line,
             schedule_problem=p.schedule_problem, kept=p.kept, kept_problem=p.kept_problem, cadences=p.cadences, cadence_words=p.cadence_words,

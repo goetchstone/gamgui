@@ -91,6 +91,9 @@ gam_row() {  # <value>...: one CSV row as GAM writes it
   for value in "$@"; do printf '%s' "$separator"; gam_cell "$value"; separator=","; done
   printf '\n'
 }
+json_opt() {  # <key> <json line>: a top-level string value, or "" when the record has none
+  printf '%s' "$2" | sed -n "s/.*\"$1\": \"\([^\"\\\\]*\)\".*/\1/p"
+}
 json_text() {  # <key> <json line>: a top-level string value holding no quote or backslash (an address, an ID)
   found=$(printf '%s' "$2" | sed -n "s/.*\"$1\": \"\([^\"\\\\]*\)\".*/\1/p")
   [ -n "$found" ] || { echo "ERROR: mock: no $1 in a data line" 1>&2; exit 2; }
@@ -386,6 +389,24 @@ is_org_unit() { [ "$1" = "/" ] || org_units | grep -qxF -- "$1"; }
 # `gam print orgs fields <OrgUnitFieldNameList>` (doPrintOrgs, read from the vendored build): plain CSV, no formatjson, the
 # root never a row. With no unit below the root `_getOrgUnits` gives [] and GAM still writes the titles; when the read
 # fails it gives None and GAM writes nothing (the error and its code come first).
+if [ "${1:-}" = "print" ] && { [ "${2:-}" = "orgs" ] || [ "${2:-}" = "ous" ]; } && [ $# -eq 2 ]; then
+  # Bare (a named report, plan F7a): doPrintOrgs' default titles orgUnitPath,orgUnitId,name,parentOrgUnitId, every unit
+  # below the root, the root never a row (type all, no showparent). GAM_MOCK_STATE/orgs_failed is orgunits.list failing
+  # with backendError: "Organizational Unit: /, Failed: Does not exist", exit 50, and no CSV at all (doPrintOrgs returns).
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/org_units_refused" ]; then
+    printf "\nERROR: Not Authorized to access this resource/api\n" 1>&2; exit 12
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/orgs_failed" ]; then
+    printf 'Organizational Unit: /, Failed: Does not exist\n' 1>&2; exit 50
+  fi
+  echo "orgUnitPath,orgUnitId,name,parentOrgUnitId"
+  n=0
+  for path in $(org_units); do
+    n=$((n + 1)); parent=${path%/*}
+    gam_row "$path" "id:03ph8a2z$n" "${path##*/}" "id:03ph8a2z$( [ -n "$parent" ] && org_units | grep -nxF -- "$parent" | cut -d: -f1 || echo 0)"
+  done
+  exit 0
+fi
 if [ "${1:-}" = "print" ] && { [ "${2:-}" = "orgs" ] || [ "${2:-}" = "ous" ]; }; then
   [ "${3:-}" = "fields" ] && [ $# -eq 4 ] || not_modelled "print orgs without exactly one fields list"
   [ "$(lower "$4")" = "orgunitpath,name,description" ] || not_modelled "print orgs fields $4"
@@ -721,6 +742,33 @@ fi
 # else, a user's address included, isn't a group: code that has to tell a person from a group (calendar sharing
 # fans a group grant out to its members) would otherwise pass here and break live. GAM's groupNotFound ->
 # entityUnknownWarning, ENTITY_DOES_NOT_EXIST_RC (wording approximate).
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ] && [ $# -eq 2 ]; then
+  # Bare (a named report, plan F7a): every group's members, titles group,type,role,id,status,email even with no row; a
+  # group with no member has no row. GAM_MOCK_STATE/members_gone/<group> is a group whose member list Google refused
+  # (groupNotFound, forbidden, serviceNotAvailable…): entityUnknownWarning "Group: <g>, Does not exist (i/N)", the group
+  # skipped, the others kept, exit 56 (getGroupMembers, doPrintGroupMembers). Members of type EXTERNAL aren't modelled.
+  echo "group,type,role,id,status,email"
+  gm_rc=0; gm_i=0; gm_n=$(grep -c . "$GAM_MOCK_FIXTURES/groups.json")
+  while IFS= read -r grp || [ -n "$grp" ]; do
+    [ -n "$grp" ] || continue
+    gm_i=$((gm_i + 1)); gm_addr=$(json_text email "$grp")
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/members_gone/$gm_addr" ]; then
+      printf 'Group: %s, Does not exist (%s/%s)\n' "$gm_addr" "$gm_i" "$gm_n" 1>&2; gm_rc=56; continue
+    fi
+    case "$gm_addr" in
+      allhands@example.com) gm_file=group_members_allhands.json ;;
+      empty-group@example.com) continue ;;
+      *) gm_file=group_members.json ;;
+    esac
+    while IFS= read -r m || [ -n "$m" ]; do
+      [ -n "$m" ] || continue
+      gm_email=$(json_text email "$m")
+      gam_row "$gm_addr" "$(json_opt type "$m")" "$(json_opt role "$m")" "id-$(printf '%s' "$gm_email" | cut -d@ -f1)" \
+        "$(json_opt status "$m")" "$gm_email"
+    done < "$GAM_MOCK_FIXTURES/$gm_file"
+  done < "$GAM_MOCK_FIXTURES/groups.json"
+  exit "$gm_rc"
+fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "group-members" ]; then
   [ $# -ge 3 ] || not_modelled "print group-members without a group"
   [ "$3" = "group" ] || invalid_arg "$3"
@@ -2851,6 +2899,28 @@ drives_refused() {  # <titles>
   fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nodrives" ]; then printf '%s\n' "$1"; exit 60; fi
 }
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddrives" ] && [ $# -eq 2 ]; then
+  # Bare (a named report, plan F7a): each drive flattened (fields='*'), User,id,name first; the fixture's fields only.
+  # showOrgUnitPaths defaults on with admin access, so GAM first reads the org units with the admin token
+  # (getOrgUnitIdToPathMap) and adds `orgUnit`, the path, or Unknown for an ID that read didn't list. GAM_MOCK_STATE/
+  # orgs_failed is that read failing: _getOrgUnits warns and returns None, which the map then iterates: a traceback, exit
+  # 1, no CSV.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/orgs_failed" ]; then
+    printf 'Organizational Unit: /, Failed: Does not exist\nTraceback (most recent call last):\nTypeError: '"'"'NoneType'"'"' object is not iterable\n' 1>&2
+    exit 1
+  fi
+  drives_refused 'User,id,name'
+  printf 'User,id,name,createdTime,hidden,orgUnit,orgUnitId\n'
+  while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    hid=$(printf '%s' "$record" | sed -n 's/.*"hidden": \([a-z]*\).*/\1/p')
+    sd_ou=$(json_opt orgUnitId "$record")
+    sd_path=$(org_units | sed -n "${sd_ou#03ph8a2z}p")
+    gam_row "$(drives_admin)" "$(json_text id "$record")" "$(json_text name "$record")" "$(json_opt createdTime "$record")" \
+      "$( [ "$hid" = true ] && echo True || echo False)" "${sd_path:-Unknown}" "$sd_ou"
+  done < "$GAM_MOCK_FIXTURES/shared_drives.json"
+  exit 0
+fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddrives" ]; then
   [ "$*" = "print shareddrives noorgunits formatjson" ] || not_modelled "print shareddrives other than noorgunits formatjson"
   drives_refused 'User,id,name,JSON'
@@ -2859,6 +2929,57 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddrives" ]; then
     [ -n "$record" ] || continue
     gam_row "$(drives_admin)" "$(json_text id "$record")" "$(json_text name "$record")" "$record"
   done < "$GAM_MOCK_FIXTURES/shared_drives.json"
+  exit 0
+fi
+if [ "${1:-}" = "print" ] && { [ "${2:-}" = "shareddriveacls" ] || [ "${2:-}" = "shareddriveorganizers" ]; } && [ $# -eq 2 ]; then
+  # Bare (named reports, plan F7a), from the same data. shareddriveacls: one row per drive, its permissions flattened
+  # (flattenJSON writes the list's length, `permissions`, then permissions.N.emailAddress/role/type), a drive with no
+  # permission left out (shownopermissionsdrives defaults false). shareddriveorganizers: id,name,organizers,createdTime,
+  # every drive, `organizers` its FIRST user organizer in the primary domain with an address (oneOrganizer defaults True),
+  # blank for none. Both drop a drive whose permissions Google refused (acl_dropped) without a word, set 60 when no drive
+  # is left, sort by name.
+  if [ "$2" = "shareddriveorganizers" ]; then drives_refused 'id,name,organizers,createdTime'
+  else drives_refused 'User,id,name,createdTime'; fi
+  TAB=$(printf '\t'); sd_wrote=""; sd_max=0
+  sd_out=$(while IFS= read -r record || [ -n "$record" ]; do
+    [ -n "$record" ] || continue
+    sd_id=$(json_text id "$record")
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/acl_dropped/$sd_id" ]; then continue; fi
+    printf '%s\t%s\t%s' "$sd_id" "$(json_text name "$record")" "$(json_text createdTime "$record")"
+    grep "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv" | cut -f 2 | while IFS= read -r perm; do
+      printf '\t%s|%s|%s' "$(json_opt emailAddress "$perm")" "$(json_opt role "$perm")" "$(json_opt type "$perm")"
+    done
+    printf '\n'
+  done < "$GAM_MOCK_FIXTURES/shared_drives.json" | sort -t "$TAB" -k2,2)
+  if [ "$2" = "shareddriveorganizers" ]; then
+    printf 'id,name,organizers,createdTime\n'
+    printf '%s\n' "$sd_out" | while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      orgs=$(printf '%s\n' "$line" | tr '\t' '\n' | tail -n +4 | awk -F'|' '$2 == "organizer" && $3 == "user" && $1 ~ /@example\.com$/ {print $1; exit}')
+      gam_row "$(printf '%s' "$line" | cut -f1)" "$(printf '%s' "$line" | cut -f2)" "$orgs" "$(printf '%s' "$line" | cut -f3)"
+    done
+    [ -n "$sd_out" ] || exit 60
+    exit 0
+  fi
+  sd_max=$(printf '%s\n' "$sd_out" | awk -F'\t' '{ if (NF - 3 > m) m = NF - 3 } END { print m + 0 }')
+  sd_titles="User,id,name,createdTime,permissions"; k=0
+  while [ "$k" -lt "$sd_max" ]; do sd_titles="$sd_titles,permissions.$k.emailAddress,permissions.$k.role,permissions.$k.type"; k=$((k + 1)); done
+  printf '%s\n' "$sd_titles"
+  printf '%s\n' "$sd_out" | while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    [ "$(printf '%s' "$line" | awk -F'\t' '{ print NF }')" -gt 3 ] || continue     # no permission: left out
+    sd_wrote=1
+    US=$(printf '\037')    # a separator that isn't whitespace to IFS, so an empty cell stays a cell
+    cells=$(printf '%s' "$line" | awk -F'\t' -v m="$sd_max" -v us="$US" '{ out = ""; for (i = 4; i < 4 + m; i++) { split($i, p, "|"); out = out us p[1] us p[2] us p[3] } print substr(out, 2) }')
+    set -- "$(drives_admin)" "$(printf '%s' "$line" | cut -f1)" "$(printf '%s' "$line" | cut -f2)" "$(printf '%s' "$line" | cut -f3)" \
+      "$(printf '%s' "$line" | awk -F'\t' '{ print NF - 3 }')"
+    old_ifs=$IFS; IFS=$US
+    # shellcheck disable=SC2086
+    for c in $cells; do set -- "$@" "$c"; done
+    IFS=$old_ifs
+    gam_row "$@"
+  done
+  printf '%s\n' "$sd_out" | awk -F'\t' 'NF > 3 { found = 1 } END { exit !found }' || exit 60
   exit 0
 fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddriveacls" ]; then
@@ -2882,6 +3003,27 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddriveacls" ]; then
     done
   done < "$GAM_MOCK_FIXTURES/shared_drives.json"
   [ -n "$sd_wrote" ] || exit 60      # every drive dropped: matchFeed empty, NO_ENTITIES_FOUND_RC, as for none
+  exit 0
+fi
+
+# `gam print alerts` (doPrintShowAlerts at the 7.52.04 tag; a named report, plan F7a): the Alert Center through the service
+# account as the admin. Titles alertId,createTime always, then (sort titles) startTime,endTime,customerId,type,source,
+# deleted and the flattened rest; none the two titles alone, exit 0 (60 never set). GAM_MOCK_STATE/denied/alerts is the
+# service refused: userServiceNotEnabledWarning "User: <admin>, Alerts Service/App not enabled", exit 73, and no CSV (the
+# function returns before writing it). GAM_MOCK_STATE/alerts_token_silent is a token Google refuses with one of
+# REFRESH_PERM_ERRORS: handleOAuthTokenError returns None without a word, so nothing at all is written, exit 0.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "alerts" ]; then
+  [ $# -eq 2 ] || not_modelled "print alerts with options"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/alerts_token_silent" ]; then exit 0; fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/alerts" ]; then
+    printf 'User: admin@example.com, Alerts Service/App not enabled\n' 1>&2; exit 73
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/no_alerts" ]; then echo "alertId,createTime"; exit 0; fi
+  echo "alertId,createTime,startTime,endTime,customerId,type,source,deleted,data.@type,data.email"
+  gam_row "a1b2c3d4-0001" "2026-11-18T07:12:00Z" "2026-11-18T07:10:00Z" "2026-11-18T07:10:00Z" "C03az79cb" \
+    "Suspicious login" "Google identity" "False" "type.googleapis.com/google.apps.alertcenter.type.AccountWarning" "bob@example.com"
+  gam_row "a1b2c3d4-0002" "2026-11-20T15:40:00Z" "2026-11-20T15:38:00Z" "2026-11-20T15:38:00Z" "C03az79cb" \
+    "User reported phishing" "Gmail phishing" "False" "type.googleapis.com/google.apps.alertcenter.type.MailPhishing" ""
   exit 0
 fi
 
@@ -2943,6 +3085,25 @@ fi
 # formatjson needs `resourceid` among them (its row is written from it). GAM_MOCK_STATE/denied/mobile is the API's
 # refusal: ClientAPIAccessDeniedExit, the error then "Reauthentication is needed", API_ACCESS_DENIED_RC 12. Not modelled:
 # Google's search beyond an owner's prefix.
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "mobile" ] && [ $# -eq 2 ]; then
+  # Bare (a named report, plan F7a): every device, one column per field; `email` (and name) its first item joined
+  # (listLimit 1: `delimiter.join(mobile[attrib][0:listLimit])`), sort titles resourceId,deviceId,serialNumber,name,email,
+  # status first; none the titles alone, exit 0 (doPrintMobileDevices never sets 60). denied/mobile as below.
+  printf 'Getting all Mobile Devices\n' 1>&2
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/mobile" ]; then
+    printf '\nERROR: Not Authorized to access this resource/api\n\nERROR: Reauthentication is needed, please run\n\ngam oauth create\n' 1>&2
+    exit 12
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/no_mobile" ]; then echo "resourceId"; exit 0; fi
+  echo "resourceId,email,status,deviceCompromisedStatus,firstSync,lastSync,model,os,type"
+  while IFS= read -r record; do
+    owner0=$(printf '%s' "$record" | sed -n 's/.*"email": \["\([^"]*\)".*/\1/p')
+    gam_row "$(json_text resourceId "$record")" "$owner0" "$(json_opt status "$record")" \
+      "$(json_opt deviceCompromisedStatus "$record")" "$(json_opt firstSync "$record")" "$(json_opt lastSync "$record")" \
+      "$(json_opt model "$record")" "$(json_opt os "$record")" "$(json_opt type "$record")"
+  done < "$GAM_MOCK_FIXTURES/mobile_devices.json"
+  exit 0
+fi
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "mobile" ]; then
   shift 2; fj=""; owner=""; fields=""; limit=1
   while [ $# -gt 0 ]; do

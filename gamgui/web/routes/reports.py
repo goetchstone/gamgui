@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from ...core import bulk, clock, guard, licenses
 from ...core import reports as reports_mod
-from ...core.audit_runs import INACTIVE_WINDOWS
+from ...core.audit_runs import INACTIVE_WINDOWS, named_run
 from ...core.catalog.catalog import load_catalog
 from ...core.connectors.base import RiskLevel
 from ...core.gam.errors import GAMError, GAMErrorKind
@@ -64,8 +64,12 @@ def _named_reports(st) -> list:
     if st.catalog is None:
         st.catalog = load_catalog()
     granted = admin_token_scopes(st.vault, st.audit_domain) if st.vault is not None else None
-    return [{"report": r, "cmd": reports_mod.named_report_command(st.catalog, r),
-             "held": reports_mod.admin_scope_held(r, granted)} for r in reports_mod.NAMED_REPORTS]
+    out = []
+    for r in reports_mod.NAMED_REPORTS:
+        cmd = reports_mod.named_report_command(st.catalog, r)
+        out.append({"report": r, "cmd": cmd, "held": reports_mod.admin_scope_held(r, granted),
+                    "runs_here": named_run(r, cmd) is not None})   # on Audit runs too, where it can be scheduled (F7a)
+    return out
 
 
 @router.get("/fill-in.csv")

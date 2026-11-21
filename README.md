@@ -152,7 +152,8 @@ and have only run offline: see
   reads with Stop between steps, each step's table kept and exported as CSV: inactive users for a window you pick (new
   accounts and admins flagged, then the same suspend preview), shared drive members (outside members first, drives no
   active organizer looks after), license usage (seats per license, seats on suspended accounts), Classroom (read only)
-  and every admin's connected apps, suspended admins included. A run can be given a **schedule** (daily, weekly or monthly,
+  and every admin's connected apps, suspended admins included. A run, or any of the named reports (run there too), can be
+  given a **schedule** (daily, weekly or monthly,
   per domain): it then says when it's due, on Home and on its own page, and keeps its last runs' tables on this Mac (a
   count you pick, at most 12) to show what's new and what's gone since. Nothing runs on its own: you press Run.
 - **Audit viewer** — every guarded write, searchable with a failures-only filter and CSV export.

@@ -57,7 +57,7 @@
     <ul class="mt-1 divide-y divide-brand-gray/30">
       {% for d in due_runs %}
       <li class="py-2">
-        <a href="/reports/runs#run-{{ d.run.key }}" class="text-sm font-medium text-amber-800 {{ link }}">{{ d.words.headline }}</a>
+        <a href="/reports/runs#run-{{ d.key }}" class="text-sm font-medium text-amber-800 {{ link }}">{{ d.words.headline }}</a>
         <p class="mt-0.5 text-xs text-brand-blueink">{{ d.words.detail }}</p>
       </li>
       {% endfor %}
@@ -66,7 +66,7 @@
     <p class="mt-2 text-sm text-brand-blueink">Nothing is due.</p>
     {% endif %}
     {% if waiting_runs %}
-    <p class="mt-1 text-xs text-brand-grayink">Not due yet: {% for w in waiting_runs %}<a href="/reports/runs#run-{{ w.run.key }}" class="text-brand-blueink {{ link }}">{{ w.run.title }}</a> ({{ w.words.headline[:1] | lower }}{{ w.words.headline[1:] }}){{ "; " if not loop.last else "." }}{% endfor %}</p>
+    <p class="mt-1 text-xs text-brand-grayink">Not due yet: {% for w in waiting_runs %}<a href="/reports/runs#run-{{ w.key }}" class="text-brand-blueink {{ link }}">{{ w.title }}</a> ({{ w.words.headline[:1] | lower }}{{ w.words.headline[1:] }}){{ "; " if not loop.last else "." }}{% endfor %}</p>
     {% endif %}
     <p class="mt-1 text-xs text-brand-grayink">Nothing runs on its own: open one and press Run.</p>
   </section>

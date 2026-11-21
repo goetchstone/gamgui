@@ -30,7 +30,8 @@ from ...core import audit_runs as runs_mod
 from ...core import clock
 from ...core import schedules as sched
 from ...core.bulk import stop_requested
-from ...core.connectors.gam_connector import NoRowUnsaid
+from ...core.catalog.catalog import load_catalog
+from ...core.connectors.gam_connector import READ_ORIGIN_AUDIT_RUN, READ_ORIGIN_NAMED_REPORT, NoRowUnsaid
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.gam.models import GAMUser
 from ...core.phishing import Incomplete
@@ -64,6 +65,18 @@ def _days(value) -> Optional[int]:
     except ValueError:
         return None
     return days if days in runs_mod.INACTIVE_WINDOWS else None
+
+
+def _named(st) -> tuple:
+    """The named reports (F2) that run here (plan F7a), from the catalog the Builder uses: loaded on first use."""
+    if st.catalog is None:
+        st.catalog = load_catalog()
+    return runs_mod.named_runs(st.catalog)
+
+
+def _find(st, key: str):
+    """An audit run, or a named report run here, by its key; None for anything else."""
+    return runs_mod.run_named(key) or next((r for r in _named(st) if r.key == key), None)
 
 
 def _job_of(st, run) -> Optional[Job]:
@@ -123,9 +136,10 @@ async def runs_page(request: Request) -> HTMLResponse:
     """Every run, each with its last result on this connector or its button. Loading the page reads nothing."""
     st = app_state(request)
     panels = [_panel_context(st, run, _job_of(st, run)) for run in runs_mod.RUNS]
+    named = [_panel_context(st, run, _job_of(st, run)) for run in _named(st)]
     set_aside = schedule_stores(st)[0].set_aside if st.connector is not None else None
     return TEMPLATES.TemplateResponse(request, _PAGE, {"connected": st.connector is not None, "panels": panels,
-                                                       "set_aside": set_aside})
+                                                       "named": named, "set_aside": set_aside})
 
 
 @router.get("/status", response_class=HTMLResponse)
@@ -136,7 +150,7 @@ async def run_status(request: Request, run: str = "", job: str = "") -> HTMLResp
     asked = st.jobs.get(job) if job else None
     if asked is not None and asked.kind != KIND:
         asked = None
-    found = runs_mod.run_named(asked.bucket if asked is not None else run)
+    found = _find(st, asked.bucket if asked is not None else run)
     if found is None:
         return error_partial(request, "That run is no longer here.")
     if asked is not None and asked.finished and asked.id != st.audit_run_jobs.get(found.key):
@@ -147,7 +161,7 @@ async def run_status(request: Request, run: str = "", job: str = "") -> HTMLResp
 @router.post("/start", response_class=HTMLResponse)
 async def start_run(request: Request, run: Annotated[str, Form()] = "", days: Annotated[str, Form()] = "") -> HTMLResponse:
     st = app_state(request)
-    found = runs_mod.run_named(run)
+    found = _find(st, run)
     if found is None:
         return error_partial(request, "That isn't one of the audit runs.")
     window = INACTIVE_DAYS
@@ -161,7 +175,8 @@ async def start_run(request: Request, run: Annotated[str, Form()] = "", days: An
     existing = _job_of(st, found)
     if existing is not None and not existing.finished:   # one of each run at a time: a second press joins the first
         return _panel(request, found, existing, announce=True)
-    job = start_job(st.jobs, len(found.steps), kind=KIND, title=f"Audit run: {found.title}")
+    job = start_job(st.jobs, len(found.steps), kind=KIND,
+                    title=f"{'Named report' if found.named else 'Audit run'}: {found.title}")
     job.bucket = found.key
     st.audit_run_jobs[found.key] = job.id
     job.task = asyncio.create_task(_run(job, st, st.connector, found, window))
@@ -198,7 +213,8 @@ async def _run(job, st, conn, run, days: int) -> None:
             try:
                 rows, unread = await conn.audit_read(runs_mod.step_command(run, step), argv, step.key_column,
                                                      ok_rcs=step.ok_rcs, partial_rcs=step.partial_rcs,
-                                                     empty_rcs=step.empty_rcs)
+                                                     empty_rcs=step.empty_rcs,
+                                                     origin=READ_ORIGIN_NAMED_REPORT if run.named else READ_ORIGIN_AUDIT_RUN)
             except Exception as exc:  # noqa: BLE001 — a failed step is unknown, said in words; the run goes on
                 why = _why(exc)
                 reads.append(runs_mod.StepRead(step, runs_mod.UNKNOWN, why, detail=gam_detail(exc)))
@@ -236,7 +252,7 @@ async def table_csv(request: Request, run: str = "", finding: str = "") -> Respo
     """One of the last run's tables, whole, formula-safe. A table that's unknown is said in plain text, never a sheet
     holding only its titles, which would read as "none" (invariant 10)."""
     st = app_state(request)
-    found = runs_mod.run_named(run)
+    found = _find(st, run)
     result = st.audit_runs.get(found.key) if found is not None else None
     table = result.finding(finding) if result is not None else None
     if found is None or table is None:
@@ -285,7 +301,7 @@ async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cade
     """Give a run a cadence on the active domain, change it, or (no cadence) stop scheduling it, which deletes what it
     kept. Local: nothing reaches Google, and nothing runs."""
     st = app_state(request)
-    found = runs_mod.run_named(run)
+    found = _find(st, run)
     if found is None:
         return error_partial(request, "That isn't one of the audit runs.")
     if st.connector is None:
@@ -325,7 +341,7 @@ async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cade
 async def delete_kept(request: Request, run: Annotated[str, Form()] = "") -> HTMLResponse:
     """Delete every run kept on this Mac for this run on the active domain. Its schedule stays. Local: no GAM."""
     st = app_state(request)
-    found = runs_mod.run_named(run)
+    found = _find(st, run)
     if found is None:
         return error_partial(request, "That isn't one of the audit runs.")
     if st.connector is None:
