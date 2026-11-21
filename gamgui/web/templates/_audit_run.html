@@ -32,8 +32,9 @@
     <p class="text-xs text-brand-grayink" {% if job and not job.error %}{{ live.ended(job) }}{% endif %}>Read {{ age | ago }}{% if result.days %}, with a {{ result.days }}-day window{% endif %}.{% if result.complete %} Every step was read.{% else %} Part of this run is unknown: each table that needs it says so.{% endif %}</p>
     <ul class="mt-2 space-y-1 text-sm">
       {% for r in result.reads %}
-      <li class="text-brand-black">{{ live.mark(r.state == "read") }}{{ r.step.title }}:
+      <li class="text-brand-black">{{ live.mark(r.state in ("read", "partial")) }}{{ r.step.title }}:
         {% if r.state == "read" %}<span class="text-brand-blueink">{{ r.rows }} row{{ "s" if r.rows != 1 }}</span>
+        {% elif r.state == "partial" %}<span class="text-amber-800">{{ r.rows }} row{{ "s" if r.rows != 1 }}, in part. {{ r.why }}</span>
         {% elif r.state == "not_run" %}<span class="text-brand-grayink">not run. {{ r.why }}</span>
         {% else %}<span class="text-amber-800">unknown. {{ r.why }}</span>
           {% if r.detail %}<details class="mt-1"><summary class="cursor-pointer text-xs text-brand-grayink">GAM’s error</summary><pre class="mt-1 whitespace-pre-wrap break-all text-xs text-brand-grayink">{{ r.detail }}</pre></details>{% endif %}
@@ -57,7 +58,7 @@
             {% for row in f.rows[:shown] %}
             <tr class="border-t border-brand-gray/20 align-top">
               {% for cell in row %}
-              <td class="px-3 py-1.5{% if loop.first %} break-all{% endif %}">{% if loop.first and f.links %}<a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ cell | urlencode }}">{{ cell }}</a>{% else %}{{ cell }}{% endif %}</td>
+              <td class="px-3 py-1.5{% if loop.first %} break-all{% endif %}">{% if loop.first and f.links and "@" in cell %}<a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ cell | urlencode }}">{{ cell }}</a>{% else %}{{ cell }}{% endif %}</td>
               {% endfor %}
             </tr>
             {% endfor %}

@@ -42,6 +42,8 @@ _NO_TABLE = "GAM ended without writing the table, so this step has no answer."
 _TIMED_OUT = "GAM didn't finish in the hour a read is allowed, so this step has no answer."
 _NOT_KEPT = "Not kept: the connection changed during the run. Run it again."
 _STOPPED_BEFORE = "The run was stopped before this step."
+_NEEDS_EARLIER = "It reads for the people an earlier step found, and that step has no answer, so nothing was read."
+_SOME_UNREAD = "GAM couldn't read {}, and read the rest: what it couldn't read is unknown, not none."
 
 
 def _days(value) -> Optional[int]:
@@ -130,27 +132,39 @@ def _why(exc: Exception) -> str:
 async def _run(job, st, conn, run, days: int) -> None:
     """The job's task: each step in turn, Stop checked before each. A step that fails is unknown and the run goes on: the
     tables that don't need it still stand. Kept only while ``conn`` is still the connected tenant's."""
-    reads, tables = [], {}
+    reads: list = []
+    tables: dict = {}
     try:
         for i, step in enumerate(run.steps):
             if stop_requested(job):
                 reads += [runs_mod.StepRead(s, runs_mod.NOT_RUN, _STOPPED_BEFORE) for s in run.steps[i:]]
                 break
             job.current = step.title
+            argv = runs_mod.step_argv(step, tables)
+            if argv is None:   # it reads for what an earlier step found, and that step has no table: nothing to run
+                why = _NEEDS_EARLIER
+                reads.append(runs_mod.StepRead(step, runs_mod.UNKNOWN, why))
+                job.record(step.title, False, why)
+                continue
             try:
-                rows = await conn.audit_read(runs_mod.step_command(run, step), runs_mod.step_argv(step), step.key_column)
+                rows, unread = await conn.audit_read(runs_mod.step_command(run, step), argv, step.key_column,
+                                                     ok_rcs=step.ok_rcs, partial_rcs=step.partial_rcs)
             except Exception as exc:  # noqa: BLE001 — a failed step is unknown, said in words; the run goes on
                 why = _why(exc)
                 reads.append(runs_mod.StepRead(step, runs_mod.UNKNOWN, why, detail=gam_detail(exc)))
                 job.record(step.title, False, why, gam_detail(exc))
                 continue
             empty = runs_mod.implausibly_empty(step, len(rows))
-            reads.append(runs_mod.StepRead(step, runs_mod.UNKNOWN if empty else runs_mod.READ, empty, rows=len(rows)))
+            state = runs_mod.UNKNOWN if empty else (runs_mod.PARTIAL if unread else runs_mod.READ)
+            why = empty or (_SOME_UNREAD.format(", ".join(unread)) if unread else "")
+            reads.append(runs_mod.StepRead(step, state, why, rows=len(rows), unread=unread))
             if not empty:
                 tables[step.key] = [GAMUser.from_json(r) for r in rows] if step is runs_mod.DIRECTORY else rows
-            job.record(step.title, not empty, empty)
-        result = runs_mod.RunResult(run, reads, runs_mod.findings_for(run, reads, tables, days=days), tables, clock.now(),
-                                    days if run is runs_mod.INACTIVE_USERS else 0)
+            job.record(step.title, not empty, why)
+        # "Leaving": an offboarding started in GamGUI since it opened, the one place the app knows of someone on the way out.
+        leaving = frozenset(str(a).lower() for a in getattr(st, "offboard_jobs", {}) or {})
+        result = runs_mod.RunResult(run, reads, runs_mod.findings_for(run, reads, tables, days=days, leaving=leaving), tables,
+                                    clock.now(), days if run is runs_mod.INACTIVE_USERS else 0)
         if st.connector is conn:
             st.audit_runs[run.key] = result
         else:

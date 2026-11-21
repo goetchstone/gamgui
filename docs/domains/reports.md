@@ -140,9 +140,9 @@ dropped on a switch, and not kept when the connection changed mid-read). Each ro
   off by name (`GAM_MOCK_STATE/nogmail/<u>`, exit 73), the silent skip (`quiet/<u>`), the titles even with no row.
 - **Not run on a real domain yet.** Read only; check the counts against the Admin console on its first run.
 
-## Audit runs (plan F3, first half)
-`/reports/runs` (linked from Reports): ready-made lists of reads, run when the operator asks. This half has two;
-shared drive permissions, Classroom and admin tokens come next.
+## Audit runs (plan F3)
+`/reports/runs` (linked from Reports): ready-made lists of reads, run when the operator asks: inactive users, shared drive
+permissions, license usage, Classroom and the admin token review.
 - **Files.** `core/audit_runs.py` (pure: `RUNS`, each step's argv `step_argv`, the joins and flags), `GAMConnector.audit_read`
   (the one read path), `web/routes/audit_runs.py` (page, `/start`, `/status`, `/table.csv`), `_audit_run.html`,
   `audit_runs.html`, `tests/test_audit_runs.py`, `tests/fixtures/licenses.csv`.
@@ -174,3 +174,36 @@ shared drive permissions, Classroom and admin tokens come next.
   row and exits 50.
 - **Not run on a real domain yet.** `print licenses` has never run live: check the counts against Billing → Licenses on
   its first run. The directory read is the cache's own, which has.
+
+### Shared drive permissions, Classroom, admin token review (F3, second half)
+Each step says which exits are its answer (`Step.ok_rcs`) and which keep the rows with accounts GAM named as unread
+(`Step.partial_rcs`; state `partial`, F1 record `partial: true`); `audit_read` takes both and returns `(rows, unread)`.
+A step that reads for what an earlier step found (`step_argv(step, tables)` is None) doesn't run and is unknown.
+- **Shared drive permissions:** `print shareddrives noorgunits formatjson`, `print shareddriveacls oneitemperrow
+  shownopermissionsdrives true formatjson` (both as the admin, admin access; exit 60 is GAM's "no drive"), `print domains
+  formatjson`, the directory. The ACL read is each drive's OWN permissions: its members, which Google's sharing guide says
+  are users and groups only ("Applies to `user` or `group` only (not domains)"). So the run flags a member from outside
+  the domain (an address not in `print domains`' own domains or aliases) and claims nothing about "anyone with the link"
+  or a whole domain: that is the sharing of files inside a drive, which it doesn't read (review of #172, 2026-11-21; the
+  first fixture invented such members). printShowSharedDriveACLs drops a drive whose permissions Google refused WITHOUT a
+  word or a code, so a listed drive missing from the ACL table goes in "Drives whose members weren't read". A drive is
+  flagged when every organizer is a user who is suspended, gone from the directory (or `deleted`), or being offboarded
+  here ("leaving" = a key of `AppState.offboard_jobs`, an offboarding started since GamGUI opened); a group organizer isn't
+  flagged; a drive with no organizer is.
+- **Classroom:** `print courses states <every state> show all countsonly fields … formatjson` (owners joined by `ownerId` to
+  the directory's `id`, no `owneremail`). `_getCourseAliasesMembers` counts a roster Google won't return as 0, without a
+  word, so no table reads a 0 as an empty class. Stale: ACTIVE or PROVISIONED, `updateTime` over 365 days old. Read only.
+- **Admin token review:** `print admins recursive` (not `types user`: with `recursive` it drops a group's row and its
+  members), the directory, then `print tokens users <every holder, one comma-joined element>`: `users` is
+  convertEntityToList, so suspended admins are read. A holder GAM couldn't name (its user lookup passed over forbidden,
+  badRequest, backendError, systemError or serviceNotAvailable) is a row with `assignedToUnknown` True, `assignedTo` alone,
+  and exit 0, a group's expanded member included: `holder_of` joins `assignedTo` to the directory's `id`, and one neither
+  can name stays in "Every admin" as `ID <id>` with everything unknown, and the run isn't complete (`Finding.partial`).
+  56/73 keep the rows and name the unread admin, whose apps say unknown; a 56/73 that names nobody is unknown whole.
+  Flags reuse `core/connected_apps` (AI by name, broad reach). Revoking stays in Incident's previewed flow.
+- **The mock:** `shared_drives.json`, `shared_drive_acls.tsv` (`nodrives` 60, `denied/drives` 50, `acl_dropped/<id>` the
+  silent drop; users and groups only); `print admins recursive` (alice direct, bob through it-admins@, a service account
+  row; `admin_unnamed` adds two `assignedToUnknown` rows, carol's ID and one no read names; `denied/admins` 12);
+  `print tokens users` (unknown or `tokens_gone/<u>` 56, `denied/tokens` 12); `print courses … show all countsonly`
+  (counts from course_participants.tsv; `roster_gone/<id>` the silent 0).
+- **Not run on a real domain yet**, none of them; the Classroom run can't be until an Education domain is there.

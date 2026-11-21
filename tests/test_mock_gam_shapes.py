@@ -47,6 +47,9 @@ HEADERS = {
     "print_courses": "id,JSON",
     "print_course_participants": "courseId,courseName,JSON-teachers,JSON-students",
     "print_all_course_participants": "courseId,courseName,JSON-teachers,JSON-students",
+    # Audit runs (F3), read at the 7.52.04 tag (printShowSharedDrives, printShowSharedDriveACLs; admin access: no `role`).
+    "print_shared_drives": "User,id,name,JSON",
+    "print_shared_drive_acls": "User,id,name,createdTime,JSON",
 }
 
 

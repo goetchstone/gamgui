@@ -27,7 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands, MessageId, Phone
+from gamgui.core.gam.commands import (CALENDAR_ACL_ROLES, COURSE_STATES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands,
+                                      MessageId, Phone)
 
 ROOT = Path(__file__).resolve().parents[1]
 GAM_COMMANDS_REF = ROOT / "gamgui" / "resources" / "gam7" / "GamCommands.txt"
@@ -58,6 +59,7 @@ ENUM_ARGS = {
     ("trash_message", "copies"): (987654,),
     ("trash_messages", "ids"): (["F1"],),
     ("transfer_calendar_ownership", "calendar_ids"): (["c_x@group.calendar.google.com"],),
+    ("print_tokens_of", "users"): ([SEARCH_ADDRESS],),
     ("delete_send_as", "address"): ("send.as@example.com",),
     ("report_activity", "application"): GAMCommands.REPORT_APPLICATIONS,
     ("report_activity", "users"): ((), (SEARCH_ADDRESS,), (SEARCH_ADDRESS, SEARCH_ADDRESS)),
@@ -85,7 +87,8 @@ ENUM_ARGS = {
     # Classroom reads (plan 2026-11-11 C1): a course ID is digits only, a teacher or student one address.
     ("print_courses", "teacher"): ("", SEARCH_ADDRESS),
     ("print_courses", "student"): ("", SEARCH_ADDRESS),
-    ("print_courses", "states"): ((), ("active",), ("active", "provisioned"), ("active", "provisioned", "archived")),
+    ("print_courses", "states"): ((), ("active",), ("active", "provisioned"), ("active", "provisioned", "archived"),
+                                    COURSE_STATES),   # every state: the audit run's Classroom read (F3)
     ("print_courses", "course_ids"): ((), ["500000000002"], ["500000000002", "500000000002"]),
     ("print_course_participants", "course_id"): ("500000000002",),
     ("print_all_course_participants", "states"): (("active",), ("active", "provisioned", "archived")),

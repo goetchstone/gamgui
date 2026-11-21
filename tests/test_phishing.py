@@ -107,8 +107,10 @@ def test_only_a_reviewed_read_may_use_the_any_exit_door():
     # from GAM skipping a refused token without a word; any non-zero exit still raises.
     # _mail_read: Reports' two `all users print forward|delegates` reads (READS builders), accounted line by line.
     # signature_exact: `print signature` (a READS builder), whose "Getting" line tells a read from a silent skip (4.1).
+    # audit_read: an audit run's step (F3), only a `print` read without todrive from core/audit_runs.step_argv, whose exits
+    # each step names (60 is GAM's none; 56/73 keep the rows and name who wasn't read); any other raises.
     assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy", "script_projects", "_courses_read",
-                       "owned_calendars", "_mail_read", "signature_exact"}
+                       "owned_calendars", "_mail_read", "signature_exact", "audit_read"}
 
 
 # --- MessageCopies ------------------------------------------------------------------------------------------------------
