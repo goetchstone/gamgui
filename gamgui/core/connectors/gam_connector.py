@@ -24,6 +24,7 @@ from ..gam.models import (
     GAMGroup,
     GAMUser,
     GroupMember,
+    LicenseSeat,
     ResourceCalendar,
     UserCalendar,
     Vacation,
@@ -329,6 +330,36 @@ class GAMConnector(Connector):
     async def move_user_to_org_unit(self, email: str, org_unit: str) -> ChangeResult:
         argv = GAMCommands.move_user_to_org_unit(org_unit, email)
         return await self._run_write("move_org_unit", email, argv, RiskLevel.LOW, about={"org_unit": org_unit})
+
+    async def license_seats(self) -> List[LicenseSeat]:
+        """Every license seat in the domain (roadmap 4.3), the read the License usage run makes. With no product named GAM
+        passes over one Google refuses without a word or a code, so a seat missing here may only be unread: the screens
+        act on a seat this read found, never on one it didn't. A run without the titles never answered, and is
+        Incomplete, never "no seats"; so is a seat listed without its IDs, which no write could name."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_licenses())
+        lines = out.split("\n")   # "\n" only, as parse_records does (org_units says why)
+        start = next((i for i, ln in enumerate(lines) if "userId" in (c.strip() for c in ln.split(","))), None)
+        if start is None:
+            raise Incomplete("GAM answered without the license seats, so who holds which license can't be told.")
+        seats = [LicenseSeat.from_row(r) for r in parse_records("\n".join(lines[start:]), json_column=False)]
+        if any(not (s.user and s.product_id and s.sku_id) for s in seats):
+            raise Incomplete("GAM listed a license seat without its user, product or SKU, so the seats can't be told apart.")
+        return seats
+
+    async def add_license(self, email: str, seat: LicenseSeat) -> ChangeResult:
+        argv = GAMCommands.add_license(email, seat.product_id, seat.sku_id)
+        return await self._run_write("add_license", email, argv, RiskLevel.LOW,
+                                     about={"product": seat.product_id, "sku": seat.sku_id})
+
+    async def swap_license(self, email: str, old: LicenseSeat, new_sku_id: str) -> ChangeResult:
+        argv = GAMCommands.swap_license(email, old.product_id, old.sku_id, new_sku_id)
+        return await self._run_write("swap_license", email, argv, RiskLevel.LOW,
+                                     about={"product": old.product_id, "from_sku": old.sku_id, "sku": new_sku_id})
+
+    async def remove_license(self, email: str, seat: LicenseSeat) -> ChangeResult:
+        argv = GAMCommands.remove_license(email, seat.product_id, seat.sku_id)
+        return await self._run_write("remove_license", email, argv, RiskLevel.DESTRUCTIVE,
+                                     about={"product": seat.product_id, "sku": seat.sku_id})
 
     async def list_group_members(self, group: str) -> List[GroupMember]:
         argv = GAMCommands.print_group_members(group)
