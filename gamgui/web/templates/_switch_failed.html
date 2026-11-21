@@ -1,0 +1,12 @@
+{# A switch from the header's domain menu that didn't happen (plan F6): the active domain stays, and why, in the menu.
+   Setup's switcher shows each line of the check; this says what failed and links to the fix. #}
+<div class="mt-2 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+  {% if unchecked %}
+  <p tabindex="-1" data-focus class="font-medium">{{ result.summary }}</p>
+  {% else %}
+  <p tabindex="-1" data-focus class="font-medium">{{ domain }} didn't pass the access check, so {{ active }} stays active.</p>
+  <p>{{ result.summary }}</p>
+  {% if result.auth_url %}<p><a href="{{ result.auth_url }}" target="_blank" rel="noopener" class="font-medium underline">Authorize Domain-Wide Delegation ↗</a></p>{% endif %}
+  <p class="text-xs">Switch to it on <a href="/setup" class="underline">Setup</a> to see each scope the check read.</p>
+  {% endif %}
+</div>

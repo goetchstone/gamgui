@@ -45,7 +45,8 @@ TEMPLATES = ROOT / "gamgui" / "web" / "templates"
 # Each section of the guide → the templates of the screen it walks through. base.html (the nav and
 # the header) counts for every section.
 SCREENS = {
-    "First setup": ["setup.html", "_tenant_panel.html", "_tenant_controls.html", "_dwd.html", "_verify.html", "_tenant.html"],
+    "First setup": ["setup.html", "_tenant_panel.html", "_tenant_controls.html", "_dwd.html", "_verify.html", "_tenant.html",
+                    "_switch_warning.html", "_switch_failed.html"],
     "Find a user": ["users.html", "_users_table.html", "_as_of.html"],
     "Onboard a new hire": ["onboarding.html", "_onboard_*.html"],
     "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html"],
@@ -79,10 +80,12 @@ NOT_A_LABEL = {
 
 
 def _screen_words(patterns: list[str]) -> set[str]:
-    """Every piece of text a screen shows: element text split at Jinja tags, plus quoted literals
-    (the nav's labels live in a Jinja tuple). ``{{ n }}`` reads as N, and a trailing arrow is
-    dropped, the way the guide writes them."""
-    words: set[str] = set()
+    """Every piece of text a screen shows: element text split at Jinja tags, plus quoted literals,
+    plus the nav's labels (``server.SCREENS``, which base.html draws). ``{{ n }}`` reads as N, and a
+    trailing arrow is dropped, the way the guide writes them."""
+    from gamgui.web.server import SCREENS
+
+    words: set[str] = {label for _, label in SCREENS}
     for pattern in ["base.html", *patterns]:
         for path in TEMPLATES.glob(pattern):
             html = path.read_text()

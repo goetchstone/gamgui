@@ -134,6 +134,8 @@ class Job:
     finished_at: float = 0.0
     error: Optional[str] = None
     cancel_requested: bool = False   # Stop pressed (plan U5): each loop checks it before its next target
+    stop_why: str = "Stopped by you"  # what a stop says: Stop, or a domain switch (plan F6, AppState.activate)
+    before_switch: bool = False      # started on the domain active before a switch (plan F6): no Retry from here
     interrupted: bool = False        # cut off (the app quit) before every step was accounted for
     about: str = ""                  # the person a run is for, when its panel names them
     title: str = ""                  # what the tray calls it ("Offboarding carol@example.com")
@@ -173,8 +175,10 @@ class Job:
     @property
     def can_retry(self) -> bool:
         """A finished run whose failed sample holds every failure (#9 caps it): only then is a retry of
-        the sample a retry of all of them."""
-        return self.finished and self.failed_total > 0 and not self.more and self.retry is not None
+        the sample a retry of all of them. Never one started before a domain switch: it would preview the old
+        domain's people on this one."""
+        return (self.finished and self.failed_total > 0 and not self.more and self.retry is not None
+                and not self.before_switch)
 
     @property
     def status_url(self) -> str:
@@ -265,6 +269,8 @@ def retry_of(jobs: dict, job_id: str, kind: str) -> Tuple[Optional[Job], Optiona
     job = jobs.get(job_id)
     if job is None or job.kind != kind or not job.finished or job.retry is None:
         return None, "That run is no longer available — run it again from the start."
+    if job.before_switch:
+        return None, "That run was on the domain active before the switch — run it again from the start on this one."
     if job.more:
         return None, (f"Only {len(job.failed)} of the {job.failed_total} failures were kept, so a retry "
                       "can't cover them all — run it again from the start.")

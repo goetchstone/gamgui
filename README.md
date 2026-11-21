@@ -196,7 +196,8 @@ runs' new reads (`print licenses`, `print shareddrives`, `print shareddriveacls`
 users …`, `print courses … show all countsonly`) have never run live either: their columns, and the failures they pass over
 without a word, were read from GAM's source at the pinned tag. The
 Builder's automatic reads aren't in the pass: since #132 (2026-11-17), 32 of them build a fuller command from GAM's
-grammar, and none of those 32 has run on a real domain yet.
+grammar, and none of those 32 has run on a real domain yet. The header's domain menu (2026-11-21) runs setup's
+check above and adds no GAM command, but it hasn't switched between two real domains yet.
 
 **Tried something on a real domain?** Tell us with the two-minute
 [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml): what you tried,

@@ -235,6 +235,7 @@ def _sweep_exports() -> None:
 async def make_export(request: Request) -> HTMLResponse:
     """Made first, then saved: a download link's response is saved as a file in the app window whatever its status, so a failure has to be said here, on the screen."""
     st = request.app.state.gamgui
+    tenant = st.tenant_key()     # a switch while it's made (plan F6): the export is the old domain's, never kept here
     report = await _report(st)
     kept, _ = incident_store(st)
     if report is None or kept is None:
@@ -259,6 +260,10 @@ async def make_export(request: Request) -> HTMLResponse:
         with contextlib.suppress(OSError):
             os.unlink(path)
         raise
+    if st.tenant_key() != tenant:
+        _quietly_unlink(path)
+        return error_partial(request, "The active domain changed while the report was made, so it wasn't kept. Switch "
+                             "back to its domain and export it again.")
     token = secrets.token_urlsafe(16)
     st.incident_export = (token, path, report.record.id)
     return TEMPLATES.TemplateResponse(request, "_incident_report_export.html", {"token": token})

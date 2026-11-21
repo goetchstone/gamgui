@@ -527,6 +527,9 @@ async def bulk_apply(request: Request, store: Annotated[str, Form()] = "", group
     refusal = guard.enforce(previews, form, confirm_step=True)
     if refusal:
         return error_partial(request, refusal)
+    # A switch during the directory read above (plan F6) would start a run nothing stops: no await from here to the start.
+    if st.connector is not conn:
+        return error_partial(request, "The connection changed, so nothing ran.")
     n = len(targets)
     users_n = f"{n} user{'s' if n != 1 else ''}"
     job = start_job(st.jobs, n, kind="department",

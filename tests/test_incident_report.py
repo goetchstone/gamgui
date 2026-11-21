@@ -408,6 +408,27 @@ def test_evidence_that_can_t_be_read_is_said_on_the_screen_and_leaves_nothing(cl
     assert "wasn't exported: Couldn't read the evidence." in page and not list(tmp_path.glob("gamgui-report-*")) and state.incident_export is None
 
 
+def test_an_export_a_domain_switch_lands_during_is_not_kept(client, state, monkeypatch, tmp_path):  # noqa: F811
+    """Plan F6 review: the export was held after its write, so a switch landing while it was made (from another window)
+    left the old domain's report downloadable on the new one."""
+    import tempfile
+
+    from gamgui.core.connectors.gam_connector import GAMConnector
+    from gamgui.web.routes import incident_report
+
+    _ready(client, state)
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    real = incident_report._write_export
+
+    def write_then_switch(*args):
+        real(*args)
+        state.activate(GAMConnector(runner=state.runner, domain="other.example.org", audit=state.connector.audit))
+    monkeypatch.setattr(incident_report, "_write_export", write_then_switch)
+    page = unescape(client.post("/incident/report/export").text)
+    assert "The active domain changed while the report was made, so it wasn't kept." in page
+    assert state.incident_export is None and not list(tmp_path.glob("gamgui-report-*"))
+
+
 def test_a_linked_saved_read_stops_the_export_rather_than_being_passed_over(client, state, tmp_path):  # noqa: F811
     record = _ready(client, state)
     evidence = tmp_path / "incidents" / record.id / "evidence"

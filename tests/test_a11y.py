@@ -424,6 +424,18 @@ def _screens(p: Page, st):
         p.goto("/setup", "document.querySelector('#tenant-switch select') && /admin@/.test("
                          "document.getElementById('tenant').innerText)")
         yield "setup/two-domains"
+        p.goto("/users", "document.getElementById('domain-toggle')")
+        p.click("#domain-toggle")
+        p.settle("!document.getElementById('domain-panel').hidden")
+        yield "header/domain-menu"                     # the header's domain menu, open (plan F6)
+        from gamgui.web.jobs import start_job
+        run = start_job(st.jobs, 3, kind="signatures", title="Signature for the whole company — 3 users")
+        try:
+            p.click("#domain-panel button", "example.org")
+            p.settle("/Switch anyway/.test(document.getElementById('domain-result')?.innerText ?? '')")
+            yield "header/domain-menu/warning"         # what a switch would stop, said before anything is checked
+        finally:
+            run.finish()
     finally:
         st.vault.clear_domain("example.org")
         st.vault.set(domain, "oauth2", oauth2)
@@ -745,6 +757,70 @@ def test_the_open_tray_is_on_top_names_each_stop_and_closes_when_focus_leaves(pa
     finally:
         for job in jobs:
             job.finish()
+
+
+@pytest.mark.a11y
+@pytest.mark.timeout(120)
+def test_the_domain_menu_names_itself_and_works_from_the_keyboard(page, st):
+    """Plan F6: with another domain in the Keychain the header's tenant is a menu that Chrome's accessibility tree names
+    "Domain, <domain>", described by who GamGUI acts as. It is a disclosure like the jobs tray: Enter opens it over the
+    page, Tab reaches each other domain, Escape closes it and hands focus back, Tab on out of it closes it. It is
+    disabled while a request is in flight, not while a poll runs, and a download doesn't leave it disabled."""
+    p = page
+    p.c.cmd("Page.enable")
+    p.c.cmd("Page.addScriptToEvaluateOnNewDocument", source=ERROR_TRAP)
+    domain = _shots().preview_mock.DOMAIN
+    st.vault.set_all("example.org", {k: v for k, v in st.vault.get_all(domain).items() if v})
+    toggle = "document.getElementById('domain-toggle')"
+    try:
+        def expanded() -> tuple:
+            return p.c.js(f"{toggle}.getAttribute('aria-expanded')"), p.c.js("!document.getElementById('domain-panel').hidden")
+
+        p.goto("/users", "document.querySelectorAll('#users-table tbody tr').length >= 3")
+        named = [n for n in p.c.cmd("Accessibility.getFullAXTree")["nodes"]
+                 if not n.get("ignored") and n.get("role", {}).get("value") == "button"
+                 and n.get("name", {}).get("value", "").startswith("Domain")]
+        assert [n["name"]["value"] for n in named] == [f"Domain, {domain}"]
+        assert named[0].get("description", {}).get("value") == f"Signed in as admin@{domain}"
+
+        p.click("#domain-toggle", action="focus")
+        p.key("Enter")
+        assert expanded() == ("true", True)
+        assert p.c.js(POPUP_COVERED % (json.dumps("#domain-panel"), "null")) == []   # over the Users table's sticky row
+        p.key("Tab")
+        assert p.focused()["text"] == "example.org" and p.focused()["ring"]
+        p.key("Escape")
+        assert expanded() == ("false", False) and p.focused()["id"] == "domain-toggle" and p.focused()["ring"]
+        p.key("Enter")
+        p.key("Tab")
+        p.key("Tab")                                         # the link to Setup, still in the menu
+        assert expanded() == ("true", True)
+        p.key("Tab")                                         # on into the nav: the menu gets out of the way
+        assert expanded() == ("false", False)
+
+        def fire(event: str, path: str) -> None:
+            p.c.js(f"document.body.dispatchEvent(new CustomEvent({json.dumps(event)}, "
+                   f"{{detail: {{pathInfo: {{requestPath: {json.dumps(path)}}}}}}}))")
+        fire("htmx:beforeRequest", "/jobs/status")
+        assert p.c.js(f"{toggle}.disabled") is False         # a poll isn't the app being busy
+        fire("htmx:afterRequest", "/jobs/status")
+        fire("htmx:beforeRequest", "/users/search")
+        assert p.c.js(f"{toggle}.disabled") is True
+        fire("htmx:afterRequest", "/users/search")
+        p.wait(f"!{toggle}.disabled")
+        assert p.c.js("""(() => { const a = Object.assign(document.createElement('a'), {href: '/audit/export.csv', textContent: 'x'});
+            a.setAttribute('download', ''); a.addEventListener('click', e => e.preventDefault());
+            document.body.append(a); a.click(); a.remove(); return document.getElementById('domain-toggle').disabled; })()""") is False
+        # An answer that sends the window to the new domain's page leaves this one inert and busy until it goes.
+        p.c.js("document.body.dispatchEvent(new CustomEvent('htmx:beforeOnLoad', "
+               "{detail: {xhr: {getResponseHeader: h => h === 'HX-Redirect' ? '/users' : null}}}))")
+        fire("htmx:afterRequest", "/setup/switch")
+        time.sleep(0.4)
+        assert p.c.js(f"document.body.inert && {toggle}.disabled") is True
+        assert p.c.js("window.__errs") == []
+        p.goto("/users")                                     # what a redirect does: a fresh page, not inert
+    finally:
+        st.vault.clear_domain("example.org")
 
 
 # Each control (or the box itself) of the open popup `sel`: the points of it that show inside both the popup's

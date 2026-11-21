@@ -186,43 +186,55 @@
     });
   });
 
-  // The header's jobs tray (plan U5, base.html): a disclosure button and the list it shows. Escape, a click
-  // outside, or focus moving on out of it closes it: an open tray left behind covers the controls focus
-  // goes to next (WCAG 2.4.11). Escape hands focus back to the button when it was in the tray, or lost —
-  // never out of a field the operator is in.
-  function setTray(open, refocus) {
-    var btn = document.getElementById("jobs-toggle"), panel = document.getElementById("jobs-panel");
+  // The header's disclosures, each a button and the panel it shows: the jobs tray (plan U5, base.html) and the domain
+  // menu (plan F6, _tenant.html). Escape, a click outside, or focus moving on out of one closes it: an open panel left
+  // behind covers the controls focus goes to next (WCAG 2.4.11). Escape hands focus back to the button when it was in
+  // the panel, or lost — never out of a field the operator is in.
+  var DISCLOSURES = {
+    "jobs-toggle": { box: "jobs-tray", panel: "jobs-panel" },
+    "domain-toggle": { box: "tenant", panel: "domain-panel" },
+  };
+  function setOpen(id, open, refocus) {
+    var btn = document.getElementById(id), panel = document.getElementById(DISCLOSURES[id].panel);
     if (!btn || !panel) return;
     btn.setAttribute("aria-expanded", open ? "true" : "false");
     panel.hidden = !open;
     if (!open && refocus) btn.focus();
   }
-  function trayOpen() {
-    var panel = document.getElementById("jobs-panel");
-    return !!panel && !panel.hidden;
+  function openOnes() {
+    return Object.keys(DISCLOSURES).filter(function (id) {
+      var panel = document.getElementById(DISCLOSURES[id].panel);
+      return !!panel && !panel.hidden && !!document.getElementById(DISCLOSURES[id].box);
+    });
   }
+  function boxOf(id) { return document.getElementById(DISCLOSURES[id].box); }
   document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || !trayOpen()) return;
-    var tray = document.getElementById("jobs-tray"), at = document.activeElement;
-    setTray(false, !at || at === document.body || tray.contains(at));
+    if (e.key !== "Escape") return;
+    openOnes().forEach(function (id) {
+      var at = document.activeElement;
+      setOpen(id, false, !at || at === document.body || boxOf(id).contains(at));
+    });
   });
   document.addEventListener("focusout", function (e) {
-    var tray = document.getElementById("jobs-tray");
-    // No relatedTarget is focus lost, not moved: a poll swapping out the focused row, or the window
-    // losing focus. Only a move to somewhere outside the tray closes it.
-    if (trayOpen() && tray && tray.contains(e.target) && e.relatedTarget && !tray.contains(e.relatedTarget)) {
-      setTray(false, false);
-    }
+    // No relatedTarget is focus lost, not moved: a poll swapping out the focused row, a button disabled while its
+    // request runs, or the window losing focus. Only a move to somewhere outside the box closes it.
+    openOnes().forEach(function (id) {
+      var box = boxOf(id);
+      if (box.contains(e.target) && e.relatedTarget && !box.contains(e.relatedTarget)) setOpen(id, false, false);
+    });
   });
   document.addEventListener("click", function (e) {
-    var tray = document.getElementById("jobs-tray");
-    // A target a poll just swapped out is no longer in the tray, but was clicked inside it.
-    if (trayOpen() && e.target.isConnected && !tray.contains(e.target)) setTray(false, false);
+    // A target a poll or a swap just replaced is no longer in the box, but was clicked inside it.
+    openOnes().forEach(function (id) {
+      if (e.target.isConnected && !boxOf(id).contains(e.target)) setOpen(id, false, false);
+    });
   });
+  function toggle(btn) { setOpen(btn.id, btn.getAttribute("aria-expanded") !== "true", false); }
 
   var actions = {
     "copy": copyText,
-    "jobs-toggle": function (btn) { setTray(btn.getAttribute("aria-expanded") !== "true", false); },
+    "jobs-toggle": toggle,
+    "domain-toggle": toggle,
     "hint": insertHint,
     "print-sheet": printSheet,
     // A confirm step's Cancel: empty the zone it was swapped into, and hand focus back to its opener.
@@ -307,21 +319,26 @@
   });
 
   // Global activity indicators: a top bar + a "Working…" pill, shown during HTMX requests and
-  // full-page navigations so it's never ambiguous whether the app is busy.
+  // full-page navigations so it's never ambiguous whether the app is busy. While they show, the domain menu's button
+  // is disabled (plan F6): a switch mid-request would reload the screen under a request still answering.
   var bar = document.getElementById("loadbar");
   var pill = document.getElementById("busy");
   var pending = 0, hideTimer = null;
+  function busy(on) {
+    if (bar) bar.classList.toggle("on", on);
+    if (pill) pill.classList.toggle("on", on);
+    var menu = document.getElementById("domain-toggle");
+    if (menu) menu.disabled = on;
+  }
   function show() {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    if (bar) bar.classList.add("on");
-    if (pill) pill.classList.add("on");
+    busy(true);
   }
   function hide() {
     if (hideTimer) clearTimeout(hideTimer);
     // Brief debounce so back-to-back requests don't make the indicators blink.
     hideTimer = setTimeout(function () {
-      if (bar) bar.classList.remove("on");
-      if (pill) pill.classList.remove("on");
+      busy(false);
       hideTimer = null;
     }, 180);
   }
@@ -334,19 +351,36 @@
       return /\/status(\?|$)/.test(p);
     } catch (e) { return false; }
   }
+  // An answer that sends the window to another page (a domain switch, plan F6: HX-Redirect) leaves this one read on the
+  // old domain: it stays busy and inert until the new page loads, so nothing on it posts to the new domain meanwhile.
+  var leaving = false;
+  document.body.addEventListener("htmx:beforeOnLoad", function (e) {
+    var xhr = e.detail && e.detail.xhr;
+    if (!xhr || !xhr.getResponseHeader("HX-Redirect")) return;
+    leaving = true;
+    document.body.inert = true;
+    show();
+  });
   function settle(e) {
-    if (isPoll(e)) return;
+    if (isPoll(e) || leaving) return;
     pending = Math.max(0, pending - 1);
     if (pending === 0) hide();
   }
   document.body.addEventListener("htmx:beforeRequest", function (e) { if (isPoll(e)) { return; } pending++; show(); });
+  // htmx 1.9.12 ends every request with afterRequest, an error status included (it fires responseError first, so
+  // settling on both counted one failed request twice), except when its own handling threw: onLoadError.
   document.body.addEventListener("htmx:afterRequest", settle);
-  document.body.addEventListener("htmx:responseError", settle);
+  document.body.addEventListener("htmx:onLoadError", settle);
   document.addEventListener("click", function (e) {
     var a = e.target.closest && e.target.closest("a[href]");
     if (!a) return;
     var href = a.getAttribute("href") || "";
-    if (a.target === "_blank" || href.charAt(0) === "#" || href.includes("://")) return;
+    // A download (an export's link) saves a file and leaves the page as it is: nothing would clear the indicators.
+    if (a.target === "_blank" || a.hasAttribute("download") || href.charAt(0) === "#" || href.includes("://")) return;
     show();  // full-page nav — cleared automatically when the new page loads
   }, true);
+  // A page Back brings out of the cache comes as it was left, mid-navigation: not busy any more.
+  window.addEventListener("pageshow", function (e) {
+    if (e.persisted) { pending = 0; leaving = false; document.body.inert = false; hide(); }
+  });
 })();
