@@ -14,7 +14,7 @@ import os
 import re
 import secrets
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
@@ -32,7 +32,7 @@ from ..core.roster_store import RosterStore
 from ..core.secrets.ephemeral import sweep_stale_configs
 from ..core.secrets.vault import SecretsVault
 from ..core.usercache import UserCache
-from .jobs import tray, watch_writes
+from .jobs import ONE_STEP, tray, watch_writes
 from .previews import Previews
 
 _WEB_DIR = Path(__file__).resolve().parent
@@ -46,18 +46,29 @@ def _jobs_tray(request) -> tuple:
 
 
 def _active_tenant(request) -> tuple:
-    """base.html's tenant (plan U10b), on every page: the connected domain and, when its ``oauth2.txt``
-    names one, the admin — ("", "") with no connector, or no app behind the page."""
+    """base.html's tenant (plan U10b), on every page: the connected domain, the admin its ``oauth2.txt`` names (when
+    it names one), and the other domains the Keychain holds credentials for, which the header's domain menu offers
+    (plan F6) — ("", "", ()) with no connector, or no app behind the page."""
     app = request.scope.get("app") if isinstance(request, Request) else None
     st = getattr(getattr(app, "state", None), "gamgui", None)
     conn = getattr(st, "connector", None)
     if st is None or conn is None:
-        return "", ""
+        return "", "", ()
+    active = conn.domain.lower()               # domains are case-insensitive; setup kept whatever was typed
     try:
         admin = st.vault.oauth_admin_email(conn.domain)
     except Exception:  # a locked or unreadable Keychain must not break every page
         admin = ""
-    return conn.domain.lower(), admin          # domains are case-insensitive; setup kept whatever was typed
+    try:
+        listed = st.vault.list_domains()
+    except Exception:  # the same: no menu, and the header still names the domain
+        listed = []
+    # One entry per domain: a spelling from before domains were lowercased is the same tenant (Setup removes it).
+    others: dict = {}
+    for d in sorted(listed, key=lambda d: d != d.lower()):      # the lowercase spelling first, where both are kept
+        if d.lower() != active:
+            others.setdefault(d.lower(), d)
+    return active, admin, tuple(sorted(others.values(), key=str.lower))
 
 
 def ago(seconds: Optional[float]) -> str:
@@ -92,6 +103,12 @@ TEMPLATES.env.filters["ago"] = ago
 TEMPLATES.env.filters["cell"] = cell
 TEMPLATES.env.globals["jobs_tray"] = _jobs_tray
 TEMPLATES.env.globals["active_tenant"] = _active_tenant
+# The header's screens, in order (base.html's nav); a switch from the domain menu reloads the one it was on (routes/setup).
+SCREENS = (("/", "Home"), ("/users", "Users"), ("/groups", "Groups"), ("/signatures", "Signatures"),
+           ("/calendars", "Calendars"), ("/classroom", "Classroom"), ("/builder", "Builder"), ("/onboard", "Onboard"),
+           ("/lifecycle", "Lifecycle"), ("/incident", "Incident"), ("/phishing", "Phishing"), ("/reports", "Reports"),
+           ("/audit", "Audit"))
+TEMPLATES.env.globals["screens"] = SCREENS
 TOKEN_COOKIE = "gamgui_token"  # noqa: S105 — a cookie name, not a secret
 DOMAINS_RETRY = 600   # seconds before a failed `gam print domains` is tried again (a success is kept)
 
@@ -185,9 +202,10 @@ class AppState:
 
     def activate(self, connector: GAMConnector) -> None:
         """Make ``connector`` the active tenant (a verify that passed; a switch, plan U10b). The directory
-        caches are dropped either way; another domain also drops every held preview and the Builder's
-        last result, so nothing read or previewed on the old tenant is served or run on the new one
-        (review 2: R5, R11). The calendar index checks its own stored domain; ``tenant_domains`` and the
+        caches are dropped either way; another domain also drops every held preview, the Builder's
+        last result, each earlier run's Retry and a report export waiting to be saved, so nothing read or previewed
+        on the old tenant is served or run on the new one (review 2: R5, R11), and stops what is running
+        after its current step (plan F6). The calendar index checks its own stored domain; ``tenant_domains`` and the
         caches' generation (``UserCache.get``) are keyed to the connector, so they follow on their own."""
         changed = self._tenant() != connector.domain.lower()
         connector.on_write = watch_writes(self.jobs)
@@ -234,6 +252,23 @@ class AppState:
             self.switches += 1
             self.previews.clear()
             self.builder_last_result = None
+            self._end_the_old_tenants_runs(connector.domain.lower())
+            held, self.incident_export = self.incident_export, None    # a report made there, not saved yet
+            if isinstance(held, tuple):                                # (its token, its temp file, the incident's ID)
+                with suppress(OSError):
+                    os.unlink(held[1])
+
+    def _end_the_old_tenants_runs(self, domain: str) -> None:
+        """A switch to another domain (plan F6) asks every running job to stop, as Stop does: each loop finishes the
+        step in hand on the connector it started with — so its records name the old domain — then ends. A one-call
+        read finishes, and the result-keeping checks (``st.connector is conn``) drop it. No run from before is offered a
+        Retry here (``before_switch``): it would preview the old tenant's people on this one. ``retry`` itself stays: a
+        running panel names its target with it (the group, the org unit)."""
+        for job in self.jobs.values():
+            job.before_switch = True
+            if not job.finished and job.kind != ONE_STEP:
+                job.stop_why = f"Stopped: you switched to {domain}"
+                job.cancel_requested = True
 
     async def gam_version(self) -> str:
         """``gam version``'s first line, for Home. Held until the binary changes (a re-vendor: its path,

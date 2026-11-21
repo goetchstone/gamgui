@@ -1062,6 +1062,10 @@ video {
   width: 2rem;
 }
 
+.w-80 {
+  width: 20rem;
+}
+
 .w-96 {
   width: 24rem;
 }
@@ -1108,6 +1112,10 @@ video {
 
 .max-w-\[13rem\] {
   max-width: 13rem;
+}
+
+.max-w-\[15rem\] {
+  max-width: 15rem;
 }
 
 .max-w-\[24rem\] {
@@ -2469,6 +2477,10 @@ video {
 
 .disabled\:cursor-not-allowed:disabled {
   cursor: not-allowed;
+}
+
+.disabled\:cursor-wait:disabled {
+  cursor: wait;
 }
 
 .disabled\:opacity-30:disabled {

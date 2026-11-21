@@ -34,7 +34,7 @@
           Authorize Domain-Wide Delegation ↗
         </a>
         <p class="text-xs text-brand-grayink">Sign in as a super-admin, tick "Overwrite existing client ID", click AUTHORIZE, then wait ~30s.</p>
-      {% else %}
+      {% elif not unchecked %}{# a check that never ran (the Keychain refused, no disk) is not a delegation problem: its summary says what to do #}
         <p class="text-sm text-brand-blueink">Fix the delegation (scopes / client ID), then verify again.</p>
       {% endif %}
       {% if switched %}

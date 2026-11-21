@@ -116,6 +116,23 @@ def test_purge_deletes_it_now_and_is_audited(client):
     assert "There was no roster kept to delete." in client.post("/classroom/import/purge").text
 
 
+def test_a_purge_a_switch_lands_during_is_recorded_under_the_domain_it_purged(client, monkeypatch):
+    """Plan F6: the record named the domain read again after the purge's await, so a switch landing during it put
+    example.com's purge under the new domain."""
+    _upload(client, ("export.zip", _zip(_files())))
+    st = client.app.state.gamgui
+    real = st.roster_store.purge
+
+    def purge_then_switch(domain):
+        gone = real(domain)
+        st.activate(GAMConnector(runner=st.runner, domain="other.example.org", audit=st.connector.audit))
+        return gone
+    monkeypatch.setattr(st.roster_store, "purge", purge_then_switch)
+    client.post("/classroom/import/purge")
+    purge = [e for e in st.connector.audit.tail() if e["action"] == "roster_purge"]
+    assert [(e["target"], e["extra"]["domain"]) for e in purge] == [(DOMAIN, DOMAIN)]
+
+
 def test_a_roster_is_kept_per_domain(client):
     _upload(client, ("export.zip", _zip(_files())))
     assert _store(client).meta("other.example.org") is None

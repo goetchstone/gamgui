@@ -57,6 +57,12 @@ Open **Setup** (every screen points you there until a domain is connected).
    so `Example.com` and `example.com` are one domain (an import from before that may have listed
    both: remove the extra one).
 
+   With more than one domain, the header's domain is also a menu: pick another domain there from any
+   page. GamGUI runs the same access check first and switches only if it passes, then reloads the
+   screen you were on for the new domain. If a job is running, the menu first says what switching
+   stops: each run finishes the step in hand and does nothing after it. **Switch anyway** goes ahead.
+   Templates and roles are shared by every domain.
+
 macOS asks for Keychain access the first time each credential is used. **Always Allow** sticks only
 if the app is signed with a stable certificate — see
 [Stop the Keychain prompts](../README.md#stop-the-keychain-prompts).
@@ -365,7 +371,9 @@ The list has one-step changes too, a delegate or a sign-out, so it shows everyth
 The audit log stays the full record.
 
 **Stop** finishes the person or step in hand, then ends and says how many it didn't attempt. An
-offboarding asks first, and marks the steps after it "not run: stopped". Jobs live in memory:
+offboarding asks first, and marks the steps after it "not run: stopped". Switching to another domain
+stops every running job the same way; a read that is one call can't stop, so it finishes, and nothing it read shows
+on the new domain. Jobs live in memory:
 **quitting the app ends them**, so let a job finish or Stop it first.
 
 ## Read the audit log

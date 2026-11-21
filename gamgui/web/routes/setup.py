@@ -16,11 +16,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
+from keyring.errors import KeyringError
 
 from ...core.audit import AuditLog
 from ...core.connectors.gam_connector import GAMConnector
-from ...core.setup import SetupService
-from ..server import TEMPLATES
+from ...core.setup import SetupService, VerifyResult
+from ..jobs import ONE_STEP, UNSTOPPABLE
+from ..server import SCREENS, TEMPLATES
 
 logger = logging.getLogger(__name__)
 _UNREADABLE_FOLDER = "That folder could not be read — check the path and try again."
@@ -131,32 +133,88 @@ async def switch(
     request: Request,
     tenant: Annotated[str, Form()] = "",
     admin: Annotated[str, Form()] = "",
+    where: Annotated[str, Form()] = "",
+    back: Annotated[str, Form()] = "",
+    confirmed: Annotated[str, Form()] = "",
 ) -> HTMLResponse:
     """Activate a domain the Keychain holds credentials for — another, or the active one again (Setup's
     Check access) — by the same verify, so a switch
     is a `check serviceaccount` read, the connector only changes on a pass, and the caches are busted.
-    The admin is the one its ``oauth2.txt`` names, else the one typed in "Your domain"."""
+    The admin is the one its ``oauth2.txt`` names, else the one typed in "Your domain".
+
+    The header's domain menu (plan F6) posts here too, with ``where=menu``: its answers land in the menu, and a pass
+    reloads ``back``, the screen it was on, for the new domain. From either place, a switch to another domain while a
+    run is going says first what it stops (``_switch_warning.html``) and goes ahead only once ``confirmed`` names every
+    running job's ID."""
     st = request.app.state.gamgui
-    tenant = tenant.strip()
-    if tenant not in st.vault.list_domains():
+    tenant, menu = tenant.strip(), where == "menu"
+    active = st.connector.domain if st.connector else ""
+    try:
+        # Keychain reads: a locked Keychain asks for its password here, as Setup's own verify does.
+        listed = st.vault.list_domains()
+        named = st.vault.oauth_admin_email(tenant) if tenant in listed else ""
+    except KeyringError as exc:
+        logger.warning("the Keychain refused a domain switch's read", exc_info=exc)
+        return _not_checked(request, tenant, active, menu, switched=True, keychain=True)
+    if tenant not in listed:
         return TEMPLATES.TemplateResponse(
             request, "_error.html", {"message": "No credentials for that domain in the Keychain."}
         )
-    admin = st.vault.oauth_admin_email(tenant) or admin.strip()
+    admin = named or admin.strip()
     if not admin:
-        return TEMPLATES.TemplateResponse(
-            request, "_error.html",
-            {"message": f"Enter {tenant}'s super-admin email in \"Your domain\" above, then try again."},
-        )
-    return await _verify_and_activate(request, tenant, admin, switched=True)
+        message = (f"{tenant}'s oauth2.txt names no admin, so switch to it on Setup, where you type its super-admin email."
+                   if menu else f"Enter {tenant}'s super-admin email in \"Your domain\" above, then try again.")
+        return TEMPLATES.TemplateResponse(request, "_error.html", {"message": message})
+    running = [j for j in st.jobs.values() if not j.finished and j.kind != ONE_STEP]
+    # Confirmed means "stop these": a run started since the warning (from another window) is warned about first.
+    unwarned = {j.id for j in running} - set(confirmed.split(","))
+    if unwarned and tenant.lower() != active.lower():
+        return TEMPLATES.TemplateResponse(request, "_switch_warning.html", {
+            "tenant": tenant, "active": active.lower(), "running": running, "unstoppable": UNSTOPPABLE,
+            "where": where, "back": back, "zone": "domain-result" if menu else "tenant-result",
+            "confirm": ",".join(j.id for j in running)})
+    return await _verify_and_activate(request, tenant, admin, switched=True, menu=menu, back=back)
 
 
-async def _verify_and_activate(request: Request, domain: str, admin: str, switched: bool = False) -> HTMLResponse:
+def _back_to(back: str) -> str:
+    """Where a pass from the menu reloads: the top of the screen it was on (``/users``, not one user's page, which may
+    name the old domain's account). Only one of the header's screens, or Setup: never another path or origin."""
+    return back if back == "/setup" or back in {href for href, _ in SCREENS} else "/"
+
+
+def _not_checked(request: Request, domain: str, active: str, menu: bool, switched: bool, keychain: bool) -> HTMLResponse:
+    """The Keychain didn't hand the credentials over (``keychain``: locked and its prompt cancelled, or access denied),
+    or the check couldn't run at all (no room for its temporary folder): an answer in fixed words, the active domain
+    kept. The caller logs the exception; its text is never shown, as it could carry the Keychain's own."""
+    if keychain:
+        summary = (f"The Keychain didn't hand over {domain}'s credentials: it may be locked, or its password prompt was "
+                   "cancelled. Nothing changed. Try again.")
+    else:
+        summary = (f"{domain}'s access check couldn't run, so nothing changed. Check the disk has room, then try "
+                   "again.")
+    result = VerifyResult(ok=False, summary=summary)
+    template = "_switch_failed.html" if menu else "_verify.html"
+    return TEMPLATES.TemplateResponse(request, template, {"result": result, "domain": domain, "switched": switched,
+                                                          "active": active.lower(), "unchecked": True})
+
+
+async def _verify_and_activate(request: Request, domain: str, admin: str, switched: bool = False, menu: bool = False,
+                               back: str = "") -> HTMLResponse:
     st = request.app.state.gamgui
-    result = await _service(request).verify(domain, admin)
+    try:
+        result = await _service(request).verify(domain, admin)
+    except Exception as exc:  # noqa: BLE001 — GAM's own failures are verify's answer; anything else is said, not a 500
+        logger.warning("a domain check couldn't run", exc_info=exc)
+        return _not_checked(request, domain, st.connector.domain if st.connector else "", menu, switched,
+                            keychain=isinstance(exc, KeyringError))
     if result.ok:
         audit = st.connector.audit if st.connector else None          # one audit log across a switch
         st.activate(GAMConnector(runner=st.runner, domain=domain, audit=audit))   # busts what the old tenant left
+        if menu:      # every screen read the old domain: reload this one, for the new domain
+            return HTMLResponse("", headers={"HX-Redirect": _back_to(back)})
+    if menu:
+        return TEMPLATES.TemplateResponse(request, "_switch_failed.html", {
+            "result": result, "domain": domain, "active": st.connector.domain.lower() if st.connector else ""})
     return TEMPLATES.TemplateResponse(
         request, "_verify.html",
         {"result": result, "domain": domain, "admin": admin, "switched": switched,
