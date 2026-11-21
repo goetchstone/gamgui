@@ -58,6 +58,7 @@ PREVIEWS = {
     "/signatures/putback/preview",   # roadmap 4.1: a kept run's old signatures, previewed
     "/groups/members/remove-many/preview", "/groups/members/remove-many/retry",   # roadmap 3.5: read the group, hold who
     "/users/bulk-ou/preview", "/users/bulk-ou/retry",   # roadmap 4.2: read the tree and the group, hold the unit and who
+    "/builder/sheet/preview",   # plan F4: a read's export to a Sheet, held; its one GAM call is the scope check, a read
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -136,6 +137,17 @@ def _ten_suspends(client) -> None:   # destructive + bulk: the typed confirmatio
         client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "carol@example.com"})
 
 
+KEPT_READ = "0123456789ab"
+
+
+def _a_read_kept(client) -> None:   # a Builder read's table, as _render_read keeps it: what Export to a Google Sheet… names
+    from gamgui.core.gam.commands import GAMCommands
+    argv = GAMCommands.print_delegates("alice@example.com")
+    client.app.state.gamgui.builder_last_result = {
+        "id": KEPT_READ, "records": [{"delegateAddress": "boss@example.com"}], "gam": "gam " + " ".join(argv),
+        "read": {"command": "build.print_delegates", "argv": argv, "target": "alice@example.com"}, "sensitive": None}
+
+
 def _another_step(client) -> None:  # the sequence lives on the server: its "edit" is a step added
     client.post("/builder/sequence/add", data={"cid": "build.suspend_user", "email": "alice@example.com"})
 
@@ -200,6 +212,9 @@ GATED = {
                               setup=_sales_role, edit={"csv_text": HIRES_CSV + "Sales,Zed,zed@example.com,it@example.com\n"}),
     "/builder/run": Case({"cid": "build.suspend_user", "email": "alice@example.com"}, "/builder/preview",
                          edit={"email": "carol@example.com"}),
+    # A read's export to a new Google Sheet (plan F4): the read's argv and the Sheet's name, held by the preview, keyed by the
+    # table it was made from. Its edit: the Export of another table.
+    "/builder/sheet/export": Case({"rid": KEPT_READ}, "/builder/sheet/preview", setup=_a_read_kept, edit={"rid": "another"}),
     # Sharing with a group of 10+ subscribes each member: /calendars/share resolves the group and, past
     # the bulk threshold, renders this confirm step instead of writing.
     "/calendars/share/group": Case({"cal": SEC_CAL, "target": "group:allhands@example.com", "role": "reader",
@@ -308,18 +323,23 @@ def test_bare_post_runs_no_write(route, client, gam_calls):
     assert client.app.state.gamgui.connector.audit.tail() == []
 
 
-def test_a_read_s_export_is_the_one_write_a_bare_post_can_make(client, gam_calls):
-    """Invariant 3: a runnable read can make one write, its export to a new Google Sheet (``todrive``) in a named
-    user's Drive, on one click and audited through _run_write. The export path serves reads only: the same fields
-    on a curated write's form run nothing without its confirm step (ledger 2026-10-02: no case covered it)."""
-    client.post("/builder/run", data={**GATED["/builder/run"].bare, "td_export": "1", "td_user": "boss@example.com"})
-    assert gam_writes(gam_calls()) == [] and client.app.state.gamgui.connector.audit.tail() == []
+def test_a_read_s_export_runs_only_from_its_preview(client, gam_calls):
+    """Invariant 3: a runnable read makes one write, its export to a new Google Sheet (``todrive``) in the connected admin's
+    Drive, audited through _run_write. Since plan F4 it runs only from its preview, like any curated write (GATED above):
+    the Builder's Run no longer exports (its old one-click fields run the read alone), and the export route serves only a
+    read the Builder kept, never a curated write's form (ledger 2026-10-02: no case covered it)."""
     client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
                                       "td_export": "1", "td_user": "boss@example.com", "td_title": "Delegates"})
-    assert gam_writes(gam_calls()) == []                     # the export is the read's own print, plus todrive
+    assert gam_writes(gam_calls()) == []                     # the read ran, and only the read
     [entry] = client.app.state.gamgui.connector.audit.tail()
-    assert entry["action"] == "export_to_sheet" and "print" in entry["argv"]
-    assert entry["argv"][-5:] == ["todrive", "tduser", "boss@example.com", "tdtitle", "Delegates"]
+    assert (entry["action"], entry["argv"]) == ("read", ["user", "alice@example.com", "print", "delegates"])
+    _a_read_kept(client)
+    client.app.state.gamgui.builder_last_result["read"]["command"] = "build.suspend_user"   # a write's form, kept as a read
+    r = client.post("/builder/sheet/preview", data={"rid": KEPT_READ})
+    assert "go to a Google Sheet" in r.text and 'hx-post="/builder/sheet/export"' not in r.text
+    r = client.post("/builder/sheet/export", data={"rid": KEPT_READ, "confirmed": "1"})
+    assert "Check what the export will run first" in r.text
+    assert gam_writes(gam_calls()) == [] and len(client.app.state.gamgui.connector.audit.tail()) == 1
 
 
 # What a confirm step adds to say "yes" (guard.enforce checks these; calendar delete types DELETE into

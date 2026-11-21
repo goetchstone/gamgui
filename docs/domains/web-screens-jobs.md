@@ -27,6 +27,14 @@ be ticked at a time. GATED in the tripwire; tests in `tests/test_remove_members.
 - `gamgui/web/routes/classroom.py` — the Classroom screen (`/classroom`, plan 2026-11-11 C1.3), read only and GET only:
   a class finder over `st.courses()` (the cached index) or one teacher's classes read live on Enter, and a class's card
   with its roster. Its own runbook is `classroom.md`.
+- `gamgui/web/routes/files.py` + `core/files.py` — **Files** (`/files`, plan F4), GET only, no gam: what this app made.
+  The Google Sheets the Builder exported, read back from the `export_to_sheet` / `sensitive_export` records (newest
+  `SHEETS_SHOWN` = 50 of the newest `RECORDS_SCANNED` = 50,000 records; the link only when it is a Google file's, each
+  row's outcome in words, an unreadable log said as unknown); each kept incident's `evidence` folder with its count of
+  saved reads (through `IncidentStore`, its CAP; one whose folder or record can't be read is named); and, in words, that
+  GamGUI keeps no list of the files the window downloaded (it never learns the path). Never a run folder (GAMCFGDIR) or
+  the setup folder. Linked from Audit and from an export's result; no header entry yet (the header is the domain menu's,
+  plan F6). Tests in `tests/test_sheet_export.py`.
 - `gamgui/web/templates/_bulk_apply.html`, `_calendar_subscribe_job.html`, `_calendar_index_job.html`, `_sequence_run.html` — the self-polling HTMX partials; `_job_failures.html`'s `failures(job)` macro is the final panels' failed list (item — reason, GAM's error in a `<details>`, "… +K more"). `_job_live.html` holds `stop(job, where)` — the Stop button in each running panel and tray row, "Stopping after the current one…" once pressed — and `ended(job, where)`, the same id on the finished panel's line (below).
 
 ## How it works

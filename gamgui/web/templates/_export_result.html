@@ -1,5 +1,24 @@
-<div class="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm shadow-sm">
-  <p class="font-medium text-emerald-800">Exported to a Google Sheet in {{ owner }}'s Drive.</p>
-  <pre class="mt-2 overflow-auto rounded bg-white/70 p-2 text-xs text-brand-black">{{ output }}</pre>
-  <p class="mt-1 text-xs text-brand-grayink">{{ gam }}</p>
+{# What an export to a Google Sheet did (plan F4, core/sheet_export.outcome): the link GAM printed, as a link only when it is
+   a Google file's; whether a file was made ("unknown" said as unknown); what to do; GAM's line one click away. #}
+{% set made = outcome.made %}
+<div class="rounded-2xl border {{ 'border-emerald-300 bg-emerald-50' if made == 'yes' and not detail else 'border-amber-300 bg-amber-50' }} p-4 text-sm shadow-sm space-y-1.5">
+  <p tabindex="-1" data-focus class="font-medium {{ 'text-emerald-800' if made == 'yes' and not detail else 'text-amber-900' }}">{{ outcome.said }}</p>
+  {% if outcome.url %}
+  <p><a href="{{ outcome.url }}" target="_blank" rel="noopener" class="font-medium text-brand-blueink underline">Open {{ name }} ↗</a>
+     <span class="block break-all text-xs text-brand-grayink">{{ outcome.url }}</span></p>
+  {% endif %}
+  {% if outcome.todo %}<p class="text-brand-black">{{ outcome.todo }}</p>{% endif %}
+  {% if unrecorded %}
+  <p class="font-medium text-amber-900">{{ unrecorded }} Files won't list it: keep the link above.</p>
+  {% else %}
+  <p class="text-xs text-brand-grayink">Kept in the audit log, and listed on <a href="/files" class="underline">Files</a>.</p>
+  {% endif %}
+  <p class="text-xs text-brand-grayink break-all">{{ gam }}</p>
+  {% if detail %}
+  <details class="copy-wrap">
+    <summary class="cursor-pointer text-xs font-medium text-amber-900">GAM's error</summary>
+    <pre class="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2.5 py-1.5 font-mono text-xs leading-snug text-amber-900">{{ detail }}</pre>
+    <button type="button" class="mt-1.5 rounded-lg border border-amber-400/70 px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 transition-colors" data-action="copy">Copy</button>
+  </details>
+  {% endif %}
 </div>

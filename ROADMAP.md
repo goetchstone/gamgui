@@ -58,7 +58,8 @@ Everything below is planned for both apps.
   Pulling straight from a SIS's API stays later.
 
 - **Audit runs, a domain menu and due schedules** (asked 2026-11-19). The five audit runs are built
-  (2026-11-20/21; not run on a real domain yet). A record for every read and the
+  (2026-11-20/21; not run on a real domain yet). So is the Sheet export with its Files list (2026-11-21;
+  no live export yet: the first waits on the operator's yes). A record for every read and the
   domain on every record; five ready-made audit runs, reads only (inactive users with a window picker,
   shared drive permissions, licence seats on suspended accounts, Classroom courses, admin tokens with
   suspended admins included); switching domains from the header; Sheet export owned by the admin and

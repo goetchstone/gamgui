@@ -35,8 +35,9 @@ two tiers by whether they can run (the current counts are in CLAUDE.md invariant
    typed `confirm`. A bare POST that skips the UI must not execute.
 4. **Every mutation is audited.** Mutations go through `GAMConnector.apply → _run_write` (serialized +
    audit log). Reads go through `GAMConnector.catalog_read` (which refuses a non-`READ_ONLY` command)
-   + `parse_records`. A read exported with `todrive` creates a Sheet — possibly in another user's
-   Drive — so it is a write: `export_to_sheet → _run_write`, audited as `export_to_sheet`.
+   + `parse_records`. A read exported with `todrive` creates a Sheet in the connected admin's Drive,
+   so it is a write, run from its own preview: `export_to_sheet → _run_write`, audited as
+   `export_to_sheet` (plan F4; docs/domains/catalog-builder.md).
 
 ## How reads become buildable
 

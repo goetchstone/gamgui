@@ -248,7 +248,7 @@ school domain is the most useful one of all.
 | Forwarding: add an address, forward on / off | Builder (forward off also Offboarding) | forward off **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14); adding an address and forward on, not yet |
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
-| Export a result to a Google Sheet | Builder | not yet |
+| Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 
 **A new account isn't ready at once.** On the first live onboarding (2026-09-30) the account,
 groups, checklist and welcome email went through, but the signature (1 s after the create) and a

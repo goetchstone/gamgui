@@ -43,6 +43,7 @@ Open **Setup** (every screen points you there until a domain is connected).
    | `https://www.googleapis.com/auth/tasks` | Onboarding task lists |
    | `https://www.googleapis.com/auth/cloud-identity.devices` | The computers signed in with an account. Setup's check doesn't ask for this one: without it, only that list is missing |
    | `https://www.googleapis.com/auth/apps.alerts` | Google's alerts, on Reports. Setup's check doesn't ask for this one either: without it, only that report is refused |
+   | `https://www.googleapis.com/auth/spreadsheets` | The Builder's export to a Google Sheet, which checks it before it runs. Setup's check doesn't ask for this one: without it, only that export is refused |
 
    Offboarding's sign-out needs one more permission that delegation can't give: the admin token's
    "Directory API - User Security" scope, ticked when `gam oauth create` runs. Setup says whether
@@ -230,6 +231,16 @@ and the CSV download takes the filtered rows.
 
 Clicking an address in a result offers follow-ups for that person (delegates, forwarding,
 signature, suspend and more). A Builder change only ever runs from its preview.
+
+**Export to a Google Sheet**, beside **Download CSV**, puts a read's table in a new Sheet in your own Drive (the admin
+GamGUI signs in as), shared with nobody. Its preview shows the exact command, and that the Sheet holds a fresh read:
+GAM runs the read again, so its rows can differ from the table, and a filter doesn't apply. It checks that the service
+account may use Drive and Sheets for you first; if not, it says which and links to the Admin console. Click **Export
+to a new Sheet**, then open it from the link. Not yet run on a real domain.
+
+**Files** (linked from **Audit**) lists what the app made: each Sheet exported, with its link, read back from the audit
+log, and each kept incident's evidence folder. It runs no GAM. Files you download aren't listed: the window saves them
+where its downloads go, and the app never learns where.
 
 A wide result? **Hide list** (top right) gives the result the whole width; the Builder remembers
 your choice until you click it again ("Show list"). Each value stays on one line: a long one is cut short —

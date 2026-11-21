@@ -424,32 +424,6 @@ def _audit(client):
     return client.app.state.gamgui.connector.audit.tail()
 
 
-def test_read_command_export_to_drive(client):
-    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
-                                          "td_export": "1", "td_user": "boss@example.com", "td_title": "Delegates"})
-    assert "Exported to a Google Sheet" in r.text and "boss@example.com" in r.text
-    assert "todrive tduser boss@example.com tdtitle Delegates" in r.text
-    # The export creates a file in boss's Drive — a write, so the chokepoint audits it (plan Q6).
-    [entry] = _audit(client)
-    assert (entry["action"], entry["target"], entry["ok"]) == ("export_to_sheet", "boss@example.com", True)
-    assert entry["argv"] == ["user", "alice@example.com", "print", "delegates",
-                             "todrive", "tduser", "boss@example.com", "tdtitle", "Delegates"]
-
-
-def test_a_failed_export_is_audited_and_shown(client, monkeypatch):
-    from gamgui.core.gam.errors import GAMError, GAMErrorKind
-
-    async def refused(domain, argv, **kw):
-        raise GAMError(GAMErrorKind.PERMISSION_DENIED, exit_code=1, stderr="ERROR: 403: Insufficient permissions")
-
-    monkeypatch.setattr(client.app.state.gamgui.connector.runner, "run_authenticated", refused)
-    r = client.post("/builder/run", data={"cid": "build.print_delegates", "email": "alice@example.com",
-                                          "td_export": "1", "td_user": "boss@example.com"})
-    assert "export to a Google Sheet failed" in r.text and "403" in r.text
-    [entry] = _audit(client)
-    assert (entry["action"], entry["target"], entry["ok"]) == ("export_to_sheet", "boss@example.com", False)
-
-
 # Reads whose output is itself a secret: named in catalog.SECRET_READS (nothing in the grammar marks one).
 SECRET_HEADS = {
     "gam <UserTypeEntity> show backupcodes|verificationcodes",
@@ -534,20 +508,6 @@ def test_a_failed_sensitive_read_is_audited(client):
     [entry] = _audit(client)
     assert (entry["action"], entry["target"], entry["ok"]) == ("sensitive_read", "missing@example.com", False)
     assert entry["extra"]["command"] == cmd.id and "Does not exist" in entry["extra"]["error"]
-
-
-async def test_a_sensitive_export_is_audited_as_such(connector, monkeypatch):
-    async def uploaded(domain, argv, **kw):
-        return "Data uploaded to Drive File: https://docs.google.com/spreadsheets/d/abc"
-
-    monkeypatch.setattr(connector.runner, "run_authenticated", uploaded)
-    cmd = _sensitive("print backupcodes")
-    res = await connector.export_to_sheet(cmd, cmd.build({"a0": "alice@example.com"}), "boss@example.com")
-    assert res.ok and "spreadsheets/d/abc" in res.output
-    [entry] = connector.audit.tail()
-    assert (entry["action"], entry["target"]) == ("sensitive_export", "boss@example.com")
-    assert entry["argv"] == ["user", "alice@example.com", "print", "backupcodes", "todrive", "tduser",
-                             "boss@example.com"]
 
 
 def test_a_sensitive_read_in_a_sequence_is_audited_as_one(client):
@@ -1142,7 +1102,9 @@ def test_destructive_bulk_sequence_needs_typed_confirm(client):
     assert "Type confirm" in blocked.text and "status?job=" not in blocked.text
 
 
-@pytest.mark.parametrize("value", ["todrive", "TargetFolder", " install ", "update"])
+@pytest.mark.parametrize("value", ["todrive", "TargetFolder", " install ", "update",
+                                   # GAM's getArgument drops "_" (7.52.04): each of these is the keyword to GAM
+                                   "to_drive", "TO_DRIVE", "t_o_d_r_i_v_e", "target_folder", "download_file", "save_attachments"])
 def test_a_promoted_read_refuses_a_write_keyword_as_a_value(value):
     # GAM reads some slot positions as keywords (`print vaultcounts matter M <QueryItem>`), so a value
     # typed as `todrive` would make a read write a Sheet outside the audited export path.

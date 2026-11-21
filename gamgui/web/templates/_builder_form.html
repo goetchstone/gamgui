@@ -45,19 +45,7 @@
   </div>
   {% endfor %}
   {% if cmd.supports_export %}
-  <details class="text-sm">
-    <summary class="cursor-pointer text-brand-blueink">Export to a Google Sheet instead of a table</summary>
-    <label class="mt-2 flex items-center gap-1.5"><input type="checkbox" name="td_export" value="1" /> Create a Sheet</label>
-    <div class="mt-2 grid gap-2 sm:grid-cols-2">
-      <span class="upick-wrap relative block">
-        <input id="td-user" name="td_user" aria-label="Sheet owner (whose Drive)" placeholder="owner email — whose Drive (blank = admin's)" autocomplete="off"
-               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="td-user-listbox"
-               class="upick {{ fld }} border-dashed" data-kind="users" />
-        <div class="upick-menu hidden absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-lg border border-brand-gray/40 bg-brand-white shadow-lg"></div>
-      </span>
-      <input name="td_title" aria-label="Sheet name" placeholder="sheet name (optional)" autocomplete="off" class="{{ fld }}" />
-    </div>
-  </details>
+  <p class="text-xs text-brand-grayink">Its table can go to a new Google Sheet in your Drive: Export to a Google Sheet…, beside Download CSV.</p>
   {% endif %}
   <div class="flex gap-2 pt-1">
     <button type="button" class="rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors"
