@@ -58,6 +58,12 @@ Open **Setup** (every screen points you there until a domain is connected).
    so `Example.com` and `example.com` are one domain (an import from before that may have listed
    both: remove the extra one).
 
+   With more than one domain, the header's domain is also a menu: pick another domain there from any
+   page. GamGUI runs the same access check first and switches only if it passes, then reloads the
+   screen you were on for the new domain. If a job is running, the menu first says what switching
+   stops: each run finishes the step in hand and does nothing after it. **Switch anyway** goes ahead.
+   Templates and roles are shared by every domain.
+
 macOS asks for Keychain access the first time each credential is used. **Always Allow** sticks only
 if the app is signed with a stable certificate — see
 [Stop the Keychain prompts](../README.md#stop-the-keychain-prompts).
@@ -310,6 +316,20 @@ when they next sign in. It shows once, after it's set, so copy it then: it isn't
 Chrome needs a scope picked when GAM was authorized, and Computers needs one delegated in the Admin console. Without one,
 that list says which and how to add it, and the others still read. Not yet verified live.
 
+## Change a person's licenses
+
+Open a person and choose **Show their licenses**. It reads every license seat in the domain and shows theirs; nothing
+changes until you confirm.
+
+- **Add** a license someone in the domain already holds. Google refuses it if no seat is left.
+- **Change** one to another license of the same product, in one step (Business Standard to Business Plus, say).
+- **Remove** one. Google warns that you might lose their data, so you type their address to confirm, and GamGUI refuses
+  while a data transfer from them hasn't finished, or when it can't check. A seat you remove can take up to a day before
+  it can go to someone else.
+
+GAM skips a product Google won't let it read without saying so, so a license missing from the card may only be unread.
+Not yet verified live.
+
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.
@@ -376,7 +396,9 @@ The list has one-step changes too, a delegate or a sign-out, so it shows everyth
 The audit log stays the full record.
 
 **Stop** finishes the person or step in hand, then ends and says how many it didn't attempt. An
-offboarding asks first, and marks the steps after it "not run: stopped". Jobs live in memory:
+offboarding asks first, and marks the steps after it "not run: stopped". Switching to another domain
+stops every running job the same way; a read that is one call can't stop, so it finishes, and nothing it read shows
+on the new domain. Jobs live in memory:
 **quitting the app ends them**, so let a job finish or Stop it first.
 
 ## Read the audit log

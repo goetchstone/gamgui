@@ -26,11 +26,11 @@ def stop_reason(kind, remediation: str, left: int) -> Optional[str]:
 
 
 def stop_requested(job) -> bool:
-    """True, with ``job.error`` saying so, once the operator pressed Stop (plan U5). Every loop asks
-    before its next target, never during one, so the write in flight finishes and is recorded."""
+    """True, with ``job.error`` saying so, once the operator pressed Stop (plan U5) or switched domains (plan F6).
+    Every loop asks before its next target, never during one, so the write in flight finishes and is recorded."""
     if not job.cancel_requested:
         return False
-    job.error = f"Stopped by you — {job.total - job.done} not attempted."
+    job.error = f"{getattr(job, 'stop_why', '') or 'Stopped by you'} — {job.total - job.done} not attempted."
     return True
 
 

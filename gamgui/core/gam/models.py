@@ -190,6 +190,24 @@ class GroupMember:
         )
 
 
+@dataclass(frozen=True)
+class LicenseSeat:
+    """One license seat as `gam print licenses` lists it (roadmap 4.3): who holds it, and the product and SKU by ID and by
+    name. The IDs are what a write names (`license_sku`); the names are what the screen shows."""
+    user: str
+    product_id: str
+    sku_id: str
+    product: str = ""
+    sku: str = ""
+
+    @classmethod
+    def from_row(cls, d: Dict[str, Any]) -> "LicenseSeat":
+        product_id, sku_id = str(d.get("productId") or "").strip(), str(d.get("skuId") or "").strip()
+        return cls(user=str(d.get("userId") or "").strip().lower(), product_id=product_id, sku_id=sku_id,
+                   product=str(d.get("productDisplay") or "").strip() or product_id,
+                   sku=str(d.get("skuDisplay") or "").strip() or sku_id)
+
+
 @dataclass
 class CalendarACL:
     """One access rule on a calendar: who has access (scope) and at what role."""

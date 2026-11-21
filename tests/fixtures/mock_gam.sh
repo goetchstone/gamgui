@@ -1996,6 +1996,91 @@ if [ "${1:-}" = "undelete" ] && [ "${2:-}" = "user" ]; then
   exit 0
 fi
 
+# `gam user <email> create|add license <SKUIDList>`, `update license <NewSKUID> [from] <OldSKUID>`, `delete license
+# <SKUIDList>` (8527-8530; getLicenseParameters, _createLicenses, updateLicense, _deleteLicenses at the 7.52.04 tag). Only
+# the `nv:<productId>:<skuId>` spelling the app sends is modelled; getProductAndSKU splits it at the first `:`. Google's
+# refusals are entityActionFailedWarning, ACTION_FAILED_RC: a seat they already hold (duplicate), none left
+# (conditionNotMet: GAM_MOCK_STATE/no_seats), a SKU the domain has no subscription to (not in license_skus.csv), a seat
+# they don't hold (notFound), and a swap to a SKU that isn't the old one's product's. An address Google doesn't know is
+# entityUnknownWarning, ENTITY_DOES_NOT_EXIST_RC. With GAM_MOCK_STATE the seats change: `print licenses` lists what's left.
+license_seat() {  # <nv:P:S>: sets lic_product and lic_sku, or refuses as GAM would
+  case "$1" in
+    nv:*) lic_rest=${1#nv:}; lic_product=${lic_rest%%:*}; lic_sku=${lic_rest#*:}
+          { [ "$lic_rest" != "$lic_product" ] && [ -n "$lic_product" ] && [ -n "$lic_sku" ]; } \
+            || invalid_choice "$1" "SKUID" ;;
+    *) not_modelled "a SKU not spelled nv:<productId>:<skuId>" ;;
+  esac
+}
+seats_file() {  # the seats `print licenses` lists: the kept copy once a write changed them
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/licenses.csv" ]; then echo "$GAM_MOCK_STATE/licenses.csv"
+  else echo "$GAM_MOCK_FIXTURES/licenses.csv"; fi
+}
+seat_known() {  # a SKU the domain subscribes to (license_skus.csv): one with no seat assigned too
+  awk -F, -v p="$1" -v s="$2" 'NR > 1 && $1 == p && $3 == s { f = 1 } END { exit !f }' "$GAM_MOCK_FIXTURES/license_skus.csv"
+}
+seat_held() { awk -F, -v u="$1" -v p="$2" -v s="$3" 'NR > 1 && $1 == u && $2 == p && $4 == s { f = 1 } END { exit !f }' "$(seats_file)"; }
+seat_failed() {  # <user> <sku> <Add|Update|Delete> <reason>
+  printf 'User: %s, License: %s, %s Failed: %s\n' "$1" "$2" "$3" "$4" 1>&2
+  exit 50
+}
+seats_keep() { [ -z "${GAM_MOCK_STATE:-}" ] || [ -e "$GAM_MOCK_STATE/licenses.csv" ] || cp "$GAM_MOCK_FIXTURES/licenses.csv" "$GAM_MOCK_STATE/licenses.csv"; }
+seat_drop() {  # <user> <product> <sku>
+  seats_keep; [ -n "${GAM_MOCK_STATE:-}" ] || return 0
+  awk -F, -v u="$1" -v p="$2" -v s="$3" '!(NR > 1 && $1 == u && $2 == p && $4 == s)' "$GAM_MOCK_STATE/licenses.csv" > "$GAM_MOCK_STATE/licenses.tmp"
+  mv "$GAM_MOCK_STATE/licenses.tmp" "$GAM_MOCK_STATE/licenses.csv"
+}
+seat_add() {  # <user> <product> <sku>: the names as the subscription gives them
+  seats_keep; [ -n "${GAM_MOCK_STATE:-}" ] || return 0
+  awk -F, -v u="$1" -v p="$2" -v s="$3" 'NR > 1 && $1 == p && $3 == s { print u "," p "," $2 "," s "," $4; exit }' \
+    "$GAM_MOCK_FIXTURES/license_skus.csv" >> "$GAM_MOCK_STATE/licenses.csv"
+}
+if [ "${1:-}" = "user" ] && [ "${4:-}" = "license" ]; then
+  case "${3:-}" in add|create|update|delete) ;; *) not_modelled "license $3" ;; esac
+  lic_user=$(lower "$2"); lic_verb=$3; shift 4
+  [ $# -ge 1 ] || missing_arg "$([ "$lic_verb" = update ] && echo SKUID || echo SKUIDList)"
+  case "$1" in *,*) [ "$lic_verb" = update ] || not_modelled "more than one SKU" ;; esac
+  license_seat "$1"; shift
+  new_product=$lic_product; new_sku=$lic_sku
+  if [ "$lic_verb" = update ]; then
+    [ "${1:-}" != "from" ] || shift
+    [ $# -ge 1 ] || missing_arg "SKUID"
+    license_seat "$1"; shift
+  fi
+  for arg in "$@"; do
+    case "$arg" in
+      product|productid|preview|actioncsv) not_modelled "license with $arg" ;;
+      archive) [ "$lic_verb" = update ] && not_modelled "license with archive" ;;
+    esac
+    usage_error "Unknown argument: $arg"
+  done
+  known_user "$lic_user" || does_not_exist "User" "$lic_user"
+  case "$lic_verb" in
+    add|create)
+      seat_known "$new_product" "$new_sku" || seat_failed "$lic_user" "$new_sku" "Add" "Invalid sku: $new_sku"
+      ! seat_held "$lic_user" "$new_product" "$new_sku" \
+        || seat_failed "$lic_user" "$new_sku" "Add" "User already has a license for the specified product and SKU"
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/no_seats" ]; then
+        seat_failed "$lic_user" "$new_sku" "Add" "Conditional check failed. There aren't enough available licenses for the specified product and SKU."
+      fi
+      seat_add "$lic_user" "$new_product" "$new_sku"
+      echo "User: $lic_user, License: $new_sku, Added" ;;
+    update)   # the product is the old SKU's (updateLicense): the new one must be a SKU of it
+      seat_held "$lic_user" "$lic_product" "$lic_sku" \
+        || seat_failed "$lic_user" "$lic_sku" "Update" "User does not have a license for specified sku and product"
+      seat_known "$lic_product" "$new_sku" || seat_failed "$lic_user" "$lic_sku" "Update" "Invalid sku: $new_sku"
+      ! seat_held "$lic_user" "$lic_product" "$new_sku" \
+        || seat_failed "$lic_user" "$lic_sku" "Update" "User already has a license for the specified product and SKU"
+      seat_drop "$lic_user" "$lic_product" "$lic_sku"; seat_add "$lic_user" "$lic_product" "$new_sku"
+      echo "User: $lic_user, License: $new_sku, Updated, From: $lic_sku" ;;
+    delete)
+      seat_held "$lic_user" "$new_product" "$new_sku" \
+        || seat_failed "$lic_user" "$new_sku" "Delete" "User does not have a license for specified sku and product"
+      seat_drop "$lic_user" "$new_product" "$new_sku"
+      echo "User: $lic_user, License: $new_sku, Deleted" ;;
+  esac
+  exit 0
+fi
+
 # `gam user <email> signout` (8938). SIGNOUTFAIL: Google refuses users.signOut the way a missing
 # admin.directory.user.security scope does — GAM's entityActionFailedWarning, ACTION_FAILED_RC.
 signout_refused() {
@@ -2733,16 +2818,16 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "licenses" ]; then
     exit 15
   fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/licenses_silent" ]; then
-    head -n 1 "$GAM_MOCK_FIXTURES/licenses.csv"
+    head -n 1 "$(seats_file)"
     exit 0
   fi
   # GAM_MOCK_STATE/licenses_partial: Google refused one product (Google Vault), passed over the same way: the other
   # products' seats and exit 0, nothing to tell it from a whole read.
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/licenses_partial" ]; then
-    grep -v ',Google-Vault,' "$GAM_MOCK_FIXTURES/licenses.csv"
+    grep -v ',Google-Vault,' "$(seats_file)"
     exit 0
   fi
-  cat "$GAM_MOCK_FIXTURES/licenses.csv"
+  cat "$(seats_file)"
   exit 0
 fi
 

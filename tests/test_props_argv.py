@@ -94,6 +94,8 @@ FREE_TEXT = (
 
 _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Example-1.com"])
 _DEVICE_USER = st.sampled_from(["devices/0vmcarol01/deviceUsers/u1", "devices/a-b_C/deviceUsers/D-1_e"])
+_PRODUCT_ID = st.sampled_from(["Google-Apps", "Google-Vault", "101031", "nv-product"])
+_SKU_ID = st.sampled_from(["1010020028", "Google-Vault-Former-Employee", "a:b", "Google-Apps-Unlimited"])
 
 # Every other builder with a str parameter: addresses, calendar/event ids, scopes, aliases, dates.
 IDENTIFIERS = (
@@ -137,6 +139,10 @@ IDENTIFIERS = (
     Spec("report_users", ("date",), (), {"params": st.just(("accounts:used_quota_in_mb",))}),
     Spec("info_user", ("email",)),
     Spec("set_suspended", ("email",), (), {"suspended": BOOL}),
+    # A license seat is one `nv:<productId>:<skuId>` element (license_sku): the IDs as `print licenses` gives them.
+    Spec("add_license", ("email",), (), {"product_id": _PRODUCT_ID, "sku_id": _SKU_ID}),
+    Spec("swap_license", ("email",), (), {"product_id": _PRODUCT_ID, "old_sku_id": _SKU_ID, "new_sku_id": _SKU_ID}),
+    Spec("remove_license", ("email",), (), {"product_id": _PRODUCT_ID, "sku_id": _SKU_ID}),
     Spec("print_calendar_acls", ("email", "calendar")),
     Spec("add_calendar_acl", ("email", "target", "calendar"), (), {"role": CAL_ROLE}),
     Spec("delete_calendar_acl", ("email", "scope", "calendar")),

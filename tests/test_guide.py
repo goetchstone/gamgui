@@ -45,7 +45,8 @@ TEMPLATES = ROOT / "gamgui" / "web" / "templates"
 # Each section of the guide → the templates of the screen it walks through. base.html (the nav and
 # the header) counts for every section.
 SCREENS = {
-    "First setup": ["setup.html", "_tenant_panel.html", "_tenant_controls.html", "_dwd.html", "_verify.html", "_tenant.html"],
+    "First setup": ["setup.html", "_tenant_panel.html", "_tenant_controls.html", "_dwd.html", "_verify.html", "_tenant.html",
+                    "_switch_warning.html", "_switch_failed.html"],
     "Find a user": ["users.html", "_users_table.html", "_as_of.html"],
     "Onboard a new hire": ["onboarding.html", "_onboard_*.html"],
     "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html"],
@@ -59,6 +60,7 @@ SCREENS = {
     "Check connected apps and AI agents": ["reports.html", "_connected_apps.html"],
     "Run an audit": ["reports.html", "audit_runs.html", "_audit_run.html", "_job_live.html", "_inactive_suspend.html"],
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],
+    "Change a person's licenses": ["user_detail.html", "_license_card.html", "_license_confirm.html"],
     "Respond to an incident": ["_incident_nav.html", "_incident_logs.html", "_incident_reading.html"],
     "Make the incident's report": ["_incident_nav.html", "_incident_report.html", "_incident_report_list.html", "_incident_report_export.html"],
     "See what was left on the account": ["incident.html", "_incident_nav.html", "_incident_check.html"],
@@ -80,10 +82,12 @@ NOT_A_LABEL = {
 
 
 def _screen_words(patterns: list[str]) -> set[str]:
-    """Every piece of text a screen shows: element text split at Jinja tags, plus quoted literals
-    (the nav's labels live in a Jinja tuple). ``{{ n }}`` reads as N, and a trailing arrow is
-    dropped, the way the guide writes them."""
-    words: set[str] = set()
+    """Every piece of text a screen shows: element text split at Jinja tags, plus quoted literals,
+    plus the nav's labels (``server.SCREENS``, which base.html draws). ``{{ n }}`` reads as N, and a
+    trailing arrow is dropped, the way the guide writes them."""
+    from gamgui.web.server import SCREENS
+
+    words: set[str] = {label for _, label in SCREENS}
     for pattern in ["base.html", *patterns]:
         for path in TEMPLATES.glob(pattern):
             html = path.read_text()

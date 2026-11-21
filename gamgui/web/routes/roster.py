@@ -297,12 +297,12 @@ async def purge(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, _KEPT, {"upload_error": NOT_CONNECTED})
     st.roster_pending = None
     st.roster_compare, st.roster_compare_job, st.roster_compare_sha = None, "", ""
+    domain, audit = st.audit_domain, st.connector.audit    # the record names what was purged, whatever a switch did meanwhile
     try:
-        gone = await asyncio.to_thread(roster_store(st).purge, st.audit_domain)
+        gone = await asyncio.to_thread(roster_store(st).purge, domain)
     except StoreError as exc:
         return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "upload_error": str(exc)})
-    st.connector.audit.record("roster_purge", connector="local", target=st.audit_domain, ok=True, extra={"deleted": gone},
-                              domain=st.audit_domain)
+    audit.record("roster_purge", connector="local", target=domain, ok=True, extra={"deleted": gone}, domain=domain)
     return TEMPLATES.TemplateResponse(request, _KEPT, {**await asyncio.to_thread(_kept, st), "purged": gone})
 
 

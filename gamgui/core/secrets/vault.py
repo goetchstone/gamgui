@@ -129,6 +129,7 @@ class SecretsVault:
                 cache_ttl = self.DEFAULT_CACHE_TTL
         self._cache_ttl = max(0.0, cache_ttl)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
+        self._index_held: Optional[Tuple[Tuple[str, ...], float]] = None   # (list_domains, until when)
         self._write_lock = threading.RLock()   # a write and replace_if_current's look-then-set
 
     @staticmethod
@@ -138,6 +139,7 @@ class SecretsVault:
     def clear_cache(self) -> None:
         """Forget cached secrets so the next read re-prompts the Keychain (an explicit 'lock')."""
         self._cache.clear()
+        self._index_held = None
 
     # --- single credential -------------------------------------------------------------
     def get(self, domain: str, name: str) -> Optional[str]:
@@ -264,6 +266,18 @@ class SecretsVault:
 
     # --- domain index ------------------------------------------------------------------
     def list_domains(self) -> list:
+        """The domains the index lists. Held for the cache's lifetime, as a secret is (``get``): every page's header reads
+        it (the domain menu, plan F6), and a locked Keychain would otherwise ask on each one. Adding or removing a domain
+        here drops it; ``clear_cache`` too."""
+        held = self._index_held
+        if self._cache_ttl and held is not None and held[1] > clock.now():
+            return list(held[0])
+        domains = self._read_index()
+        if self._cache_ttl:
+            self._index_held = (tuple(domains), clock.now() + self._cache_ttl)
+        return domains
+
+    def _read_index(self) -> list:
         raw = self.backend.get_password(_INDEX_SERVICE, _INDEX_KEY)
         try:
             return sorted(json.loads(raw)) if raw else []
@@ -271,16 +285,18 @@ class SecretsVault:
             return []
 
     def _register_domain(self, domain: str) -> None:
-        domains = set(self.list_domains())
+        domains = set(self._read_index())       # the store's own, never the held copy: a write must not lose one
         if domain not in domains:
             domains.add(domain)
             self.backend.set_password(_INDEX_SERVICE, _INDEX_KEY, json.dumps(sorted(domains)))
+        self._index_held = None                 # after the write: a read in between gets the new index anyway
 
     def _unregister_domain(self, domain: str) -> None:
-        domains = set(self.list_domains())
+        domains = set(self._read_index())
         if domain in domains:
             domains.discard(domain)
             self.backend.set_password(_INDEX_SERVICE, _INDEX_KEY, json.dumps(sorted(domains)))
+        self._index_held = None
 
 
 def _check_name(name: str) -> None:

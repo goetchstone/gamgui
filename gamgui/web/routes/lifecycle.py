@@ -427,7 +427,10 @@ async def offboard_run(
             return error_partial(request, f"Couldn't read {user}'s Gmail filters again ({_why(exc)}), so nothing ran.")
         if set(now) != set(held.filters):
             return error_partial(request, f"{user}'s filters that forward changed after the preview — click Preview steps again.")
-    # No await from here to the registration, so two Runs can't both pass the check.
+    # No await from here to the registration, so two Runs can't both pass the check, and a switch during the reads above
+    # (plan F6) can't start a run that nothing stops, on the domain it previewed.
+    if st.connector is not conn:
+        return error_partial(request, "The connection changed, so nothing ran.")
     if running := _running(st, user):
         return _already_running(request, running, user)
     job = start_job(st.jobs, len(steps), kind="offboard", title=f"Offboarding {user}")

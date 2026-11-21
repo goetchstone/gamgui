@@ -111,7 +111,7 @@ async def _run_finish(job: FinishJob, conn, waiting: List[Dict[str, Any]],
         await onboarding.finish_new_accounts(conn, waiting, report, stopped=lambda: job.cancel_requested,
                                              nap=nap, waits=onboarding.NEW_ACCOUNT_WAITS if waits is None else waits)
         if job.cancel_requested:
-            job.error = "Stopped by you."
+            job.error = f"{job.stop_why}."
     except Exception as exc:  # noqa: BLE001 — a loop-level failure shouldn't wedge the job
         if not isinstance(exc, GAMError):
             logger.warning("finishing new accounts failed", exc_info=exc)

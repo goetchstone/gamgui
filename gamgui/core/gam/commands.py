@@ -255,6 +255,19 @@ def signature_read_as_file(body: str) -> Optional[str]:
     return word if word in GAM_FILE_KEYWORDS else None
 
 
+def license_sku(product_id: str, sku_id: str) -> str:
+    """A license seat as GAM's `nv:<productId>:<skuId>` (roadmap 4.3): the IDs `print licenses` gave, so GAM's own SKU table
+    never picks the product. GAM ignores `product <ProductID>` (getLicenseParameters rebinds a local at the 7.52.04 tag) and
+    refuses a SKU its table doesn't know unless it is `nv:`. getProductAndSKU splits at the first `:` after `nv:`, the
+    add/delete list splits at `,`, and getGoogleSKU strips spaces: an ID those would change is refused here."""
+    product_id, sku_id = str(product_id), str(sku_id)
+    if not product_id or any(c in product_id for c in ":,") or product_id != product_id.strip():
+        raise ValueError(f"{product_id!r} isn't a product ID GAM can be given")
+    if not sku_id or "," in sku_id or sku_id != sku_id.strip():
+        raise ValueError(f"{sku_id!r} isn't a SKU ID GAM can be given")
+    return f"nv:{product_id}:{sku_id}"
+
+
 class GAMCommands:
     # GAM's REPORT_CHOICE_MAP keys, as `report` takes them. Not `gplus` or `jamboard`, whose services have ended.
     REPORT_APPLICATIONS = ("login", "token", "saml", "gmail", "accessevaluation", "chat", "useraccounts", "takeout", "mobile", "chrome", "drive", "calendar",
@@ -540,6 +553,26 @@ class GAMCommands:
         # no product named GAM lists every product it knows and passes over one Google refuses (invalid, forbidden) without a
         # word or a code, so a missing product isn't "no seats". No scope for the License Manager API exits 15.
         return ["print", "licenses"]
+
+    # One person's license seats (roadmap 4.3): add, swap, remove (grammar `gam <UserTypeEntity> create|add|update|delete
+    # license`; getLicenseParameters at the 7.52.04 tag), each seat named by `license_sku`. Never `sync`: it removes what
+    # the preview didn't name.
+    @staticmethod
+    def add_license(email: str, product_id: str, sku_id: str) -> List[str]:
+        # licenseAssignments.insert: Google refuses a seat they hold (duplicate) and one with none left (conditionNotMet).
+        return ["user", email, "add", "license", license_sku(product_id, sku_id)]
+
+    @staticmethod
+    def swap_license(email: str, product_id: str, old_sku_id: str, new_sku_id: str) -> List[str]:
+        # licenseAssignments.patch: "a different SKU in the same product" (Licensing API reference). GAM takes the product
+        # from the old SKU, so one product names both. No `archive`: that also archives the account.
+        return ["user", email, "update", "license", license_sku(product_id, new_sku_id), "from",
+                license_sku(product_id, old_sku_id)]
+
+    @staticmethod
+    def remove_license(email: str, product_id: str, sku_id: str) -> List[str]:
+        # licenseAssignments.delete: Google refuses a seat they don't hold (notFound).
+        return ["user", email, "delete", "license", license_sku(product_id, sku_id)]
 
     @staticmethod
     def print_tokens_of(users: Sequence[str]) -> List[str]:

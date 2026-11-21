@@ -59,6 +59,7 @@ PREVIEWS = {
     "/groups/members/remove-many/preview", "/groups/members/remove-many/retry",   # roadmap 3.5: read the group, hold who
     "/users/bulk-ou/preview", "/users/bulk-ou/retry",   # roadmap 4.2: read the tree and the group, hold the unit and who
     "/builder/sheet/preview",   # plan F4: a read's export to a Sheet, held; its one GAM call is the scope check, a read
+    "/users/licenses/preview",   # roadmap 4.3: read the seats and their account, hold the one change
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -193,6 +194,11 @@ GATED = {
     # Move one person to another org unit (roadmap 4.2): the preview reads their unit and the tree again, holds from → to.
     "/users/ou/apply": Case({"email": "alice@example.com", "org_unit": "/Sales"}, "/users/ou/preview",
                             edit={"org_unit": "/Students"}),
+    # A license change on their page (roadmap 4.3): the preview reads the seats again and holds the change; a removal is
+    # DESTRUCTIVE, so it takes the address typed.
+    "/users/licenses/apply": Case({"email": "alice@example.com", "action": "remove", "product_id": "Google-Apps",
+                                     "sku_id": "1010020028"}, "/users/licenses/preview",
+                                    typed={"confirm_email": "alice@example.com"}, edit={"sku_id": "1010020025"}),
     "/users/delete/apply": Case({"email": "alice@example.com"}, "/users/delete/confirm",
                                 typed={"confirm_email": "alice@example.com"}, edit={"email": "carol@example.com"}),
     "/calendars/event/delete": Case({"cal": "aspen@resource.calendar.google.com", "event_id": "evt-weekly-standup"},

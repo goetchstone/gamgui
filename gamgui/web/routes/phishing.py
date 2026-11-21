@@ -109,13 +109,13 @@ async def _find(job, st, conn, messages: List[MessageId]) -> None:
     try:
         results = await asyncio.gather(*(one(m) for m in messages))
         found.searches = [r for r in results if r is not None]
-        if job.cancel_requested:
+        if st.connector is not conn:    # a domain switch also stops it (plan F6): what's said is why nothing is kept
+            job.error = "Not kept: the connection changed during the search. Find again."
+        elif job.cancel_requested:
             bulk.stop_requested(job)
-        elif st.connector is conn:
+        else:
             st.phishing_found = found
             _remember_gone(st, conn, found)
-        else:
-            job.error = "Not kept: the connection changed during the search. Find again."
     finally:
         job.finish()
 

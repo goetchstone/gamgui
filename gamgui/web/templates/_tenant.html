@@ -1,6 +1,41 @@
 {# The active tenant (plan U10b), in every page's header: the domain, and the admin its oauth2.txt names.
-   A verify that switches it sends this back out of band, so the header never names the old one. #}
+   With another domain in the Keychain it is the domain menu (plan F6): a disclosure like the jobs tray (app.js), named
+   "Domain, <domain>", whose buttons switch through Setup's own route and check (routes/setup.switch). A pass reloads
+   this screen's top page for the new domain; a failed check, or the runs a switch would stop, is said in the menu.
+   app.js disables it while a request is in flight; a second click while one switch is asked drops (hx-sync). No
+   hx-disabled-elt="this" on a button its answer doesn't replace: htmx 1.9.12 counts it with the request class on one
+   counter, so the button kept .htmx-request for good. A verify that switches on Setup sends this back out of band, so
+   the header never names the old domain. #}
 {% set t = active_tenant(request) %}
+{% if t[2] %}
+{% set here = request.url.path if request is defined else "/" %}
+{% set back = "/" ~ here.strip("/").split("/")[0] %}
+<div id="tenant" class="relative min-w-0"{% if tenant_oob %} hx-swap-oob="true"{% endif %}>
+  <button id="domain-toggle" type="button" data-action="domain-toggle" aria-expanded="false" aria-controls="domain-panel"
+          {% if t[1] %}aria-describedby="tenant-admin"{% endif %}
+          class="flex max-w-[15rem] items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left leading-tight hover:text-brand-black transition-colors disabled:cursor-wait disabled:opacity-50">
+    <span class="min-w-0">
+      <span class="sr-only">Domain, </span><span class="block truncate text-sm text-brand-black">{{ t[0] }}</span>
+      {% if t[1] %}<span id="tenant-admin" aria-hidden="true" class="block truncate text-[11px] text-brand-grayink"><span class="sr-only">Signed in as </span>{{ t[1] }}</span>{% endif %}
+    </span>
+    <span aria-hidden="true" class="shrink-0 text-xs text-brand-grayink">▾</span>
+  </button>
+  <div id="domain-panel" hidden role="region" aria-labelledby="domain-heading"
+       class="absolute left-0 top-full z-50 mt-2 max-h-[32rem] w-80 overflow-y-auto rounded-xl border border-brand-gray/50 bg-brand-white p-4 shadow-lg">
+    <h2 id="domain-heading" class="eyebrow text-brand-blue">Switch domain</h2>
+    <p class="mt-2 text-xs text-brand-blueink">{{ t[0] }} is active. Switching checks the domain's access the way Setup does, and switches only if it passes.</p>
+    <ul class="mt-3 space-y-1" aria-label="Other domains">
+      {% for d in t[2] %}
+      <li><button type="button" class="w-full truncate rounded-md px-2 py-1.5 text-left text-sm text-brand-black hover:bg-brand-blue/5 transition-colors"
+                  hx-post="/setup/switch" hx-target="#domain-result" hx-swap="innerHTML" hx-sync="#domain-panel:drop"
+                  hx-vals='{"tenant": {{ d | tojson }}, "where": "menu", "back": {{ back | tojson }} }'>{{ d }}</button></li>
+      {% endfor %}
+    </ul>
+    <div id="domain-result"></div>
+    <p class="mt-3 border-t border-brand-gray/30 pt-2 text-xs text-brand-grayink"><a href="/setup" class="underline hover:text-brand-black">Setup</a> checks access again or removes a domain.</p>
+  </div>
+</div>
+{% else %}
 <a id="tenant" href="/setup"{% if tenant_oob %} hx-swap-oob="true"{% endif %}
    class="min-w-0 max-w-[13rem] leading-tight hover:text-brand-black transition-colors"
    title="{{ (t[0] ~ (' as ' ~ t[1] if t[1] else '') ~ ' — check access or switch on Setup') if t[0] else 'Connect Google Workspace on Setup' }}">
@@ -12,3 +47,4 @@
   <span class="eyebrow text-brand-grayink">Not connected</span>
   {% endif %}
 </a>
+{% endif %}

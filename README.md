@@ -89,6 +89,8 @@ and have only run offline: see
   (grant/revoke access to that person's own calendar), **sign out everywhere**, a guarded
   **suspend**, and a **move to another org unit** (the tree read when asked, from and to previewed) — one person from
   their page, or many from a group or a pasted list as a job with Stop and a retry of the ones that failed.
+- **A person's licenses** — the paid seats they hold, read when asked; add one the domain holds, change one to another
+  license of the same product, or remove one (typed address, refused while a data transfer from them is unfinished).
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
@@ -196,7 +198,8 @@ runs' new reads (`print licenses`, `print shareddrives`, `print shareddriveacls`
 users …`, `print courses … show all countsonly`) have never run live either: their columns, and the failures they pass over
 without a word, were read from GAM's source at the pinned tag. The
 Builder's automatic reads aren't in the pass: since #132 (2026-11-17), 32 of them build a fuller command from GAM's
-grammar, and none of those 32 has run on a real domain yet.
+grammar, and none of those 32 has run on a real domain yet. The header's domain menu (2026-11-21) runs setup's
+check above and adds no GAM command, but it hasn't switched between two real domains yet.
 
 **Tried something on a real domain?** Tell us with the two-minute
 [I tried it form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml): what you tried,
@@ -215,6 +218,7 @@ school domain is the most useful one of all.
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Move to an org unit (`update org <ou> move user <email>`) | Users (one person, or many as a job) | not yet: the tenant has no org units, so the check creates one first |
 | Create, rename, delete an org unit | Builder | not yet: the check creates a throwaway unit, renames it, then deletes it |
+| Add, change, remove a license (`user <email> add\|update\|delete license nv:<product>:<sku>`) | Users | not yet: needs a spare seat (`print licenses countsonly` first), run on a throwaway |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
