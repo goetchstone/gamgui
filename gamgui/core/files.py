@@ -92,7 +92,9 @@ def sheets_made(path: Path) -> Sheets:
             command=str(extra.get("command") or ""),
             argv=tuple(str(a) for a in record.get("argv") or ()) if isinstance(record.get("argv"), list) else (),
             owner=owner, sensitive=record.get("action") == "sensitive_export",
-            outcome=sheet_export.outcome(ok, url, "" if ok else str(extra.get("error") or ""), owner)))
+            # What became of the file is what the record kept from the upload's own lines, never its error summary.
+            outcome=sheet_export.outcome(ok, url, upload if (upload := str(extra.get("upload") or "")) in sheet_export.UPLOAD_CODES
+                                         else "", owner, "" if ok else str(extra.get("error") or ""))))
     return Sheets(tuple(made), more, more or scanned < RECORDS_SCANNED)
 
 

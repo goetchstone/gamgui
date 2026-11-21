@@ -142,8 +142,12 @@ a door to `_exec` that the chokepoint tripwires couldn't see and that `Ephemeral
   code kept; a scope listed in `GAM_MOCK_STATE/dwd_missing` refuses it as GAM does ("User: <admin>,
   Drive API v3 Service/App not enabled", 73, nothing made; or "… Sheets API Service/App not enabled",
   73, the file made with no link printed), and `check serviceaccount` reads the same list. Each file
-  made is a line in `GAM_MOCK_STATE/drive_files`. It once printed the read's CSV and accepted any tail
-  (failure-log 2026-11-21). The `info user` handler ignores trailing words
+  made is a line in `GAM_MOCK_STATE/drive_files`. `GAM_MOCK_STATE/drive_full` is a refused create ("Drive Folder:
+  root, Create Failed: …", 50, nothing made) and `sheets_fail` a Sheets step refused after the create ("ERROR: User:
+  <admin>, Drive File ID: <id>, Not Created: …", 50, the file made). A read whose account's token is refused
+  (`not_a_user`) prints its titles before exiting 50 where GAM's loop goes on to `writeCSVfile` (`print delegates`,
+  `print forwardingaddresses`), so its export uploads a Sheet of headers only. It once printed the read's CSV and
+  accepted any tail (failure-log 2026-11-21). The `info user` handler ignores trailing words
   (`check serviceaccount` takes only `scope|scopes <APIScopeURLList>` of service-account scopes), so a
   `todrive` after them (or a `show`) is refused before the handler runs.
 - **Seeing what GAM received:** an autouse fixture (`tests/conftest.py` `_gam_argv_log`) points

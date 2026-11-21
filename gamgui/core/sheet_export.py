@@ -10,15 +10,24 @@ printing its CSV, GAM:
    Refused, it writes ``User: <admin>, Drive API v3 Service/App not enabled`` to stderr and exits 73
    (SERVICE_NOT_APPLICABLE_RC): nothing made. Drive turned off for the admin reads ``User: <admin>, Drive Service/App not
    enabled`` (73); ``forbidden``/``insufficientPermissions`` reads ``WARNING: Insufficient permissions to perform this
-   task`` (67); a missing folder, a full Drive or Google's internal error reads ``Drive Folder: root, Failed, <why>`` (50).
+   task`` (67); a missing folder, a full Drive or Google's error reads ``Drive Folder: root, Create Failed: <why>`` (50:
+   ``entityActionFailedWarning`` after ``Act.Set(Act.CREATE)``, and ``Act.Failed()`` is ``"<action> Failed"``), or, for
+   Google's internal error on the create itself, ``Drive File: <name>, Create Failed: Google reported "…" but the file
+   was probably uploaded, check that it has N rows`` (50).
 2. finishes it as a Sheet through the Sheets API (``spreadsheets.get`` + ``batchUpdate``, naming the tab): the delegated
    Sheets scope. Refused, the file is ALREADY made, but GAM returns before printing its link:
-   ``User: <admin>, Sheets API Service/App not enabled``, exit 73.
+   ``User: <admin>, Sheets API Service/App not enabled``, exit 73. A Sheets call that fails once the token is had is
+   ``todriveCSVErrorExit``: ``ERROR: User: <admin>, Drive File ID: <id>, Not Created: <why>`` (50), the file made.
 3. prints ``Data uploaded to Drive File:`` and the file's ``webViewLink`` on the next line, on stdout. The exit is 0, or a
-   warning code the read itself set: GAM uploads the table it has all the same.
+   warning code the read itself set: GAM uploads the table it has all the same. A per-account read that couldn't get a
+   token for an account (``handleOAuthTokenError``, a soft error: rc 50, ``continue``) still writes its CSV, so a read of
+   an account that doesn't exist uploads a Sheet holding only its headers, prints its link, and exits 50.
 
 A result too large for a Sheet is uploaded as a plain CSV file after a ``WARNING`` line on stdout (its link is a
 drive.google.com one). No rows is still uploaded (``todrive_upload_nodata`` defaults true; 77 only with it off).
+
+What became of the file is read from the upload's OWN lines (``upload_state``: the link, and the lines above, naming the
+admin or the file), never from GAM's one-line error summary, which can be a line the read printed about another account.
 """
 
 from __future__ import annotations
@@ -39,12 +48,18 @@ SCOPES = (
 _UPLOADED = re.compile(r"^\s*Data uploaded to Drive File:\s*\n\s*(\S+)\s*$", re.M)
 # The hosts a Drive file's webViewLink is on: a Sheet's docs.google.com/spreadsheets/d/…, a plain CSV's drive.google.com/file/d/….
 _LINK_HOSTS = frozenset({"docs.google.com", "drive.google.com"})
-_SA_DRIVE_REFUSED = re.compile(r"Drive API v3[^,\n]*Service/App not enabled", re.I)
-_SA_SHEETS_REFUSED = re.compile(r"Sheets API[^,\n]*Service/App not enabled", re.I)
-_DRIVE_OFF = re.compile(r"\bDrive Service/App not enabled", re.I)
-_NOT_PERMITTED = re.compile(r"Insufficient permissions to perform this task", re.I)
-_PROBABLY_UPLOADED = re.compile(r"the file was probably uploaded", re.I)
-_CREATE_FAILED = re.compile(r"Drive Folder: [^,\n]+, Failed", re.I)   # files.create refused: no folder, Drive full, Google's error
+# The upload's own lines (writeCSVToDrive at 7.52.04), each with the code the record keeps. `{who}` is the admin the file
+# is made for: a line the read printed about another account never stands for the upload.
+UPLOAD_LINES = (
+    ("sheets_refused", r"User: {who}, Sheets API[^,\n]*Service/App not enabled"),
+    ("drive_refused", r"User: {who}, Drive API v3[^,\n]*Service/App not enabled"),
+    ("drive_off", r"User: {who}, Drive Service/App not enabled"),
+    ("not_permitted", r"Insufficient permissions to perform this task"),
+    ("probably_made", r"Drive File: [^\n]*, \w+ Failed: Google reported [^\n]*the file was probably uploaded"),
+    ("create_failed", r"Drive Folder: [^,\n]+, \w+ Failed:"),
+    ("finish_failed", r"User: {who}, Drive File ID: [^,\n]+, Not \w+"),
+)
+UPLOAD_CODES = frozenset(code for code, _ in UPLOAD_LINES)
 
 
 def is_google_link(url: str) -> bool:
@@ -68,10 +83,26 @@ def sheet_url(stdout: str) -> str:
     return m.group(1) if m and is_google_link(m.group(1)) else ""
 
 
-def noted(stdout: str) -> Dict[str, str]:
-    """What an export's record keeps from GAM's output: the file's link, when GAM printed one (``_run_write``'s ``noted``)."""
+def upload_state(stderr: str, owner: str) -> str:
+    """Which of the upload's own failure lines GAM printed (a code in ``UPLOAD_CODES``), the last one if several (the
+    upload runs after the read), or "" for none. A line naming an account other than ``owner`` is the read's, not this."""
+    who = re.escape(owner) if owner else r"[^,\n]+"
+    last, code = -1, ""
+    for name, pattern in UPLOAD_LINES:
+        for m in re.finditer(pattern.replace("{who}", who), stderr or "", re.I):
+            if m.start() > last:
+                last, code = m.start(), name
+    return code
+
+
+def noted(stdout: str, stderr: str = "", owner: str = "") -> Dict[str, str]:
+    """What an export's record keeps from GAM's output (``_run_write``'s ``noted``): the file's link when GAM printed one,
+    else which of the upload's own failure lines it printed (``upload``). Never the output itself."""
     url = sheet_url(stdout)
-    return {"url": url} if url else {}
+    if url:
+        return {"url": url}
+    code = upload_state(stderr, owner)
+    return {"upload": code} if code else {}
 
 
 def verify(stdout: str) -> str:
@@ -115,9 +146,10 @@ _ADD_SCOPE = ("Authorize it in the Admin console's Domain-Wide Delegation (Setup
               "then export again.")
 
 
-def outcome(ok: bool, url: str, error: str, owner: str) -> Outcome:
-    """Read an export's result: ``ok`` and ``error`` are the write's (``ChangeResult.ok`` and ``.detail``, GAM's own
-    line), ``url`` the link its record kept. Only a printed link is a made file; a failure that can't be placed is unknown."""
+def outcome(ok: bool, url: str, upload: str, owner: str, error: str = "") -> Outcome:
+    """Read an export's result: ``ok`` is the write's, ``url`` and ``upload`` what its record kept from the upload's own
+    lines (``noted``), ``error`` GAM's summary, said only as why a made Sheet may be short. Only a printed link or one of the
+    upload's lines places the file; anything else is unknown (invariant 10)."""
     who = owner or "the admin"
     if ok and url and "/spreadsheets/" not in url:   # too large for a Sheet: GAM uploaded the CSV as a plain file
         return Outcome(url, "yes", f"Exported to a new file in {who}'s Drive, shared with nobody: a plain CSV file, "
@@ -125,27 +157,32 @@ def outcome(ok: bool, url: str, error: str, owner: str) -> Outcome:
     if ok:
         return Outcome(url, "yes", f"Exported to a new Google Sheet in {who}'s Drive, shared with nobody." if url else
                        f"Exported to {who}'s Drive. No link was kept: the export was made before its link was recorded.")
-    if url:   # printed, then a warning exit the read itself set: the file is there, its rows maybe short
-        return Outcome(url, "yes", f"GAM made the Sheet in {who}'s Drive, then reported a problem, so it may not hold "
-                       "every row.", "Check it against the table, or export again.")
-    if _SA_SHEETS_REFUSED.search(error):
+    if url:   # the upload printed its link; the read itself had reported a problem, which set the exit code
+        said = (f"GAM made the Sheet in {who}'s Drive, but the read reported a problem, so the Sheet may hold only some "
+                "rows, or only its headers.")
+        return Outcome(url, "yes", said + (f" GAM said: {error}" if error else ""),
+                       "Check it against what you expected, or export again once the read works.")
+    if upload == "sheets_refused":
         return Outcome("", "yes", f"GAM made the file in {who}'s Drive, then stopped before finishing it as a Sheet or "
                        "printing its link: the service account isn't allowed Google Sheets (" + SHEETS_SCOPE + ").",
                        "Find the file in that Drive by its name. " + _ADD_SCOPE)
-    if _SA_DRIVE_REFUSED.search(error):
+    if upload == "finish_failed":
+        return Outcome("", "yes", f"GAM made the file in {who}'s Drive, then Google refused to finish it as a Sheet, so "
+                       "no link was printed.", "Find the file in that Drive by its name, and see GAM's line below.")
+    if upload == "drive_refused":
         return Outcome("", "no", "Nothing was made: the service account isn't allowed Drive (" + DRIVE_SCOPE + ") for "
                        f"{who}.", _ADD_SCOPE)
-    if _DRIVE_OFF.search(error):
+    if upload == "drive_off":
         return Outcome("", "no", f"Nothing was made: Google Drive is turned off for {who}.",
                        "Turn Drive on for the admin's organizational unit in the Admin console, then export again.")
-    if _NOT_PERMITTED.search(error):
+    if upload == "not_permitted":
         return Outcome("", "no", f"Nothing was made: Google refused to create a file in {who}'s Drive.",
                        "Check that the admin's Drive accepts new files, then export again.")
-    if _PROBABLY_UPLOADED.search(error):   # before _CREATE_FAILED: GAM says this one in the same "Failed" line
-        return Outcome("", "unknown", "Google reported an error, but says the file was probably made.",
-                       f"Look in {who}'s Drive before exporting again.")
-    if _CREATE_FAILED.search(error):
+    if upload == "create_failed":
         return Outcome("", "no", f"Nothing was made: Google refused to create the file in {who}'s Drive (it may be full).",
                        "See GAM's line below, then export again.")
+    if upload == "probably_made":
+        return Outcome("", "unknown", "Google reported an error, but says the file was probably made.",
+                       f"Look in {who}'s Drive before exporting again.")
     return Outcome("", "unknown", "The export failed, and whether a file was made can't be told.",
                    f"Look in {who}'s Drive before exporting again.")

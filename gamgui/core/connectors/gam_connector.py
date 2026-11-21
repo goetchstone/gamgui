@@ -1087,16 +1087,20 @@ class GAMConnector(Connector):
         the connected admin's own Drive, shared with nobody, opening no browser and sending no email
         (``GAMCommands.todrive_args``). Creating a file is a write, so it runs through the chokepoint, audited
         ``export_to_sheet`` (``sensitive_export`` for a sensitive read, filed next to ``sensitive_read``): target the admin,
-        ``extra.command`` the catalog id, ``extra.url`` the file's link once GAM prints it (kept on a warning exit too). An
-        exit 0 without the link is a failure, the file unknown. The read's own argv may hold no ``todrive``."""
+        ``extra.command`` the catalog id, ``extra.url`` the file's link once GAM prints it (kept on a warning exit too), else
+        ``extra.upload``, which of the upload's own failure lines GAM printed (``sheet_export.upload_state``, read from
+        stderr lines naming this admin, never a line the read printed about another account). An exit 0 without the link is
+        a failure, the file unknown. The read's own argv may hold no ``todrive``."""
         _require_read(cmd)
         if carries_todrive(argv):   # GAM reads `to_drive` as todrive (as_keyword)
             raise ValueError("the read already carries todrive")
         action = "sensitive_export" if cmd.sensitive else "export_to_sheet"
+        owner = self.sheet_owner()
         # A domain-wide read plus its upload: a kill part way leaves a file nobody can name, so it gets the long timeout.
-        return await self._run_write(action, self.sheet_owner() or "(admin Drive)", list(argv) + GAMCommands.todrive_args(title),
+        return await self._run_write(action, owner or "(admin Drive)", list(argv) + GAMCommands.todrive_args(title),
                                      RiskLevel.LOW, about={"command": cmd.id}, timeout=DOMAIN_WIDE_TIMEOUT,
-                                     verify=sheet_export.verify, noted=sheet_export.noted)
+                                     verify=sheet_export.verify,
+                                     noted=lambda out, err: sheet_export.noted(out, err, owner))
 
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:
@@ -1220,7 +1224,7 @@ class GAMConnector(Connector):
         secrets: Sequence[str] = (),
         timeout: Optional[float] = None,
         verify: Optional[Callable[[str], str]] = None,
-        noted: Optional[Callable[[str], Dict[str, str]]] = None,
+        noted: Optional[Callable[[str, str], Dict[str, str]]] = None,
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
         a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)
@@ -1236,7 +1240,7 @@ class GAMConnector(Connector):
         it (``group``, ``scope``, ``event``, ``command``…) — once filed as ``group`` whatever it was.
         ``verify`` reads the output of a run that exited 0, for a command GAM can leave undone without a word: what it says is the failure.
         ``noted`` reads what the write's own output says to keep on its record and its result (the link of the Sheet an export
-        made), from GAM's stdout whether it exited 0 or not: a warning exit can follow the write itself. Never the output."""
+        made), from GAM's stdout and stderr whether it exited 0 or not: a warning exit can follow the write itself. Never the output."""
         named = {k: v for k, v in (about or {}).items() if v}
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
@@ -1268,7 +1272,7 @@ class GAMConnector(Connector):
             kinds = getattr(exc, "kinds", None)
             tolerated = bool(tolerate_kinds and kinds and kinds <= set(tolerate_kinds))
             error = redact_secrets(str(exc), secrets)
-            kept = noted(getattr(exc, "stdout", "") or "") if noted is not None else {}
+            kept = noted(getattr(exc, "stdout", "") or "", getattr(exc, "stderr", "") or "") if noted is not None else {}
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,
                 extra={**named, **kept, "error": error, "tolerated": tolerated},
@@ -1281,7 +1285,7 @@ class GAMConnector(Connector):
             remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
             return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation,
                                 kind=exc.kind if isinstance(exc, GAMError) else None, noted=kept)
-        kept = noted(out) if noted is not None else {}
+        kept = noted(out, "") if noted is not None else {}
         if verify is not None and (short := redact_secrets(verify(out), secrets)):
             self.audit.record(action, target=target, argv=shown, ok=False, extra={**named, **kept, "error": short, "tolerated": False}, secrets=secrets, domain=self.domain)
             return ChangeResult(preview=preview, ok=False, detail=short, remediation=short, noted=kept)

@@ -102,13 +102,59 @@ async def test_a_warning_exit_after_the_table_still_uploads_it(runner, domain, g
     result = await connector.export_to_sheet(_cmd(), tokens[:4], TITLE)
     [entry] = connector.audit.tail()
     assert not result.ok and LINK.fullmatch(result.noted["url"]) and entry["extra"]["url"] == result.noted["url"]
-    shown = sheet_export.outcome(result.ok, result.noted["url"], result.detail, ADMIN)
-    assert shown.made == "yes" and "may not hold every row" in shown.said
+    shown = sheet_export.outcome(result.ok, result.noted["url"], "", ADMIN, result.detail)
+    assert shown.made == "yes" and "only some rows" in shown.said and "ghost@example.com" in shown.said
 
 
-async def test_a_read_that_fails_uploads_nothing(runner, domain, gam_state):
-    res = await runner.run_any_exit(domain, GAMCommands.print_delegates("missing@example.com") + GAMCommands.todrive_args())
-    assert res.returncode != 0 and res.stdout.strip() == "" and _made(gam_state) == []
+async def test_a_read_of_an_account_that_isn_t_there_uploads_its_headers(runner, domain, gam_state, connector):
+    # printShowDelegates at 7.52.04: the account's token is refused (handleOAuthTokenError, soft: rc 50, `continue`), the
+    # loop ends, and csvPF.writeCSVfile writes the titles: with todrive, a Sheet holding only its headers, its link, exit 50.
+    missing = GAMCommands.print_delegates("missing@example.com")
+    plain = await runner.run_any_exit(domain, missing)
+    assert plain.returncode == 50 and plain.stdout.strip().splitlines() == ["User,delegateAddress,delegationStatus"]
+    res = await runner.run_any_exit(domain, missing + GAMCommands.todrive_args(TITLE))
+    assert res.returncode == 50 and LINK.search(res.stdout) and "invalid_grant" in res.stderr
+    assert [line.split("\t")[2] for line in _made(gam_state)] == ["0"]      # headers only
+    result = await connector.export_to_sheet(_cmd(), missing, TITLE)
+    shown = sheet_export.outcome(result.ok, result.noted.get("url", ""), result.noted.get("upload", ""), ADMIN, result.detail)
+    assert shown.made == "yes" and shown.url and "only its headers" in shown.said and "invalid_grant" in shown.said
+
+
+async def test_a_read_that_stops_before_its_table_uploads_nothing(runner, domain, gam_state):
+    # ClientAPIAccessDeniedExit (12) is a hard exit: GAM never reaches writeCSVfile, so nothing is written or uploaded.
+    (gam_state / "denied").mkdir()
+    (gam_state / "denied" / "tokens").write_text("")
+    res = await runner.run_any_exit(domain, GAMCommands.print_tokens_of(["alice@example.com"]) + GAMCommands.todrive_args())
+    assert res.returncode == 12 and res.stdout.strip() == "" and _made(gam_state) == []
+
+
+async def test_a_full_drive_makes_nothing_and_says_so(connector, gam_state):
+    (gam_state / "drive_full").write_text("")
+    res = await connector.export_to_sheet(_cmd(), READ, TITLE)
+    [entry] = connector.audit.tail()
+    assert not res.ok and _made(gam_state) == [] and "Drive Folder: root, Create Failed:" in entry["extra"]["error"]
+    assert res.noted == {"upload": "create_failed"} and entry["extra"]["upload"] == "create_failed"
+    assert sheet_export.outcome(res.ok, "", res.noted["upload"], ADMIN).made == "no"
+
+
+async def test_a_read_s_own_line_about_another_account_never_stands_for_the_upload(connector, gam_state, monkeypatch):
+    # The read warns about bob's Drive (another account), then the upload makes the admin's file and the Sheets step fails.
+    # GAMError's summary keeps one line, bob's could be it: the outcome is read from the upload's own lines instead.
+    stderr = ("User: bob@example.com, Drive Service/App not enabled\n"
+              f"\nERROR: User: {ADMIN}, Drive File ID: 1abc, Not Created: Requested entity was not found.\n")
+
+    async def failed(domain, argv, **kw):
+        raise GAMError.from_run(50, stderr, list(argv))
+    real = connector.runner.run_authenticated
+    monkeypatch.setattr(connector.runner, "run_authenticated", failed)
+    res = await connector.export_to_sheet(_cmd(), READ, TITLE)
+    assert res.noted == {"upload": "finish_failed"}
+    shown = sheet_export.outcome(res.ok, "", res.noted["upload"], ADMIN, res.detail)
+    assert shown.made == "yes" and "Nothing was made" not in shown.said
+    (gam_state / "sheets_fail").write_text("")                              # the mock prints the same line
+    monkeypatch.setattr(connector.runner, "run_authenticated", real)
+    res = await connector.export_to_sheet(_cmd(), READ, TITLE)
+    assert res.noted == {"upload": "finish_failed"} and len(_made(gam_state)) == 1
 
 
 @pytest.mark.hand_built_argv
@@ -150,21 +196,33 @@ def test_only_a_google_file_link_is_a_link(text, url):
     assert bool(sheet_export.verify(text)) is (not url)
 
 
-@pytest.mark.parametrize("error,made", [
-    ("GAM failed (service_not_enabled, exit=73): User: a@x, Sheets API Service/App not enabled", "yes"),
-    ("GAM failed (service_not_enabled, exit=73): User: a@x, Drive API v3 Service/App not enabled", "no"),
-    ("GAM failed (service_not_enabled, exit=73): User: a@x, Drive Service/App not enabled", "no"),
-    ("GAM failed (unknown, exit=67): WARNING: Insufficient permissions to perform this task", "no"),
-    ("GAM failed (unknown, exit=50): Drive Folder: root, Failed: The user's Drive storage quota has been exceeded.", "no"),
-    ('GAM failed (unknown, exit=50): Drive File: T, Failed: Google reported "x" but the file was probably uploaded, check that it has 3 rows', "unknown"),
-    ("GAM failed (timeout, exit=None)", "unknown"),
-    ("", "unknown"),
+# GAM's upload lines as 7.52.04 prints them (sheet_export's docstring cites each), and what each says of the file.
+@pytest.mark.parametrize("stderr,code,made", [
+    (f"User: {ADMIN}, Sheets API Service/App not enabled\n", "sheets_refused", "yes"),
+    (f"\nERROR: User: {ADMIN}, Drive File ID: 1abc, Not Created: Requested entity was not found.\n", "finish_failed", "yes"),
+    (f"User: {ADMIN}, Drive API v3 Service/App not enabled\n", "drive_refused", "no"),
+    (f"User: {ADMIN}, Drive Service/App not enabled\n", "drive_off", "no"),
+    ("\nWARNING: Insufficient permissions to perform this task\n", "not_permitted", "no"),
+    ("Drive Folder: root, Create Failed: The user's Drive storage quota has been exceeded.\n", "create_failed", "no"),
+    (f'Drive File: {TITLE}, Create Failed: Google reported "Internal Error" but the file was probably uploaded, check '
+     "that it has 3 rows\n", "probably_made", "unknown"),
+    ("User: bob@example.com, Drive Service/App not enabled\n", "", "unknown"),         # the read's line, another account
+    ("ERROR: something else\n", "", "unknown"),
+    ("", "", "unknown"),
 ])
-def test_a_failed_export_says_whether_a_file_was_made(error, made):
-    shown = sheet_export.outcome(False, "", error, ADMIN)
+def test_a_failed_export_says_whether_a_file_was_made(stderr, code, made):
+    assert sheet_export.upload_state(stderr, ADMIN) == code
+    assert sheet_export.noted("", stderr, ADMIN) == ({"upload": code} if code else {})
+    shown = sheet_export.outcome(False, "", code, ADMIN, "GAM failed (unknown, exit=50): whatever")
     assert shown.made == made and shown.said and not shown.url
     if made == "unknown":
         assert "can't be told" in shown.said or "probably" in shown.said
+
+
+def test_the_failed_line_is_the_one_gam_prints():
+    # entityActionFailedWarning after Act.Set(Act.CREATE): "<entity>: <name>, Create Failed: <why>". Never ", Failed".
+    assert sheet_export.upload_state("Drive Folder: root, Failed: quota\n", ADMIN) == ""
+    assert sheet_export.upload_state("Drive Folder: root, Create Failed: quota\n", ADMIN) == "create_failed"
 
 
 def test_a_plain_csv_file_and_an_old_record_are_said_as_they_are():
@@ -175,8 +233,8 @@ def test_a_plain_csv_file_and_an_old_record_are_said_as_they_are():
 
 
 def test_a_link_printed_before_a_failed_exit_is_a_made_file():
-    shown = sheet_export.outcome(False, "https://docs.google.com/spreadsheets/d/a", "GAM failed (not_found, exit=56)", ADMIN)
-    assert shown.made == "yes" and shown.url and "may not hold every row" in shown.said
+    shown = sheet_export.outcome(False, "https://docs.google.com/spreadsheets/d/a", "", ADMIN, "GAM failed (not_found, exit=56)")
+    assert shown.made == "yes" and shown.url and "only its headers" in shown.said and "exit=56" in shown.said
 
 
 def test_the_scope_check_in_words():
@@ -215,10 +273,11 @@ async def test_a_sensitive_read_s_export_is_a_sensitive_export(connector, monkey
 async def test_without_sheets_the_record_says_failed_and_the_file_is_made(connector, gam_state):
     _refuse(gam_state, SHEETS)
     res = await connector.export_to_sheet(_cmd(), READ, TITLE)
-    assert not res.ok and res.noted == {} and len(_made(gam_state)) == 1
+    assert not res.ok and res.noted == {"upload": "sheets_refused"} and len(_made(gam_state)) == 1
     [entry] = connector.audit.tail()
     assert entry["ok"] is False and "Sheets API Service/App not enabled" in entry["extra"]["error"] and "url" not in entry["extra"]
-    assert sheet_export.outcome(res.ok, "", res.detail, res.preview.target).made == "yes"
+    assert entry["extra"]["upload"] == "sheets_refused"
+    assert sheet_export.outcome(res.ok, "", res.noted["upload"], res.preview.target).made == "yes"
 
 
 async def test_a_link_before_a_warning_exit_stays_on_the_record(connector, monkeypatch):

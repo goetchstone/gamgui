@@ -573,7 +573,8 @@ async def sheet_export_run(request: Request, rid: Annotated[str, Form()] = "") -
         logger.warning("a Sheet export was refused before GAM ran", exc_info=True)
         return error_partial(request, "This read can't be exported: it isn't a read, or it already carries todrive. "
                                       "Nothing ran.")
-    shown = sheet_export.outcome(res.ok, res.noted.get("url", ""), "" if res.ok else res.detail, res.preview.target)
+    shown = sheet_export.outcome(res.ok, res.noted.get("url", ""), res.noted.get("upload", ""), res.preview.target,
+                                 "" if res.ok else res.detail)
     return TEMPLATES.TemplateResponse(request, "_export_result.html", {
         "outcome": shown, "name": name, "gam": "gam " + shlex.join(res.preview.argv), "detail": "" if res.ok else res.detail,
         # _run_write's "It worked, but the audit log couldn't record it": the Sheet is made, its record isn't, and Files

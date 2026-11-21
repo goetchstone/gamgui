@@ -163,16 +163,20 @@ acl_lets() {  # <user, lowercased> <a calendar's kept rules>: does any rule give
 # A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
 # one that isn't a user the token request fails, and GAM reports the token endpoint's words against it
 # (handleOAuthTokenError -> entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build).
-not_a_user() {  # <address> <Show|Print>
+# The error is a SOFT one in a per-account loop (handleOAuthTokenError(e, softErrors=True): the warning, rc 50, `continue`),
+# so a print read whose loop ends in csvPF.writeCSVfile still writes its titles: <titles>, when given, is that header on
+# stdout (printShowDelegates and printShowForwardingAddresses at 7.52.04). With todrive that header is what GAM uploads.
+not_a_user() {  # <address> <Show|Print> [<titles>]
   printf 'User: %s, User:, %s Failed: invalid_grant: Invalid email or User ID\n' "$1" "$2" 1>&2
+  if [ -n "${3:-}" ]; then printf '%s\n' "$3"; fi
   exit 50
 }
-need_user() {  # <address> <Show|Print>: a fixture-directory user, or one the mock keeps state for
+need_user() {  # <address> <Show|Print> [<titles>]: a fixture-directory user, or one the mock keeps state for
   known_user "$(lower "$1")" && return 0
   if [ -n "${GAM_MOCK_STATE:-}" ] && { [ -e "$GAM_MOCK_STATE/vacation/$1" ] || [ -e "$GAM_MOCK_STATE/delegates/$1" ]; }; then
     return 0
   fi
-  not_a_user "$1" "$2"
+  not_a_user "$1" "$2" "${3:-}"
 }
 # A just-created account Google hasn't finished setting up. Live, 2026-09-30, a signature set 1 s after
 # `create user` failed "User: x, User Set Failed: access_denied: Requested client not authorized"
@@ -232,6 +236,13 @@ todrive_upload() {  # <read exit code> <title> <the read's CSV>
     printf 'User: %s, Drive API v3 Service/App not enabled\n' "$td_admin" 1>&2
     exit 73
   fi
+  # GAM_MOCK_STATE/drive_full: files.create refused (storageQuotaExceeded) -> entityActionFailedWarning after
+  # Act.Set(Act.CREATE): "Drive Folder: root, Create Failed: <Google's words>", 50, nothing made. The words are Google's,
+  # approximate here.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_full" ]; then
+    printf "Drive Folder: root, Create Failed: The user's Drive storage quota has been exceeded.\n" 1>&2
+    exit 50
+  fi
   td_name=${2:-example.com - mock}
   td_id="1MockSheet$(printf '%s' "$td_name" | cksum | cut -d' ' -f1)"
   if [ -n "${GAM_MOCK_STATE:-}" ]; then
@@ -240,6 +251,12 @@ todrive_upload() {  # <read exit code> <title> <the read's CSV>
   if dwd_missing "https://www.googleapis.com/auth/spreadsheets"; then
     printf 'User: %s, Sheets API Service/App not enabled\n' "$td_admin" 1>&2
     exit 73
+  fi
+  # GAM_MOCK_STATE/sheets_fail: the Sheets token is had, but spreadsheets.get/batchUpdate is refused -> todriveCSVErrorExit:
+  # "ERROR: User: <admin>, Drive File ID: <id>, Not Created: <why>" (Act.NotPerformed of CREATE), 50, the file made.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/sheets_fail" ]; then
+    printf '\nERROR: User: %s, Drive File ID: %s, Not Created: Requested entity was not found.\n' "$td_admin" "$td_id" 1>&2
+    exit 50
   fi
   printf 'Data uploaded to Drive File:\nhttps://docs.google.com/spreadsheets/d/%s/edit?usp=drivesdk\n' "$td_id"
   exit "$1"
@@ -1492,7 +1509,7 @@ fi
 # the titles alone. One row per address Gmail has, none for none: only alice@ has one.
 gmail_off() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$1" ]; }
 gmail_read() {  # <user> <items> <titles>: the token, the "Getting" line, and Gmail off
-  need_user "$1" Print
+  need_user "$1" Print "$3"
   printf 'Getting %s for %s\n' "$2" "$1" 1>&2
   if gmail_off "$1"; then printf 'User: %s, Gmail Service/App not enabled\n' "$1" 1>&2; printf '%s\n' "$3"; exit 73; fi
 }
@@ -1511,7 +1528,7 @@ fi
 # `gam user <email> print delegates` (no formatjson) -> THAT user's delegates as plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
   [ $# -eq 4 ] || invalid_arg "$5"
-  need_user "$2" Print
+  need_user "$2" Print "User,delegateAddress,delegationStatus"
   printf 'User,delegateAddress,delegationStatus\n'
   delegates_of "$2" | while IFS= read -r d; do
     if [ -n "$d" ]; then printf '%s,%s,accepted\n' "$2" "$d"; fi
