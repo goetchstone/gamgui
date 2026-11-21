@@ -6,8 +6,10 @@ A loop writes into the polled progress record the web layer starts it with (``we
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Optional
+from types import SimpleNamespace
+from typing import Any, Awaitable, Callable, Dict, Optional
 
+from . import licenses
 from .gam.errors import ACCOUNT_WIDE_KINDS, GAMError
 
 # A failure that isn't GAM's own has no remediation to show: the Users screen's line for one.
@@ -69,15 +71,16 @@ async def set_departments(job, conn, users, department: str,
         job.finish()
 
 
-async def _each(job, emails, write: Callable[[str], Awaitable[Any]],
-                on_set: Optional[Callable[[str], None]] = None) -> None:
+async def _each(job, emails, write: Callable[[Any], Awaitable[Any]],
+                on_set: Optional[Callable[[Any], None]] = None, label: Callable[[Any], str] = str) -> None:
     """Run ``write(email)`` for each of ``emails`` into ``job``; ``on_set(email)`` after each write GAM accepted. Stops at a
-    failure every later one would share (``stop_reason``), or at Stop. A failure of one never stops the rest."""
+    failure every later one would share (``stop_reason``), or at Stop. A failure of one never stops the rest. ``label``
+    names a target that isn't an address in the feed and the failures (a person's license)."""
     try:
         for email in emails:
             if stop_requested(job):
                 break
-            job.current = email
+            job.current = label(email)
             kind, why, detail = None, "", ""
             try:
                 res = await write(email)
@@ -86,7 +89,7 @@ async def _each(job, emails, write: Callable[[str], Awaitable[Any]],
                     kind, why, detail = getattr(res, "kind", None), getattr(res, "remediation", ""), getattr(res, "detail", "")
             except Exception as exc:  # noqa: BLE001 — one target must not stop the rest
                 ok, kind, why, detail = False, getattr(exc, "kind", None), _why(exc), str(exc) if isinstance(exc, GAMError) else ""
-            job.record(email, ok, why, detail)
+            job.record(label(email), ok, why, detail)
             if ok and on_set is not None:
                 on_set(email)
             stop = stop_reason(kind, why, job.total - job.done)
@@ -121,3 +124,19 @@ async def move_users(job, conn, emails, org_unit: str, on_set: Optional[Callable
     """Move each of ``emails`` to ``org_unit`` through the chokepoint (``move_user_to_org_unit`` → ``_run_write``, roadmap
     4.2)."""
     await _each(job, emails, lambda email: conn.move_user_to_org_unit(email, org_unit), on_set)
+
+
+async def remove_licenses(job, conn, held) -> None:
+    """Remove each held ``(address, seat)`` through the chokepoint (``remove_license`` → ``_run_write``, roadmap 4.3). Each
+    person's data transfers are read just before their first seat goes, once a run: one unfinished, failed or unread
+    (``licenses.many_refusal``) keeps every seat of theirs, each listed as not removed with why (invariant 10)."""
+    why_not: Dict[str, str] = {}
+
+    async def write(pair):
+        email, seat = pair
+        if email not in why_not:
+            why_not[email] = licenses.many_refusal(email, await conn.incomplete_transfers_for(email))
+        if why_not[email]:
+            return SimpleNamespace(ok=False, kind=None, remediation=why_not[email], detail="")
+        return await conn.remove_license(email, seat)
+    await _each(job, held, write, label=lambda pair: f"{pair[0]} — {pair[1].sku}")
