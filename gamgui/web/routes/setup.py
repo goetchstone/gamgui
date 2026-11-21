@@ -22,6 +22,7 @@ from keyring.errors import KeyringError
 from ...core.audit import AuditLog
 from ...core.connectors.gam_connector import GAMConnector
 from ...core.schedules import StoreProblem
+from ...core.schedules import forget_domain as forget_schedules
 from ...core.setup import SetupService, VerifyResult
 from ..jobs import ONE_STEP, UNSTOPPABLE
 from ..server import SCREENS, TEMPLATES
@@ -279,8 +280,7 @@ async def _forget_schedules(st, domain: str, active: str) -> str:
         return ""
     store, kept = schedule_stores(st)
     try:
-        runs = await asyncio.to_thread(kept.forget_domain, domain)
-        schedules = await asyncio.to_thread(store.forget_domain, domain)
+        schedules, runs = await asyncio.to_thread(forget_schedules, store, kept, domain)
     except (StoreProblem, OSError) as exc:
         logger.warning("deleting a removed domain's schedules failed", exc_info=exc)
         return (" Its schedules and the runs they kept on this Mac couldn't all be deleted: what is left is in "

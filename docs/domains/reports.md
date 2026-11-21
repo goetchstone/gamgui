@@ -230,12 +230,20 @@ own**: there is no background runner, and the run is the operator's Run button, 
 - **Changed since.** Each table against the newest earlier kept run that holds it whole (known, not partial, kept) with the
   same window (`days`; 0 for every run but Inactive users), passing over a kept run that can't be read. Rows compared
   whole, as a multiset: a row with any cell changed is gone and new. A table unknown or partial now, or no earlier run to
-  compare with, says why and is never "no change". Each list draws 100 rows.
+  compare with, says why and is never "no change". Each list draws 100 rows. Shared drive members and unlooked-after
+  drives leave out a drive whose members GAM dropped without a word, so with any such drive (or the drive list unknown)
+  both are `partial` and never compared (review of #176: a dropped drive's members read as "gone"). GAM's other silent
+  skips can't be seen at all, so the licence tables and Classroom's class list carry `Finding.change_note`, shown beside
+  every change: a gone seat, or a count fallen to 0, may be one it couldn't read this time.
 - **Store rules.** `schedules.json` is read again on every look and change. No file is the empty store; a read the disk
   failed is unknown, said (Home never says "Nothing is due" then) and never saved over; a file that isn't a store (not
   UTF-8, not JSON, not this shape) is moved to `schedules.json.unreadable-<time>` before an empty one starts, said on Home
-  and the runs page; one that can't be moved stays, unknown, never saved over. A kept run that can't be read is listed as
-  such, never dropped.
+  and the runs page; one that can't be moved stays, unknown, never saved over. A stored time must be finite and before
+  1e11 seconds (a date can be made of it), and a kept window an int from 0 to 10,000: else not a store / not whole, never a
+  crashed page. A kept run that can't be read is listed as such, never dropped. A link anywhere from the schedules folder
+  down to a run's folder is refused (`StoreProblem`), never followed. One lock (`_KEEP_LOCK`) spans "still scheduled? keep,
+  prune, count" in `after_run` and `set_schedule`, `delete_kept`, `forget_domain`: a run finishing as it is unscheduled, or
+  its domain removed, keeps nothing. It is per process, like the other stores' locks.
 - **Per domain.** Everything is keyed by the active connector's domain, lowercased: a switch shows that domain's. A run
   that ends after a switch isn't kept, as before. The poll of a running run reads no schedule.
 - **Not run on a real domain yet**, and not seen in the app window (WKWebView): headless Chrome only. Its Delete asks

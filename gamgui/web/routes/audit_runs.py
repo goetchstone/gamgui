@@ -286,7 +286,8 @@ async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cade
     store, kept = schedule_stores(st)
     domain = st.connector.domain
     try:
-        saved = await asyncio.to_thread(store.put, domain, found.key, cadence, count or sched.KEEP_DEFAULT, time.time())
+        saved, gone = await asyncio.to_thread(sched.set_schedule, store, kept, domain, found.key, cadence,
+                                              count or sched.KEEP_DEFAULT, time.time())
     except sched.StoreProblem as problem:
         return _panel(request, found, notice=str(problem), notice_problem=True)
     except OSError as exc:
@@ -297,13 +298,7 @@ async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cade
     else:
         notice = (f"Saved: {sched.CADENCE_WORDS[saved.cadence].lower()}, keeping the last {saved.keep} "
                   f"run{'' if saved.keep == 1 else 's'}.")
-    try:   # what it keeps now: nothing when it isn't scheduled, else its newest ``keep``
-        if saved is None:
-            gone = await asyncio.to_thread(kept.delete_all, domain, found.key)
-        else:
-            gone = await asyncio.to_thread(kept.prune, domain, found.key, saved.keep)
-    except (sched.StoreProblem, OSError) as exc:
-        logger.warning("deleting kept runs failed", exc_info=exc)
+    if gone is None:   # what it keeps now (nothing when unscheduled, else its newest ``keep``) couldn't all be made so
         return _panel(request, found, notice=notice + " Its kept runs couldn't all be deleted: Delete them below, or try "
                                                       "again.", notice_problem=True)
     if gone:
@@ -321,7 +316,7 @@ async def delete_kept(request: Request, run: Annotated[str, Form()] = "") -> HTM
     if st.connector is None:
         return _panel(request, found)
     try:
-        gone = await asyncio.to_thread(schedule_stores(st)[1].delete_all, st.connector.domain, found.key)
+        gone = await asyncio.to_thread(sched.delete_kept, schedule_stores(st)[1], st.connector.domain, found.key)
     except sched.StoreProblem as problem:
         return _panel(request, found, notice=str(problem), notice_problem=True)
     except OSError as exc:

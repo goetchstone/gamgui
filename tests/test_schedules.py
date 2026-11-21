@@ -147,6 +147,28 @@ def test_a_schedules_file_that_isn_t_a_store_is_set_aside_before_anything_is_sav
     assert set(store.schedules("example.com")) == {"license_usage"}
 
 
+@pytest.mark.parametrize("content", [
+    b'{"version": 1, "domains": {"example.com": {"license_usage": {"cadence": "weekly", "keep": 3, "since": 1, "done": 1e300}}}}',
+    b'{"version": 1, "domains": {"example.com": {"license_usage": {"cadence": "weekly", "keep": 3, "since": 1' + b"0" * 400 + b'}}}}',
+    b'{"version": 1, "domains": {"example.com": {"license_usage": {"cadence": "weekly", "keep": 3, "since": NaN}}}}',
+    b"[" * 100_000,
+], ids=["huge-done", "huge-since", "nan", "deep"])
+def test_a_time_no_date_can_be_made_of_or_a_file_too_deep_to_read_is_set_aside_never_a_crash(tmp_path, content):
+    store = sched.ScheduleStore(tmp_path / "s")
+    store.root.mkdir()
+    store.path.write_bytes(content)
+    assert store.schedules("example.com") == {} and store.set_aside.read_bytes() == content
+
+
+def test_a_schedule_for_no_domain_is_refused_before_anything_is_saved(tmp_path):
+    store = sched.ScheduleStore(tmp_path / "s")
+    store.put("example.com", "license_usage", "weekly", 3, T0)
+    for domain in ("", "   "):
+        with pytest.raises(ValueError):
+            store.put(domain, "license_usage", "weekly", 3, T0)
+    assert set(store.schedules("example.com")) == {"license_usage"} and store.set_aside is None
+
+
 def test_a_file_that_isn_t_a_store_and_can_t_be_moved_aside_is_never_saved_over(tmp_path, monkeypatch):
     store = sched.ScheduleStore(tmp_path / "s")
     store.root.mkdir()
@@ -210,6 +232,54 @@ def test_a_link_in_the_kept_folder_is_never_read(tmp_path):
     secret.write_text("x\n")
     (folder / "9999999999999-deadbeef.jsonl").symlink_to(secret)
     assert [k.id for k in kept.runs("example.com", "license_usage")] == [run.id]
+
+
+def test_a_kept_header_whose_numbers_aren_t_a_time_or_a_window_is_listed_as_not_whole(tmp_path):
+    kept = sched.KeptRuns(tmp_path / "kept")
+    run = kept.keep("example.com", "license_usage", T0, 90, [_finding("seats", [("a", "A")])])
+    path = next(kept.root.rglob("*.jsonl"))
+    lines = path.read_text().splitlines()
+    for field, value in (("days", "Infinity"), ("days", "true"), ("days", "1e9"), ("when", "NaN"), ("when", "1e300")):
+        head = json.loads(lines[0])
+        head[field] = "__X__"
+        path.write_text(json.dumps(head).replace('"__X__"', value) + "\n" + "\n".join(lines[1:]) + "\n")
+        assert [k.problem for k in kept.runs("example.com", "license_usage")] == ["It isn't whole."], (field, value)
+        assert kept.load("example.com", "license_usage", run.id).problem == "It isn't whole."
+
+
+def test_a_link_anywhere_in_the_kept_folders_is_refused_and_what_it_points_at_left_alone(tmp_path):
+    outside = tmp_path / "outside"
+    kept = sched.KeptRuns(outside / "kept")
+    kept.keep("example.com", "license_usage", T0, 0, [_finding("seats", [("a", "A")])])
+    victim = next(outside.rglob("*.jsonl"))
+    real_kept = outside / "kept"
+    top = next(real_kept.iterdir())
+    for linked in ("schedules", "kept", "domain", "run"):
+        root = tmp_path / linked / "schedules"
+        root.parent.mkdir()
+        if linked == "schedules":
+            root.symlink_to(outside)                               # the store's own folder is a link
+        else:
+            root.mkdir()
+            if linked == "kept":
+                (root / "kept").symlink_to(real_kept)
+            else:
+                (root / "kept").mkdir()
+                if linked == "domain":
+                    (root / "kept" / top.name).symlink_to(top)
+                else:
+                    (root / "kept" / top.name).mkdir()
+                    (root / "kept" / top.name / "license_usage").symlink_to(top / "license_usage")
+        probe = sched.KeptRuns(root / "kept")
+        for act, *args in ((probe.delete_all,), (probe.prune, 0), (probe.runs,), (probe.keep, T0, 0, [])):
+            with pytest.raises(sched.StoreProblem, match="isn't a folder"):
+                act("example.com", "license_usage", *args)
+        if linked == "run":       # Remove lists the domain's run folders and passes a link over: nothing to follow
+            assert probe.forget_domain("example.com") == 0
+        else:
+            with pytest.raises(sched.StoreProblem, match="isn't a folder"):
+                probe.forget_domain("example.com")
+        assert victim.exists(), linked
 
 
 def test_prune_keeps_the_newest_and_delete_and_forget_leave_nothing(tmp_path):
@@ -315,6 +385,43 @@ def test_a_run_with_a_step_unanswered_is_compared_where_it_can_be_but_never_kept
     assert store.schedules("example.com")["license_usage"].done == T0
 
 
+@pytest.mark.parametrize("meanwhile", ["unscheduled", "domain removed"])
+def test_a_run_that_finishes_as_it_stops_being_scheduled_keeps_nothing(tmp_path, meanwhile):
+    store, kept = _stores(tmp_path)
+    store.put("example.com", "license_usage", "weekly", 2, T0)
+    sched.after_run(store, kept, "example.com", "license_usage", [_finding("seats", [("a", "A")])], 0, True, T0)
+    real = kept.runs
+
+    def then_the_operator_acts(domain, run):
+        found = real(domain, run)          # the compare has read what was kept: now Save or Remove lands
+        if meanwhile == "unscheduled":
+            assert sched.set_schedule(store, kept, domain, run, "", 0, T0 + 1) == (None, 1)
+        else:
+            assert sched.forget_domain(store, kept, domain) == (1, 1)
+        return found
+    kept.runs = then_the_operator_acts
+    after = sched.after_run(store, kept, "example.com", "license_usage", [_finding("seats", [("a", "A")])], 0, True,
+                            T0 + DAY)
+    kept.runs = real
+    assert after.note == "Not kept: it stopped being scheduled while it ran." and not after.problem
+    assert list(kept.root.rglob("*.jsonl")) == [] and store.schedules("example.com") == {}
+
+
+def test_drives_whose_members_weren_t_read_make_their_tables_partial_never_gone_or_unchanged():
+    drives = [{"id": "A", "name": "Kept"}, {"id": "B", "name": "Dropped"}]
+    acls = [{"id": "A", "name": "Kept", "permission": {"type": "user", "role": "organizer", "emailAddress": "a@example.com"}}]
+    reads = [runs.StepRead(s, runs.READ) for s in (runs.DRIVES, runs.DRIVE_ACLS, runs.DOMAINS, runs.DIRECTORY)]
+    perms, orphans, unread = runs.shared_drive_findings(drives, acls, ["example.com"],
+                                                        [runs.GAMUser(primary_email="a@example.com")], frozenset(), reads)
+    assert perms.partial and orphans.partial and not unread.partial
+    assert "leaves out the 1 drive whose members weren't read" in perms.note
+    whole = runs.shared_drive_findings(drives[:1], acls, ["example.com"],
+                                       [runs.GAMUser(primary_email="a@example.com")], frozenset(), reads)
+    assert not whole[0].partial and not whole[1].partial
+    out = sched.changes_since([perms, orphans], 0, [], lambda i: sched.KeptRun(i))
+    assert out["permissions"].why == out["orphaned"].why == sched.PART_UNKNOWN_NOW
+
+
 def test_schedules_that_can_t_be_read_keep_nothing_and_say_so(tmp_path):
     store, kept = _stores(tmp_path)
     store.put("example.com", "license_usage", "weekly", 2, T0)
@@ -408,6 +515,29 @@ def test_the_next_run_says_what_changed_since_the_last(client, gam_state):  # no
     page = unescape(client.get("/reports/runs").text)
     assert ": 0 new, 1 gone." in page and "Gone since then (1)" in page and "No change since" in page
     assert "shows as gone and as new" in page
+    # GAM gives no sign of a product it passed over, so a seat gone may be one it couldn't read: said beside each change
+    assert page.count("a seat gone since then may be one it couldn't read this time") == 3
+
+
+def test_a_drive_gam_dropped_is_never_gone_and_the_next_whole_run_compares_with_the_last_whole_one(client, gam_state):  # noqa: F811
+    _schedule(client, run="shared_drive_permissions")
+    _start(client, "shared_drive_permissions")
+    st = client.app.state.gamgui
+    first = st.schedules.schedules("example.com")["shared_drive_permissions"].done
+    (gam_state / "acl_dropped").mkdir()
+    (gam_state / "acl_dropped" / "0ALEGALuk9PVA").touch()       # Google refused one drive's members: no word, no code
+    _start(client, "shared_drive_permissions")
+    result = st.audit_runs["shared_drive_permissions"]
+    assert result.answered and result.finding("unread").rows        # every step answered, one drive unread
+    assert result.changes["permissions"].why == result.changes["orphaned"].why == sched.PART_UNKNOWN_NOW
+    assert result.changes["unread"].compared and result.changes["unread"].new == [("Legal hold", "0ALEGALuk9PVA")]
+    panel = unescape(client.get("/reports/runs").text).split('id="run-shared_drive_permissions"')[1].split("</section>")[0]
+    members = panel.split('id="run-shared_drive_permissions-permissions"')[1].split('id="run-shared_drive_permissions-orphaned"')[0]
+    assert "Part of this table is unknown this time" in members and "No change since" not in members and "gone." not in members
+    (gam_state / "acl_dropped" / "0ALEGALuk9PVA").unlink()
+    _start(client, "shared_drive_permissions")
+    again = st.audit_runs["shared_drive_permissions"].changes["permissions"]
+    assert again.compared and again.since == first and again.new == [] and again.gone == []   # the partial run passed over
 
 
 def test_a_run_with_a_step_that_failed_is_not_kept_and_stays_due(client, gam_state):  # noqa: F811

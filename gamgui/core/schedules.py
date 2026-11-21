@@ -29,6 +29,8 @@ from __future__ import annotations
 import calendar
 import hashlib
 import json
+import logging
+import math
 import os
 import re
 import secrets
@@ -44,6 +46,8 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .paths import app_data_dir
 
+logger = logging.getLogger(__name__)
+
 CADENCES = ("daily", "weekly", "monthly")
 CADENCE_WORDS = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
 KEEP_DEFAULT = 5          # runs kept when the operator doesn't say
@@ -53,6 +57,11 @@ FILE_VERSION = 1
 TZ: Optional[tzinfo] = None   # the Mac's own time zone (tests set one)
 
 _LOCK = threading.RLock()     # one load-change-save of the schedules file at a time in this process
+# One keep, prune or delete of kept runs at a time in this process, each with its own look at the schedule: a run that
+# finishes as it is unscheduled (or its domain removed) is never kept after its runs were deleted. Never held by a page.
+_KEEP_LOCK = threading.RLock()
+_MAX_TIME = 1e11              # seconds since 1970 a stored time may be (the year 5138): past it, the file isn't a store
+_MAX_DAYS = 10_000            # a kept run's window, in days
 _RUN_KEY = re.compile(r"^[a-z][a-z_]{0,39}$")
 _KEPT_NAME = re.compile(r"^\d{13}-[0-9a-f]{8}\.jsonl$")
 _TEMP_PREFIX = ".kept-"
@@ -120,16 +129,22 @@ def when_words(when: float) -> str:
 
 
 # --- the schedules file ---------------------------------------------------------------------------------------------
+def _a_time(value: object) -> bool:
+    """A stored time: a finite number of seconds from 1970 that a date can be made of."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            and 0 <= value < _MAX_TIME)
+
+
 def _schedule_from(run: str, raw: object) -> Schedule:
     if not isinstance(raw, dict) or not _RUN_KEY.match(run):
         raise ValueError("not a schedule")
     cadence, keep, since, done = raw.get("cadence"), raw.get("keep"), raw.get("since"), raw.get("done", 0)
     if cadence not in CADENCES or isinstance(keep, bool) or not isinstance(keep, int) or not 1 <= keep <= KEEP_CAP:
         raise ValueError("not a schedule")
-    times = [t for t in (since, done) if isinstance(t, (int, float)) and not isinstance(t, bool) and t >= 0]
+    times = [float(t) for t in (since, done) if isinstance(t, (int, float)) and _a_time(t)]
     if len(times) != 2:
         raise ValueError("not a schedule")
-    return Schedule(run, str(cadence), int(keep), float(times[0]), float(times[1]))
+    return Schedule(run, str(cadence), int(keep), times[0], times[1])
 
 
 class ScheduleStore:
@@ -165,13 +180,13 @@ class ScheduleStore:
                     raise ValueError("not a schedules file")
                 found[domain] = {run: _schedule_from(run, s) for run, s in runs.items()}
             return found
-        except (ValueError, TypeError, AttributeError, UnicodeDecodeError):
+        except (ValueError, TypeError, AttributeError, UnicodeDecodeError, OverflowError, RecursionError):
             return self._move_aside()
 
     def _move_aside(self) -> Dict[str, Dict[str, Schedule]]:
         """Keep a file that isn't a store under a new name, and start empty: a save then writes a new file instead of
         over it. One that can't be moved stays, unknown, and nothing is saved over it."""
-        aside = self.path.with_name(f"{self.path.name}.unreadable-{int(time.time())}")
+        aside = self.path.with_name(f"{self.path.name}.unreadable-{int(time.time())}-{secrets.token_hex(3)}")
         try:
             os.replace(self.path, aside)
         except OSError as exc:
@@ -189,6 +204,8 @@ class ScheduleStore:
         try:
             with os.fdopen(handle, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())      # whole on disk before it replaces the file: a crash never leaves it empty
             os.chmod(temp, 0o600)
             os.replace(temp, self.path)
         except BaseException:
@@ -206,9 +223,9 @@ class ScheduleStore:
     def put(self, domain: str, run: str, cadence: str, keep: int, now: float) -> Optional[Schedule]:
         """Schedule ``run`` on ``domain``, or (``cadence`` "") stop scheduling it. A run already scheduled keeps when it
         last counted. StoreProblem, or OSError, when it couldn't be saved."""
-        if not _RUN_KEY.match(run):
+        if not _RUN_KEY.match(run) or not _domain(domain):
             raise ValueError("not a run")
-        if cadence and (cadence not in CADENCES or not 1 <= keep <= KEEP_CAP):
+        if cadence and (cadence not in CADENCES or not 1 <= keep <= KEEP_CAP or not _a_time(now)):
             raise ValueError("not a schedule")
         with _LOCK:
             every = self._load()
@@ -224,6 +241,8 @@ class ScheduleStore:
     def mark_done(self, domain: str, run: str, when: float) -> None:
         """A run of ``run`` that counts finished at ``when``: it is due again a cadence on. Nothing when it isn't
         scheduled (any more)."""
+        if not _a_time(when):
+            raise ValueError("not a time")
         with _LOCK:
             every = self._load()
             old = every.get(_domain(domain), {}).get(run)
@@ -298,23 +317,24 @@ class KeptRuns:
     def __init__(self, root: Optional[Path] = None) -> None:
         self.root = Path(root) if root is not None else default_root() / "kept"
 
+    def _top(self, domain: str) -> Path:
+        if not _domain(domain):
+            raise ValueError("not a domain")
+        return self.root / hashlib.sha256(_domain(domain).encode()).hexdigest()[:24]
+
     def _folder(self, domain: str, run: str, make: bool) -> Optional[Path]:
-        if not _RUN_KEY.match(run) or not _domain(domain):
+        """The run's folder on ``domain``. Every folder from the store's own down is a real folder, never a link: a link
+        anywhere in it would lead a read, a keep or a delete outside the store. None when one doesn't exist yet and
+        ``make`` is off."""
+        if not _RUN_KEY.match(run):
             raise ValueError("not a run")
-        folder = self.root / hashlib.sha256(_domain(domain).encode()).hexdigest()[:24] / run
+        folder = self._top(domain) / run
+        chain = (self.root.parent, self.root, folder.parent, folder)
         if make:
-            _private_folder(self.root.parent)
-            _private_folder(self.root)
-            _private_folder(folder.parent)
-            _private_folder(folder)
+            for level in chain:
+                _private_folder(level)
             return folder
-        try:
-            info = os.lstat(folder)
-        except FileNotFoundError:
-            return None
-        if not stat.S_ISDIR(info.st_mode):
-            raise StoreProblem(f"{folder} isn't a folder (it may be a link), so its kept runs can't be read.")
-        return folder
+        return folder if all(_existing_folder(level) for level in chain) else None
 
     def _files(self, folder: Optional[Path]) -> List[Path]:
         if folder is None:
@@ -396,13 +416,15 @@ class KeptRuns:
 
     def forget_domain(self, domain: str) -> int:
         """Every kept run of ``domain``, of every run it has a folder for (Setup removed it); how many went."""
-        if not _domain(domain):
-            raise ValueError("not a domain")
-        top = self.root / hashlib.sha256(_domain(domain).encode()).hexdigest()[:24]
+        top = self._top(domain)
+        if not all(_existing_folder(level) for level in (self.root.parent, self.root, top)):
+            return 0
         try:
             runs = [p.name for p in top.iterdir() if _RUN_KEY.match(p.name) and not p.is_symlink()]
         except FileNotFoundError:
             return 0
+        except OSError as exc:
+            raise StoreProblem("The kept runs' folder couldn't be read just now. Try again.") from exc
         gone = sum(self.delete_all(domain, run) for run in runs)
         try:
             top.rmdir()
@@ -437,7 +459,10 @@ class KeptRuns:
             if (not isinstance(head, dict) or head.get("version") != FILE_VERSION or head.get("id") != kept_id
                     or head.get("domain") != _domain(domain) or head.get("run") != run):
                 raise ValueError("not this run")
-            found = KeptRun(kept_id, float(head["when"]), int(head["days"]))
+            when, days = head["when"], head["days"]
+            if not _a_time(when) or isinstance(days, bool) or not isinstance(days, int) or not 0 <= days <= _MAX_DAYS:
+                raise ValueError("not this run")
+            found = KeptRun(kept_id, float(when), days)
             for t in head["tables"]:
                 found.tables.append(KeptTable(str(t["key"]), str(t["title"]), tuple(str(c) for c in t["columns"]),
                                               t["known"] is True, t["partial"] is True, int(t["count"]), t["kept"] is True))
@@ -452,9 +477,20 @@ class KeptRuns:
                         if t.key not in rows or len(rows[t.key]) != t.count:
                             raise ValueError("a table isn't whole")
                         t.rows = rows[t.key]
-        except (ValueError, TypeError, KeyError, AttributeError, UnicodeDecodeError):
+        except (ValueError, TypeError, KeyError, AttributeError, UnicodeDecodeError, OverflowError, RecursionError):
             return KeptRun(kept_id, problem="It isn't whole.")
         return found
+
+
+def _existing_folder(path: Path) -> bool:
+    """True for a real folder, False when nothing is there; StoreProblem for anything else (a link, a file)."""
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(info.st_mode):
+        raise StoreProblem(f"{path} isn't a folder (it may be a link), so the kept runs in it are left alone.")
+    return True
 
 
 def _unlink(path: Path) -> int:
@@ -557,21 +593,59 @@ def after_run(store: ScheduleStore, kept: KeptRuns, domain: str, run: str, findi
                                  (NOT_KNOWN_NOW if not f.known else PART_UNKNOWN_NOW)) for f in findings}
     if not answered:
         return AfterRun(changes, "Not kept, and it doesn't count as its scheduled run: a step has no answer.", True)
-    after = AfterRun(changes, f"Kept on this Mac, as one of the last {schedule.keep} run{'s' if schedule.keep != 1 else ''} "
-                              "it keeps.")
-    try:
-        kept.keep(domain, run, when, days, findings)
-        kept.prune(domain, run, schedule.keep)
-    except (OSError, StoreProblem):
-        after.note = ("It couldn't be kept on this Mac, so the next run can't say what changed since this one. "
-                      "Check the disk has room.")
-        after.problem = True
-    try:
-        store.mark_done(domain, run, when)
-    except (OSError, StoreProblem):
-        after.note += " It counts as its scheduled run, but that couldn't be saved, so it may still say it's due."
-        after.problem = True
+    with _KEEP_LOCK:
+        try:   # looked at again: it may have been unscheduled, or its domain removed, while this run read
+            schedule = store.schedules(domain).get(run)
+        except StoreProblem as exc:
+            return AfterRun(changes, f"{exc} So this run isn't kept.", True)
+        if schedule is None:
+            return AfterRun(changes, "Not kept: it stopped being scheduled while it ran.")
+        after = AfterRun(changes, f"Kept on this Mac, as one of the last {schedule.keep} "
+                                  f"run{'s' if schedule.keep != 1 else ''} it keeps.")
+        try:
+            kept.keep(domain, run, when, days, findings)
+            kept.prune(domain, run, schedule.keep)
+        except StoreProblem as exc:
+            after.note, after.problem = f"It couldn't be kept on this Mac: {exc}", True
+        except OSError as exc:
+            logger.warning("keeping a scheduled run failed", exc_info=exc)
+            after.note = ("It couldn't be kept on this Mac, so the next run can't say what changed since this one. "
+                          "Check the disk has room.")
+            after.problem = True
+        try:
+            store.mark_done(domain, run, when)
+        except (OSError, StoreProblem) as exc:
+            logger.warning("marking a scheduled run done failed", exc_info=exc)
+            after.note += " It counts as its scheduled run, but that couldn't be saved, so it may still say it's due."
+            after.problem = True
     return after
+
+
+def set_schedule(store: ScheduleStore, kept: KeptRuns, domain: str, run: str, cadence: str, keep: int,
+                 now: float) -> Tuple[Optional[Schedule], Optional[int]]:
+    """Save ``run``'s schedule on ``domain`` (``cadence`` "": stop scheduling it), then make what it keeps match: its newest
+    ``keep``, or none. The saved schedule, and how many kept runs were deleted (None: they couldn't all be). StoreProblem,
+    OSError or ValueError when the schedule itself couldn't be saved; then nothing was deleted."""
+    with _KEEP_LOCK:
+        saved = store.put(domain, run, cadence, keep, now)
+        try:
+            return saved, (kept.prune(domain, run, saved.keep) if saved else kept.delete_all(domain, run))
+        except (StoreProblem, OSError) as exc:
+            logger.warning("deleting kept runs failed", exc_info=exc)
+            return saved, None
+
+
+def delete_kept(kept: KeptRuns, domain: str, run: str) -> int:
+    """Every kept run of ``run`` on ``domain``; how many went. Its schedule stays."""
+    with _KEEP_LOCK:
+        return kept.delete_all(domain, run)
+
+
+def forget_domain(store: ScheduleStore, kept: KeptRuns, domain: str) -> Tuple[int, int]:
+    """Every schedule of ``domain`` and every run they kept (Setup removed it): how many of each went. The schedules go
+    first, so a run finishing meanwhile finds itself unscheduled and keeps nothing."""
+    with _KEEP_LOCK:
+        return store.forget_domain(domain), kept.forget_domain(domain)
 
 
 def changes_since(findings: Sequence, days: int, earlier: Sequence[KeptRun],

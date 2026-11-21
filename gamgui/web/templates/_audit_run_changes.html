@@ -29,4 +29,5 @@
   {% endfor %}
   <p class="mt-1 text-xs text-brand-grayink">A row counts by all its cells: one with any cell changed shows as gone and as new.</p>
 {% endif %}
+{% if change.compared and f.change_note %}<p class="mt-1 text-xs text-amber-800">{{ f.change_note }}</p>{% endif %}
 </div>
