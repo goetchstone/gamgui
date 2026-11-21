@@ -336,17 +336,86 @@ def test_a_table_unknown_or_partly_unknown_now_is_never_compared(tmp_path):
 def test_it_compares_with_the_newest_run_that_read_the_table_whole_with_the_same_window(tmp_path, monkeypatch):
     monkeypatch.setattr(sched, "KEEP_ROWS_CAP", 3)
     kept = sched.KeptRuns(tmp_path / "kept")
+    broken = kept.keep("example.com", "license_usage", T0 - 1, 90, [_finding("seats", [("broken", "1")])])
+    next(p for p in kept.root.rglob("*.jsonl") if p.stem == broken.id).write_text("garbage\n")   # older: never reached
     kept.keep("example.com", "license_usage", T0, 90, [_finding("seats", [("whole", "90")])])
     kept.keep("example.com", "license_usage", T0 + 1, 30, [_finding("seats", [("other", "window")])])
     kept.keep("example.com", "license_usage", T0 + 2, 90, [_finding("seats", [("x", "1")], partial=True)])
     kept.keep("example.com", "license_usage", T0 + 3, 90, [_finding("seats", [], known=False)])
     kept.keep("example.com", "license_usage", T0 + 4, 90, [_finding("seats", [("a", "1")] * 4)])      # over the cap
-    broken = kept.keep("example.com", "license_usage", T0 + 5, 90, [_finding("seats", [("broken", "1")])])
-    next(p for p in kept.root.rglob("*.jsonl") if p.stem == broken.id).write_text("garbage\n")
     change = _compare(kept, [_finding("seats", [("whole", "90")])], days=90)["seats"]
     assert change.compared and change.since == T0 and change.new == [] and change.gone == []
     nothing = _compare(kept, [_finding("seats", [("a", "1")])], days=180)["seats"]
-    assert not nothing.compared and nothing.why == sched.NOTHING_BEFORE
+    assert not nothing.compared and nothing.why == sched.KEPT_RUN_UNREAD    # the broken one might have been a 180-day run
+
+
+def test_a_kept_run_that_can_t_be_read_is_said_never_passed_over_as_nothing_before(tmp_path):
+    kept = sched.KeptRuns(tmp_path / "kept")
+    run = kept.keep("example.com", "license_usage", T0, 0, [_finding("seats", [("a", "A"), ("b", "B")])])
+    path = next(kept.root.rglob("*.jsonl"))
+    head = path.read_text().splitlines()[0]
+    path.write_text(head + "\n" + '{"table": "seats", "rows": [["a", "A"]]}\n')     # its rows cut short
+    change = _compare(kept, [_finding("seats", [("a", "A")])])["seats"]
+    assert not change.compared and change.why == ("The run kept on Wed 18 Nov 2026, 09:00 couldn't be read whole, so this "
+                                                  "table isn't compared.")
+    newest = kept.keep("example.com", "license_usage", T0 + 1, 0, [_finding("seats", [("a", "A")])])
+    next(p for p in kept.root.rglob("*.jsonl") if p.stem == newest.id).write_text("garbage\n")   # no header at all
+    assert _compare(kept, [_finding("seats", [("a", "A")])])["seats"].why == sched.KEPT_RUN_UNREAD
+    assert [k.id for k in kept.runs("example.com", "license_usage")] == [newest.id, run.id]   # listed, never dropped
+
+
+def test_kept_runs_are_ordered_by_when_kept_never_by_the_clock(tmp_path):
+    kept = sched.KeptRuns(tmp_path / "kept")
+    ahead = kept.keep("example.com", "license_usage", T0 + 365 * DAY, 0, [_finding("seats", [("ahead", "1")])])
+    right = kept.keep("example.com", "license_usage", T0, 0, [_finding("seats", [("right", "1")])])
+    assert [k.id for k in kept.runs("example.com", "license_usage")] == [right.id, ahead.id]   # the last kept is newest
+    change = _compare(kept, [_finding("seats", [("right", "1")])])["seats"]
+    assert change.compared and change.since == T0 and change.new == [] and change.gone == []
+    assert kept.prune("example.com", "license_usage", 1) == 1
+    assert [k.id for k in kept.runs("example.com", "license_usage")] == [right.id]           # the clock's run went
+
+
+def test_a_run_counted_with_the_clock_ahead_never_holds_the_schedule_off(tmp_path):
+    store = sched.ScheduleStore(tmp_path / "s")
+    store.put("example.com", "license_usage", "weekly", 3, T0)
+    store.mark_done("example.com", "license_usage", T0 + 365 * DAY)       # the clock a year ahead
+    ahead = store.schedules("example.com")["license_usage"]
+    words = sched.due_words("License usage", ahead, T0 + DAY)
+    assert words.due and "dated after now" in words.detail                 # never "next due" a year out
+    store.mark_done("example.com", "license_usage", T0 + DAY)              # the clock put right, a run counts
+    assert store.schedules("example.com")["license_usage"].done == T0 + DAY
+    assert not sched.is_due(store.schedules("example.com")["license_usage"], T0 + 2 * DAY)
+
+
+def test_a_linked_schedules_folder_is_refused_never_followed(tmp_path):
+    real = sched.ScheduleStore(tmp_path / "real")
+    real.put("example.com", "license_usage", "weekly", 3, T0)
+    before = real.path.read_bytes()
+    (tmp_path / "linked").symlink_to(tmp_path / "real")
+    store = sched.ScheduleStore(tmp_path / "linked")
+    with pytest.raises(sched.StoreProblem, match="isn't a folder"):
+        store.schedules("example.com")
+    with pytest.raises(sched.StoreProblem, match="isn't a folder"):
+        store.put("example.com", "classroom_courses", "daily", 1, T0)
+    assert real.path.read_bytes() == before and sorted(p.name for p in (tmp_path / "real").iterdir()) == ["schedules.json"]
+
+
+def test_a_fifo_where_a_schedule_or_kept_run_should_be_never_hangs(tmp_path, fifo):
+    import time as clock
+    store = sched.ScheduleStore(tmp_path / "s")
+    store.root.mkdir()
+    fifo(store.path)
+    started = clock.monotonic()
+    with pytest.raises(sched.StoreProblem, match="isn't a file"):
+        store.schedules("example.com")
+    with pytest.raises(sched.StoreProblem, match="isn't a file"):
+        store.put("example.com", "license_usage", "weekly", 3, T0)
+    kept = sched.KeptRuns(tmp_path / "k" / "kept")
+    run = kept.keep("example.com", "license_usage", T0, 0, [_finding("seats", [("a", "A")])])
+    fifo(next(kept.root.rglob("*.jsonl")).with_name("9999999999999-deadbeef.jsonl"))
+    listed = kept.runs("example.com", "license_usage")
+    assert [k.problem for k in listed] == ["It isn't a file.", ""] and listed[1].id == run.id
+    assert clock.monotonic() - started < 2      # well inside the watchdog: nothing blocked on the FIFO
 
 
 # --- after a run --------------------------------------------------------------------------------------------------------
@@ -373,14 +442,14 @@ def test_a_scheduled_run_that_counts_is_kept_pruned_and_marked_done(tmp_path):
     assert after.changes["seats"].new == [("a", "2")] and after.changes["seats"].gone == [("a", "1")]
 
 
-def test_a_run_with_a_step_unanswered_is_compared_where_it_can_be_but_never_kept_or_counted(tmp_path):
+def test_a_run_with_a_step_unanswered_is_never_compared_kept_or_counted(tmp_path):
     store, kept = _stores(tmp_path)
     store.put("example.com", "license_usage", "weekly", 2, T0)
     sched.after_run(store, kept, "example.com", "license_usage", [_finding("seats", [("a", "A")])], 0, True, T0)
     after = sched.after_run(store, kept, "example.com", "license_usage",
                             [_finding("seats", [("a", "A")]), _finding("more", [], known=False)], 0, False, T0 + DAY)
     assert after.problem and "a step has no answer" in after.note
-    assert after.changes["seats"].compared and after.changes["more"].why == sched.NOT_KNOWN_NOW
+    assert after.changes["seats"].why == after.changes["more"].why == sched.NOT_ANSWERED
     assert len(kept.runs("example.com", "license_usage")) == 1
     assert store.schedules("example.com")["license_usage"].done == T0
 
@@ -550,6 +619,33 @@ def test_a_run_with_a_step_that_failed_is_not_kept_and_stays_due(client, gam_sta
     assert kept.runs("example.com", "license_usage") == []
     assert ">License usage is due</a>" in _home(client)
     assert "No change since" not in unescape(client.get("/reports/runs").text)
+
+
+def test_a_failed_directory_s_unknown_cells_never_read_as_changes(client, gam_state):  # noqa: F811
+    # Seats per license is known with "unknown" in its last two columns when the directory read failed: compared whole,
+    # every license once read as both gone and new.
+    _schedule(client)
+    _start(client, "license_usage")
+    (gam_state / "directory_fails").touch()
+    _start(client, "license_usage")
+    result = client.app.state.gamgui.audit_runs["license_usage"]
+    assert result.finding("per_sku").known and result.finding("per_sku").rows[0][4] == "unknown"
+    assert all(c.why == sched.NOT_ANSWERED for c in result.changes.values())
+    panel = unescape(client.get("/reports/runs").text).split('id="run-license_usage"')[1].split("</section>")[0]
+    assert " new, " not in panel and "No change since" not in panel and "aren't compared" in panel
+
+
+@pytest.mark.parametrize("change", ["delete", "unschedule", "fewer"])
+def test_the_runs_note_on_its_keep_goes_once_its_kept_runs_change(client, change):  # noqa: F811
+    _schedule(client)
+    _start(client, "license_usage")
+    assert "Kept on this Mac, as one of the last 3" in unescape(client.get("/reports/runs").text)
+    if change == "delete":
+        panel = unescape(client.post("/reports/runs/kept/delete", data={"run": "license_usage"}).text)
+    else:
+        panel = _schedule(client, cadence="" if change == "unschedule" else "weekly", keep="1")
+    assert "Kept on this Mac, as one of" not in panel
+    assert "Kept on this Mac, as one of" not in unescape(client.get("/reports/runs").text)
 
 
 def test_a_stopped_run_is_not_kept(client):  # noqa: F811

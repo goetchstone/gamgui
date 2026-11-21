@@ -27,6 +27,7 @@ A kept run that can't be read is listed as such, never read as none, and is neve
 from __future__ import annotations
 
 import calendar
+import errno
 import hashlib
 import json
 import logging
@@ -35,7 +36,6 @@ import os
 import re
 import secrets
 import stat
-import tempfile
 import threading
 import time
 from collections import Counter
@@ -147,6 +147,24 @@ def _schedule_from(run: str, raw: object) -> Schedule:
     return Schedule(run, str(cadence), int(keep), times[0], times[1])
 
 
+_FILE_CAP = 1 << 20     # bytes a schedules file may hold: this app's is a few KB, so anything larger isn't one
+_UNREAD = ("The schedules file couldn't be read just now, so what is due is unknown. Nothing was changed. Try again.")
+_NOT_A_FILE = "{} isn't a file (it may be a link), so what is due is unknown and nothing is saved over it."
+
+
+def _read_all(fd: int, cap: int) -> bytes:
+    """What an open file holds, or b"" when it grew past ``cap`` while read (the size checked first was only what it said
+    then)."""
+    chunks: List[bytes] = []
+    total = 0
+    while chunk := os.read(fd, 1 << 16):
+        total += len(chunk)
+        if total > cap:
+            return b""
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 class ScheduleStore:
     """Every domain's schedules, in one ``schedules.json`` (``0600``) in a ``0700`` folder of the app's data folder.
     Read again on every look and every change, so a change made from another window is never saved over."""
@@ -156,64 +174,118 @@ class ScheduleStore:
         self.path = self.root / "schedules.json"
         self.set_aside: Optional[Path] = None     # where a file that wasn't a store went: said on the screen
 
-    def _load(self) -> Dict[str, Dict[str, Schedule]]:
+    def _folder_fd(self, make: bool) -> Optional[int]:
+        """The store's folder as a held descriptor, never through a link (O_NOFOLLOW with O_DIRECTORY), ours, `0700` when
+        made. None when it doesn't exist and ``make`` is off. StoreProblem, in words, for a link, a file or another user's."""
+        if make:
+            self.root.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.mkdir(self.root, 0o700)
+            except FileExistsError:
+                pass
         try:
-            fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+            fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         except FileNotFoundError:
-            return {}
-        except OSError as exc:
-            raise StoreProblem("The schedules file couldn't be read just now, so what is due is unknown. "
-                               "Nothing was changed. Try again.") from exc
+            if make:
+                raise
+            return None
+        except OSError as exc:      # a link: on macOS O_NOFOLLOW with O_DIRECTORY says "not a directory"
+            if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                raise StoreProblem(f"{self.root} isn't a folder (it may be a link), so what is due is unknown and "
+                                   "nothing is saved there.") from exc
+            raise StoreProblem(_UNREAD) from exc
         try:
-            with os.fdopen(fd, "rb") as f:
-                raw = f.read()
-        except OSError as exc:
-            raise StoreProblem("The schedules file couldn't be read just now, so what is due is unknown. "
-                               "Nothing was changed. Try again.") from exc
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            if not isinstance(data, dict) or data.get("version") != FILE_VERSION or not isinstance(data.get("domains"), dict):
-                raise ValueError("not a schedules file")
-            found: Dict[str, Dict[str, Schedule]] = {}
-            for domain, runs in data["domains"].items():
-                if not isinstance(domain, str) or not domain or domain != _domain(domain) or not isinstance(runs, dict):
-                    raise ValueError("not a schedules file")
-                found[domain] = {run: _schedule_from(run, s) for run, s in runs.items()}
-            return found
-        except (ValueError, TypeError, AttributeError, UnicodeDecodeError, OverflowError, RecursionError):
-            return self._move_aside()
+            info = os.fstat(fd)
+            if info.st_uid != os.getuid():
+                raise StoreProblem(f"{self.root} belongs to another user, so what is due is unknown and nothing is saved "
+                                   "there.")
+            if make and stat.S_IMODE(info.st_mode) != 0o700:
+                os.fchmod(fd, 0o700)
+        except BaseException:
+            os.close(fd)
+            raise
+        return fd
 
-    def _move_aside(self) -> Dict[str, Dict[str, Schedule]]:
-        """Keep a file that isn't a store under a new name, and start empty: a save then writes a new file instead of
-        over it. One that can't be moved stays, unknown, and nothing is saved over it."""
-        aside = self.path.with_name(f"{self.path.name}.unreadable-{int(time.time())}-{secrets.token_hex(3)}")
+    def _load(self) -> Dict[str, Dict[str, Schedule]]:
+        folder = self._folder_fd(make=False)
+        if folder is None:
+            return {}
         try:
-            os.replace(self.path, aside)
+            try:   # not following a link, and not hanging on a FIFO: the regular-file check can only follow the open
+                fd = os.open(self.path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=folder)
+            except FileNotFoundError:
+                return {}
+            except OSError as exc:
+                if exc.errno == errno.ELOOP:
+                    raise StoreProblem(_NOT_A_FILE.format(self.path)) from exc
+                raise StoreProblem(_UNREAD) from exc
+            try:
+                info = os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode):
+                    raise StoreProblem(_NOT_A_FILE.format(self.path))
+                raw = b"" if info.st_size > _FILE_CAP else _read_all(fd, _FILE_CAP)
+            except OSError as exc:
+                raise StoreProblem(_UNREAD) from exc
+            finally:
+                os.close(fd)
+            try:
+                if not raw:
+                    raise ValueError("empty, or larger than a schedules file")
+                data = json.loads(raw.decode("utf-8"))
+                if (not isinstance(data, dict) or data.get("version") != FILE_VERSION
+                        or not isinstance(data.get("domains"), dict)):
+                    raise ValueError("not a schedules file")
+                found: Dict[str, Dict[str, Schedule]] = {}
+                for domain, runs in data["domains"].items():
+                    if not isinstance(domain, str) or not domain or domain != _domain(domain) or not isinstance(runs, dict):
+                        raise ValueError("not a schedules file")
+                    found[domain] = {run: _schedule_from(run, s) for run, s in runs.items()}
+                return found
+            except (ValueError, TypeError, AttributeError, UnicodeDecodeError, OverflowError, RecursionError):
+                return self._move_aside(folder)
+        finally:
+            os.close(folder)
+
+    def _move_aside(self, folder: int) -> Dict[str, Dict[str, Schedule]]:
+        """Keep a file that isn't a store under a new name in the held ``folder``, and start empty: a save then writes a
+        new file instead of over it. One that can't be moved stays, unknown, and nothing is saved over it."""
+        aside = f"{self.path.name}.unreadable-{int(time.time())}-{secrets.token_hex(3)}"
+        try:
+            os.replace(self.path.name, aside, src_dir_fd=folder, dst_dir_fd=folder)
         except OSError as exc:
             raise StoreProblem("The schedules file isn't one GamGUI can read, and it couldn't be moved aside, so what is "
                                "due is unknown and nothing is saved over it.") from exc
-        self.set_aside = aside
+        self.set_aside = self.root / aside
         return {}
 
     def _save(self, every: Dict[str, Dict[str, Schedule]]) -> None:
-        _private_folder(self.root)
         data = {"version": FILE_VERSION, "domains": {
             domain: {s.run: {"cadence": s.cadence, "keep": s.keep, "since": s.since, "done": s.done} for s in runs.values()}
             for domain, runs in sorted(every.items()) if runs}}
-        handle, temp = tempfile.mkstemp(dir=self.root, prefix=".schedules-")
+        body = json.dumps(data, indent=2).encode("utf-8")
+        folder = self._folder_fd(make=True)
+        assert folder is not None
         try:
-            with os.fdopen(handle, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())      # whole on disk before it replaces the file: a crash never leaves it empty
-            os.chmod(temp, 0o600)
-            os.replace(temp, self.path)
-        except BaseException:
+            temp = f".schedules-{secrets.token_hex(6)}"
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=folder)
             try:
-                os.unlink(temp)
-            except OSError:
-                pass
-            raise
+                written = 0
+                while written < len(body):
+                    written += os.write(fd, body[written:])
+                os.fsync(fd)      # whole on disk before it replaces the file: a crash never leaves it empty
+                os.close(fd)
+                fd = -1
+                os.replace(temp, self.path.name, src_dir_fd=folder, dst_dir_fd=folder)
+            except BaseException:
+                if fd >= 0:
+                    os.close(fd)
+                try:
+                    os.unlink(temp, dir_fd=folder)
+                except OSError:
+                    pass
+                raise
+        finally:
+            os.close(folder)
 
     def schedules(self, domain: str) -> Dict[str, Schedule]:
         """``domain``'s schedules by run key. StoreProblem when they can't be told."""
@@ -248,7 +320,9 @@ class ScheduleStore:
             old = every.get(_domain(domain), {}).get(run)
             if old is None:
                 return
-            every[_domain(domain)][run] = Schedule(old.run, old.cadence, old.keep, old.since, max(when, old.done))
+            # This run's time, even if an earlier one is later: that one came from a clock set ahead, and kept, it would hold
+            # the schedule off for as long as the clock was wrong.
+            every[_domain(domain)][run] = Schedule(old.run, old.cadence, old.keep, old.since, when)
             self._save(every)
 
     def forget_domain(self, domain: str) -> int:
@@ -312,7 +386,8 @@ def _cells(row: Iterable[object]) -> Tuple[str, ...]:
 class KeptRuns:
     """The kept runs: ``<root>/<domain's hash>/<run key>/<id>.jsonl``, folders ``0700``, files ``0600``. A file is a header
     line (the run, when, its window, each table's title, columns and count) and one line per kept table's rows; listing
-    reads the header alone. Written under a temporary name and renamed into place, so only a whole run is ever listed."""
+    reads the header alone. Written under a temporary name and renamed into place, so only a whole run is ever listed.
+    Named by a sequence (`<13 digits>-<8 hex>`), so newest is the last kept, whatever the clock said."""
 
     def __init__(self, root: Optional[Path] = None) -> None:
         self.root = Path(root) if root is not None else default_root() / "kept"
@@ -351,7 +426,10 @@ class KeptRuns:
         """Keep a run's findings (``core.audit_runs.Finding``) whole. StoreProblem or OSError when it couldn't be."""
         folder = self._folder(domain, run, make=True)
         assert folder is not None
-        kept_id = f"{int(when * 1000):013d}-{secrets.token_hex(4)}"
+        # Named by the order kept, not by the clock: a run kept while the Mac's clock was wrong would otherwise sort
+        # ahead of every later one, be compared with forever and outlive them all in a prune.
+        last = max((int(p.name[:13]) for p in self._files(folder)), default=0)
+        kept_id = f"{last + 1:013d}-{secrets.token_hex(4)}"
         tables = [KeptTable(f.key, f.title, tuple(f.columns), bool(f.known), bool(f.partial), len(f.rows),
                             bool(f.known) and len(f.rows) <= KEEP_ROWS_CAP) for f in findings]
         header = {"version": FILE_VERSION, "id": kept_id, "domain": _domain(domain), "run": run, "when": when,
@@ -447,9 +525,11 @@ class KeptRuns:
 
     def _read(self, path: Path, domain: str, run: str, whole: bool) -> KeptRun:
         kept_id = path.stem
-        try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:   # not following a link, and not hanging on a FIFO: the regular-file check can only follow the open
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
             with os.fdopen(fd, "rb") as f:
+                if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                    return KeptRun(kept_id, problem="It isn't a file.")
                 first = f.readline(_HEADER_CAP)
                 rest = f.read() if whole else b""
         except OSError:
@@ -521,6 +601,9 @@ class Change:
 NOT_KNOWN_NOW = "Unknown this time, so it isn't compared."
 PART_UNKNOWN_NOW = "Part of this table is unknown this time, so what's new or gone can't be told."
 NOTHING_BEFORE = "No earlier run that read this table whole is kept, so there's nothing to compare it with yet."
+KEPT_RUN_UNREAD = ("A run kept before couldn't be read, so this table isn't compared. Delete the kept runs if it stays "
+                   "that way.")
+NOT_ANSWERED = "A step of this run has no answer, so its tables aren't compared: one may hold \"unknown\" where it had a value."
 
 
 def _difference(rows: Sequence[Tuple[str, ...]], minus: Sequence[Tuple[str, ...]]) -> List[Tuple[str, ...]]:
@@ -550,6 +633,9 @@ def due_words(title: str, schedule: Schedule, now: float) -> Due:
     """Whether ``schedule`` is due at ``now``, in the words Home and the run's own page say it."""
     nxt = due_day(schedule)
     cadence = CADENCE_WORDS[schedule.cadence]
+    if schedule.done > now:     # counted at a time still to come: the Mac's clock was ahead then, or is behind now
+        return Due(True, f"{title} is due", f"{cadence}; its last run is dated after now, so when it's next due can't be "
+                                            "told. Check the Mac's clock.")
     if nxt is None:
         return Due(True, f"{title} is due", f"{cadence}; no run of it has read every step since it was scheduled.")
     if local_day(now) >= nxt:
@@ -586,13 +672,14 @@ def after_run(store: ScheduleStore, kept: KeptRuns, domain: str, run: str, findi
         except StoreProblem as exc:
             return KeptRun(kept_id, problem=str(exc))
 
+    if not answered:   # a table built on a step with no answer can hold "unknown" cells with no partial flag: never compared
+        return AfterRun({f.key: Change(f.key, why=NOT_ANSWERED) for f in findings},
+                        "Not kept, and it doesn't count as its scheduled run: a step has no answer.", True)
     try:
         changes = changes_since(findings, days, kept.runs(domain, run), load)
     except StoreProblem:
         changes = {f.key: Change(f.key, why=KEPT_UNREAD if f.known and not f.partial else
                                  (NOT_KNOWN_NOW if not f.known else PART_UNKNOWN_NOW)) for f in findings}
-    if not answered:
-        return AfterRun(changes, "Not kept, and it doesn't count as its scheduled run: a step has no answer.", True)
     with _KEEP_LOCK:
         try:   # looked at again: it may have been unscheduled, or its domain removed, while this run read
             schedule = store.schedules(domain).get(run)
@@ -664,14 +751,19 @@ def changes_since(findings: Sequence, days: int, earlier: Sequence[KeptRun],
         now_rows = [_cells(r) for r in f.rows]
         change = Change(f.key, why=NOTHING_BEFORE)
         for head in earlier:
+            if head.problem:     # what it held can't be told: it may be the run to compare with, so nothing older is
+                change = Change(f.key, why=KEPT_RUN_UNREAD)
+                break
             t = head.table(f.key)
-            if head.problem or head.days != days or t is None or not t.known or t.partial or not t.kept:
+            if head.days != days or t is None or not t.known or t.partial or not t.kept:
                 continue
             if head.id not in loaded:
                 loaded[head.id] = load(head.id)
             whole = loaded[head.id].table(f.key)
             if loaded[head.id].problem or whole is None or whole.rows is None:
-                continue
+                change = Change(f.key, why=f"The run kept on {when_words(head.when)} couldn't be read whole, so this "
+                                           "table isn't compared.")
+                break
             change = Change(f.key, head.when, _difference(now_rows, whole.rows), _difference(whole.rows, now_rows))
             break
         out[f.key] = change

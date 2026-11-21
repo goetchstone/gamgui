@@ -255,6 +255,14 @@ async def table_csv(request: Request, run: str = "", finding: str = "") -> Respo
     return Response(out.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}.csv"'})
 
 
+def _kept_changed(st, run) -> None:
+    """What the run on screen said of its keep ("Kept on this Mac, as one of the last 5…") no longer holds once its schedule
+    or its kept runs change: dropped, so the panel says only what the notice says now."""
+    result = st.audit_runs.get(run.key)
+    if result is not None:
+        result.kept_note, result.kept_problem = "", False
+
+
 def _keep_count(value) -> Optional[int]:
     """How many runs to keep, as typed: blank is the default; anything but a whole number from 1 to the cap is None."""
     text = str(value or "").strip()
@@ -299,6 +307,7 @@ async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cade
     except OSError as exc:
         logger.warning("saving a schedule failed", exc_info=exc)
         return _panel(request, found, notice="The schedule couldn't be saved. Check the disk has room.", notice_problem=True)
+    _kept_changed(st, found)
     if saved is None:
         notice = "Not scheduled."
     else:
@@ -323,6 +332,7 @@ async def delete_kept(request: Request, run: Annotated[str, Form()] = "") -> HTM
         return _panel(request, found)
     try:
         gone = await asyncio.to_thread(sched.delete_kept, schedule_stores(st)[1], st.connector.domain, found.key)
+        _kept_changed(st, found)
     except sched.StoreProblem as problem:
         return _panel(request, found, notice=str(problem), notice_problem=True)
     except OSError as exc:
