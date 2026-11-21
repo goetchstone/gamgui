@@ -181,6 +181,16 @@ def test_loading_the_page_reads_nothing_and_offers_each_run(client, gam_calls): 
     assert 'href="/reports/runs"' in client.get("/reports").text
 
 
+@pytest.mark.parametrize("run", runs.RUNS, ids=lambda r: r.key)
+def test_every_step_of_every_run_leaves_one_f1_read_record(client, run):  # noqa: F811
+    _start(client, run.key, days="90")
+    records = _records(client)
+    assert [r["extra"]["command"] for r in records] == [runs.step_command(run, s) for s in run.steps]
+    for r in records:
+        assert r["ok"] and r["target"] == "" and r["argv"][0] == "print"
+        assert r["extra"]["origin"] == "audit_run" and r["extra"]["domain"] == "example.com" and r["extra"]["rows"] > 0
+
+
 def test_the_inactive_run_reads_the_directory_once_records_it_and_offers_the_suspend_preview(client, gam_calls):  # noqa: F811
     before = len(gam_calls())
     _, job = _start(client, "inactive_users", days="90")
