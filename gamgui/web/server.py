@@ -141,6 +141,8 @@ class AppState:
     runbooks: object = None  # onboarding role templates + welcome email (lazy-loaded by the route)
     sig_templates: object = None  # saved HTML signature templates (lazy-loaded by the signatures route)
     signature_backups: object = None  # each run's replaced signatures, kept for Put Back (roadmap 4.1; lazy, _common)
+    schedules: object = None   # each domain's audit-run schedules (plan F7a; lazy: _common.schedule_stores)
+    kept_runs: object = None   # the tables of a scheduled run's last runs, kept on this Mac (F7a; lazy, with it)
     offboard_templates: object = None  # saved offboarding routines (lazy-loaded by the lifecycle route)
     incident_store: object = None      # the incidents kept here (lazy: routes/_common.incident_store)
     roster_store: Optional[RosterStore] = None   # the SIS roster kept per domain (Classroom import, plan 2026-11-11 C2)

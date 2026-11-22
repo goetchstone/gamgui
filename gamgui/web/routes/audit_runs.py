@@ -8,6 +8,10 @@ on (``AppState.audit_runs``, dropped on a switch); a run that ends after a switc
 
 Bounded (invariant 9): the poll draws the steps alone, never a table; the finished panel draws ``ROWS_SHOWN`` rows of each
 table, and the table's CSV is the whole of it. ``tests/test_write_routes_guarded.py`` lists ``/start`` as local: reads only.
+
+Schedules (plan F7a, ``core/schedules.py``): a run can be given a cadence on the active domain (``/schedule``), and then says
+when it is due, here and on Home. Nothing runs on its own: the Run button is the run. A scheduled run's tables are compared
+with its last kept run's and kept on this Mac (``after_run``); ``/kept/delete`` deletes them. Both are local: no GAM.
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import logging
+import time
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Form, Request
@@ -22,7 +28,9 @@ from fastapi.responses import HTMLResponse, Response
 
 from ...core import audit_runs as runs_mod
 from ...core import clock
+from ...core import schedules as sched
 from ...core.bulk import stop_requested
+from ...core.connectors.gam_connector import NoRowUnsaid
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.gam.models import GAMUser
 from ...core.phishing import Incomplete
@@ -30,15 +38,18 @@ from ...core.reports import INACTIVE_DAYS
 from ..csvutil import csv_safe
 from ..jobs import Job, start_job
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, app_state, error_partial, friendly, gam_detail
+from ._common import NOT_CONNECTED, app_state, error_partial, friendly, gam_detail, schedule_stores
 
 router = APIRouter(prefix="/reports/runs")
+logger = logging.getLogger(__name__)
 
 _PAGE = "audit_runs.html"
 _PANEL = "_audit_run.html"
 KIND = "audit_run"
 # Fixed words, never an exception's own text (tests/test_route_error_text.py).
 _NO_TABLE = "GAM ended without writing the table, so this step has no answer."
+_NO_ROW_UNSAID = ("GAM wrote no row and didn't say there were none, which it does when there are. A service-account "
+                  "token Google refuses ends this way, so this step has no answer: check the domain's access on Setup.")
 _TIMED_OUT = "GAM didn't finish in the hour a read is allowed, so this step has no answer."
 _NOT_KEPT = "Not kept: the connection changed during the run. Run it again."
 _STOPPED_BEFORE = "The run was stopped before this step."
@@ -59,18 +70,52 @@ def _job_of(st, run) -> Optional[Job]:
     return st.jobs.get(st.audit_run_jobs.get(run.key, ""))
 
 
-def _panel_context(st, run, job=None, announce: bool = False) -> dict:
-    result = st.audit_runs.get(run.key)
-    ctx = {"run": run, "connected": st.connector is not None, "job": job, "announce": announce, "result": result,
-           "windows": runs_mod.INACTIVE_WINDOWS, "days": result.days if result and result.days else INACTIVE_DAYS,
-           "shown": runs_mod.ROWS_SHOWN, "inactive_run": runs_mod.INACTIVE_USERS.key}
-    if result is not None:
-        ctx["age"] = clock.now() - result.when
+# A panel's schedule part before it's read (a running job's panel, or no connection): nothing drawn.
+_NO_SCHEDULE = {"scheduling": False, "domain": "", "schedule": None, "due": False, "due_line": "", "schedule_problem": "", "kept": [],
+                "kept_problem": "", "cadences": sched.CADENCES, "cadence_words": sched.CADENCE_WORDS,
+                "keep_default": sched.KEEP_DEFAULT, "keep_cap": sched.KEEP_CAP, "when_words": sched.when_words}
+
+
+def _schedule_context(st, run) -> dict:
+    """The run's schedule on the active domain, whether it's due, and its kept runs (headers only). Read from disk, so only
+    for a panel that isn't polling: a running job's panel draws its steps alone."""
+    store, kept = schedule_stores(st)
+    domain = st.connector.domain
+    ctx: dict = {**_NO_SCHEDULE, "scheduling": True, "domain": domain.lower()}
+    try:
+        ctx["schedule"] = store.schedules(domain).get(run.key)
+    except sched.StoreProblem as exc:
+        ctx["schedule_problem"] = str(exc)
+    if ctx["schedule"] is not None:
+        due = sched.due_words(run.title, ctx["schedule"], time.time())
+        ctx["due"], ctx["due_line"] = due.due, due.line
+    try:
+        ctx["kept"] = kept.runs(domain, run.key)
+    except sched.StoreProblem as exc:
+        ctx["kept_problem"] = str(exc)
     return ctx
 
 
-def _panel(request: Request, run, job=None, announce: bool = False) -> HTMLResponse:
-    return TEMPLATES.TemplateResponse(request, _PANEL, _panel_context(app_state(request), run, job, announce))
+def _panel_context(st, run, job=None, announce: bool = False, notice: str = "", notice_problem: bool = False) -> dict:
+    result = st.audit_runs.get(run.key)
+    ctx = {"run": run, "connected": st.connector is not None, "job": job, "announce": announce, "result": result,
+           "windows": runs_mod.INACTIVE_WINDOWS, "days": result.days if result and result.days else INACTIVE_DAYS,
+           "shown": runs_mod.ROWS_SHOWN, "inactive_run": runs_mod.INACTIVE_USERS.key,
+           "notice": notice, "notice_problem": notice_problem, **_NO_SCHEDULE}
+    if result is not None:
+        ctx["age"] = clock.now() - result.when
+    if st.connector is not None and not (job is not None and not job.finished):
+        ctx.update(_schedule_context(st, run))
+        newest = next((k for k in ctx["kept"] if not k.problem), None)
+        if result is None and run is runs_mod.INACTIVE_USERS and newest is not None and newest.days in runs_mod.INACTIVE_WINDOWS:
+            ctx["days"] = newest.days     # the window its last kept run read: one click runs the same again
+    return ctx
+
+
+def _panel(request: Request, run, job=None, announce: bool = False, notice: str = "",
+           notice_problem: bool = False) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, _PANEL, _panel_context(app_state(request), run, job, announce, notice,
+                                                                      notice_problem))
 
 
 @router.get("", response_class=HTMLResponse)
@@ -78,7 +123,9 @@ async def runs_page(request: Request) -> HTMLResponse:
     """Every run, each with its last result on this connector or its button. Loading the page reads nothing."""
     st = app_state(request)
     panels = [_panel_context(st, run, _job_of(st, run)) for run in runs_mod.RUNS]
-    return TEMPLATES.TemplateResponse(request, _PAGE, {"connected": st.connector is not None, "panels": panels})
+    set_aside = schedule_stores(st)[0].set_aside if st.connector is not None else None
+    return TEMPLATES.TemplateResponse(request, _PAGE, {"connected": st.connector is not None, "panels": panels,
+                                                       "set_aside": set_aside})
 
 
 @router.get("/status", response_class=HTMLResponse)
@@ -122,6 +169,8 @@ async def start_run(request: Request, run: Annotated[str, Form()] = "", days: An
 
 
 def _why(exc: Exception) -> str:
+    if isinstance(exc, NoRowUnsaid):
+        return _NO_ROW_UNSAID
     if isinstance(exc, Incomplete):
         return _NO_TABLE
     if isinstance(exc, GAMError) and exc.kind is GAMErrorKind.TIMEOUT:
@@ -148,7 +197,8 @@ async def _run(job, st, conn, run, days: int) -> None:
                 continue
             try:
                 rows, unread = await conn.audit_read(runs_mod.step_command(run, step), argv, step.key_column,
-                                                     ok_rcs=step.ok_rcs, partial_rcs=step.partial_rcs)
+                                                     ok_rcs=step.ok_rcs, partial_rcs=step.partial_rcs,
+                                                     empty_rcs=step.empty_rcs)
             except Exception as exc:  # noqa: BLE001 — a failed step is unknown, said in words; the run goes on
                 why = _why(exc)
                 reads.append(runs_mod.StepRead(step, runs_mod.UNKNOWN, why, detail=gam_detail(exc)))
@@ -167,6 +217,12 @@ async def _run(job, st, conn, run, days: int) -> None:
                                     clock.now(), days if run is runs_mod.INACTIVE_USERS else 0)
         if st.connector is conn:
             st.audit_runs[run.key] = result
+            # A scheduled run (F7a): compared with its last kept run, then kept, on the domain it read. Off the event loop:
+            # a domain's tables can be tens of thousands of rows.
+            store, kept = schedule_stores(st)
+            after = await asyncio.to_thread(sched.after_run, store, kept, conn.domain, run.key, result.findings,
+                                            result.days, result.answered, time.time())
+            result.changes, result.kept_note, result.kept_problem = after.changes, after.note, after.problem
         else:
             job.error = _NOT_KEPT
     except Exception as exc:  # noqa: BLE001 — surface any failure in the panel
@@ -197,3 +253,89 @@ async def table_csv(request: Request, run: str = "", finding: str = "") -> Respo
     # Both keys are the run's own (run_named, RunResult.finding), so the name holds only filename-safe characters.
     name = f"{found.key}-{table.key}".replace("_", "-")
     return Response(out.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}.csv"'})
+
+
+def _kept_changed(st, run) -> None:
+    """What the run on screen said of its keep ("Kept on this Mac, as one of the last 5…") no longer holds once its schedule
+    or its kept runs change: dropped, so the panel says only what the notice says now."""
+    result = st.audit_runs.get(run.key)
+    if result is not None:
+        result.kept_note, result.kept_problem = "", False
+
+
+def _keep_count(value) -> Optional[int]:
+    """How many runs to keep, as typed: blank is the default; anything but a whole number from 1 to the cap is None."""
+    text = str(value or "").strip()
+    if not text:
+        return sched.KEEP_DEFAULT
+    try:
+        keep = int(text)
+    except ValueError:
+        return None
+    return keep if 1 <= keep <= sched.KEEP_CAP else None
+
+
+def _runs_word(n: int) -> str:
+    return f"{n} kept run{'' if n == 1 else 's'}".capitalize()
+
+
+@router.post("/schedule", response_class=HTMLResponse)
+async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cadence: Annotated[str, Form()] = "",
+                        keep: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Give a run a cadence on the active domain, change it, or (no cadence) stop scheduling it, which deletes what it
+    kept. Local: nothing reaches Google, and nothing runs."""
+    st = app_state(request)
+    found = runs_mod.run_named(run)
+    if found is None:
+        return error_partial(request, "That isn't one of the audit runs.")
+    if st.connector is None:
+        return _panel(request, found)
+    cadence = cadence.strip().lower()
+    count = _keep_count(keep)
+    if cadence and cadence not in sched.CADENCES:
+        return _panel(request, found, notice="Pick daily, weekly, monthly or not scheduled.", notice_problem=True)
+    if cadence and count is None:
+        return _panel(request, found, notice=f"Keep a whole number of runs, from 1 to {sched.KEEP_CAP}.",
+                      notice_problem=True)
+    store, kept = schedule_stores(st)
+    domain = st.connector.domain
+    try:
+        saved, gone = await asyncio.to_thread(sched.set_schedule, store, kept, domain, found.key, cadence,
+                                              count or sched.KEEP_DEFAULT, time.time())
+    except sched.StoreProblem as problem:
+        return _panel(request, found, notice=str(problem), notice_problem=True)
+    except OSError as exc:
+        logger.warning("saving a schedule failed", exc_info=exc)
+        return _panel(request, found, notice="The schedule couldn't be saved. Check the disk has room.", notice_problem=True)
+    _kept_changed(st, found)
+    if saved is None:
+        notice = "Not scheduled."
+    else:
+        notice = (f"Saved: {sched.CADENCE_WORDS[saved.cadence].lower()}, keeping the last {saved.keep} "
+                  f"run{'' if saved.keep == 1 else 's'}.")
+    if gone is None:   # what it keeps now (nothing when unscheduled, else its newest ``keep``) couldn't all be made so
+        return _panel(request, found, notice=notice + " Its kept runs couldn't all be deleted: Delete them below, or try "
+                                                      "again.", notice_problem=True)
+    if gone:
+        notice += f" {_runs_word(gone)} {'were' if gone != 1 else 'was'} deleted from this Mac."
+    return _panel(request, found, notice=notice)
+
+
+@router.post("/kept/delete", response_class=HTMLResponse)
+async def delete_kept(request: Request, run: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Delete every run kept on this Mac for this run on the active domain. Its schedule stays. Local: no GAM."""
+    st = app_state(request)
+    found = runs_mod.run_named(run)
+    if found is None:
+        return error_partial(request, "That isn't one of the audit runs.")
+    if st.connector is None:
+        return _panel(request, found)
+    try:
+        gone = await asyncio.to_thread(sched.delete_kept, schedule_stores(st)[1], st.connector.domain, found.key)
+        _kept_changed(st, found)
+    except sched.StoreProblem as problem:
+        return _panel(request, found, notice=str(problem), notice_problem=True)
+    except OSError as exc:
+        logger.warning("deleting kept runs failed", exc_info=exc)
+        return _panel(request, found, notice="The kept runs couldn't all be deleted. Try again.", notice_problem=True)
+    return _panel(request, found, notice=f"Deleted {_runs_word(gone)} from this Mac." if gone else "Nothing was kept.")

@@ -110,6 +110,11 @@ _ONE_ACCOUNT_WARNING_RCS = (56, 73)
 PER_USER_RCS = (0, 50, 51, 60, 73)   # phishing.PER_USER_EXIT_CODES: read the lines; any other, the read says so
 
 
+class NoRowUnsaid(Incomplete):
+    """An audit read wrote its titles and no row, at an exit that isn't GAM's way of saying none (``empty_rcs``): a read
+    that skipped the admin silently (a token Google refused) looks the same, so it is unknown, never "none"."""
+
+
 def _answered(out: str, what: str, check: str) -> str:
     """A read whose CSV header GAM prints even when nothing matches. With no output at all GAM answered nothing (a refused
     token refresh exits 0 without a word), which must never read as none: the read raises Incomplete instead."""
@@ -1047,14 +1052,17 @@ class GAMConnector(Connector):
         return out
 
     async def audit_read(self, command: str, argv: List[str], key_column: str, ok_rcs: Sequence[int] = (0,),
-                         partial_rcs: Sequence[int] = ()) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
+                         partial_rcs: Sequence[int] = (), empty_rcs: Optional[Sequence[int]] = None,
+                         ) -> Tuple[List[Dict[str, Any]], Tuple[str, ...]]:
         """One audit-run step's read (plan F3): its rows, and the accounts GAM named as unread. Recorded as a ``read`` of origin
         ``audit_run`` holding ``command`` (the run and step), the domain and ``rows`` (and ``partial`` when GAM skipped
         accounts), or ``error`` when it failed or was cancelled: never the output. Only a ``print`` read without ``todrive``
         runs here, so this can't become a write path. An exit in ``ok_rcs`` is the whole answer (60 is GAM's "none"); one in
         ``partial_rcs`` keeps the rows and names who wasn't read (entityUnknownWarning's "User: <u>, Does not exist", "…,
         Service not applicable"); any other raises, and so does output without the step's table (titles naming
-        ``key_column``): GAM writes the titles even with no row, so a missing table is never "none" (invariant 10). Parsed
+        ``key_column``): GAM writes the titles even with no row, so a missing table is never "none" (invariant 10). With
+        ``empty_rcs``, no row at all is an answer only at one of those exits (GAM's own "none"); at any other it raises
+        ``NoRowUnsaid``: a read that skipped silently writes the same titles alone. Parsed
         off the event loop: a large domain's directory is tens of thousands of rows."""
         # GAM reads an argument lowercased with its underscores dropped (getArgument), so `to_drive` and `ToDrive` are todrive.
         if argv[:1] != ["print"] or carries_todrive(argv):
@@ -1074,6 +1082,8 @@ class GAMConnector(Connector):
                     raise Incomplete(f"GAM exited {res.returncode} without naming the account it couldn't read")
                 extra["partial"] = True
             records = await asyncio.to_thread(parse_records, res.stdout)
+            if not records and empty_rcs is not None and res.returncode not in empty_rcs:
+                raise NoRowUnsaid(f"GAM wrote no row and exited {res.returncode}, which isn't how it says there are none")
         except BaseException as exc:   # a cancelled read is recorded too, then the cancel finishes
             error = INTERRUPTED if isinstance(exc, asyncio.CancelledError) else str(exc)
             self.audit.record("read", target="", argv=argv, ok=False, extra={**extra, "error": error}, domain=self.domain)

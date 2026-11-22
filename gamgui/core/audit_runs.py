@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .connected_apps import Reach, describe, grants_from, looks_like_ai
 from .gam.commands import CACHE_FIELDS, COURSE_STATES, GAMCommands, is_one_address
@@ -50,6 +50,7 @@ class Step:
     key_column: str  # the column the step's joins read: a table without it isn't the table asked for
     ok_rcs: Tuple[int, ...] = (0,)          # exits that are the step's whole answer
     partial_rcs: Tuple[int, ...] = ()       # exits whose rows stand, with accounts GAM named as unread
+    empty_rcs: Optional[Tuple[int, ...]] = None   # exits at which no row at all is an answer; None: any of ok_rcs
 
 
 @dataclass(frozen=True)
@@ -62,8 +63,12 @@ class Run:
 
 DIRECTORY = Step("directory", "The directory, suspended accounts included", "primaryEmail")
 LICENSES = Step("licenses", "Every license seat", "userId")
-DRIVES = Step("drives", "Every shared drive", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC))
-DRIVE_ACLS = Step("drive_acls", "Every shared drive's members", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC))
+# No row is "no drive" only with GAM's 60: a service-account token Google refuses silently (REFRESH_PERM_ERRORS) makes both
+# reads skip the admin, titles alone, exit 0 (buildGAPIServiceObject -> handleOAuthTokenError, then `continue` before the
+# none check, printShowSharedDrives / printShowSharedDriveACLs at the 7.52.04 tag).
+DRIVES = Step("drives", "Every shared drive", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC), empty_rcs=(NO_ENTITIES_FOUND_RC,))
+DRIVE_ACLS = Step("drive_acls", "Every shared drive's members", "id", ok_rcs=(0, NO_ENTITIES_FOUND_RC),
+                  empty_rcs=(NO_ENTITIES_FOUND_RC,))
 DOMAINS = Step("domains", "The domain's own domains and aliases", "domainName")
 COURSES = Step("courses", "Every Classroom class, with its counts", "id")
 ADMINS = Step("admins", "Every admin role, a group's members included", "roleAssignmentId")
@@ -123,6 +128,9 @@ class Finding:
     note: str = ""
     links: bool = False   # the first column is an account's address in the directory: it opens the person
     partial: bool = False  # known, but holding something no read could tell (an admin GAM couldn't name or read)
+    # What a change since an earlier run can't tell, said beside it (plan F7a): a read GAM can cut short without a word
+    # makes a row that's gone, or a count that fell, look the same as one it couldn't read this time.
+    change_note: str = ""
 
 
 @dataclass
@@ -133,10 +141,20 @@ class RunResult:
     tables: Dict[str, list]   # each step's records, kept for the run (the directory as GAMUser, the rest as rows)
     when: float
     days: int = 0             # Inactive users: the window it was read with
+    # A scheduled run (plan F7a): each table against the last kept run that read it (core/schedules.Change, by finding
+    # key), and what happened to this run's keep, in words (``kept_problem``: that it went wrong).
+    changes: Dict[str, Any] = field(default_factory=dict)
+    kept_note: str = ""
+    kept_problem: bool = False
 
     @property
     def complete(self) -> bool:
         return all(r.state == READ for r in self.reads) and not any(f.partial for f in self.findings)
+
+    @property
+    def answered(self) -> bool:
+        """Every step has an answer, at most with accounts GAM named as unread: the run counts for its schedule (F7a)."""
+        return all(r.state in (READ, PARTIAL) for r in self.reads)
 
     def finding(self, key: str) -> Optional[Finding]:
         return next((f for f in self.findings if f.key == key), None)
@@ -318,21 +336,23 @@ def license_findings(seats: List[dict], users: Optional[List[GAMUser]], reads: S
     gam_note = ("GAM passes over a product Google won't let it read without saying so: a product missing here may be one "
                 "it couldn't read. Check the counts against the Admin console (Billing → Licenses).")
     seats_word = f"{total} seat{'' if total == 1 else 's'}"
+    unsure = ("GAM passes over a product it can't read without saying so, so a seat gone since then may be one it couldn't "
+              "read this time.")
     return [
         Finding("per_sku", "Seats per license",
                 f"{seats_word} across {len(per_sku)} license{'' if len(per_sku) == 1 else 's'}.",
-                PER_SKU_COLUMNS, sku_rows, known=not seats_why, why=seats_why,
+                PER_SKU_COLUMNS, sku_rows, known=not seats_why, why=seats_why, change_note=unsure,
                 note=gam_note + ("" if joined else " The directory couldn't be read, so the last two columns are unknown.")),
         Finding("on_suspended", "Seats on suspended accounts",
                 (f"{n_susp} seat{'' if n_susp == 1 else 's'} {'is' if n_susp == 1 else 'are'} held by a suspended account."
                  if n_susp else f"No suspended account holds any of the {seats_word} read."),
-                SUSPENDED_SEAT_COLUMNS, suspended_rows, known=not join_why, why=join_why, links=True,
+                SUSPENDED_SEAT_COLUMNS, suspended_rows, known=not join_why, why=join_why, links=True, change_note=unsure,
                 note=("A suspended account keeps its seat until the license is removed. Remove these licenses… reads the "
                       "seats and the directory again before anything is removed. " + skipped)),
         Finding("not_in_directory", "Seats on an address the directory read doesn't list",
                 (f"{n_stray} seat{'' if n_stray == 1 else 's'} {'is' if n_stray == 1 else 'are'} on an address the directory "
                  "read didn't list." if n_stray else "Every seat read is on an account the directory read listed."),
-                STRAY_SEAT_COLUMNS, stray_rows, known=not join_why, why=join_why,
+                STRAY_SEAT_COLUMNS, stray_rows, known=not join_why, why=join_why, change_note=unsure,
                 note="An account made, renamed or deleted between the two reads shows here too. " + skipped),
     ]
 
@@ -428,20 +448,26 @@ def shared_drive_findings(drives: List[dict], acl_rows: List[dict], domains: Opt
     unread = sorted(((str(d.get("name") or ""), str(d.get("id") or "")) for d in drives if str(d.get("id") or "") not in read_ids),
                     key=lambda r: r[0].lower())
     n, n_orphans, n_unread = len(rows), len(orphans), len(unread)
+    # A drive whose members weren't read (or whose listing is unknown) is missing from both tables below: each holds
+    # something no read could tell, so neither is whole, and neither is compared with an earlier run as if it were.
+    left_out = bool(unread) or bool(unread_why)
+    left_out_note = (f" It leaves out the {n_unread} drive{'' if n_unread == 1 else 's'} whose members weren't read, listed "
+                     "below." if unread else " Whether GAM passed over a drive can't be told: the list of drives wasn't read."
+                     if unread_why else "")
     return [
         Finding("permissions", "Every drive's members", (f"{n} member{'' if n == 1 else 's'} across {len(by_drive)} drive"
                 f"{'' if len(by_drive) == 1 else 's'}; {outside} {'is' if outside == 1 else 'are'} from outside the domain, "
                 "listed first."),
-                PERMISSION_COLUMNS, rows, known=not perms_why, why=perms_why,
+                PERMISSION_COLUMNS, rows, known=not perms_why, why=perms_why, partial=left_out,
                 note=("A shared drive's members are users and groups only. Outside the domain means an address not in one of "
                       "the domain's own domains or aliases. Files inside a drive can be shared further (with anyone with the "
-                      "link, say): this run reads each drive's members, not its files' sharing.")),
+                      "link, say): this run reads each drive's members, not its files' sharing." + left_out_note)),
         Finding("orphaned", "Drives no active organizer looks after",
                 (f"{n_orphans} drive{'' if n_orphans == 1 else 's'} {'has' if n_orphans == 1 else 'have'} no organizer who is "
                  "active here." if n_orphans else "Every drive read has an active organizer, or a group as one."),
-                ORPHAN_COLUMNS, orphans, known=not orphan_why, why=orphan_why,
+                ORPHAN_COLUMNS, orphans, known=not orphan_why, why=orphan_why, partial=left_out,
                 note=("Being offboarded means an offboarding started in GamGUI since it opened. A group organizer isn't "
-                      "flagged: its members can't be told from here.")),
+                      "flagged: its members can't be told from here." + left_out_note)),
         Finding("unread", "Drives whose members weren't read",
                 (f"GAM listed {n_unread} drive{'' if n_unread == 1 else 's'} but didn't read {'its' if n_unread == 1 else 'their'} "
                  "members: unknown, not shared with no one." if n_unread else "GAM read every listed drive's members."),
@@ -490,6 +516,8 @@ def classroom_findings(courses: List[dict], users: Optional[List[GAMUser]], read
     return [
         Finding("courses", "Every class", f"{n} class{'' if n == 1 else 'es'} in every state.", COURSE_COLUMNS, every,
                 known=not courses_why, why=courses_why,
+                change_note=("GAM counts a roster Google won't return as 0 without a word, so a class whose count fell to 0 "
+                             "since then may be one it couldn't read this time."),
                 note=("GAM counts a class whose roster Google won't return as 0 teachers and 0 students, without a word, so a "
                       "0 isn't an empty class. Not yet checked on a school domain.")),
         Finding("owned_by_suspended", "Classes owned by a suspended account",

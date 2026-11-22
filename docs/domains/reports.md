@@ -186,7 +186,10 @@ A step that reads for what an earlier step found (`step_argv(step, tables)` is N
   the domain (an address not in `print domains`' own domains or aliases) and claims nothing about "anyone with the link"
   or a whole domain: that is the sharing of files inside a drive, which it doesn't read (review of #172, 2026-11-21; the
   first fixture invented such members). printShowSharedDriveACLs drops a drive whose permissions Google refused WITHOUT a
-  word or a code, so a listed drive missing from the ACL table goes in "Drives whose members weren't read". A drive is
+  word or a code, so a listed drive missing from the ACL table goes in "Drives whose members weren't read" (every drive
+  dropped is GAM's 60, as for none). No row is "no drive" only at 60 (`Step.empty_rcs`): a service-account token Google
+  refuses silently (`REFRESH_PERM_ERRORS`) writes the titles alone at exit 0, and `audit_read` raises `NoRowUnsaid`
+  (failure-log 2026-11-21, a refused token read as no shared drive). A drive is
   flagged when every organizer is a user who is suspended, gone from the directory (or `deleted`), or being offboarded
   here ("leaving" = a key of `AppState.offboard_jobs`, an offboarding started since GamGUI opened); a group organizer isn't
   flagged; a drive with no organizer is.
@@ -207,3 +210,52 @@ A step that reads for what an earlier step found (`step_argv(step, tables)` is N
   `print tokens users` (unknown or `tokens_gone/<u>` 56, `denied/tokens` 12); `print courses … show all countsonly`
   (counts from course_participants.tsv; `roster_gone/<id>` the silent 0).
 - **Not run on a real domain yet**, none of them; the Classroom run can't be until an Education domain is there.
+
+### Schedules (plan F7a)
+A run can be given a cadence per domain: it then says when it's due, on Home and on its own panel. **Nothing runs on its
+own**: there is no background runner, and the run is the operator's Run button, recorded as ever (`read`, origin
+`audit_run`). No write, no sensitive read, no Sheet export.
+- **Files.** `core/schedules.py` (cadence, due, `ScheduleStore`, `KeptRuns`, `changes_since`, `after_run`), the panel's
+  `/reports/runs/schedule` and `/reports/runs/kept/delete` (both LOCAL_ONLY), `_audit_run_schedule.html`,
+  `_audit_run_changes.html`, Home's "Scheduled audit runs" (`routes/home._schedules`), Setup's Remove
+  (`routes/setup._forget_schedules`), `tests/test_schedules.py`.
+- **Cadence and due.** `daily`, `weekly`, `monthly`. A run *counts* when every step has an answer, `partial` included
+  (`RunResult.answered`); stopped, or a step unknown, doesn't. Due now when none has counted since the cadence was set;
+  else due from the local day 1 day, 7 days or one calendar month (clamped to the month's last day) after the day it last
+  counted. Changing the cadence keeps when it last counted. Counting records this run's time, never a later one kept: a
+  time still to come (the clock was ahead) makes it due now and says to check the Mac's clock. Words: `<Title> is due` + `<Cadence>; no run of it has read every
+  step since it was scheduled.` / `<Cadence>; its last run that read every step was on <Wed 18 Nov 2026>.`; not due:
+  `<Cadence>, next due <day>`.
+- **Kept runs.** Only a scheduled run that counts is kept: its findings (what the panel shows, never the steps' raw reads),
+  in `<app data>/schedules/kept/<sha256(domain)[:24]>/<run>/<seq>-<hex>.jsonl`, a header line then one line of rows per
+  kept table, written under a temp name and renamed. Named by a sequence, so the newest is the last kept whatever the
+  clock said (a run kept with the clock a year ahead once sorted first forever, and survived prunes). `keep` per run: default 5, 1 to 12; a table over 50,000 rows isn't
+  kept (its header says so). The oldest beyond `keep` go after each kept run and when the count is lowered; all go when the
+  run is unscheduled, on Delete the kept runs, or when Setup removes the domain (unless another spelling is still listed).
+- **Changed since.** Each table against the newest earlier kept run that holds it whole (known, not partial, kept) with the
+  same window (`days`; 0 for every run but Inactive users). A kept run that can't be read, met before that one, stops the
+  walk and says so: it may be the run to compare with. A run with any step unanswered compares nothing: a table built on
+  that step can hold "unknown" cells without a partial flag (Seats per license with the directory unread). Rows compared
+  whole, as a multiset: a row with any cell changed is gone and new. A table unknown or partial now, or no earlier run to
+  compare with, says why and is never "no change". Each list draws 100 rows. Shared drive members and unlooked-after
+  drives leave out a drive whose members GAM dropped without a word, so with any such drive (or the drive list unknown)
+  both are `partial` and never compared (review of #176: a dropped drive's members read as "gone"). GAM's other silent
+  skips can't be seen at all, so the licence tables and Classroom's class list carry `Finding.change_note`, shown beside
+  every change: a gone seat, or a count fallen to 0, may be one it couldn't read this time.
+- **Store rules.** `schedules.json` is read again on every look and change, its folder held by a descriptor opened
+  `O_NOFOLLOW | O_DIRECTORY` (a linked `schedules/` is refused, never followed), the file opened `O_NOFOLLOW | O_NONBLOCK`
+  and read only if it is a regular file of at most 1 MB (a FIFO there once would have hung the page), its temp file and
+  rename made in that held folder. A kept run that isn't a regular file is listed as "It isn't a file." No file is the empty store; a read the disk
+  failed is unknown, said (Home never says "Nothing is due" then) and never saved over; a file that isn't a store (not
+  UTF-8, not JSON, not this shape) is moved to `schedules.json.unreadable-<time>` before an empty one starts, said on Home
+  and the runs page; one that can't be moved stays, unknown, never saved over. A stored time must be finite and before
+  1e11 seconds (a date can be made of it), and a kept window an int from 0 to 10,000: else not a store / not whole, never a
+  crashed page. A kept run that can't be read is listed as such, never dropped. A link anywhere from the schedules folder
+  down to a run's folder is refused (`StoreProblem`), never followed. One lock (`_KEEP_LOCK`) spans "still scheduled? keep,
+  prune, count" in `after_run` and `set_schedule`, `delete_kept`, `forget_domain`: a run finishing as it is unscheduled, or
+  its domain removed, keeps nothing. It is per process, like the other stores' locks.
+- **Per domain.** Everything is keyed by the active connector's domain, lowercased: a switch shows that domain's. A run
+  that ends after a switch isn't kept, as before. The poll of a running run reads no schedule. Saving a schedule or
+  deleting the kept runs drops what the run on screen said of its keep; the notice says what happened instead.
+- **Not run on a real domain yet**, and not seen in the app window (WKWebView): headless Chrome only. Its Delete asks
+  through `hx-confirm`, as Stop does.

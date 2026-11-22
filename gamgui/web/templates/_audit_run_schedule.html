@@ -1,0 +1,36 @@
+{#- Plan F7a: a run's schedule on the active domain, and the runs it keeps on this Mac (core/schedules.py). A schedule only
+    says when the run is due; it never runs on its own. Open after a save or a delete, so focus lands back on the button
+    pressed and its result is in view. -#}
+<details class="mt-4 border-t border-brand-gray/30 pt-3"{% if notice or kept_problem %} open{% endif %}>
+  <summary class="cursor-pointer text-sm font-medium text-brand-blueink hover:text-brand-black">Schedule: {{ (cadence_words[schedule.cadence] | lower) if schedule else "not scheduled" }}{% if kept %} · {{ kept | length }} kept on this Mac{% endif %}<span class="sr-only">, {{ run.title }}</span></summary>
+  <p class="mt-2 text-xs text-brand-blueink">A schedule says when this run is due on {{ domain }}, here and on Home. It never runs on its own: you run it, with the button above. A scheduled run that reads every step keeps its tables on this Mac, so the next run can say what changed since. They hold your domain's data, in a folder only your Mac account can open, until you lower the count, stop scheduling the run, delete them here, or remove {{ domain }} on Setup.</p>
+  <form class="mt-3 flex flex-wrap items-end gap-3" hx-post="/reports/runs/schedule" hx-target="#run-{{ run.key }}" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="run" value="{{ run.key }}" />
+    <label class="text-sm text-brand-blueink">Due
+      <select name="cadence" class="ml-1 rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30">
+        <option value=""{% if not schedule %} selected{% endif %}>Not scheduled</option>
+        {% for c in cadences %}<option value="{{ c }}"{% if schedule and schedule.cadence == c %} selected{% endif %}>{{ cadence_words[c] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="text-sm text-brand-blueink">Keep the last
+      <input type="number" name="keep" min="1" max="{{ keep_cap }}" step="1" value="{{ schedule.keep if schedule else keep_default }}" class="mx-1 w-16 rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />runs
+    </label>
+    <button type="submit" class="inline-flex items-center rounded-lg border border-brand-gray/60 bg-brand-white px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-paper transition-colors">Save schedule<span class="sr-only"> for {{ run.title }}</span></button>
+  </form>
+  <p class="mt-1 text-xs text-brand-grayink">Up to {{ keep_cap }} runs. Not scheduled keeps none: saving it deletes the runs kept.</p>
+  {% if kept_problem %}<p class="mt-2 text-sm text-amber-800">{{ kept_problem }}</p>{% endif %}
+  {% if kept %}
+  <h3 class="mt-3 text-sm font-medium text-brand-black">Kept on this Mac</h3>
+  <ul class="mt-1 space-y-0.5 text-sm text-brand-black">
+    {% for k in kept %}
+    <li>{% if k.problem %}<span class="text-amber-800">A kept run that can't be read. {{ k.problem }}</span>
+      {%- else %}{{ when_words(k.when) }}{% if k.days %}, a {{ k.days }}-day window{% endif %}: <span class="text-brand-blueink">{% for t in k.tables %}{{ t.title }} {{ t.count if t.known else "unknown" }}{% if t.known and not t.kept %} (too many rows to keep){% endif %}{{ "; " if not loop.last }}{% endfor %}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <form class="mt-2" hx-post="/reports/runs/kept/delete" hx-target="#run-{{ run.key }}" hx-swap="outerHTML" hx-disabled-elt="find button"
+        hx-confirm="Delete the {{ kept | length }} run{{ 's' if kept | length != 1 }} of {{ run.title }} kept on this Mac? The next run then has nothing to compare with.">
+    <input type="hidden" name="run" value="{{ run.key }}" />
+    <button type="submit" class="inline-flex items-center rounded-lg border border-red-700 bg-brand-white px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors">Delete the kept runs<span class="sr-only"> of {{ run.title }}</span></button>
+  </form>
+  {% endif %}
+</details>

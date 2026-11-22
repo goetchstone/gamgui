@@ -21,9 +21,12 @@ from keyring.errors import KeyringError
 
 from ...core.audit import AuditLog
 from ...core.connectors.gam_connector import GAMConnector
+from ...core.schedules import StoreProblem
+from ...core.schedules import forget_domain as forget_schedules
 from ...core.setup import SetupService, VerifyResult
 from ..jobs import ONE_STEP, UNSTOPPABLE
 from ..server import SCREENS, TEMPLATES
+from ._common import schedule_stores
 
 logger = logging.getLogger(__name__)
 _UNREADABLE_FOLDER = "That folder could not be read — check the path and try again."
@@ -270,6 +273,24 @@ async def _verify_and_activate(request: Request, domain: str, admin: str, switch
     )
 
 
+async def _forget_schedules(st, domain: str, active: str) -> str:
+    """Plan F7a: a domain removed from the list takes its schedules and the runs they kept on this Mac (its data at rest)
+    with it, unless another spelling of it is still listed or active. What went, in words, to add to the notice."""
+    if any(d and d.lower() == domain.lower() for d in (*st.vault.list_domains(), active)):
+        return ""
+    store, kept = schedule_stores(st)
+    try:
+        schedules, runs = await asyncio.to_thread(forget_schedules, store, kept, domain)
+    except (StoreProblem, OSError) as exc:
+        logger.warning("deleting a removed domain's schedules failed", exc_info=exc)
+        return (" Its schedules and the runs they kept on this Mac couldn't all be deleted: what is left is in "
+                f"{store.root}.")
+    if not runs and not schedules:
+        return ""
+    return (f" Its {schedules} schedule{'' if schedules == 1 else 's'} and {runs} kept run{'' if runs == 1 else 's'} "
+            "on this Mac were deleted.")
+
+
 @router.post("/remove", response_class=HTMLResponse)
 async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLResponse:
     """Delete a listed, inactive domain's credentials from the Keychain (``SetupService.remove_domain``)
@@ -284,7 +305,7 @@ async def remove(request: Request, remove: Annotated[str, Form()] = "") -> HTMLR
     try:
         # Keychain deletes and the case probe are synchronous: off the event loop.
         removal = await asyncio.to_thread(_service(request).remove_domain, domain, active, audit=audit)
-        notice = removal.message
+        notice = removal.message + await _forget_schedules(st, domain, active)
     except ValueError as exc:
         error = str(exc)
     except Exception as exc:  # noqa: BLE001 — a refused or locked Keychain: the items may remain

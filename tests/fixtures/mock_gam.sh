@@ -2838,9 +2838,13 @@ fi
 # (60). GAM_MOCK_STATE/denied/drives is drives.list refused: entityActionFailedWarning, the titles alone, exit 50.
 # GAM_MOCK_STATE/acl_dropped/<drive id> is a drive whose permissions.list Google refused: printShowSharedDriveACLs passes
 # fileNotFound, forbidden, insufficient*Permissions, internalError, unknownError and invalid WITHOUT a word or a code, so
-# the drive is simply missing from the table, exit 0.
+# the drive is simply missing from the table, exit 0; with every drive dropped, the table is empty and GAM sets 60 as for
+# none. GAM_MOCK_STATE/drive_token_silent is a service-account token Google refuses with one of REFRESH_PERM_ERRORS:
+# buildGAPIServiceObject -> handleOAuthTokenError(softErrors) returns None with no word, the loop `continue`s before the
+# none check, so both reads write their titles alone and exit 0 (printShowSharedDrives, printShowSharedDriveACLs).
 drives_admin() { printf 'admin@example.com'; }
 drives_refused() {  # <titles>
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_token_silent" ]; then printf '%s\n' "$1"; exit 0; fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/drives" ]; then
     printf 'User: %s, Shared Drive: , Print Failed: The user does not have sufficient permissions\n' "$(drives_admin)" 1>&2
     printf '%s\n' "$1"; exit 50
@@ -2863,10 +2867,12 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddriveacls" ]; then
   drives_refused 'User,id,name,createdTime,JSON'
   printf 'User,id,name,createdTime,JSON\n'
   TAB=$(printf '\t')
+  sd_wrote=""
   while IFS= read -r record || [ -n "$record" ]; do
     [ -n "$record" ] || continue
     sd_id=$(json_text id "$record"); sd_name=$(json_text name "$record"); sd_made=$(json_text createdTime "$record")
     if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/acl_dropped/$sd_id" ]; then continue; fi
+    sd_wrote=1
     if ! grep -q "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv"; then
       gam_row "$(drives_admin)" "$sd_id" "$sd_name" "$sd_made" '{}'   # shownopermissionsdrives true: the drive, no permission
       continue
@@ -2875,6 +2881,7 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddriveacls" ]; then
       gam_row "$(drives_admin)" "$sd_id" "$sd_name" "$sd_made" "{\"permission\": $perm}"
     done
   done < "$GAM_MOCK_FIXTURES/shared_drives.json"
+  [ -n "$sd_wrote" ] || exit 60      # every drive dropped: matchFeed empty, NO_ENTITIES_FOUND_RC, as for none
   exit 0
 fi
 
