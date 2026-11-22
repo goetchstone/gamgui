@@ -374,7 +374,11 @@ DEVICES_SCOPE = ("https://www.googleapis.com/auth/cloud-identity.devices", "The 
 # Reports' "Google's alerts" (roadmap 3.1) reads the Alert Center through the service account: offered, never verified, so an
 # install without it stays connected and only that read is refused (gamlib glapi `_SVCACCT_SCOPES`, alertcenter).
 ALERTS_SCOPE = ("https://www.googleapis.com/auth/apps.alerts", "Google's alerts (Reports)")
-OPTIONAL_DWD_SCOPES = (DEVICES_SCOPE, ALERTS_SCOPE)
+# A read exported to a Google Sheet (plan F4): GAM makes the file with Drive, then finishes it as a Sheet through the Sheets API
+# as the service account (gamlib glapi `_SVCACCT_SCOPES`, "Sheets API"). Offered, never verified: only that export needs it, and
+# its preview checks it (core/sheet_export.py). In the link so following Setup's link (it overwrites the client's list) keeps it.
+SHEETS_SCOPE = ("https://www.googleapis.com/auth/spreadsheets", "Export a read to a Google Sheet (Builder)")
+OPTIONAL_DWD_SCOPES = (DEVICES_SCOPE, ALERTS_SCOPE, SHEETS_SCOPE)
 
 # Offboarding's sign-out (`deprovision … signout`, `signout`) calls the Directory API with the
 # ADMIN token (oauth2.txt), not the service account: in GAM's tables this is a client-access scope
@@ -798,7 +802,7 @@ class SetupService:
         except GAMError as exc:
             # A failing scope or a rejected key is an answer, not a crash: GAM exits with its PASS/FAIL
             # rows on stdout (and, for a scope, the Admin-console link). Read it — still refusing to connect.
-            if exc.exit_code in CHECK_ANSWER_RCS and _parse_check(exc.stdout):
+            if exc.exit_code in CHECK_ANSWER_RCS and parse_check(exc.stdout):
                 return self._with_every_scope(_check_result(exc.stdout, exited_ok=False), domain)
             return VerifyResult(ok=False, summary=exc.message, raw=exc.stderr)
         return self._with_every_scope(_check_result(out), domain)
@@ -823,7 +827,7 @@ CHECK_ANSWER_RCS = (SCOPES_NOT_AUTHORIZED_RC, OAUTH2SERVICE_JSON_REQUIRED_RC)
 def _check_result(out: str, exited_ok: bool = True) -> VerifyResult:
     """A :class:`VerifyResult` from `check serviceaccount`'s stdout. It passes only on a clean exit
     whose every row is PASS; otherwise it names how many scopes failed and carries GAM's link."""
-    lines = _parse_check(out)
+    lines = parse_check(out)
     up = out.upper()
     failed = (not exited_ok) or ("FAILED" in up) or ("DISABLED!" in up) or any(s == "FAIL" for _, s in lines)
     ok = bool(lines) and not failed
@@ -872,7 +876,7 @@ _STATUS_RE = re.compile(r"\b(PASS|FAIL)\b")
 _AUTH_URL_RE = re.compile(r"https://(?:gam-shortn\.appspot\.com|admin\.google\.com)/\S+")
 
 
-def _parse_check(stdout: str) -> List[Tuple[str, str]]:
+def parse_check(stdout: str) -> List[Tuple[str, str]]:
     """Pull (label, PASS/FAIL) pairs from `gam ... check serviceaccount` output, tolerantly.
 
     Handles both ``Label: PASS`` and GAM's scope-table form ``<scope-url>   FAIL (n/m)``.

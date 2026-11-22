@@ -64,8 +64,9 @@ guarding them:
   targets, the route that applies it re-checks the posted confirmation with `guard.enforce()` before
   any write, so a POST that skips the confirm step writes nothing (a tripwire posts to every route,
   each either gated or exempt with a stated reason). By policy (`core/guard.py`) a single-target,
-  low-risk change runs on one click: a delegate, a signature, an auto-reply, a calendar share, and
-  the Builder's export of a read to a Google Sheet in a named user's Drive. An account delete needs the exact address typed on
+  low-risk change runs on one click: a delegate, a signature, an auto-reply, a calendar share. The
+  Builder's export of a read to a Google Sheet runs only from its preview (the exact command with GAM's
+  `todrive` options: a new Sheet in the connected admin's own Drive, shared with nobody). An account delete needs the exact address typed on
   every path; a confirm step that posts the page's form runs the values its preview held under a
   single-use token, so a form edited after the preview writes nothing; and the write is then
   appended to a local audit log — as failed and "interrupted" if quitting cut it off mid-call.
@@ -82,7 +83,8 @@ guarding them:
   `contactphotos`). Every other Builder read is recorded too, as `read` (the command, the domain and
   the row count, never the output), so a mailbox search or a domain-wide listing leaves a trace; reads
   stay open by design, and the reads screens make for themselves (a directory refresh, a person's
-  tabs) are not recorded. Exporting any read to a Google Sheet is audited as the write it is. Every
+  tabs) are not recorded. Exporting any read to a Google Sheet is audited as the write it is
+  (`export_to_sheet`, or `sensitive_export`), with the link GAM printed. Every
   audit record names its domain (`extra.domain`).
 - **The loopback server rejects cross-origin callers and foreign hosts.** Cookies are not
   port-scoped, so a token cookie alone would let any page on another `127.0.0.1` port drive the app;

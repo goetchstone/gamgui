@@ -15,6 +15,7 @@ import csv
 import io
 import re
 import secrets
+import shlex
 from typing import Annotated
 from urllib.parse import urlencode
 
@@ -22,11 +23,14 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core import guard as guard_mod
+from ...core import sheet_export
 from ...core.catalog import load_catalog
 from ...core.catalog.catalog import AREA_ORDER
 from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
+from ...core.gam.commands import GAMCommands, carries_todrive
 from ...core.gam.errors import GAMError
+from ...core.setup import SetupService
 from ...core.connectors.gam_connector import READ_ORIGIN_SEQUENCE
 from ...core.gam.parser import table_records
 from ...core.bulk import stop_requested
@@ -182,11 +186,14 @@ async def _render_read(request: Request, out: str, cmd, argv, target: str, tenan
         # (plan U1 — a filter over only the rendered rows once hid row 101 on), and the CSV download
         # takes it too; for a sensitive read, so does what the download's audit record names (never
         # the rows). The id lets a stale table's request tell it has been replaced.
+        # The read itself is kept too: Export to a Google Sheet… runs exactly this argv again (plan F4).
         last = app_state(request).builder_last_result = {
             "id": secrets.token_hex(6), "records": records, "gam": gam,
+            "read": {"command": cmd.id, "argv": list(argv), "target": target},
             "sensitive": {"command": cmd.id, "argv": list(argv), "target": target} if cmd.sensitive else None}
-        return TEMPLATES.TemplateResponse(request, "_records_table.html",
-                                          await _results_context(request, last, "", False, 1))
+        ctx = await _results_context(request, last, "", False, 1)
+        ctx["sheet_ok"] = cmd.supports_export   # GAM's command takes todrive: Export to a Google Sheet… beside the CSV
+        return TEMPLATES.TemplateResponse(request, "_records_table.html", ctx)
     return TEMPLATES.TemplateResponse(request, "_read_output.html", {"output": out, "gam": gam})
 
 
@@ -448,16 +455,7 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     slots, argv, target, error = await _assemble(request, cmd)
     if error:
         return error_partial(request, error)
-    if cmd.risk == RiskLevel.READ_ONLY:
-        form = await request.form()
-        if form.get("td_export"):  # a new Google Sheet instead of the in-app table — a write, audited
-            owner = str(form.get("td_user") or "").strip()
-            res = await conn.export_to_sheet(cmd, argv, owner, str(form.get("td_title") or "").strip())
-            if not res.ok:
-                return error_partial(request, "The export to a Google Sheet failed.", res.detail)
-            return TEMPLATES.TemplateResponse(request, "_export_result.html",
-                                              {"gam": _gam_str(res.preview.argv), "output": res.output,
-                                               "owner": owner or "the admin account"})
+    if cmd.risk == RiskLevel.READ_ONLY:   # a read runs from the live form; its export to a Sheet is a write of its own (/sheet)
         try:
             out = await conn.catalog_read(cmd, argv, target)
         except Exception as exc:  # noqa: BLE001
@@ -480,6 +478,114 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     if not result.ok:   # what didn't happen, in words; GAM's own line one click away (roadmap 0.4)
         return write_failed(request, f"{cmd.name} failed.", result)
     return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": cmd.name + " — done"})
+
+
+# --- export a read's table to a Google Sheet (plan F4) ------------------------------------
+
+# A curated write: GAM runs the read again with `todrive` and makes a new Sheet in the connected admin's Drive. The preview
+# holds the read's exact argv and the Sheet's name under a single-use token, keyed by the table it was made from (its id),
+# and Export runs only that, once, with `confirmed=1` (guard.enforce), through conn.export_to_sheet -> _run_write.
+_SHEET_FLOW = "builder_sheet"
+_SHEET_AGAIN = "use Export to a Google Sheet… on the table again"
+
+
+def _sheet_read(request: Request, rid: str):
+    """The retained read a Sheet export names and its catalog command, or why it can't be exported."""
+    last, why = _last_result(request, rid)
+    if last is None:
+        return None, None, why
+    read = last.get("read") or {}
+    cmd = _catalog(request).by_id(str(read.get("command") or ""))
+    if cmd is None or not cmd.supports_export:
+        return None, None, "This read can't go to a Google Sheet: GAM's command for it doesn't take todrive."
+    if carries_todrive(read.get("argv") or ()):   # catalog_read refuses one; this holds no token for one either
+        return None, None, "This read already says todrive, so it can't be exported again: build it without that word."
+    return read, cmd, ""
+
+
+def _sheet_preview_of(conn, cmd, argv) -> ChangePreview:
+    return ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=conn.sheet_owner() or "(admin Drive)",
+                         summary=f"Export {cmd.name} to a Google Sheet", risk=RiskLevel.LOW, argv=argv, meta={"cid": cmd.id})
+
+
+def _dwd_link(st, domain: str) -> str:
+    """Setup's Domain-Wide Delegation link, every scope GamGUI uses filled in, or "" when it can't be made."""
+    try:
+        return str(SetupService(st.vault, st.runner).dwd_details(domain)["auth_url"])
+    except Exception:  # noqa: BLE001 - only a link; the words say what to authorize
+        logger.warning("couldn't make the Domain-Wide Delegation link", exc_info=True)
+        return ""
+
+
+async def _sheet_page(request: Request, rid: str, error: str = "") -> HTMLResponse:
+    """What Export to a Google Sheet… runs: the read's exact `gam …` plus GAM's todrive options, whose Drive the Sheet
+    goes in, that it holds a fresh read, and the scope check (a read). Held under a token its Export button posts back,
+    unless the service account is known to lack a scope the export needs."""
+    st = app_state(request)
+    tenant, conn = st.tenant_key(), st.connector   # before the scope check reads (web/previews.py)
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    read, cmd, why = _sheet_read(request, rid)
+    if read is None:
+        return error_partial(request, why)
+    name = sheet_export.title(conn.domain, cmd.name)
+    argv = list(read["argv"]) + GAMCommands.todrive_args(name)
+    rows = len((st.builder_last_result or {}).get("records") or [])   # before the check: a switch during it drops them
+    checked = await conn.sheet_export_scopes()
+    missing = checked is not None and not all(checked.values())
+    token = "" if missing else st.previews.hold(_SHEET_FLOW, rid, (cmd.id, list(read["argv"]), name), tenant=tenant)
+    return TEMPLATES.TemplateResponse(request, "_sheet_preview.html", {
+        "cmd": cmd, "gam": "gam " + shlex.join(argv), "owner": conn.sheet_owner(), "name": name, "rid": rid,
+        "rows": rows,
+        "scopes": [(scope, what, None if checked is None else checked.get(scope)) for scope, what in sheet_export.SCOPES],
+        "scope_words": sheet_export.scope_state(checked), "dwd_link": _dwd_link(st, conn.domain) if missing else "",
+        "token": token, "error": error,
+    })
+
+
+@router.post("/sheet/preview", response_class=HTMLResponse)
+async def sheet_preview(request: Request, rid: Annotated[str, Form()] = "") -> HTMLResponse:
+    return await _sheet_page(request, rid)
+
+
+@router.post("/sheet/export", response_class=HTMLResponse)
+async def sheet_export_run(request: Request, rid: Annotated[str, Form()] = "") -> HTMLResponse:
+    """Make the Sheet the preview showed, once: the held argv, never one rebuilt from the page.
+
+    The connector is taken with the token, no await between them or from there to the export (plan F6): the token is
+    bound to the domain its preview was made on, so this connector is that domain's, GAM runs the read there, and the
+    record (``export_to_sheet``, ``sensitive_export``) names it even when a switch lands while the export runs."""
+    st = app_state(request)
+    form = await request.form()
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    token = str(form.get(TOKEN_FIELD) or "")
+    held, refusal = st.previews.take(_SHEET_FLOW, token, rid, again=_SHEET_AGAIN, what="table")
+    if refusal:
+        return error_partial(request, refusal if token else "Check what the export will run first: " + _SHEET_AGAIN + ".")
+    cid, read_argv, name = held
+    cmd = _catalog(request).by_id(cid)
+    if cmd is None or not cmd.supports_export:
+        return error_partial(request, "This read can't go to a Google Sheet: GAM's command for it doesn't take todrive.")
+    refusal = guard_mod.enforce([_sheet_preview_of(conn, cmd, read_argv + GAMCommands.todrive_args(name))], form,
+                                confirm_step=True)
+    if refusal:
+        return await _sheet_page(request, rid, error=refusal)
+    try:
+        res = await conn.export_to_sheet(cmd, read_argv, name)
+    except ValueError:   # export_to_sheet's own refusal: not a read, or one carrying todrive. Nothing ran.
+        logger.warning("a Sheet export was refused before GAM ran", exc_info=True)
+        return error_partial(request, "This read can't be exported: it isn't a read, or it already carries todrive. "
+                                      "Nothing ran.")
+    shown = sheet_export.outcome(res.ok, res.noted.get("url", ""), res.noted.get("upload", ""), res.preview.target,
+                                 "" if res.ok else res.detail)
+    return TEMPLATES.TemplateResponse(request, "_export_result.html", {
+        "outcome": shown, "name": name, "gam": "gam " + shlex.join(res.preview.argv), "detail": "" if res.ok else res.detail,
+        # _run_write's "It worked, but the audit log couldn't record it": the Sheet is made, its record isn't, and Files
+        # (which reads the log) won't list it, so the page must not say it was kept.
+        "unrecorded": res.detail if res.ok else "",
+    })
 
 
 # --- sequence --------------------------------------------------------------------------

@@ -16,7 +16,7 @@ from dataclasses import replace
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
-from ..gam.commands import GAMCommands, MessageId, Phone, build_user_query, cut_off_account
+from ..gam.commands import GAMCommands, MessageId, Phone, build_user_query, carries_todrive, cut_off_account
 from ..gam.errors import GAMError, GAMErrorKind, only_unknown_owners
 from ..gam.models import (
     CalendarACL,
@@ -65,6 +65,8 @@ from ..person_reads import (
     mobile_devices_from,
 )
 from ..gam.runner import DOMAIN_WIDE_TIMEOUT, GAMRunner
+from .. import sheet_export
+from ..setup import SCOPES_NOT_AUTHORIZED_RC, parse_check
 from .base import (
     Capability,
     ChangePreview,
@@ -1026,10 +1028,14 @@ class GAMConnector(Connector):
         Both hold the catalog id (``command``), the domain, where it was started (``origin``, one of
         ``READ_ORIGINS``) and, when the output is a table, how many rows it had (``rows``). A read that
         failed has ``error`` and no ``rows``; output that isn't a table has no ``rows`` either, since
-        "not a table" is not "no rows"."""
+        "not a table" is not "no rows". A read GAM would read as carrying `todrive`, in any spelling, is refused before it
+        runs: it would make a Sheet with no preview (plan F4; the export is ``export_to_sheet``)."""
         _require_read(cmd)
         if origin not in READ_ORIGINS:
             raise ValueError(f"unknown read origin {origin!r}")
+        if carries_todrive(argv):
+            raise ValueError("That read carries todrive, which would make a Google Sheet: use Export to a Google Sheet "
+                             "on its table instead.")
         action = "sensitive_read" if cmd.sensitive else "read"
         extra: Dict[str, Any] = {"command": cmd.id, "origin": origin}
         try:
@@ -1059,7 +1065,7 @@ class GAMConnector(Connector):
         ``NoRowUnsaid``: a read that skipped silently writes the same titles alone. Parsed
         off the event loop: a large domain's directory is tens of thousands of rows."""
         # GAM reads an argument lowercased with its underscores dropped (getArgument), so `to_drive` and `ToDrive` are todrive.
-        if argv[:1] != ["print"] or any(str(a).lower().replace("_", "") == "todrive" for a in argv):
+        if argv[:1] != ["print"] or carries_todrive(argv):
             raise ValueError("an audit run reads with a print command, and never exports")
         extra: Dict[str, Any] = {"command": command, "origin": READ_ORIGIN_AUDIT_RUN}
         try:
@@ -1092,15 +1098,53 @@ class GAMConnector(Connector):
         self.audit.record("sensitive_csv_export", target=target, argv=argv, ok=True,
                           extra={"command": command, "rows": rows}, domain=self.domain)
 
-    async def export_to_sheet(self, cmd, argv: List[str], owner: str = "", title: str = "") -> ChangeResult:
-        """Run a Builder read with ``todrive``: GAM writes the result to a new Google Sheet in
-        ``owner``'s Drive (blank = the admin's). Creating a file is a write, so it runs through the
-        chokepoint; ``output`` carries the Sheet URL GAM prints. A sensitive read's export is audited
-        as ``sensitive_export`` so it files next to ``sensitive_read``."""
+    def sheet_owner(self) -> str:
+        """Whose Drive an export's Sheet goes in: the connected admin, the address in the sign-in token, as GAM takes it
+        (``_getAdminEmail``: GamGUI's gam.cfg names no admin_email). "" when the token can't be read."""
+        try:
+            return self.runner.vault.oauth_admin_email(self.domain)
+        except Exception:  # noqa: BLE001 - a Keychain refusal: unnamed, never its message
+            return ""
+
+    async def sheet_export_scopes(self) -> Optional[Dict[str, bool]]:
+        """Plan F4's scope check, a read: may the service account act for the connected admin in Drive and in Sheets? Setup's
+        own ``check serviceaccount``, narrowed to those two (core/sheet_export.SCOPES): ``{scope: authorized}``, or None when
+        it couldn't be told (no admin in the token, another exit, a row missing), which is never "authorized" (invariant 10)."""
+        owner = self.sheet_owner()
+        if not owner:
+            return None
+        try:
+            out = await self.runner.run_authenticated(self.domain, GAMCommands.check_svcacct(owner, [s for s, _ in sheet_export.SCOPES]))
+        except GAMError as exc:   # a scope FAILed: exit 10, its PASS/FAIL rows on stdout
+            if exc.exit_code != SCOPES_NOT_AUTHORIZED_RC:
+                return None
+            out = exc.stdout
+        except Exception:  # noqa: BLE001 - the check couldn't be made: unknown
+            return None
+        rows = {label.lower(): status == "PASS" for label, status in parse_check(out)}
+        if any(scope not in rows for scope, _ in sheet_export.SCOPES):
+            return None
+        return {scope: rows[scope] for scope, _ in sheet_export.SCOPES}
+
+    async def export_to_sheet(self, cmd, argv: List[str], title: str = "") -> ChangeResult:
+        """Plan F4: run a Builder read again with ``todrive``. GAM reads it afresh and writes the CSV to a NEW Google Sheet in
+        the connected admin's own Drive, shared with nobody, opening no browser and sending no email
+        (``GAMCommands.todrive_args``). Creating a file is a write, so it runs through the chokepoint, audited
+        ``export_to_sheet`` (``sensitive_export`` for a sensitive read, filed next to ``sensitive_read``): target the admin,
+        ``extra.command`` the catalog id, ``extra.url`` the file's link once GAM prints it (kept on a warning exit too), else
+        ``extra.upload``, which of the upload's own failure lines GAM printed (``sheet_export.upload_state``, read from
+        stderr lines naming this admin, never a line the read printed about another account). An exit 0 without the link is
+        a failure, the file unknown. The read's own argv may hold no ``todrive``."""
         _require_read(cmd)
-        argv = list(argv) + GAMCommands.todrive_args(owner, title)
+        if carries_todrive(argv):   # GAM reads `to_drive` as todrive (as_keyword)
+            raise ValueError("the read already carries todrive")
         action = "sensitive_export" if cmd.sensitive else "export_to_sheet"
-        return await self._run_write(action, owner or "(admin Drive)", argv, RiskLevel.LOW)
+        owner = self.sheet_owner()
+        # A domain-wide read plus its upload: a kill part way leaves a file nobody can name, so it gets the long timeout.
+        return await self._run_write(action, owner or "(admin Drive)", list(argv) + GAMCommands.todrive_args(title),
+                                     RiskLevel.LOW, about={"command": cmd.id}, timeout=DOMAIN_WIDE_TIMEOUT,
+                                     verify=sheet_export.verify,
+                                     noted=lambda out, err: sheet_export.noted(out, err, owner))
 
     # --- destructive: plan (dry-run) then apply ----------------------------------------
     def plan_suspend(self, emails: Sequence[str], suspend: bool = True) -> List[ChangePreview]:
@@ -1224,6 +1268,7 @@ class GAMConnector(Connector):
         secrets: Sequence[str] = (),
         timeout: Optional[float] = None,
         verify: Optional[Callable[[str], str]] = None,
+        noted: Optional[Callable[[str, str], Dict[str, str]]] = None,
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
         a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)
@@ -1237,7 +1282,9 @@ class GAMConnector(Connector):
         ``timeout`` overrides the runner's default — a domain-wide (``all users``) call needs longer.
         ``about`` is what else the write concerned, recorded in the audit ``extra`` under the key that names
         it (``group``, ``scope``, ``event``, ``command``…) — once filed as ``group`` whatever it was.
-        ``verify`` reads the output of a run that exited 0, for a command GAM can leave undone without a word: what it says is the failure."""
+        ``verify`` reads the output of a run that exited 0, for a command GAM can leave undone without a word: what it says is the failure.
+        ``noted`` reads what the write's own output says to keep on its record and its result (the link of the Sheet an export
+        made), from GAM's stdout and stderr whether it exited 0 or not: a warning exit can follow the write itself. Never the output."""
         named = {k: v for k, v in (about or {}).items() if v}
         shown = redact_secrets(audit_argv if audit_argv is not None else argv, secrets)   # never the raw secret
         preview = ChangePreview(connector_id=self.id, target=target, summary=action, risk=risk, argv=shown)
@@ -1269,9 +1316,10 @@ class GAMConnector(Connector):
             kinds = getattr(exc, "kinds", None)
             tolerated = bool(tolerate_kinds and kinds and kinds <= set(tolerate_kinds))
             error = redact_secrets(str(exc), secrets)
+            kept = noted(getattr(exc, "stdout", "") or "", getattr(exc, "stderr", "") or "") if noted is not None else {}
             self.audit.record(
                 action, target=target, argv=shown, ok=tolerated,
-                extra={**named, "error": error, "tolerated": tolerated},
+                extra={**named, **kept, "error": error, "tolerated": tolerated},
                 secrets=secrets, domain=self.domain,
             )
             if tolerated:
@@ -1280,19 +1328,20 @@ class GAMConnector(Connector):
                                            "and own-calendar notices are expected and were skipped).")
             remediation = exc.remediation if isinstance(exc, GAMError) else _WRITE_FAILED
             return ChangeResult(preview=preview, ok=False, detail=error, remediation=remediation,
-                                kind=exc.kind if isinstance(exc, GAMError) else None)
+                                kind=exc.kind if isinstance(exc, GAMError) else None, noted=kept)
+        kept = noted(out, "") if noted is not None else {}
         if verify is not None and (short := redact_secrets(verify(out), secrets)):
-            self.audit.record(action, target=target, argv=shown, ok=False, extra={**named, "error": short, "tolerated": False}, secrets=secrets, domain=self.domain)
-            return ChangeResult(preview=preview, ok=False, detail=short, remediation=short)
+            self.audit.record(action, target=target, argv=shown, ok=False, extra={**named, **kept, "error": short, "tolerated": False}, secrets=secrets, domain=self.domain)
+            return ChangeResult(preview=preview, ok=False, detail=short, remediation=short, noted=kept)
         unrecorded = ""
         try:
             self.audit.record(
                 action, target=target, argv=shown, ok=True,
-                extra=named or None,
+                extra={**named, **kept} or None,
                 secrets=secrets, domain=self.domain,
             )
         except OSError as exc:
             # The write happened, so it must not read as failed: a temporary password would be lost with nobody told.
             logger.error("audit record failed after %s succeeded: %s", action, type(exc).__name__)
             unrecorded = f"It worked, but the audit log couldn't record it ({exc.strerror or type(exc).__name__})."
-        return ChangeResult(preview=preview, ok=True, detail=unrecorded, output=redact_secrets(out, secrets))
+        return ChangeResult(preview=preview, ok=True, detail=unrecorded, output=redact_secrets(out, secrets), noted=kept)

@@ -57,6 +57,17 @@ CACHE_FIELDS = (
 )
 
 
+def as_keyword(token: str) -> str:
+    """``token`` as GAM reads a keyword (``getArgument``, 7.52.04: lowercased, every "_" dropped), so `to_drive` and
+    `ToDrive` are `todrive` to GAM. Compare against this, never against the raw spelling."""
+    return str(token).strip().lower().replace("_", "")
+
+
+def carries_todrive(argv: Sequence[str]) -> bool:
+    """Whether GAM would read any element of ``argv`` as `todrive`: a read that writes a Sheet (plan F4)."""
+    return any(as_keyword(a) == "todrive" for a in argv)
+
+
 def cut_off_account(argv: Sequence[str]) -> Optional[str]:
     """The account ``argv`` cuts off from Google, as sent, or None for any other command: deleted,
     suspended, its OAuth tokens deleted (``deprovision``, which took GamGUI's own token, failure log
@@ -1084,15 +1095,21 @@ class GAMCommands:
         return ["delete", "alias", alias]
 
     @staticmethod
-    def todrive_args(user: str = "", title: str = "") -> List[str]:
-        # Append to a `print …` command to export its CSV to a Google Sheet. `user` = whose Drive
-        # owns the sheet (blank = the admin/oauth account's Drive); `title` names it.
+    def todrive_args(title: str = "") -> List[str]:
+        """Appended to a `print …` read: GAM writes the read's CSV to a NEW Google Sheet instead of stdout (plan F4).
+        Grammar `todrive <ToDriveAttribute>*`; read from CSVPrintFile.GetTodriveParameters / writeCSVfile at the pin.
+
+        No `tduser`: the Sheet goes in the connected admin's own Drive (GAM's _getAdminEmail, oauth2.txt's address) and
+        no `tdshare`/`tdalert`/`tdnotify`, so it is shared with nobody. `tdnobrowser true`: GAM otherwise opens the Sheet in
+        the Mac's default browser itself (`webbrowser.open`; GamGUI's fresh gam.cfg has no_browser false, so
+        todrive_nobrowser defaults false) — the app shows the link instead. `tdnoemail true`: todrive_noemail follows
+        no_browser, so a config with no_browser on would have GAM email the link through the admin's Gmail; passing it
+        fixes "no email" whatever the config. ``title`` names the file (one argv element; GAM takes any string, even
+        empty, so a blank one is left out and GAM names it `<domain> - <list>`)."""
         argv = ["todrive"]
-        if user:
-            argv += ["tduser", user]
         if title:
             argv += ["tdtitle", title]
-        return argv
+        return argv + ["tdnobrowser", "true", "tdnoemail", "true"]
 
     @staticmethod
     def show_vacation(email: str) -> List[str]:

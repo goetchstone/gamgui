@@ -364,15 +364,17 @@ def unshaped_argv(sent) -> list:
 def test_the_sent_argv_sweep_bites():
     C, a = GAMCommands, "alice@example.com"
     good = [C.set_signature(a, "Best,\nAlice"), C.add_calendar_acl(a, "group:sales@example.com", "writer"),
-            C.print_delegates(a) + C.todrive_args("boss@example.com", "Delegates"), C.print_users() + ["todrive"],
+            C.print_delegates(a) + C.todrive_args("example.com - Delegates"), C.print_users() + C.todrive_args(),
             ["print", "groups"], ["user", a, "print", "backupcodes"],   # Builder catalog reads
             ["MOCKFAIL", "scope"]]
     assert unshaped_argv({tuple(argv): "t" for argv in good}) == []
     bad = {("user", a, "vacation", "on", "subject", "S"): "no GAMCommands builder",     # hand-built
-           (*C.show_vacation(a), "todrive"): "doesn't take it",
-           (*C.info_user(a), "todrive", "tduser", "boss@example.com"): "doesn't take it",
+           (*C.show_vacation(a), *C.todrive_args()): "doesn't take it",
+           (*C.info_user(a), *C.todrive_args("T")): "doesn't take it",
+           (*C.print_users(), "todrive"): "todrive_args doesn't emit",   # GAM would open a browser (plan F4)
            (*C.print_users(), "todrive", "tdshare", "x@example.com", "writer"): "todrive_args doesn't emit",
-           (*C.print_users(), "todrive", "tdtitle", "T", "tduser", "boss@example.com"): "todrive_args doesn't emit"}
+           (*C.print_users(), "todrive", "tduser", "boss@example.com", "tdnobrowser", "true", "tdnoemail", "true"):
+               "todrive_args doesn't emit"}
     for argv, why in bad.items():
         [found] = unshaped_argv({argv: "tests/test_x.py::t"})
         assert found.startswith("tests/test_x.py::t: gam ") and why in found, found

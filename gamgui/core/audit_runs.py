@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from .connected_apps import Reach, describe, grants_from, looks_like_ai
 from .gam.commands import CACHE_FIELDS, COURSE_STATES, GAMCommands, is_one_address
 from .gam.models import GAMUser
+from .licenses import ONLY_SEATS_READ
 from .reports import INACTIVE_DAYS, _parse_dt, build_reports
 
 ROWS_SHOWN = 100                           # rows a finished table draws; its count and its CSV are the whole of it
@@ -331,7 +332,7 @@ def license_findings(seats: List[dict], users: Optional[List[GAMUser]], reads: S
     total, n_susp, n_stray = sum(per_sku.values()), len(suspended_rows), len(stray_rows)
     # Every table built on the seats says so: with no product named GAM passes over one Google refuses, exit 0, so even
     # a clean run may be missing a product's seats, and an all-clear covers only the seats read.
-    skipped = "GAM passes over a product Google won't let it read without saying so, so this covers only the seats read."
+    skipped = ONLY_SEATS_READ
     gam_note = ("GAM passes over a product Google won't let it read without saying so: a product missing here may be one "
                 "it couldn't read. Check the counts against the Admin console (Billing → Licenses).")
     seats_word = f"{total} seat{'' if total == 1 else 's'}"
@@ -346,7 +347,8 @@ def license_findings(seats: List[dict], users: Optional[List[GAMUser]], reads: S
                 (f"{n_susp} seat{'' if n_susp == 1 else 's'} {'is' if n_susp == 1 else 'are'} held by a suspended account."
                  if n_susp else f"No suspended account holds any of the {seats_word} read."),
                 SUSPENDED_SEAT_COLUMNS, suspended_rows, known=not join_why, why=join_why, links=True, change_note=unsure,
-                note="A suspended account keeps its seat until the license is removed. " + skipped),
+                note=("A suspended account keeps its seat until the license is removed. Remove these licenses… reads the "
+                      "seats and the directory again before anything is removed. " + skipped)),
         Finding("not_in_directory", "Seats on an address the directory read doesn't list",
                 (f"{n_stray} seat{'' if n_stray == 1 else 's'} {'is' if n_stray == 1 else 'are'} on an address the directory "
                  "read didn't list." if n_stray else "Every seat read is on an account the directory read listed."),

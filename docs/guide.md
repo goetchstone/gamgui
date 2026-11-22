@@ -43,6 +43,7 @@ Open **Setup** (every screen points you there until a domain is connected).
    | `https://www.googleapis.com/auth/tasks` | Onboarding task lists |
    | `https://www.googleapis.com/auth/cloud-identity.devices` | The computers signed in with an account. Setup's check doesn't ask for this one: without it, only that list is missing |
    | `https://www.googleapis.com/auth/apps.alerts` | Google's alerts, on Reports. Setup's check doesn't ask for this one either: without it, only that report is refused |
+   | `https://www.googleapis.com/auth/spreadsheets` | The Builder's export to a Google Sheet, which checks it before it runs. Setup's check doesn't ask for this one: without it, only that export is refused |
 
    Offboarding's sign-out needs one more permission that delegation can't give: the admin token's
    "Directory API - User Security" scope, ticked when `gam oauth create` runs. Setup says whether
@@ -237,6 +238,16 @@ and the CSV download takes the filtered rows.
 Clicking an address in a result offers follow-ups for that person (delegates, forwarding,
 signature, suspend and more). A Builder change only ever runs from its preview.
 
+**Export to a Google Sheet**, beside **Download CSV**, puts a read's table in a new Sheet in your own Drive (the admin
+GamGUI signs in as), shared with nobody. Its preview shows the exact command, and that the Sheet holds a fresh read:
+GAM runs the read again, so its rows can differ from the table, and a filter doesn't apply. It checks that the service
+account may use Drive and Sheets for you first; if not, it says which and links to the Admin console. Click **Export
+to a new Sheet**, then open it from the link. Not yet run on a real domain.
+
+**Files** (linked from **Audit**) lists what the app made: each Sheet exported, with its link, read back from the audit
+log, and each kept incident's evidence folder. It runs no GAM. Files you download aren't listed: the window saves them
+where its downloads go, and the app never learns where.
+
 A wide result? **Hide list** (top right) gives the result the whole width; the Builder remembers
 your choice until you click it again ("Show list"). Each value stays on one line: a long one is cut short —
 click it to read all of it, or hover. The CSV download always has every value whole.
@@ -273,7 +284,8 @@ Ready-made reads of the whole domain, each a fixed list of steps. A run changes 
   would suspend, and leaves out the account GamGUI is connected as.
 - **License usage:** seats per license, seats held by suspended accounts, and seats on an address the directory didn't
   list. GAM passes over a product Google won't let it read without saying so, so compare the counts with the Admin
-  console (Billing → Licenses) the first time.
+  console (Billing → Licenses) the first time. **Remove these licenses**… opens the same preview as the Suspended card on
+  Reports (see [Change a person's licenses](#change-a-persons-licenses)).
 - **Shared drive permissions:** every shared drive's members (users and groups: a drive has no other kind), members from
   outside the domain first; drives no active organizer looks after (each organizer suspended, gone from the directory, or
   being offboarded in GamGUI since it opened); and drives GAM listed but whose members it didn't read, which are unknown.
@@ -318,6 +330,12 @@ changes until you confirm.
 
 GAM skips a product Google won't let it read without saying so, so a license missing from the card may only be unread.
 Not yet verified live.
+
+To take the seats back from everyone suspended at once, choose **Remove their licenses**… on the Suspended card on
+**Reports** (or **Remove these licenses**… in the License usage audit run). It reads the seats and the directory again
+and lists each license it would remove; type what it asks, and it removes exactly those, one at a time, with a Stop.
+Each person's data transfers are read just before their first license goes: if one hasn't finished, failed, or can't be
+read, that person keeps their licenses and is listed as not removed. Not yet verified live.
 
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.

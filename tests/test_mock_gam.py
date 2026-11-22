@@ -262,12 +262,14 @@ async def test_mock_vacation_merges_like_gam(runner, domain, gam_state):
     (["user", "admin@example.com", "check", "serviceaccount", "scopes"], "Missing argument"),
     (["user", "admin@example.com", "check", "serviceaccount", "scopes", ""], "Empty argument"),
     (C.print_delegates("alice@example.com") + ["todrive", "tdshare", "x@example.com", "writer"], "Invalid argument"),
-    (C.print_delegates("alice@example.com") + ["todrive", "tduser"], "Missing argument"),
-    (C.print_delegates("alice@example.com") + ["todrive", "tduser", ""], "Empty argument"),
+    # Since plan F4 the Builder never names another Drive (tduser) and always passes tdnobrowser true tdnoemail true.
+    (C.print_delegates("alice@example.com") + ["todrive", "tduser", "boss@example.com"], "Invalid argument: tduser"),
+    (C.print_delegates("alice@example.com") + ["todrive"], "Invalid argument: todrive"),
     (C.print_users() + ["todrive", "tdtitle"], "Missing argument"),
-    (C.print_users() + ["todrive", "tduser", "boss@example.com", "extra"], "Invalid argument"),
+    (C.print_users() + C.todrive_args("T") + ["extra"], "Invalid argument: extra"),
+    (C.print_users() + ["todrive", "tdtitle", "T", "tdnobrowser", "false", "tdnoemail", "true"], "Invalid argument: false"),
+    (C.print_users() + ["todrive", "tdnobrowser", "true", "tdnoemail"], "Invalid argument: tdnoemail"),
     (C.print_users() + ["todrive", "tdtitle", "T", "tduser", "boss@example.com"], "Invalid argument: tduser"),
-    (C.print_users() + ["todrive", "tduser", "a@example.com", "tduser", "b@example.com"], "Invalid argument: tduser"),
 ])
 @pytest.mark.hand_built_argv   # malformed on purpose: the grammar sweep would (rightly) refuse every one
 async def test_mock_rejects_a_malformed_shape(runner, domain, argv, needle):
@@ -331,13 +333,13 @@ async def test_mock_fails_a_per_user_read_of_an_unknown_address_as_gam_does(runn
     assert ei.value.exit_code == 50 and "Invalid Input: memberKey" in ei.value.stderr
 
 
-@pytest.mark.parametrize("todrive", [C.todrive_args(), C.todrive_args("boss@example.com"),
-                                     C.todrive_args(title="Delegates"), C.todrive_args("boss@example.com", "D")],
+@pytest.mark.parametrize("todrive", [C.todrive_args(), C.todrive_args("example.com - Delegates"), C.todrive_args(title="")],
                          ids=lambda a: " ".join(a))
 @pytest.mark.parametrize("read", [C.print_delegates("alice@example.com"), C.print_users(), C.print_groups(),
                                   C.print_calendar_acls("alice@example.com")], ids=lambda a: " ".join(a[:4]))
 async def test_mock_accepts_the_todrive_shapes_the_builder_emits(runner, domain, read, todrive):
-    await runner.run_authenticated(domain, read + todrive)
+    # GAM prints the new file's link instead of the read's CSV (writeCSVToDrive, plan F4; tests/test_sheet_export.py)
+    assert (await runner.run_authenticated(domain, read + todrive)).startswith("Data uploaded to Drive File:\nhttps://")
 
 
 @pytest.mark.parametrize("delegate", ["delegate-exists@example.com", "assistant@example.com"])

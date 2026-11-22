@@ -185,9 +185,10 @@ def test_alias_commands():
 
 
 def test_todrive_args():
-    assert GAMCommands.todrive_args() == ["todrive"]
-    assert GAMCommands.todrive_args("u@e.com", "Report") == ["todrive", "tduser", "u@e.com", "tdtitle", "Report"]
-    assert GAMCommands.todrive_args(title="Just a title") == ["todrive", "tdtitle", "Just a title"]
+    # The admin's own Drive, shared with nobody; no browser, no email (plan F4, tests/test_sheet_export.py).
+    assert GAMCommands.todrive_args() == ["todrive", "tdnobrowser", "true", "tdnoemail", "true"]
+    assert GAMCommands.todrive_args(title="Just a title") == ["todrive", "tdtitle", "Just a title", "tdnobrowser", "true",
+                                                              "tdnoemail", "true"]
 
 
 def test_show_signature_and_groups_member():

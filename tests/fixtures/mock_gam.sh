@@ -163,16 +163,20 @@ acl_lets() {  # <user, lowercased> <a calendar's kept rules>: does any rule give
 # A per-user Gmail/Calendar command acts AS the user, so GAM first needs a token for that address. For
 # one that isn't a user the token request fails, and GAM reports the token endpoint's words against it
 # (handleOAuthTokenError -> entityActionFailedWarning, ACTION_FAILED_RC; read from the vendored build).
-not_a_user() {  # <address> <Show|Print>
+# The error is a SOFT one in a per-account loop (handleOAuthTokenError(e, softErrors=True): the warning, rc 50, `continue`),
+# so a print read whose loop ends in csvPF.writeCSVfile still writes its titles: <titles>, when given, is that header on
+# stdout (printShowDelegates and printShowForwardingAddresses at 7.52.04). With todrive that header is what GAM uploads.
+not_a_user() {  # <address> <Show|Print> [<titles>]
   printf 'User: %s, User:, %s Failed: invalid_grant: Invalid email or User ID\n' "$1" "$2" 1>&2
+  if [ -n "${3:-}" ]; then printf '%s\n' "$3"; fi
   exit 50
 }
-need_user() {  # <address> <Show|Print>: a fixture-directory user, or one the mock keeps state for
+need_user() {  # <address> <Show|Print> [<titles>]: a fixture-directory user, or one the mock keeps state for
   known_user "$(lower "$1")" && return 0
   if [ -n "${GAM_MOCK_STATE:-}" ] && { [ -e "$GAM_MOCK_STATE/vacation/$1" ] || [ -e "$GAM_MOCK_STATE/delegates/$1" ]; }; then
     return 0
   fi
-  not_a_user "$1" "$2"
+  not_a_user "$1" "$2" "${3:-}"
 }
 # A just-created account Google hasn't finished setting up. Live, 2026-09-30, a signature set 1 s after
 # `create user` failed "User: x, User Set Failed: access_denied: Requested client not authorized"
@@ -203,18 +207,59 @@ delegates_of() {  # <user>: the current list — with GAM_MOCK_STATE, the stored
   fi
 }
 has_delegate() { delegates_of "$1" | grep -qixF -- "$2"; }   # Gmail compares addresses case-insensitively
-# `todrive <ToDriveAttribute>*` (grammar 655) after a print/report read: only the shape the Builder emits
-# (GAMCommands.todrive_args) — `todrive [tduser <EmailAddress>] [tdtitle <String>]`, each once, in that order,
-# last on the line. GAM (CSVPrintFile.GetTodriveParameters, read from the vendored build) reads tduser with
-# getString, which refuses an empty value, and tdtitle with minLen=0, which doesn't.
+# `todrive <ToDriveAttribute>*` (grammar 657) after a print/report read: only the shape the Builder emits
+# (GAMCommands.todrive_args) — `todrive [tdtitle <String>] tdnobrowser true tdnoemail true`, in that order, last on
+# the line. GAM (CSVPrintFile.GetTodriveParameters at 7.52.04) reads tdtitle with minLen=0, so an empty title is
+# taken; tdnobrowser/tdnoemail with getBoolean. No tduser, tdshare, tdalert or tdnotify: the app never sends them.
 todrive_tail() {
-  if [ "${1:-}" = "tduser" ]; then
-    need_value $# "EmailAddress"
-    [ -n "$2" ] || empty_arg "EmailAddress"
-    shift 2
-  fi
   if [ "${1:-}" = "tdtitle" ]; then need_value $# "String"; shift 2; fi
-  [ $# -eq 0 ] || invalid_arg "$1"
+  [ "${1:-}" = "tdnobrowser" ] || invalid_arg "${1:-todrive}"
+  [ "${2:-}" = "true" ] || invalid_arg "${2:-tdnobrowser}"
+  [ "${3:-}" = "tdnoemail" ] || invalid_arg "${3:-tdnobrowser}"
+  [ "${4:-}" = "true" ] || invalid_arg "${4:-tdnoemail}"
+  [ $# -eq 4 ] || invalid_arg "$5"
+}
+# A delegated scope the simulated tenant has NOT authorized for the service account: listed, one per line, in
+# GAM_MOCK_STATE/dwd_missing. Both `check serviceaccount` and a todrive upload read it, so they agree as on a tenant.
+dwd_missing() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/dwd_missing" ] && grep -qxF -- "$1" "$GAM_MOCK_STATE/dwd_missing"; }
+# GAM's writeCSVToDrive (7.52.04), after the read wrote its table: the CSV goes to a new file in the admin's Drive
+# (_getAdminEmail: oauth2.txt's address), made by the service account acting as the admin. Its Drive token refused ->
+# "User: <admin>, Drive API v3 Service/App not enabled" (handleOAuthTokenError -> userServiceNotEnabledWarning), 73,
+# nothing made. Then files.create (a Sheet, converted from the CSV). Its Sheets token refused -> the file is made, but
+# GAM returns before printing its link: "User: <admin>, Sheets API Service/App not enabled", 73. Otherwise
+# "Data uploaded to Drive File:" and the file's webViewLink on stdout (printKeyValueList), and the read's own exit
+# code stands (setSysExitRC; a warning exit uploads all the same). The CSV is never printed. Each file made is
+# listed in GAM_MOCK_STATE/drive_files as <id> TAB <title> TAB <rows>.
+todrive_upload() {  # <read exit code> <title> <the read's CSV>
+  td_admin=$(sed -n 's/.*"email": *"\([^"]*\)".*/\1/p' "$GAMCFGDIR/oauth2.txt" | head -n 1)
+  if dwd_missing "https://www.googleapis.com/auth/drive"; then
+    printf 'User: %s, Drive API v3 Service/App not enabled\n' "$td_admin" 1>&2
+    exit 73
+  fi
+  # GAM_MOCK_STATE/drive_full: files.create refused (storageQuotaExceeded) -> entityActionFailedWarning after
+  # Act.Set(Act.CREATE): "Drive Folder: root, Create Failed: <Google's words>", 50, nothing made. The words are Google's,
+  # approximate here.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_full" ]; then
+    printf "Drive Folder: root, Create Failed: The user's Drive storage quota has been exceeded.\n" 1>&2
+    exit 50
+  fi
+  td_name=${2:-example.com - mock}
+  td_id="1MockSheet$(printf '%s' "$td_name" | cksum | cut -d' ' -f1)"
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    printf '%s\t%s\t%s\n' "$td_id" "$td_name" "$(($(printf '%s\n' "$3" | wc -l) - 1))" >> "$GAM_MOCK_STATE/drive_files"
+  fi
+  if dwd_missing "https://www.googleapis.com/auth/spreadsheets"; then
+    printf 'User: %s, Sheets API Service/App not enabled\n' "$td_admin" 1>&2
+    exit 73
+  fi
+  # GAM_MOCK_STATE/sheets_fail: the Sheets token is had, but spreadsheets.get/batchUpdate is refused -> todriveCSVErrorExit:
+  # "ERROR: User: <admin>, Drive File ID: <id>, Not Created: <why>" (Act.NotPerformed of CREATE), 50, the file made.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/sheets_fail" ]; then
+    printf '\nERROR: User: %s, Drive File ID: %s, Not Created: Requested entity was not found.\n' "$td_admin" "$td_id" 1>&2
+    exit 50
+  fi
+  printf 'Data uploaded to Drive File:\nhttps://docs.google.com/spreadsheets/d/%s/edit?usp=drivesdk\n' "$td_id"
+  exit "$1"
 }
 
 is_bool() { case "${1:-}" in true|on|yes|enabled|1|false|off|no|disabled|0) return 0 ;; esac; return 1; }
@@ -295,8 +340,10 @@ esac
 
 # A read may end in `todrive …` (the Builder's export to a Sheet). Only a print/report read takes it — the
 # grammar's info/show/check lines have none, and the `info user`/`check serviceaccount` handlers ignore
-# trailing words, so it is refused here. Check its attributes, then handle the read as without them (the
-# canned CSV stays the output; GAM would print the Sheet's URL). A write is left to its strict handler.
+# trailing words, so it is refused here. Check its attributes, run the read as without them, and then do
+# what GAM does with its table (todrive_upload): the CSV is uploaded, never printed. A read that stopped
+# before writing its table (nothing on stdout) uploads nothing and exits as it did. A write is left to its
+# strict handler.
 case "${1:-}:${3:-}" in
   print:*|report:*|*:print) td_read=print ;;
   info:*|*:show|*:check) td_read=other ;;
@@ -308,12 +355,21 @@ if [ -n "$td_read" ]; then
   if [ "$td" -gt 0 ]; then
     [ "$td_read" = print ] || invalid_arg todrive
     ( shift "$td"; todrive_tail "$@" ) || exit $?
-    i=0
+    i=0; td_title=""; prev=""
     for a in "$@"; do   # keep the words before `todrive` (the list was expanded before the loop)
       i=$((i + 1))
       [ "$i" -gt 1 ] || set --
+      if [ "$i" -eq $((td + 2)) ] && [ "$prev" = tdtitle ]; then td_title=$a; fi
+      prev=$a
       [ "$i" -ge "$td" ] || set -- "$@" "$a"
     done
+    # The read itself, as a call of its own (not logged twice: the argv log holds the call the app made).
+    # `|| …`: under set -eu a failed $(...) assignment exits the mock, and GAM uploads a table its read printed before a
+    # warning exit (the code stands); grep -v finding no line is no failure either.
+    td_rc=0; td_csv=$(GAM_MOCK_ARGV_LOG='' "$0" "$@") || td_rc=$?
+    td_csv=$(printf '%s\n' "$td_csv" | grep -v -F -- "$GAMCFGDIR") || true   # its own config banner: printed once, above
+    [ -n "$td_csv" ] || exit "$td_rc"
+    todrive_upload "$td_rc" "$td_title" "$td_csv"
   fi
 fi
 
@@ -1453,7 +1509,7 @@ fi
 # the titles alone. One row per address Gmail has, none for none: only alice@ has one.
 gmail_off() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$1" ]; }
 gmail_read() {  # <user> <items> <titles>: the token, the "Getting" line, and Gmail off
-  need_user "$1" Print
+  need_user "$1" Print "$3"
   printf 'Getting %s for %s\n' "$2" "$1" 1>&2
   if gmail_off "$1"; then printf 'User: %s, Gmail Service/App not enabled\n' "$1" 1>&2; printf '%s\n' "$3"; exit 73; fi
 }
@@ -1472,7 +1528,7 @@ fi
 # `gam user <email> print delegates` (no formatjson) -> THAT user's delegates as plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
   [ $# -eq 4 ] || invalid_arg "$5"
-  need_user "$2" Print
+  need_user "$2" Print "User,delegateAddress,delegationStatus"
   printf 'User,delegateAddress,delegationStatus\n'
   delegates_of "$2" | while IFS= read -r d; do
     if [ -n "$d" ]; then printf '%s,%s,accepted\n' "$2" "$d"; fi
@@ -1693,16 +1749,17 @@ fi
 # `  {scope:73} PASS (j/n)`. A scope asked for must be a SERVICE-ACCOUNT scope (lowercased, commas or
 # spaces between) or GAM exits with an invalid choice — admin.directory.* are client-access scopes (the
 # admin token, `gam oauth create`) and are refused here as GAM refuses them. The simulated tenant
-# authorized exactly the scopes GamGUI pre-fills (core/setup.py DWD_SCOPES). A bare check asks about
+# authorized exactly the scopes GamGUI pre-fills (core/setup.py DWD_SCOPES), and the Sheets one its link offers
+# (SHEETS_SCOPE; less any listed in GAM_MOCK_STATE/dwd_missing, which a todrive upload reads too). A bare check asks about
 # GAM's own larger default set, so its extra scopes FAIL and GAM exits SCOPES_NOT_AUTHORIZED_RC (10).
 # A `*partialdwd*` admin's tenant authorized all of those but gmail.settings.sharing and tasks. On a FAIL,
 # checkServiceAccount appends userinfo.email to the scopes checked and prints SCOPE_AUTHORIZATION_FAILED
 # with the short link and the admin.google.com one (clientScopeToAdd = those scopes, sorted; authuser =
 # the admin) — all on STDOUT (printLine), nothing on stderr — then exits SCOPES_NOT_AUTHORIZED_RC (10).
 # The exit codes are the build's *_RC values; tests/test_gam_exit_codes.py holds them to it.
-SA_AUTHORIZED="https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/gmail.settings.sharing https://www.googleapis.com/auth/tasks"
+SA_AUTHORIZED="https://mail.google.com/ https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic https://www.googleapis.com/auth/gmail.settings.sharing https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/tasks"
 # A sample of GAM's other default-on service-account scopes (gamlib glapi _SVCACCT_SCOPES).
-SA_OTHER="https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.activity https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/keep https://www.googleapis.com/auth/spreadsheets"
+SA_OTHER="https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.activity https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/keep"
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccount" ]; then
   sa_user="$2"; shift 4
   asked=""
@@ -1748,6 +1805,7 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccou
   for s in $checked; do
     j=$((j + 1))
     case " $granted " in *" $s "*) st=PASS ;; *) st=FAIL; failed=1 ;; esac
+    if [ "$st" = PASS ] && dwd_missing "$s"; then st=FAIL; failed=1; fi
     printf '  %-73s %s (%d/%d)\n' "$s" "$st" "$j" "$n"
   done
   if [ "$failed" = 1 ]; then

@@ -49,8 +49,9 @@ _READ_VERBS = {"print", "show", "info", "report", "check"}
 
 def gam_writes(calls: List[List[str]]) -> List[List[str]]:
     """Just the mutating calls: a read names its verb in the first three tokens (`print users`,
-    `user x show vacation`, `calendars x print events`, `all users print calendars`)."""
-    return [c for c in calls if not _READ_VERBS & set(c[:3])]
+    `user x show vacation`, `calendars x print events`, `all users print calendars`). A read with `todrive` is a write:
+    GAM makes a new Google Sheet with it (plan F4)."""
+    return [c for c in calls if not _READ_VERBS & set(c[:3]) or "todrive" in c]
 
 
 def wait_for_job(client, job, timeout: float = 10.0) -> None:

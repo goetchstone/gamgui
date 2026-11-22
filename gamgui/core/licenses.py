@@ -16,11 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .gam.models import LicenseSeat
+from .gam.commands import license_sku
+from .gam.models import GAMUser, LicenseSeat
 
 SOURCE = "https://knowledge.workspace.google.com/admin/billing/assign-remove-and-reassign-licenses"
 MIGHT_LOSE_DATA = "If you remove a user's license, you might lose their data."
 REASSIGN_WAIT = "A license removed can take up to 24 hours before it can be given to someone else."
+ONLY_SEATS_READ = "GAM passes over a product Google won't let it read without saying so, so this covers only the seats read."
 
 Key = Tuple[str, str]   # (productId, skuId)
 
@@ -65,6 +67,24 @@ def choices(seats: Sequence[LicenseSeat], email: str) -> Choices:
                    adds=[s for s in others if s.product_id not in products])
 
 
+def nameable(seat: LicenseSeat) -> bool:
+    """Whether GAM can be given the seat's IDs as one ``nv:`` seat (``license_sku``): one it can't is never offered."""
+    try:
+        license_sku(seat.product_id, seat.sku_id)
+    except ValueError:
+        return False
+    return True
+
+
+def on_suspended(seats: Sequence[LicenseSeat], users: Sequence[GAMUser]) -> List[Tuple[str, LicenseSeat]]:
+    """Each seat the read lists on an account the directory read says is suspended, as ``(their primary address, the
+    seat)``, one per license, by address then license name (roadmap 4.3, D3). A seat on an address the directory read
+    doesn't list isn't one: who holds it, and whether they're suspended, is unknown."""
+    suspended = {u.primary_email.strip().lower(): u.primary_email.strip() for u in users if u.suspended}
+    held = {(s.user, key(s)): s for s in seats if s.user in suspended}
+    return sorted(((suspended[user], s) for (user, _), s in held.items()), key=lambda p: (p[0].lower(), *_by_name(p[1])))
+
+
 def _failed(transfer: dict) -> bool:
     return str(transfer.get("status", "")).strip().lower() == "failed"
 
@@ -88,3 +108,15 @@ def transfer_refusal(email: str, pending: Optional[list]) -> str:
 def failed_transfers(pending: Optional[list]) -> List[str]:
     """The applications whose transfer from them failed, for the confirm step to name."""
     return [str(p.get("application") or "data") for p in (pending or []) if _failed(p)]
+
+
+def many_refusal(email: str, pending: Optional[list]) -> str:
+    """Why a removal in a run over many people leaves ``email``'s seats in place: ``transfer_refusal``, and a transfer that
+    *failed* too. On their page the confirm step names a failed one and the operator decides; a run has no one to ask, so
+    it keeps the seat and says why, and their page can still remove it."""
+    if refusal := transfer_refusal(email, pending):
+        return refusal
+    if failed := failed_transfers(pending):
+        return (f"A data transfer from {email} failed ({', '.join(failed)}): what it was moving may still be only on their "
+                "account, so the license isn't removed. Transfer it again, or remove it from their page.")
+    return ""

@@ -19,7 +19,7 @@ from gamgui.core.setup import (
     USER_SECURITY_SCOPE,
     SetupService,
     _extract_auth_url,
-    _parse_check,
+    parse_check,
     dwd_auth_url,
 )
 
@@ -459,22 +459,22 @@ def test_setup_commands_shape(tmp_path):
     assert cmds[order[0]].endswith("oauth create")
 
 
-def test_parse_check_pulls_pass_fail():
+def testparse_check_pulls_pass_fail():
     out = "System time status: PASS\nSome scope: FAIL\nno colon line\n"
-    lines = _parse_check(out)
+    lines = parse_check(out)
     assert ("System time status", "PASS") in lines
     assert ("Some scope", "FAIL") in lines
     assert len(lines) == 2
 
 
-def test_parse_check_handles_scope_table_format():
+def testparse_check_handles_scope_table_format():
     # GAM's real `check serviceaccount` output: "<scope-url>   FAIL (n/m)"
     out = (
         "Domain-wide Delegation authentication:, User: a@e.com, Scopes: 2\n"
         "  https://mail.google.com/                         FAIL (1/2)\n"
         "  https://www.googleapis.com/auth/calendar         PASS (2/2)\n"
     )
-    lines = _parse_check(out)
+    lines = parse_check(out)
     assert ("https://mail.google.com/", "FAIL") in lines
     assert ("https://www.googleapis.com/auth/calendar", "PASS") in lines
 

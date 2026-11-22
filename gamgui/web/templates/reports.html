@@ -62,6 +62,14 @@
                   class="inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors">Suspend these…</button>
         </div>
         {% endif %}
+        {% if r.key == "suspended" %}
+        {# Reads the seats and the directory again and previews; it removes nothing by itself (roadmap 4.3). #}
+        <div id="suspended-licenses">
+          <button type="button" hx-post="/reports/suspended-licenses/preview" hx-target="#suspended-licenses" hx-swap="innerHTML" hx-disabled-elt="this"
+                  aria-label="Remove the licenses held by the {{ r.count }} suspended accounts…"
+                  class="mt-3 inline-flex items-center rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 transition-colors">Remove their licenses…</button>
+        </div>
+        {% endif %}
         {% if r.key in reminders %}
         {# The fix is theirs to make: an email asking them to. Previews before it sends (roadmap 3.3). #}
         {% set subject, message = reminders[r.key] %}

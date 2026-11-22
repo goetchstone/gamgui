@@ -77,6 +77,9 @@ class ChangeResult:
     # On a failure GAM reported, its classification; None on success or an error that wasn't GAM's.
     # A bulk loop stops on an account-wide kind (gam.errors.ACCOUNT_WIDE_KINDS).
     kind: Optional["GAMErrorKind"] = None
+    # What the write's own output said that its audit record keeps too (``_run_write``'s ``noted``): a Sheet export's
+    # ``url``, read whether or not GAM exited 0. Never the output itself.
+    noted: Dict[str, str] = field(default_factory=dict)
 
 
 class Connector:

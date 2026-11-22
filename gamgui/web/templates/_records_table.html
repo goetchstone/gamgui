@@ -10,7 +10,11 @@
       <label class="flex items-center gap-1 text-brand-blueink"><input id="rt-external" type="checkbox" name="external" value="1" /> External only</label>
     </form>
     {% include "_records_meta.html" %}
+    {# A curated write (plan F4): its preview says what runs, whose Drive, and that the Sheet holds a fresh read. #}
+    {% if sheet_ok %}<button type="button" hx-post="/builder/sheet/preview" hx-vals='{"rid": {{ rid | tojson }}}' hx-target="#rt-sheet" hx-swap="innerHTML"
+            class="font-medium text-brand-blueink hover:text-brand-black">Export to a Google Sheet…</button>{% endif %}
     <code class="ml-auto truncate text-brand-grayink">{{ gam }}</code>
   </div>
+  <div id="rt-sheet" class="empty:hidden mb-2"></div>
   <div id="rt-body">{% include "_records_page.html" %}</div>
 </div>

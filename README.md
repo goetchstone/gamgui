@@ -91,6 +91,7 @@ and have only run offline: see
   their page, or many from a group or a pasted list as a job with Stop and a retry of the ones that failed.
 - **A person's licenses** — the paid seats they hold, read when asked; add one the domain holds, change one to another
   license of the same product, or remove one (typed address, refused while a data transfer from them is unfinished).
+  Or take back every seat held by a suspended account as a job from Reports, each person's transfers checked first.
 - **A person's Security tab** — the Chrome profiles, phones and tablets, and computers signed in with their account,
   a virtual machine marked, and a **temporary password** to hand over, shown once and changed at their next sign-in.
 - **Respond to an incident** — where each account stands, what's still to do with a button on each item, and what's done, from the logs, this app's audit log or your own word.
@@ -220,7 +221,7 @@ school domain is the most useful one of all.
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
 | Move to an org unit (`update org <ou> move user <email>`) | Users (one person, or many as a job) | not yet: the tenant has no org units, so the check creates one first |
 | Create, rename, delete an org unit | Builder | not yet: the check creates a throwaway unit, renames it, then deletes it |
-| Add, change, remove a license (`user <email> add\|update\|delete license nv:<product>:<sku>`) | Users | not yet: needs a spare seat (`print licenses countsonly` first), run on a throwaway |
+| Add, change, remove a license (`user <email> add\|update\|delete license nv:<product>:<sku>`) | Users; removal from suspended accounts as a job on Reports | not yet: needs a spare seat (`print licenses countsonly` first), run on a throwaway |
 | Add group member | Groups, Users, Onboard, Builder | **confirmed** (as a member) |
 | Remove group member | Groups, Users, Builder | **confirmed**; several at once (Groups, a job) is the same command, not yet run as one |
 | Add delegate | Users, Offboarding, Builder | **confirmed** |
@@ -254,7 +255,7 @@ school domain is the most useful one of all.
 | Forwarding: add an address, forward on / off | Builder (forward off also Offboarding) | forward off **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14); adding an address and forward on, not yet |
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
-| Export a result to a Google Sheet | Builder | not yet |
+| Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 
 **A new account isn't ready at once.** On the first live onboarding (2026-09-30) the account,
 groups, checklist and welcome email went through, but the signature (1 s after the create) and a
