@@ -16,8 +16,8 @@ pytest-xdist>=3.6
 httpx>=0.27
 hypothesis>=6.100
 atheris==3.1.0; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version >= '3.12'
-ruff==0.17.5
+ruff==0.17.6
 mypy==2.4.1
-uv==0.13.8
+uv==0.13.9
 hatchling
 editables~=0.3
