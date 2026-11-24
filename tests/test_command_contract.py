@@ -28,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from gamgui.core.gam.commands import (CALENDAR_ACL_ROLES, COURSE_STATES, EXPECTED_GAM_VERSION, GROUP_ROLES, GROUP_SETTINGS, GAMCommands,
+                                     ORG_TEXT_FIELDS, Organization,
                                       MessageId, Phone)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +78,12 @@ ENUM_ARGS = {
     ("delete_filters", "filter_ids"): (["F1"],),
     ("update_phones", "phones"): ([], [Phone("work", "", "<value>", True)], [Phone("custom", "<name>", "<value>", False)],
                                   [Phone("", "", "<value>", False)]),
+    # Roadmap 4.6: a person's whole organizations list and phones in one `update user`, each field GAM sends back.
+    ("update_profile", "organizations"): (
+        [Organization((("title", "<value>"), ("department", "<value>")), primary=True)],
+        [Organization(tuple((k, "<value>") for k in ORG_TEXT_FIELDS), "work", full_time_equivalent=100000, primary=True),
+         Organization((("name", "<value>"),), custom_type="<name>")]),
+    ("update_profile", "phones"): (None, [Phone("work", "", "<value>", True)]),
     ("print_chrome_profiles", "user"): (SEARCH_ADDRESS,),
     ("print_mobile_devices", "user"): (SEARCH_ADDRESS,),
     ("print_devices", "user"): (SEARCH_ADDRESS,),

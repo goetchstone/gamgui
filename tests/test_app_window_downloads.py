@@ -45,7 +45,8 @@ def test_the_attachment_routes_are_the_ones_we_think():
                                    "/phishing/copies.csv", "/phishing/recipients.csv",
                                    "/incident/logs/log.csv", "/incident/logs/export.zip", "/incident/logs/reach.csv", "/incident/logs/got-it.csv",
                                    "/incident/report/list.csv", "/incident/report/export.zip", "/classroom/owned.csv", "/classroom/import/issues.csv", "/classroom/import/handover.zip",
-                                   "/reports/fill-in.csv", "/reports/runs/table.csv"}
+                                   "/reports/fill-in.csv", "/reports/runs/table.csv",
+                                   "/users/csv/template.csv", "/users/csv/before.csv"}
 
 
 def test_every_link_to_a_download_route_carries_the_download_attribute():

@@ -48,6 +48,7 @@ SCREENS = {
     "First setup": ["setup.html", "_tenant_panel.html", "_tenant_controls.html", "_dwd.html", "_verify.html", "_tenant.html",
                     "_switch_warning.html", "_switch_failed.html"],
     "Find a user": ["users.html", "_users_table.html", "_as_of.html"],
+    "Change many people from a CSV": ["users.html", "bulk_csv.html", "_bulk_csv_preview.html", "reports.html"],
     "Onboard a new hire": ["onboarding.html", "_onboard_*.html"],
     "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html", "_closeout_*.html"],
     "Roll out a signature": ["signatures.html", "_sig_*.html", "_job_*.html"],

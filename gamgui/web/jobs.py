@@ -42,6 +42,7 @@ PANELS = {
     "remind": "/reports/remind/status",
     "group_remove": "/groups/members/remove-many/status",
     "org_unit_move": "/users/bulk-ou/status",
+    "profile_csv": "/users/csv/status",   # roadmap 4.6: Stop between people
     "mail_review": "/reports/mail-review",
     "incident_check": "/incident/check/status",
     "incident_secure": "/incident/secure/status",
@@ -92,6 +93,7 @@ CHANGE_WORDS = {
     "suspend_user": "Suspend",
     "archive_user": "Archive",
     "move_alias": "Move an alias",
+    "update_profile": "Change title, department or phone",
     "onboard_runbook": "Create a task list",
     "reset_password": "Reset a password",
     "revoke_access": "Revoke access",

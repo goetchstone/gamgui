@@ -76,6 +76,22 @@ profile, groups, delegates, vacation responder, signature and calendar sharing.
 
 ![The Users list](screenshots/users.png)
 
+## Change many people from a CSV
+
+On **Users**, **Bulk: change from a CSV** takes a CSV with an `email` column and any of `title`, `department`, `phone` and
+`org_unit`. The **No title**, **No department** and **No phone** sheets on **Reports** download in exactly this shape: fill
+them in and upload them here. A blank cell leaves that value alone; nothing here clears a value. The phone is the one a
+signature shows.
+
+**Preview changes** lists each person's value now and after, and says which rows it won't change and why: an address that
+isn't an account, an alias, an org unit that doesn't exist, or a profile GAM couldn't send back as it is. Download the
+the before file first: it’s the undo, each value as it was, and uploading it puts them back (a value that was empty before
+it can't put back; clear that one on the person's page). Over 25 people asks you to type the count.
+
+Google keeps a person's organizations and phones each as one list, so the change sends every other entry back as it is.
+Each person is read again just before their change; anyone changed elsewhere since the preview is left alone and the run
+says so.
+
 ## Onboard a new hire
 
 **Before:** on **Onboard → Role templates**, check the role you'll use — its org unit, signature,

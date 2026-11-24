@@ -1,0 +1,48 @@
+{#- Change from a CSV (roadmap 4.6): the confirm step. Each change is the directory's value now and the CSV's, held under a
+    single-use token; Change runs exactly those. The "before" file is the undo. -#}
+{% set n = changes | length %}
+<div class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm space-y-2">
+  {% if n %}
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">Change {{ n }} {{ "person" if n == 1 else "people" }}?</p>
+  {% else %}
+  <p tabindex="-1" data-focus class="text-brand-blueink">Nothing to change.</p>
+  {% endif %}
+  {% if unchanged %}<p class="text-xs text-brand-grayink">{{ unchanged }} {{ "person is" if unchanged == 1 else "people are" }} already as the CSV says, and left alone.</p>{% endif %}
+  {% for line in notes %}<p class="text-xs text-brand-grayink">{{ line }}</p>{% endfor %}
+  {% if refused %}
+  <details{% if not n %} open{% endif %}>
+    <summary class="cursor-pointer text-amber-800">Not changed ({{ refused | length }})</summary>
+    <ul class="mt-1 max-h-48 space-y-0.5 overflow-auto text-xs text-amber-900">{% for line in refused %}<li>{{ line }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if n %}
+  <div class="max-h-80 overflow-auto rounded border border-brand-gray/30 bg-brand-white">
+    <table class="w-full text-xs">
+      <thead class="sticky top-0 bg-paper text-left text-brand-grayink"><tr><th class="px-2 py-1">Person</th><th class="px-2 py-1">What</th><th class="px-2 py-1">Now</th><th class="px-2 py-1">After</th></tr></thead>
+      <tbody>
+        {% for c in changes %}{% for col in columns if col in c.after %}
+        <tr class="border-t border-brand-gray/20">
+          <td class="px-2 py-1 text-brand-black">{% if loop.first %}{{ c.email }}{% endif %}</td>
+          <td class="px-2 py-1">{{ labels[col] }}</td>
+          <td class="px-2 py-1 text-brand-grayink">{{ c.before[col] or "(empty)" }}</td>
+          <td class="px-2 py-1 text-brand-black">{{ c.after[col] }}</td>
+        </tr>
+        {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-xs text-brand-blueink"><a href="/users/csv/before.csv?key={{ before | urlencode }}" download class="font-medium underline">Download the before file</a> first: it's this CSV's undo, each value as it is now. Upload it here to put them back.{% if blanks %} It can't put back {{ blanks }} {{ "value" if blanks == 1 else "values" }}: one that was empty (a blank cell changes nothing), or that starts or ends with a space. Set {{ "it" if blanks == 1 else "those" }} on the person's page.{% endif %}</p>
+  <p class="text-xs text-brand-grayink">Each person is read again just before their change. Anyone whose organizations, phones or org unit changed since this preview is left as they are, and the run says so. A new org unit's settings and policies apply to them from then on.</p>
+  <form class="flex flex-wrap items-end gap-2" hx-post="/users/csv/apply" hx-target="#bulk-csv-result" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    {% if typed_count %}
+    <label class="block text-sm text-brand-black">Type <strong>{{ n }}</strong> to confirm:
+      <input name="confirm_count" inputmode="numeric" autocomplete="off"
+             class="mt-1 block w-24 rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    </label>
+    {% endif %}
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Change {{ n }}</button>
+  </form>
+  {% endif %}
+</div>
