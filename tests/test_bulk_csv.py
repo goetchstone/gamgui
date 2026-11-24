@@ -95,6 +95,7 @@ def test_every_organization_goes_back_as_read_with_only_the_change():
 @pytest.mark.parametrize("orgs", [
     [{"title": "A", "jobDescription": "x", "primary": True}],          # a field GAM wouldn't send back
     [{"title": "A", "type": "partner"}],                               # a type GAM doesn't keep
+    [{"title": "A", "fullTimeEquivalent": True, "primary": True}],    # true isn't a number, whatever Python says
     "not a list",
 ])
 def test_an_organization_gam_couldnt_send_back_refuses_the_person(orgs):

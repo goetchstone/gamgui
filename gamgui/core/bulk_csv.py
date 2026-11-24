@@ -167,7 +167,7 @@ def organizations_from(record: Mapping[str, Any]) -> List[Organization]:
         if not isinstance(o.get("primary", False), bool):
             raise ValueError("an organization's primary isn't true or false")
         fte = o.get("fullTimeEquivalent")
-        if fte is not None and not isinstance(fte, int):
+        if fte is not None and (isinstance(fte, bool) or not isinstance(fte, int)):   # a bool is an int to Python
             raise ValueError("an organization's full-time equivalent isn't a number")
         if not any(o.get(k) for k in (*ORG_TEXT_FIELDS, "type", "customType", "fullTimeEquivalent")):
             raise ValueError("an organization of theirs is empty, and GAM would send it back as nothing")
