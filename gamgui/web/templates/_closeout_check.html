@@ -65,7 +65,8 @@
     <legend class="text-sm font-medium text-brand-black">Licenses</legend>
     {% for s in found.seats %}
     <label class="mt-1 flex items-center gap-2 text-sm"><input type="checkbox" name="seat" value="{{ key(s) }}" class="{{ box }}" /> Remove {{ s.sku }}</label>
-    {% else %}<p class="mt-1 text-sm text-brand-grayink">No license found for them.</p>{% endfor %}
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">No license read for them.</p>{% endfor %}
+    <p class="mt-1 text-xs text-brand-grayink">{{ only_seats_read }}</p>
   </fieldset>
   {% endif %}
 

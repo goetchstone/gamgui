@@ -15,8 +15,9 @@ from typing import List, Optional, Tuple
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import closeout, guard, lifecycle
+from ...core import closeout, guard, licenses, lifecycle
 from ...core.connectors.base import RiskLevel
+from ...core.gam.commands import GAMCommands
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.gam.models import GAMUser
 from ..jobs import start_job
@@ -63,10 +64,16 @@ async def _account(st, conn, typed: str) -> Tuple[Optional[GAMUser], str]:
     primary = record.primary_email
     if primary.lower() != typed.lower():
         return None, f"{typed} is an alias of {primary}: close out {primary}."
-    admin = st.vault.oauth_admin_email(conn.domain) if st.vault is not None else ""
-    if admin and admin.lower() == primary.lower():
-        return None, f"{primary} is the admin GamGUI is connected as: it can't close itself out."
+    if why := await _own_account(conn, primary, previewing=True):
+        return None, why
     return record, ""
+
+
+async def _own_account(conn, user: str, previewing: bool = False) -> str:
+    """Why ``user`` can't be closed out because it may be the admin GamGUI signs in as, or "". By Google account ID
+    (``cut_off_refusal``), so an alias or a renamed admin reads as the account behind it, and an admin GamGUI can't
+    confirm refuses: archiving it or taking its role signs the app out. Asked as the account's suspend would be."""
+    return await conn.cut_off_refusal([GAMCommands.set_suspended(user, True)], previewing=previewing)
 
 
 def _busy(st, user: str) -> str:
@@ -96,7 +103,8 @@ async def check(request: Request, user: str = "") -> HTMLResponse:
     if why:
         return error_partial(request, why)
     return TEMPLATES.TemplateResponse(request, "_closeout_check.html", {"found": found, "key": closeout.seat_key,
-                                                                       "archive_note": closeout.ARCHIVE_SWAPS, "archive_source": closeout.ARCHIVE_SOURCE})
+                                                                       "archive_note": closeout.ARCHIVE_SWAPS, "archive_source": closeout.ARCHIVE_SOURCE,
+                                                                       "only_seats_read": licenses.ONLY_SEATS_READ})
 
 
 async def _manager(conn, manager: str, user: str) -> str:
@@ -195,6 +203,8 @@ async def apply(request: Request) -> HTMLResponse:
     refusal = guard.enforce(_changes(held.steps), form, confirm_step=True, typed_address=held.user)
     if refusal:
         return error_partial(request, f"{refusal} Nothing ran: preview again.")
+    if refusal := await _own_account(conn, held.user):
+        return error_partial(request, f"{refusal} Nothing ran.")
     if refusal := _busy(st, held.user) or await _still_the_same(conn, held):
         return error_partial(request, refusal)
     # No await from here to the registration, so two Runs can't both pass, and a switch during the reads can't start this.

@@ -186,6 +186,10 @@ IDENTIFIERS = (
     # A group's settings (roadmap 4.4): one group address, and each setting a value from its own list.
     Spec("info_group_settings", (), (), {"group": _SEARCH_ADDRESS}),
     Spec("update_group_settings", (), (), {"group": _SEARCH_ADDRESS, "changes": _SETTINGS_CHANGES}),
+    # Close Out (roadmap 4.5): an assignment by its numeric ID, an alias moved to one account, each address one element.
+    Spec("delete_admin_role", (), (), {"assignment_id": st.from_regex(r"[0-9]{1,20}", fullmatch=True)}),
+    Spec("set_archived", ("email",)),
+    Spec("move_alias", (), (), {"alias": _SEARCH_ADDRESS, "to": _SEARCH_ADDRESS}),
 )
 
 

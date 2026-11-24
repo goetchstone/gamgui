@@ -30,7 +30,11 @@ the rest. Order: groups, roles (`delete admin <id>`), org unit, suspend or archi
 Archived User one (Admin Help, "Archive former employee accounts"). `update alias` deletes the alias from **whoever holds it
 now**, then adds it, so Run reads the leaver again and refuses an alias no longer theirs; an add that fails after the delete
 leaves it on nobody (exit 50), and the step says so. Run also reads the transfer again, and refuses while an offboarding or
-another Close Out of them runs. The confirm step posts only its token, the leaver's address typed, `confirm` at ten steps.
+another Close Out of them runs (and an offboarding refuses while their Close Out runs). The admin GamGUI signs in as is refused
+by Google account ID (`cut_off_refusal`, at the check and again at Run), so a renamed admin or one the token doesn't name
+can't be archived or lose its role here; `archived on` is a cut-off shape too. `incomplete_transfers_for` takes output
+without its `id` title as unread and a row with no status as unfinished, for the delete gate as well. The alias step reads
+the leaver's aliases again right before it runs. The confirm step posts only its token, the leaver's address typed, `confirm` at ten steps.
 The delete isn't a step: the check embeds the Users delete zone (`/users/delete/zone`), the one delete path. Not run live yet.
 
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on

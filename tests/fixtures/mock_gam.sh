@@ -2422,8 +2422,7 @@ if [ "${1:-}" = "update" ] && { [ "${2:-}" = "alias" ] || [ "${2:-}" = "aliases"
   alias=$(lower "$3"); to=$(lower "$5"); shift 5
   while [ $# -gt 0 ]; do
     case "$1" in
-      notargetverify) shift ;;
-      waitafterdelete) need_value $# "Integer"; shift 2 ;;
+      notargetverify|waitafterdelete) not_modelled "update alias with $1" ;;   # GAM bounds waitafterdelete to 2..10
       *) invalid_arg "$1" ;;
     esac
   done

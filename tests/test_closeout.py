@@ -173,11 +173,63 @@ def test_a_read_that_fails_offers_nothing_for_it_and_says_so(client, monkeypatch
     assert "Take them out of" not in page and "In no group" not in page and "Remove Super Admin" in page
 
 
-def test_an_alias_or_the_connected_admin_is_refused(client, monkeypatch):  # noqa: F811
+def test_an_alias_is_refused_for_its_primary(client):  # noqa: F811
     assert "is an alias of alice@example.com" in _text(client.get("/lifecycle/closeout/check?user=a.anders@example.com").text)
-    st = client.app.state.gamgui
-    monkeypatch.setattr(st.vault, "oauth_admin_email", lambda domain: ALICE)
-    assert "can't close itself out" in _text(client.get(f"/lifecycle/closeout/check?user={ALICE}").text)
+
+
+ALICE_ID = "100000000000000000001"
+
+
+@pytest.mark.parametrize("claim, account_id", [
+    (ALICE, ALICE_ID),                     # the admin GamGUI signs in as
+    ("a.anders@example.com", ALICE_ID),    # the same admin, renamed: the token still names the old address
+    ("", ""),                              # an admin GamGUI can't confirm: never "not this one"
+])
+def test_the_admin_gamgui_signs_in_as_is_never_closed_out(client, monkeypatch, gam_calls, claim, account_id):  # noqa: F811
+    _, token = _preview(client, role="9170001", state="archive")     # held while the identity read as someone else
+    vault = client.app.state.gamgui.vault
+    monkeypatch.setattr(vault, "oauth_admin_email", lambda domain: claim)
+    monkeypatch.setattr(vault, "oauth_admin_id", lambda domain: account_id)
+    assert "Preview changes" not in client.get(f"/lifecycle/closeout/check?user={ALICE}").text
+    assert not _preview(client, role="9170001", state="archive")[1]
+    assert "nothing" in _text(_apply(client, token).text).lower()
+    assert gam_writes(gam_calls()) == []
+
+
+def test_archiving_counts_as_cutting_an_account_off():
+    from gamgui.core.gam.commands import cut_off_account
+    assert cut_off_account(GAMCommands.set_archived(ALICE)) == ALICE
+    assert cut_off_account(["update", "user", ALICE, "archived", "off"]) is None
+
+
+@pytest.mark.parametrize("out, pending", [
+    ("Getting all Data Transfers for alice@example.com\n", None),        # no `id` title: no answer, never "none"
+    ("id,overallTransferStatusCode,application\nT1,,Drive and Docs\n", [{"application": "Drive and Docs", "status": "status unknown"}]),
+    ("id\n", []),
+])
+def test_a_transfer_read_without_its_table_or_a_status_is_never_finished(client, monkeypatch, out, pending):  # noqa: F811
+    conn = client.app.state.gamgui.connector
+    real = conn.runner.run_authenticated
+
+    async def transfers(domain, argv, *a, **k):
+        return out if argv[:2] == ["print", "datatransfers"] else await real(domain, argv, *a, **k)
+    monkeypatch.setattr(conn.runner, "run_authenticated", transfers)
+    assert client.portal.call(conn.incomplete_transfers_for, ALICE) == pending
+
+
+def test_an_offboarding_cant_start_while_a_close_out_of_them_runs(client):  # noqa: F811
+    from gamgui.web.jobs import start_job
+    job = start_job(client.app.state.gamgui.jobs, 3, kind="closeout", title=f"Closing out {ALICE}")
+    job.about = ALICE
+    r = client.post("/lifecycle/offboard/preview", data={"user": ALICE, "manager": "bob@example.com"})
+    assert "A Close Out of alice@example.com is running" in _text(r.text)
+
+
+def test_an_alias_gone_from_them_by_the_step_is_never_moved(client, gam_calls):  # noqa: F811
+    conn = client.app.state.gamgui.connector
+    result = client.portal.call(conn.move_alias, "carol@example.com", "a.anders@example.com", "bob@example.com")   # alice's
+    assert not result.ok and "isn't carol@example.com's alias any more" in result.remediation
+    assert gam_writes(gam_calls()) == []
 
 
 def test_the_preview_holds_the_picked_steps_and_writes_nothing(client, gam_calls):  # noqa: F811
@@ -288,8 +340,15 @@ def test_a_run_finishes_and_says_so(client):  # noqa: F811
     assert "Closed out alice@example.com: all 1 step succeeded." in _text(client.get(f"/lifecycle/closeout/status?job={job.id}").text)
 
 
-def test_a_failed_alias_move_says_the_alias_may_be_on_nobody(client):  # noqa: F811
+def test_a_failed_alias_move_says_the_alias_may_be_on_nobody(client, monkeypatch):  # noqa: F811
     conn = client.app.state.gamgui.connector
+    real = conn.get_user
+
+    async def holds_it(email, fields=None):     # alice holds the alias GAM will fail to add (the mock's *addfail*)
+        user = await real(email, fields)
+        user.aliases = ["x.addfail@example.com"]
+        return user
+    monkeypatch.setattr(conn, "get_user", holds_it)
     result = client.portal.call(conn.move_alias, ALICE, "x.addfail@example.com", "bob@example.com")
     assert not result.ok and result.remediation.startswith("x.addfail@example.com may now be on nobody")
 

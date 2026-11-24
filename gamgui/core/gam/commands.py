@@ -113,7 +113,8 @@ def cut_off_account(argv: Sequence[str]) -> Optional[str]:
         for i, word in enumerate(attributes):
             if word == "password":
                 return original[2]
-            if word in ("suspended", "suspend") and attributes[i + 1:i + 2] not in (["off"], ["false"]):
+            # Archived can't sign in either (Close Out, roadmap 4.5): GAM's own token goes with it.
+            if word in ("suspended", "suspend", "archived", "archive") and attributes[i + 1:i + 2] not in (["off"], ["false"]):
                 return original[2]
     return None
 

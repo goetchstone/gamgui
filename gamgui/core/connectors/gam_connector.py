@@ -407,6 +407,18 @@ class GAMConnector(Connector):
         """Move ``alias`` from ``email`` to ``to``: GAM deletes it, then adds it there. A failure may have come after the
         delete, so its remediation says the alias may be on nobody, whatever GAM's own words were."""
         argv = GAMCommands.move_alias(alias, to)
+        # `update alias` deletes it from whoever holds it now, so it is read as theirs right before; a read that fails
+        # refuses too (the steps before this one in a run take time, and the alias may have moved meanwhile).
+        try:
+            mine = {a.lower() for a in (await self.get_user(email, fields=("primaryEmail", "aliases"))).aliases}
+        except Exception as exc:  # noqa: BLE001 - unread: never moved, whatever it was
+            mine, why = set(), f"Couldn't read {email}'s aliases ({exc})"
+        else:
+            why = f"{alias} isn't {email}'s alias any more"
+        if alias.lower() not in mine:
+            preview = ChangePreview(connector_id=self.id, target=email, summary="Move an alias", risk=RiskLevel.DESTRUCTIVE)
+            return ChangeResult(preview=preview, ok=False, detail=why,
+                                remediation=f"{why}, so it wasn't moved: moving it would take it from whoever has it now.")
         result = await self._run_write("move_alias", email, argv, RiskLevel.DESTRUCTIVE, about={"alias": alias, "to": to})
         if result.ok:
             return result
@@ -1056,12 +1068,15 @@ class GAMConnector(Connector):
         except Exception as exc:  # noqa: BLE001 - any failure leaves the answer unknown, whatever it was
             logger.warning("the data-transfer check for a delete failed", exc_info=exc)
             return None
-        if not out.strip():       # GAM prints the header even with no transfers: no table is no answer
+        try:                      # GAM prints the `id` title even with no transfers: output without it is no answer
+            rows = _rows_from_titles(out, "id", "GAM answered without the data transfers.")
+        except Incomplete:
             return None
         pending = []
-        for r in parse_records(out):
-            status = str(r.get("overallTransferStatusCode") or r.get("status") or "")
-            if status and status.lower() != "completed":
+        for r in rows:
+            # A row without a status is unfinished as far as anyone can tell, never completed (invariant 10).
+            status = str(r.get("overallTransferStatusCode") or r.get("status") or "").strip() or "status unknown"
+            if status.lower() != "completed":
                 pending.append({"application": str(r.get("application") or "data"), "status": status})
         return pending
 

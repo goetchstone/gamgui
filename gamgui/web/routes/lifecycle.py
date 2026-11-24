@@ -93,6 +93,14 @@ def _running(st, user: str):
     return job if job is not None and not job.finished else None
 
 
+def _closing_out(st, user: str) -> str:
+    """Why an offboarding of ``user`` can't start while their Close Out runs (roadmap 4.5), or "": it would move what
+    Close Out is taking away, and Close Out read no transfer that this one would start."""
+    if any(j.kind == "closeout" and not j.finished and j.about.lower() == user.lower() for j in st.jobs.values()):
+        return f"A Close Out of {user} is running: wait for it to finish before offboarding them."
+    return ""
+
+
 def _already_running(request: Request, job, user: str) -> HTMLResponse:
     """The refusal, with the running job's own progress panel — the way back to it after a reload."""
     return TEMPLATES.TemplateResponse(request, "_offboard_running.html",
@@ -292,6 +300,8 @@ async def offboard_preview(
     recipient = check.recipient.primary_email if check.recipient else ""   # "" is the manager
     if running := _running(st, user):
         return _already_running(request, running, user)
+    if why := _closing_out(st, user):
+        return error_partial(request, why)
     if "delegate" not in done | na and (warning := await _delegate_warning(st.connector, user, manager)):
         check.warnings.append(warning)
     conn = st.connector
@@ -433,6 +443,8 @@ async def offboard_run(
         return error_partial(request, "The connection changed, so nothing ran.")
     if running := _running(st, user):
         return _already_running(request, running, user)
+    if why := _closing_out(st, user):
+        return error_partial(request, why)
     job = start_job(st.jobs, len(steps), kind="offboard", title=f"Offboarding {user}")
     st.offboard_jobs = {u: j for u, j in st.offboard_jobs.items() if _running(st, u)}   # drop finished ones
     st.offboard_jobs[user.lower()] = job.id
