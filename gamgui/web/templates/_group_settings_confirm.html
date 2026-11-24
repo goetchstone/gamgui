@@ -1,0 +1,28 @@
+{#- A group's settings change, previewed (roadmap 4.4): exactly the settings held, old and new. The form posts only the token,
+    so nothing in it names what runs; Change reads the settings again first. -#}
+<div class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm">
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">Change {{ held | length }} setting{{ "s" if held | length != 1 }} of {{ group }}?</p>
+  <table class="mt-2 w-full text-left text-sm">
+    <caption class="sr-only">Each setting that changes, as it is and as it would be</caption>
+    <thead class="text-xs text-brand-grayink">
+      <tr><th scope="col" class="py-1 pr-3 font-normal">Setting</th><th scope="col" class="py-1 pr-3 font-normal">Now</th><th scope="col" class="py-1 font-normal">After</th></tr>
+    </thead>
+    <tbody>
+      {% for c in held %}
+      <tr class="border-t border-brand-gray/30">
+        <th scope="row" class="py-1 pr-3 font-medium text-brand-black">{{ c.label }}</th>
+        <td class="py-1 pr-3 text-brand-blueink">{{ c.before }}</td>
+        <td class="py-1 text-brand-black">{{ c.after }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="mt-2 text-xs text-brand-blueink">The rest stay as they are. Google refuses some combinations itself; if it does, it says why here and nothing changes.</p>
+  <form class="mt-2 flex gap-2" hx-post="/groups/settings/apply" hx-target="#group-settings-confirm" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Change</button>
+    <button type="button" data-action="clear" data-clear="group-settings-confirm"
+            class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors">Cancel</button>
+  </form>
+</div>

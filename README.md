@@ -106,7 +106,9 @@ and have only run offline: see
   one preview, one guarded step per mailbox with the count typed. The sender's Sent copy is kept.
 - **Gmail signatures** — a scoped designer with variables, saved templates, a live preview, and
   bulk apply with a live per-user ✓/✗ feed as each signature gets set.
-- **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step.
+- **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step;
+  and seven of its settings (who can post, join and see the members, outside members, moderation, web posting, history),
+  each change previewed as it is and as it would be.
 - **Classroom** (school domains, read only) — find any class and see its teachers and students, a person's classes
   (with a warning at offboarding when a leaver owns some), and who may create classes. **Plan an import** reads your
   SIS's roster export on this Mac (OneRoster 1.1 or 1.2, Clever's CSV files, or one spreadsheet you map by its
@@ -255,6 +257,7 @@ school domain is the most useful one of all.
 | Forwarding: add an address, forward on / off | Builder (forward off also Offboarding) | forward off **confirmed** (the first live offboarding, 2026-10-07, GAM 7.48.14); adding an address and forward on, not yet |
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
+| Change a group's settings (`update group <group> <setting> <value>`) | Groups | not yet: run on a throwaway group |
 | Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 
 **A new account isn't ready at once.** On the first live onboarding (2026-09-30) the account,

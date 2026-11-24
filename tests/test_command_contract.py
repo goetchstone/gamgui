@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from gamgui.core.gam.commands import (CALENDAR_ACL_ROLES, COURSE_STATES, EXPECTED_GAM_VERSION, GROUP_ROLES, GAMCommands,
+from gamgui.core.gam.commands import (CALENDAR_ACL_ROLES, COURSE_STATES, EXPECTED_GAM_VERSION, GROUP_ROLES, GROUP_SETTINGS, GAMCommands,
                                       MessageId, Phone)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +92,10 @@ ENUM_ARGS = {
     ("print_courses", "course_ids"): ((), ["500000000002"], ["500000000002", "500000000002"]),
     ("print_course_participants", "course_id"): ("500000000002",),
     ("print_all_course_participants", "states"): (("active",), ("active", "provisioned", "archived")),
+    # A group's settings (roadmap 4.4): each setting, and every value each takes, as the builder sends them.
+    ("info_group_settings", "group"): (SEARCH_ADDRESS,),   # one address: a list would read several groups
+    ("update_group_settings", "group"): (SEARCH_ADDRESS,),
+    ("update_group_settings", "changes"): tuple({k: v} for k, (_, values) in GROUP_SETTINGS.items() for v in values),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
@@ -139,12 +143,9 @@ def builder_argvs():
 
 
 @functools.lru_cache(maxsize=None)
-def _grammar():
+def _definitions():
+    """Each `<Name> ::= …` definition's right-hand side, its continuation lines joined on."""
     text = GAM_COMMANDS_REF.read_text(errors="replace")
-    words = set(re.findall(r"[\w-]+", text))
-    heads = [line.split()[1:] for line in text.splitlines() if line.startswith("gam ")]
-    # `<Name> ::= a|b|<Other>` definitions that are only a choice of words, resolved to those words
-    # (`<Boolean>` → true|on|…|false|off|…), so `vacation on` can match `vacation [<Boolean>]`.
     rhs, name = {}, None
     for line in text.splitlines():
         m = re.match(r"(<[^>]+>)\s*:*=+(.*)", line)   # the grammar also spells it `=`, `::=`, `:==`
@@ -155,6 +156,17 @@ def _grammar():
             rhs[name][-1] += line.strip()
         else:
             name = None
+    return rhs
+
+
+@functools.lru_cache(maxsize=None)
+def _grammar():
+    text = GAM_COMMANDS_REF.read_text(errors="replace")
+    words = set(re.findall(r"[\w-]+", text))
+    heads = [line.split()[1:] for line in text.splitlines() if line.startswith("gam ")]
+    # `<Name> ::= a|b|<Other>` definitions that are only a choice of words, resolved to those words
+    # (`<Boolean>` → true|on|…|false|off|…), so `vacation on` can match `vacation [<Boolean>]`.
+    rhs = _definitions()
 
     def choices(n, seen=()):
         out, seen = set(), (*seen, n)
@@ -205,8 +217,34 @@ def _command_words(argv) -> int:
                default=start)
 
 
+def _attributes(name, seen=()):
+    """An attribute list's `(word <Slot>|a|b)` alternatives (`<GroupSettingsAttribute>`), through the lists it names: each word
+    and the values it takes, or None where any value fills it."""
+    rhs, enums, out = _definitions(), _grammar()[3], {}
+    for group, ref in re.findall(r"\(([^()]*)\)|(<[^<>]+>)", "|".join(rhs.get(name, ()))):
+        if ref:
+            if ref not in seen:
+                out.update(_attributes(ref, (*seen, name)))
+            continue
+        words, _, value = group.partition(" ")
+        value = value.strip()
+        takes = enums.get(value) or (None if re.fullmatch(r"<[^<>]+>", value) else set(value.split("|")))
+        out.update(dict.fromkeys(words.split("|"), takes))
+    return out
+
+
+def _group_attributes_ok(pairs) -> bool:
+    """`update group <GroupEntity> <GroupAttribute>*`: the reference puts the list on the line after the head, so its words
+    are read from `<GroupAttribute>`'s own definition, a word and the value it takes at a time."""
+    attrs = _attributes("<GroupAttribute>")
+    return bool(pairs) and len(pairs) % 2 == 0 and all(
+        w in attrs and (_value(v) if attrs[w] is None else v in attrs[w]) for w, v in zip(pairs[::2], pairs[1::2], strict=True))
+
+
 def _matches_grammar(argv) -> bool:
     _, _, heads, enums = _grammar()
+    if argv[:2] == ["update", "group"] and len(argv) > 3 and _value(argv[2]) and _group_attributes_ok(argv[3:]):
+        return True
     # The reference says `calendars <CalendarEntity> transfer <UserItem>`, but GAM's own source and comment at the pin take
     # `transfer ownership`, and anything else is an invalid choice: the source is the authority (back-port plan C3).
     if len(argv) > 3 and argv[0] == "calendars" and argv[2:4] == ["transfer", "ownership"]:
@@ -254,7 +292,9 @@ def test_builder_commands_match_a_grammar_line():
     # The checker must bite: a renamed verb or noun, or a keyword in a slot's place, matches nothing.
     for wrong in (["user", "<e>", "delete", "calendar", "<c>"], ["calendars", "<c>", "remove", "events"],
                   ["user", "<e>", "vacation", "maybe"], ["update", "group", "<g>", "insert", "<m>"],
-                  ["create", "users", "<e>"], ["user", "<e>", "zzz", "delegate", "<d>"]):
+                  ["create", "users", "<e>"], ["user", "<e>", "zzz", "delegate", "<d>"],
+                  ["update", "group", "<g>", "whocanjoin", "sometimes"], ["update", "group", "<g>", "whocanfly", "true"],
+                  ["update", "group", "<g>", "isarchived", "maybe"], ["update", "group", "<g>", "isarchived"]):
         assert not _matches_grammar(wrong), wrong
     unmatched = {f"{name}: {' '.join(argv[:_command_words(argv)])}"
                  for name, argv in builder_argvs() if name not in SUFFIXES and not _matches_grammar(argv)}
@@ -331,6 +371,8 @@ def _argv_problem(argv) -> str:
     # A Builder export is a read plus GAMCommands.todrive_args: split at each `todrive`, and each side must
     # be a shape. Any reading that passes the grammar clears the argv.
     problem = "no GAMCommands builder or Builder read emits this shape, so its keywords can't be told from its values"
+    if len(argv) > 3 and tuple(argv[:2]) == ("update", "group") and _group_attributes_ok(list(argv[3:])):
+        return ""   # a group's settings: each pair a word `<GroupAttribute>` defines and a value it takes, so none is unsure
     by_len = _shapes()
     for cut in [len(argv)] + [i for i, a in enumerate(argv) if a == "todrive"]:
         head, tail = argv[:cut], argv[cut:]
@@ -368,7 +410,11 @@ def test_the_sent_argv_sweep_bites():
             ["print", "groups"], ["user", a, "print", "backupcodes"],   # Builder catalog reads
             ["MOCKFAIL", "scope"]]
     assert unshaped_argv({tuple(argv): "t" for argv in good}) == []
+    good.append(C.update_group_settings("sales@example.com", {"whocanjoin": "invited_can_join", "isarchived": "false"}))
+    assert unshaped_argv({tuple(argv): "t" for argv in good}) == []
     bad = {("user", a, "vacation", "on", "subject", "S"): "no GAMCommands builder",     # hand-built
+           ("update", "group", "sales@example.com", "whocanjoin", "sometimes"): "no GAMCommands builder",
+           ("update", "group", "sales@example.com", "isarchived", "false", "whocanjoin"): "no GAMCommands builder",
            (*C.show_vacation(a), *C.todrive_args()): "doesn't take it",
            (*C.info_user(a), *C.todrive_args("T")): "doesn't take it",
            (*C.print_users(), "todrive"): "todrive_args doesn't emit",   # GAM would open a browser (plan F4)

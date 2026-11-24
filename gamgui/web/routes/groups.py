@@ -1,5 +1,6 @@
 """The Groups board (/groups): find a group, see its members and their roles, add someone by name or
-email with a role, and remove a member after a confirm step (plan U7, A6).
+email with a role, and remove a member after a confirm step (plan U7, A6); and change seven of its settings, each change
+previewed (roadmap 4.4, at the end).
 
 Every list here is capped server-side: the group finder and the people type-ahead return the top
 matches from the cached directory, never the whole of it, and a group's members come a page at a time.
@@ -17,14 +18,15 @@ from typing import Annotated
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from ...core import bulk, guard
+from ...core import bulk, group_settings, guard
 from ...core.connectors.base import RiskLevel
-from ...core.gam.commands import GROUP_ROLES
+from ...core.gam.errors import GAMErrorKind
+from ...core.gam.commands import GROUP_ROLES, GROUP_SETTINGS, is_one_address, settings_skipped
 from ...core.onboarding import looks_like_email
 from ..jobs import retry_key, retry_of, start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
-from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly
+from ._common import GAM_TROUBLE, NOT_CONNECTED, app_state, as_of, error_partial, friendly, unread_why, write_failed
 
 PICK_LIMIT = 15      # group and people suggestions shown at once — keep typing to narrow
 MEMBERS_PAGE = 50    # member rows per page; the list scrolls inside the fixed window
@@ -327,3 +329,103 @@ async def remove_many_status(request: Request, job: str = "") -> HTMLResponse:
     if found is None or found.kind != "group_remove":
         return error_partial(request, "That run is no longer here.")
     return TEMPLATES.TemplateResponse(request, _REMOVE_RUN, {"job": found, "group": str(found.retry)})
+
+
+# --- a group's settings (roadmap 4.4) ----------------------------------------------------------------------------------
+# "Show settings" reads seven of the group's settings (core/group_settings.py). Preview reads them again and holds exactly
+# the ones the form changes, old and new, under a single-use token; the confirm step posts only that token. Apply reads them
+# a third time and refuses when one held has changed since (so an older preview can't undo a newer change), then writes only
+# the held settings. Google refuses some combinations itself, and its words reach the screen.
+_SETTINGS_FLOW = "group_settings"
+_SETTINGS_KEY = ("group_settings",)   # the confirm step posts only its token: nothing in it names what runs
+_SETTINGS_CARD = "_group_settings.html"
+_SETTINGS_CONFIRM = "_group_settings_confirm.html"
+_SETTINGS_TRY_AGAIN = f"{GAM_TROUBLE} Please try again."
+
+
+async def _settings_now(conn, group: str):
+    """``(settings, why not, address)``: the offered settings read now and the group's primary address as GAM read it (an
+    alias resolves to it), or None and why they can't be told (invariant 10)."""
+    skipped = "GAM doesn't read or change the settings of an abuse@ or postmaster@ group: use the Admin console."
+    if settings_skipped(group):
+        return None, skipped, group
+    try:
+        record = await conn.group_settings(group)
+    except Exception as exc:  # noqa: BLE001 — unread: nothing offered, never a default
+        return None, unread_why(exc, _SETTINGS_TRY_AGAIN), group
+    addr = str(record.get("email") or "").strip()
+    if settings_skipped(addr):
+        return None, skipped, addr
+    found = group_settings.read(record)
+    if found is None or not is_one_address(addr):
+        return None, "GAM's answer left some of them out, so none are offered.", group
+    return found, "", addr
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_card(request: Request, group: str = "") -> HTMLResponse:
+    conn, group = app_state(request).connector, group.strip()
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    if not is_one_address(group):
+        return error_partial(request, "Pick a group first.")
+    settings, why, _ = await _settings_now(conn, group)
+    return TEMPLATES.TemplateResponse(request, _SETTINGS_CARD, {
+        "group": group, "settings": settings or [], "error": f"Couldn't read {group}'s settings. {why}" if why else ""})
+
+
+@router.post("/settings/preview", response_class=HTMLResponse)
+async def settings_preview(request: Request, group: Annotated[str, Form()] = "") -> HTMLResponse:
+    st = app_state(request)
+    tenant = st.tenant_key()   # before the read: what the preview is bound to
+    conn, group = st.connector, group.strip()
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    if not is_one_address(group):
+        return error_partial(request, "Pick a group first.")
+    settings, why, group = await _settings_now(conn, group)   # from here, the group as GAM read it
+    if settings is None:
+        return error_partial(request, f"Couldn't read {group}'s settings again, so nothing is changed. {why}")
+    form = await request.form()
+    try:
+        held = group_settings.changes(settings, {k: str(form.get(k) or "") for k in GROUP_SETTINGS})
+    except ValueError:
+        return error_partial(request, "Pick each setting from its list.")
+    if not held:
+        return error_partial(request, f"Nothing to change: each setting is already as {group} has it.")
+    token = st.previews.hold(_SETTINGS_FLOW, _SETTINGS_KEY, (group, held), tenant=tenant)
+    return TEMPLATES.TemplateResponse(request, _SETTINGS_CONFIRM, {"group": group, "held": held, "token": token})
+
+
+@router.post("/settings/apply", response_class=HTMLResponse)
+async def settings_apply(request: Request) -> HTMLResponse:
+    st = app_state(request)
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    form = await request.form()
+    taken, refusal = st.previews.take(_SETTINGS_FLOW, str(form.get(TOKEN_FIELD) or ""), _SETTINGS_KEY,
+                                      again="click Preview changes again")
+    if refusal:
+        return error_partial(request, refusal)
+    group, held = taken
+    n = len(held)
+    refusal = guard.enforce(guard.changes([group], RiskLevel.LOW, f"Change {n} setting{'s' if n != 1 else ''}"), form,
+                            confirm_step=True)
+    if refusal:
+        return error_partial(request, refusal)
+    settings, why, _ = await _settings_now(conn, group)   # read again at the click
+    if settings is None:
+        return error_partial(request, f"Couldn't read {group}'s settings again, so nothing is changed. {why}")
+    if since := group_settings.moved(held, settings):
+        return error_partial(request, f"{', '.join(since)} changed since the preview, so nothing is changed. "
+                                      "Show the settings again and preview what you want.")
+    result = await conn.update_group_settings(group, {c.key: c.new for c in held})
+    if not result.ok:
+        said = group_settings.google_said(result.detail) if result.kind is not GAMErrorKind.NOT_FOUND else ""
+        if said:
+            return error_partial(request, f"Google refused the change to {group}'s settings: “{said}”. Nothing was changed.",
+                                 result.detail)
+        return write_failed(request, f"Couldn't change {group}'s settings.", result)
+    return TEMPLATES.TemplateResponse(request, "_group_settings_done.html", {
+        "group": group, "message": f"Changed {n} setting{'s' if n != 1 else ''} of {group}."})

@@ -62,6 +62,7 @@ SCREENS = {
     "See where an account is signed in": ["user_detail.html", "_user_security.html"],
     "Change a person's licenses": ["user_detail.html", "_license_card.html", "_license_confirm.html", "reports.html",
                                    "_audit_run.html", "_suspended_licenses.html", "_suspended_licenses_run.html"],
+    "Change a group's settings": ["groups.html", "_group_panel.html", "_group_settings.html", "_group_settings_confirm.html"],
     "Respond to an incident": ["_incident_nav.html", "_incident_logs.html", "_incident_reading.html"],
     "Make the incident's report": ["_incident_nav.html", "_incident_report.html", "_incident_report_list.html", "_incident_report_export.html"],
     "See what was left on the account": ["incident.html", "_incident_nav.html", "_incident_check.html"],

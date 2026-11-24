@@ -20,7 +20,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence
 
 # The GAM7 version GamGUI is pinned to and tested against — the SINGLE SOURCE OF TRUTH.
 # `scripts/fetch_gam.sh` (TAG), the mock, and the version tests must all match this; that's enforced by
@@ -33,6 +33,30 @@ GROUP_ROLES = ("member", "manager", "owner")
 # `<CalendarACLRole>` in the vendored grammar, verbatim (tests/test_command_contract.py pins it).
 CALENDAR_ACL_ROLES = ("editor", "freebusy", "freebusyreader", "owner", "reader", "writer",
                       "writerwithoutprivateaccess", "none")
+
+# A group's settings this app offers (roadmap 4.4): each `<GroupSettingsAttribute>` word, the Groups Settings API name `info
+# group ... formatjson` prints it under, and the values the grammar takes for it, as GAM is given them. GAM reads a choice
+# lowercased with `_` dropped (getChoice) and sends Google its upper-case name; a <Boolean> it sends as "true"/"false", and
+# Google keeps it as that string, which the read gives back.
+GROUP_SETTINGS = {
+    "whocanpostmessage": ("whoCanPostMessage", ("anyone_can_post", "all_in_domain_can_post", "all_members_can_post",
+                                                "all_managers_can_post", "all_owners_can_post", "none_can_post")),
+    "whocanjoin": ("whoCanJoin", ("anyone_can_join", "all_in_domain_can_join", "can_request_to_join", "invited_can_join")),
+    "whocanviewmembership": ("whoCanViewMembership", ("all_in_domain_can_view", "all_members_can_view",
+                                                      "all_managers_can_view", "all_owners_can_view")),
+    "allowexternalmembers": ("allowExternalMembers", ("true", "false")),
+    "messagemoderationlevel": ("messageModerationLevel", ("moderate_none", "moderate_new_members", "moderate_non_members",
+                                                          "moderate_all_messages")),
+    "allowwebposting": ("allowWebPosting", ("true", "false")),
+    "isarchived": ("isArchived", ("true", "false")),
+}
+
+
+def settings_skipped(group: str) -> bool:
+    """An abuse@ or postmaster@ group: GAM neither reads nor writes its settings, and its update still says it was done
+    (GroupIsAbuseOrPostmaster, doUpdateGroups and infoGroups at the 7.52.04 tag)."""
+    return group.lower().startswith(("abuse@", "postmaster@"))
+
 
 # `gam print users` returns ONLY primaryEmail unless fields are requested — these populate the list.
 # `organizations` carries the job title (the practical "role" for automations).
@@ -1192,6 +1216,31 @@ class GAMCommands:
     @staticmethod
     def print_group_members(group: str) -> List[str]:
         return ["print", "group-members", "group", group, "formatjson"]
+
+    @staticmethod
+    def info_group_settings(group: str) -> List[str]:
+        # `info group <GroupEntity> quick fields <GroupFieldNameList> formatjson` (infoGroups at the 7.52.04 tag): no members
+        # or aliases, one JSON line with the settings merged into the group's own fields. A settings read Google refuses fails
+        # the whole group (exit 50, no line). A list would read several, so the group is one address.
+        if not is_one_address(group):
+            raise ValueError(f"{group!r} isn't one group address")
+        return ["info", "group", group, "quick", "fields", ",".join(("email", *GROUP_SETTINGS)), "formatjson"]
+
+    @staticmethod
+    def update_group_settings(group: str, changes: Mapping[str, str]) -> List[str]:
+        # `update group <GroupEntity> <GroupAttribute>*` (doUpdateGroups): only the settings that change, so Google keeps the
+        # rest as they are. Each value one element, from GROUP_SETTINGS. GAM writes no setting of an abuse@ or postmaster@
+        # group yet reports it updated, so those are refused here; so is a list, which would change several groups.
+        if not is_one_address(group) or settings_skipped(group):
+            raise ValueError(f"{group!r} isn't a group whose settings GAM changes")
+        if not changes:
+            raise ValueError("no setting to change")
+        argv = ["update", "group", group]
+        for key, value in changes.items():
+            if value not in GROUP_SETTINGS.get(key, ("", ()))[1]:
+                raise ValueError(f"{key!r} {value!r} isn't a group setting this app offers")
+            argv += [key, value]
+        return argv
 
     @staticmethod
     def print_domains() -> List[str]:

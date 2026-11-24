@@ -337,6 +337,18 @@ and lists each license it would remove; type what it asks, and it removes exactl
 Each person's data transfers are read just before their first license goes: if one hasn't finished, failed, or can't be
 read, that person keeps their licenses and is listed as not removed. Not yet verified live.
 
+## Change a group's settings
+
+On **Groups**, pick a group and choose **Show settings**. It reads seven of the group's settings: who can post, who can
+join, who can see the members, members from outside the organization, messages held for a moderator, posting from the
+Groups website, and the conversation history. Each list starts at what Google has now. Change the ones you want and choose
+**Preview changes**…: it reads them again and shows only those that differ, as they are and as they would be. **Change**
+reads them once more and changes only those; if one was changed somewhere else since the preview, nothing changes and it
+says which. Google refuses some combinations itself, and then the screen gives Google's words.
+
+A setting Google gives a value this screen doesn't offer is shown as Google's and left alone. GAM doesn't read or change
+the settings of an abuse@ or postmaster@ group, so for those use the Admin console. Not yet verified live.
+
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.

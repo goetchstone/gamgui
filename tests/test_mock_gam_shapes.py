@@ -60,9 +60,9 @@ async def _fails(runner, domain, argv) -> GAMError:
 
 
 def test_every_formatjson_read_has_its_gam_header():
-    # A new formatjson read says its key columns here; `info user` prints one JSON record, not a table.
+    # A new formatjson read says its key columns here; `info user` and `info group` print one JSON record, not a table.
     emitting = {name for name, cases in READS.items() for argv in cases
-                if "formatjson" in argv and argv[:2] != ["info", "user"]}
+                if "formatjson" in argv and argv[:2] not in (["info", "user"], ["info", "group"])}
     assert emitting == set(HEADERS)
 
 

@@ -96,6 +96,8 @@ _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Exampl
 _DEVICE_USER = st.sampled_from(["devices/0vmcarol01/deviceUsers/u1", "devices/a-b_C/deviceUsers/D-1_e"])
 _PRODUCT_ID = st.sampled_from(["Google-Apps", "Google-Vault", "101031", "nv-product"])
 _SKU_ID = st.sampled_from(["1010020028", "Google-Vault-Former-Employee", "a:b", "Google-Apps-Unlimited"])
+_SETTINGS_CHANGES = st.lists(st.sampled_from(sorted(commands.GROUP_SETTINGS)), min_size=1, unique=True).flatmap(
+    lambda keys: st.fixed_dictionaries({k: st.sampled_from(commands.GROUP_SETTINGS[k][1]) for k in keys}))
 
 # Every other builder with a str parameter: addresses, calendar/event ids, scopes, aliases, dates.
 IDENTIFIERS = (
@@ -181,6 +183,9 @@ IDENTIFIERS = (
     Spec("print_groups_member", ("email",)),
     Spec("add_group_member", ("group", "member"), (), {"role": ROLE}),
     Spec("remove_group_member", ("group", "member")),
+    # A group's settings (roadmap 4.4): one group address, and each setting a value from its own list.
+    Spec("info_group_settings", (), (), {"group": _SEARCH_ADDRESS}),
+    Spec("update_group_settings", (), (), {"group": _SEARCH_ADDRESS, "changes": _SETTINGS_CHANGES}),
 )
 
 
@@ -486,3 +491,17 @@ def test_command_line_reads_back_as_the_masked_argv(argv):
         # Masked exactly where the audit log masks it — except GAM's own `password random`-style
         # keyword, which is not a secret and is shown so the operator can read the command.
         assert shown == (raw if generator else masked[i]), (i, argv, words)
+
+
+@given(group=st.one_of(TEXT, _SEARCH_ADDRESS), key=st.one_of(TEXT, st.sampled_from(sorted(commands.GROUP_SETTINGS))),
+       value=st.one_of(TEXT, SPELLED, st.sampled_from([v for _, vs in commands.GROUP_SETTINGS.values() for v in vs])))
+def test_a_group_setting_is_sent_only_as_offered_or_refused(group, key, value):
+    """Whatever the form posts: one group address and an offered setting with one of its own values, or ValueError."""
+    try:
+        argv = G.update_group_settings(group, {key: value})
+    except ValueError:
+        assert not (commands.is_one_address(group) and not commands.settings_skipped(group)
+                    and value in commands.GROUP_SETTINGS.get(key, ("", ()))[1])
+        return
+    assert argv == ["update", "group", group, key, value] and commands.is_one_address(group)
+    assert value in commands.GROUP_SETTINGS[key][1] and not commands.settings_skipped(group)

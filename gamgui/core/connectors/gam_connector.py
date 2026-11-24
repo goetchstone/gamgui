@@ -618,6 +618,20 @@ class GAMConnector(Connector):
         argv = GAMCommands.remove_group_member(group, member)
         return await self._run_write("remove_group_member", member, argv, RiskLevel.LOW, about={"group": group})
 
+    async def group_settings(self, group: str) -> Dict[str, Any]:
+        """A group's record from `info group ... formatjson` (roadmap 4.4): its address and the settings this app offers, under
+        the Groups Settings API's names. A run that printed no one record never answered, and is Incomplete; a setting the
+        record lacks (an abuse@ or postmaster@ group's, which GAM skips) is for the caller to read as unknown."""
+        records = parse_records(await self.runner.run_authenticated(self.domain, GAMCommands.info_group_settings(group)))
+        if len(records) != 1 or not isinstance(records[0], dict):
+            raise Incomplete("GAM answered without the group's settings, so they can't be told.")
+        return records[0]
+
+    async def update_group_settings(self, group: str, changes: Dict[str, str]) -> ChangeResult:
+        argv = GAMCommands.update_group_settings(group, changes)
+        return await self._run_write("update_group_settings", group, argv, RiskLevel.LOW,
+                                     about={"settings": ", ".join(f"{k} {v}" for k, v in changes.items())})
+
     # --- directory profile (title = role, department) -----------------------------------
     async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:
         argv = GAMCommands.update_organization(email, title=title, department=department)
