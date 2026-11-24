@@ -115,7 +115,8 @@ guarding them:
   no table over 50,000 rows. Those tables are the domain's own data: names and addresses, licences, shared drive members,
   classes, admins and the apps they granted, group memberships, mobile devices and Google's alerts. `core/schedules.py` keeps them per domain, each run one `0600` file in
   `0700` folders under the app's data folder (`schedules/`), never the steps' raw reads, and deletes them when the count is
-  lowered, the run is no longer scheduled, on **Delete the kept runs**, or when Setup removes the domain. The run's screen
+  lowered, the run is no longer scheduled, on **Delete the kept runs**, or when Setup removes the domain. Runs kept for a
+  report this GAM version can no longer run stay listed on Audit runs, where they can still be deleted. The run's screen
   says this beside the schedule. A schedule only says a run is due: nothing runs unattended, writes, reads something
   sensitive or exports to a Sheet. Deleting a file on an SSD doesn't overwrite it; FileVault is what protects it at rest.
 - **The vendored `gam` binary is checksum-pinned and verified fail-closed.** An asset with no

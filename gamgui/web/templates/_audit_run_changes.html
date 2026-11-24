@@ -1,6 +1,7 @@
 {#- Plan F7a: what changed in one table since the run's last kept run that read it whole (core/schedules.changes_since).
     A row counts by all its cells, so one with any cell changed is gone and new. A table not compared says why: never
-    "no change" (invariant 10). Each list draws `shown` rows (invariant 9). Context: change (a Change), f (its finding). -#}
+    "no change" (invariant 10). Each list draws `shown` rows (invariant 9). A column that moves on its own (a device's last
+    sync) is left out of the comparison, and said. Context: change (a Change), f (its finding). -#}
 <div class="mt-2 rounded-xl border border-brand-gray/30 px-3 py-2">
 {% if not change.compared %}
   <p class="text-xs text-brand-grayink">{{ change.why }}</p>
@@ -29,5 +30,6 @@
   {% endfor %}
   <p class="mt-1 text-xs text-brand-grayink">A row counts by all its cells: one with any cell changed shows as gone and as new.</p>
 {% endif %}
+{% if change.compared and change.left_out %}<p class="mt-1 text-xs text-brand-grayink">{{ f.compare_note or ("Compared without " ~ (change.left_out | join(", ")) ~ ".") }}</p>{% endif %}
 {% if change.compared and f.change_note %}<p class="mt-1 text-xs text-amber-800">{{ f.change_note }}</p>{% endif %}
 </div>

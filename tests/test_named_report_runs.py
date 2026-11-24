@@ -68,7 +68,7 @@ def test_each_named_report_runs_reads_once_and_leaves_one_named_report_record(cl
     assert record["ok"] and record["argv"] == list(run.steps[0].argv) and record["target"] == ""
     assert record["extra"]["origin"] == "named_report" and record["extra"]["command"] == key
     assert record["extra"]["domain"] == "example.com"
-    assert record["extra"]["rows"] > 0 or key == "data_transfers"     # the mock's domain has never run a transfer
+    assert record["extra"]["rows"] > 0
     result = _result(client, key)
     [table] = result.findings
     assert result.answered and table.known and len(table.rows) == record["extra"]["rows"]
@@ -109,6 +109,8 @@ def test_the_table_s_csv_is_the_whole_read(client):  # noqa: F811
     ("mobile_devices", "denied/mobile", "", False),                                                # 12, no CSV
     ("alerts", "alerts_token_silent", "GAM ended without writing the table", False),               # nothing at all, exit 0
     ("alerts", "denied/alerts", "", False),                                                        # 73, no CSV
+    ("data_transfers", "denied/datatransfers", "", False),                                         # 50, no CSV
+    ("data_transfers", "denied/transferapps", "", False),                                          # 61, no CSV
 ], ids=lambda v: v if isinstance(v, str) and "/" not in v and " " not in v else None)
 def test_a_failed_or_silent_read_is_unknown_never_none(client, gam_state, key, state, words, recorded_ok):  # noqa: F811
     (gam_state / state).parent.mkdir(parents=True, exist_ok=True)
@@ -125,7 +127,8 @@ def test_a_failed_or_silent_read_is_unknown_never_none(client, gam_state, key, s
 
 
 @pytest.mark.parametrize("key, state", [("shared_drives", "nodrives"), ("org_units", "no_org_units"),
-                                        ("mobile_devices", "no_mobile"), ("alerts", "no_alerts")])
+                                        ("mobile_devices", "no_mobile"), ("alerts", "no_alerts"),
+                                        ("data_transfers", "no_transfers")])
 def test_none_is_an_answer_where_gam_says_none_its_own_way(client, gam_state, key, state):  # noqa: F811
     (gam_state / state).touch()
     _start(client, key)
@@ -237,7 +240,7 @@ def test_organizers_is_one_per_drive_so_a_second_one_never_shows_and_the_panel_s
     rows = {r[1]: r[2] for r in _result(client, "shared_drive_organizers").findings[0].rows}
     assert rows["Finance"] == "alice@example.com"            # oneOrganizer: the first, never "alice… carol…"
     panel = unescape(client.get("/reports/runs").text).split('id="run-shared_drive_organizers"')[1].split("</section>")[0]
-    assert "GAM lists one organizer per drive" in panel and "The Shared drive permissions run lists every member." in panel
+    assert "GAM lists one organizer per drive" in panel and "The Shared drive permissions audit run, above, lists every member." in panel
 
 
 def test_columns_a_read_grows_or_sheds_between_runs_compare_on_what_rows_share(tmp_path):
@@ -255,3 +258,134 @@ def test_columns_a_read_grows_or_sheds_between_runs_compare_on_what_rows_share(t
     change = sched.changes_since([shed], 0, kept.runs("example.com", "shared_drive_acls"),
                                  lambda i: kept.load("example.com", "shared_drive_acls", i))["table"]
     assert change.columns == cols1 and change.gone == [("A", "Team", "a@x.com"), ("B", "Ops", "b@x.com")]
+
+
+# --- after the review of #178 ---------------------------------------------------------------------------------------------
+
+def _fixtures(tmp_path, monkeypatch):
+    import shutil
+    from pathlib import Path
+    fixtures = tmp_path / "fixtures"
+    shutil.copytree(Path(__file__).parent / "fixtures", fixtures)
+    monkeypatch.setenv("GAM_MOCK_FIXTURES", str(fixtures))
+    return fixtures
+
+
+def _panel(client, key):  # noqa: F811
+    return unescape(client.get("/reports/runs").text).split(f'id="run-{key}"')[1].split("</section>")[0]
+
+
+def test_a_device_that_only_synced_is_no_change_but_one_blocked_is(client, tmp_path, monkeypatch):  # noqa: F811
+    # lastSync moves each time a phone syncs: compared whole, every device read as gone and new (5 of 5).
+    fixtures = _fixtures(tmp_path, monkeypatch)
+    _schedule(client, "mobile_devices")
+    _start(client, "mobile_devices")
+    devices = fixtures / "mobile_devices.json"
+    devices.write_text(devices.read_text().replace('"lastSync": "2026-10-', '"lastSync": "2026-11-'))
+    _start(client, "mobile_devices")
+    change = _result(client, "mobile_devices").changes["table"]
+    assert change.compared and change.new == [] and change.gone == [] and change.left_out == ("lastSync",)
+    panel = _panel(client, "mobile_devices")
+    assert "No change since" in panel and "Compared without lastSync: it moves each time a device syncs" in panel
+    devices.write_text(devices.read_text().replace('"status": "APPROVED"', '"status": "BLOCKED"', 1))
+    _start(client, "mobile_devices")
+    change = _result(client, "mobile_devices").changes["table"]
+    assert len(change.new) == 1 and len(change.gone) == 1 and "BLOCKED" in change.new[0]
+    assert "lastSync" not in change.columns and change.columns     # drawn in the columns compared
+
+
+def test_an_alert_only_edited_is_no_change_but_one_closed_is(client, gam_state):  # noqa: F811
+    _schedule(client, "alerts")
+    _start(client, "alerts")
+    (gam_state / "alerts_edited").touch()                 # updateTime and metadata.updateTime moved, nothing else
+    _start(client, "alerts")
+    change = _result(client, "alerts").changes["table"]
+    assert change.compared and change.new == [] and change.gone == []
+    assert change.left_out == ("metadata.updateTime", "updateTime")
+    assert "A change to its status, assignee or severity still shows." in _panel(client, "alerts")
+    (gam_state / "alerts_closed").touch()
+    _start(client, "alerts")
+    change = _result(client, "alerts").changes["table"]
+    assert [r[0] for r in change.new] == ["a1b2c3d4-0001"] and "CLOSED" in change.new[0]
+
+
+def test_a_schedule_its_report_can_t_run_any_more_is_never_due_and_can_be_cleared(client, monkeypatch):  # noqa: F811
+    # A GAM bump that renames a named report's read: its schedule was "due" forever, and neither unscheduling nor deleting
+    # its kept runs was allowed ("That isn't one of the audit runs.").
+    st = client.app.state.gamgui
+    _schedule(client, "alerts")
+    _start(client, "alerts")
+    real = runs.named_report_command
+    monkeypatch.setattr(runs, "named_report_command", lambda cat, r: None if r.key == "alerts" else real(cat, r))
+    home = unescape(client.get("/").text)
+    assert "Google's alerts is due" not in home and "Google's alerts can't run here any more" in home
+    assert 'href="/reports/runs#stranded-alerts"' in home and "Nothing is due." in home
+    page = unescape(client.get("/reports/runs").text)
+    assert 'id="run-alerts"' not in page and 'id="stranded-alerts"' in page and "Can't run here any more" in page
+    assert "still scheduled weekly, with 1 run kept on this Mac" in page.split('id="stranded-alerts"')[1]
+    refused = _schedule(client, "alerts", cadence="daily")
+    assert "can't be scheduled" in refused and st.schedules.schedules("example.com")["alerts"].cadence == "weekly"
+    off = _schedule(client, "alerts", cadence="")
+    assert "Not scheduled. 1 kept run was deleted from this Mac." in off and "nothing of it is kept" in off
+    assert "alerts" not in st.schedules.schedules("example.com") and st.kept_runs.runs("example.com", "alerts") == []
+    assert "can't run here any more" not in unescape(client.get("/").text)
+
+
+def test_runs_kept_for_a_run_that_no_longer_exists_are_listed_and_can_be_deleted(client):  # noqa: F811
+    st = client.app.state.gamgui
+    sched_store, kept = st.schedules, st.kept_runs
+    assert sched_store is not None and kept is not None
+    kept.keep("example.com", "old_report", 1.0, 0, [runs.Finding("table", "Old", "", ("id",), [("1",)])])
+    page = unescape(client.get("/reports/runs").text).split('id="stranded-old_report"')[1].split("</section>")[0]
+    assert "1 run is still kept on this Mac" in page and "Delete the kept runs" in page
+    done = unescape(client.post("/reports/runs/kept/delete", data={"run": "old_report"}).text)
+    assert "Deleted 1 kept run from this Mac." in done and "nothing of it is kept" in done
+    assert kept.runs("example.com", "old_report") == []
+    for bad in ("nothing_kept", "../old_report", "old_report\n", "Alerts"):
+        assert "That isn't one of the audit runs." in unescape(client.post("/reports/runs/kept/delete", data={"run": bad}).text)
+        assert "That isn't one of the audit runs." in _schedule(client, bad, cadence="")
+
+
+def test_no_two_runs_share_a_title_and_the_pointers_name_the_audit_run(client):  # noqa: F811
+    import re
+    page = unescape(client.get("/reports/runs").text)
+    titles = re.findall(r'<h2 id="run-[a-z_]+-title"[^>]*>([^<]+)</h2>', page)
+    assert len(titles) == len(set(titles)) == len(runs.RUNS) + len(runs.named_runs(CATALOG))
+    assert runs.SHARED_DRIVES.title == "Shared drive permissions"
+    acls = next(r for r in runs.named_runs(CATALOG) if r.key == "shared_drive_acls")
+    assert acls.title == "Shared drive members" and "Shared drive permissions audit run, above" in acls.change_note
+
+
+def test_a_kept_run_of_a_drive_with_thousands_of_members_reads_back_whole(tmp_path):
+    # Bare `print shareddriveacls` writes about 13 columns a member: 3,000 members once made the first line too long to
+    # read back, so every such kept run read as broken.
+    kept = sched.KeptRuns(tmp_path / "kept")
+    cols = ("id", "name") + tuple(f"permissions.{i}.{f}" for i in range(3000) for f in (
+        "allowFileDiscovery", "deleted", "displayName", "domain", "emailAddress", "expirationTime", "id",
+        "pendingOwner", "permissionDetails", "photoLink", "role", "type", "view"))
+    row = ("0Aone", "Everyone") + tuple("x" for _ in cols[2:])
+    big = runs.Finding("table", "Shared drive members", "", cols, [row])
+    kept.keep("example.com", "shared_drive_acls", 1.0, 0, [big])
+    [head] = kept.runs("example.com", "shared_drive_acls")
+    assert not head.problem and head.table("table").kept
+    loaded = kept.load("example.com", "shared_drive_acls", head.id)
+    assert not loaded.problem and loaded.table("table").columns == cols and loaded.table("table").rows == [row]
+    change = sched.changes_since([big], 0, kept.runs("example.com", "shared_drive_acls"),
+                                 lambda i: kept.load("example.com", "shared_drive_acls", i))["table"]
+    assert change.compared and change.new == [] and change.gone == []
+
+
+def test_a_run_kept_before_the_columns_moved_still_reads(tmp_path):
+    # Kept runs written by version 1 (columns in the first line) are still read and compared with.
+    import json
+    kept = sched.KeptRuns(tmp_path / "kept")
+    kept.keep("example.com", "org_units", 1.0, 0, [runs.Finding("table", "Org units", "", ("orgUnitPath",), [("/A",)])])
+    [path] = list((tmp_path / "kept").rglob("*.jsonl"))
+    head, rows = path.read_text().splitlines()
+    head_d, rows_d = json.loads(head), json.loads(rows)
+    head_d["version"] = 1
+    head_d["tables"][0]["columns"] = rows_d.pop("columns")
+    path.write_text(json.dumps(head_d) + "\n" + json.dumps(rows_d) + "\n")
+    [old] = kept.runs("example.com", "org_units")
+    assert not old.problem and old.table("table").columns == ("orgUnitPath",)
+    assert kept.load("example.com", "org_units", old.id).table("table").rows == [("/A",)]

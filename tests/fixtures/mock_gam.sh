@@ -1871,14 +1871,33 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "check" ] && [ "${4:-}" = "serviceaccou
   exit 0
 fi
 
-# `gam print datatransfers olduser <email>` -> CSV; a *pending* user has an in-flight transfer.
+# `gam print datatransfers [olduser <email>]` (doPrintShowDataTransfers at the 7.52.04 tag) -> CSV; a *pending* user has an
+# in-flight transfer. CSVPrintFile(['id'], DATA_TRANSFER_SORT_TITLES): no transfer is the `id` title alone, exit 0. A row is
+# one application of one transfer, titles id,requestTime,oldOwnerUserEmail,newOwnerUserEmail,overallTransferStatusCode,
+# application,applicationId,status, then each transfer param (PRIVACY_LEVEL, RELEASE_RESOURCES). The transfer apps are read
+# first (getTransferApplications): refused, accessErrorExit, INVALID_DOMAIN_RC 61, no CSV; the transfers list refused,
+# entityActionFailedExit, ACTION_FAILED_RC 50, no CSV. Bare (a named report, plan F7a): the domain's transfers,
+# mock_gam/datatransfers_all.csv; GAM_MOCK_STATE/no_transfers is none, GAM_MOCK_STATE/denied/datatransfers the list refused,
+# GAM_MOCK_STATE/denied/transferapps the apps refused.
 if [ "${1:-}" = "print" ] && [ "${2:-}" = "datatransfers" ]; then
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/transferapps" ]; then
+    echo "ERROR: Access Denied: Domain: example.com, Customer ID: C03az79cb" 1>&2; exit 61
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/datatransfers" ]; then
+    echo "ERROR: Transfer Request: , Failed: Forbidden" 1>&2; exit 50
+  fi
+  if [ $# -eq 2 ]; then
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/no_transfers" ]; then echo "id"; exit 0; fi
+    cat "$GAM_MOCK_FIXTURES/datatransfers_all.csv"
+    exit 0
+  fi
+  [ "${3:-}" = "olduser" ] && [ $# -eq 4 ] || not_modelled "print datatransfers with these options"
   case "${4:-}" in
     *pending*) cat "$GAM_MOCK_FIXTURES/datatransfers_pending.csv" ;;
     # A read that fails, and one that exits 0 without its table: neither answers "nothing pending".
     *xferfail*) echo "ERROR: 403: Forbidden - insufficientPermissions: Request had insufficient authentication scopes." 1>&2; exit 1 ;;
     *xfernotable*) ;;
-    *)         printf 'id,oldOwnerUserEmail,newOwnerUserEmail,overallTransferStatusCode,application\n' ;;
+    *)         echo "id" ;;
   esac
   exit 0
 fi
@@ -3019,11 +3038,21 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "alerts" ]; then
     printf 'User: admin@example.com, Alerts Service/App not enabled\n' 1>&2; exit 73
   fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/no_alerts" ]; then echo "alertId,createTime"; exit 0; fi
-  echo "alertId,createTime,startTime,endTime,customerId,type,source,deleted,data.@type,data.email"
+  # flattenJSON(alert, timeObjects=ALERT_TIME_OBJECTS) also writes updateTime and metadata.* raw (not time objects; etag is
+  # dropped at every level), and they move with any edit to an alert. GAM_MOCK_STATE/alerts_edited moves both times alone;
+  # GAM_MOCK_STATE/alerts_closed is the first alert closed (its status changed, and both times with it).
+  upd1="2026-11-18T07:12:05.120Z"; upd2="2026-11-20T15:40:03.004Z"; st1="NOT_STARTED"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && { [ -e "$GAM_MOCK_STATE/alerts_edited" ] || [ -e "$GAM_MOCK_STATE/alerts_closed" ]; }; then
+    upd1="2026-11-23T09:01:44.871Z"; upd2="2026-11-23T09:02:10.302Z"
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/alerts_closed" ]; then st1="CLOSED"; fi
+  echo "alertId,createTime,startTime,endTime,customerId,type,source,deleted,data.@type,data.email,metadata.alertId,metadata.customerId,metadata.severity,metadata.status,metadata.updateTime,updateTime"
   gam_row "a1b2c3d4-0001" "2026-11-18T07:12:00Z" "2026-11-18T07:10:00Z" "2026-11-18T07:10:00Z" "C03az79cb" \
-    "Suspicious login" "Google identity" "False" "type.googleapis.com/google.apps.alertcenter.type.AccountWarning" "bob@example.com"
+    "Suspicious login" "Google identity" "False" "type.googleapis.com/google.apps.alertcenter.type.AccountWarning" "bob@example.com" \
+    "a1b2c3d4-0001" "C03az79cb" "HIGH" "$st1" "$upd1" "$upd1"
   gam_row "a1b2c3d4-0002" "2026-11-20T15:40:00Z" "2026-11-20T15:38:00Z" "2026-11-20T15:38:00Z" "C03az79cb" \
-    "User reported phishing" "Gmail phishing" "False" "type.googleapis.com/google.apps.alertcenter.type.MailPhishing" ""
+    "User reported phishing" "Gmail phishing" "False" "type.googleapis.com/google.apps.alertcenter.type.MailPhishing" "" \
+    "a1b2c3d4-0002" "C03az79cb" "MEDIUM" "NOT_STARTED" "$upd2" "$upd2"
   exit 0
 fi
 

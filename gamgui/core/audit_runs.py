@@ -66,6 +66,8 @@ class Run:
     change_note: str = ""      # a named report's: what a change since an earlier run can't tell (Finding.change_note)
     cid: str = ""              # a named report's catalog command, which the Builder opens
     note: str = ""             # a named report's: what its table can't show (Finding.note)
+    compare_without: Tuple[str, ...] = ()   # a named report's columns that move on their own (Finding.compare_without)
+    compare_note: str = ""                  # and the words that say so beside a comparison
 
 
 DIRECTORY = Step("directory", "The directory, suspended accounts included", "primaryEmail")
@@ -139,6 +141,10 @@ class Finding:
     # What a change since an earlier run can't tell, said beside it (plan F7a): a read GAM can cut short without a word
     # makes a row that's gone, or a count that fell, look the same as one it couldn't read this time.
     change_note: str = ""
+    # Columns that move on their own (a device's last sync), left out when it's compared with an earlier run, so a row that
+    # differs only there isn't a change; ``compare_note`` says which, beside the comparison.
+    compare_without: Tuple[str, ...] = ()
+    compare_note: str = ""
 
 
 @dataclass
@@ -659,10 +665,13 @@ class NamedRead:
     empty_why: str = ""                   # set when no row at all can't be an honest answer
     change_note: str = ""                 # what a change since an earlier run can't tell (a silent skip)
     note: str = ""                        # what the table itself can't show, said under it
+    compare_without: Tuple[str, ...] = ()  # columns that move on their own, left out of changed-since
+    compare_note: str = ""                # what the comparison says of them
 
 
 _DRIVES_DROPPED = ("GAM passes over a drive whose members Google won't return, without a word, so a drive gone since then may "
-                   "be one it couldn't read this time. The Shared drive permissions run tells those apart.")
+                   "be one it couldn't read this time. The Shared drive permissions audit run, above, names each drive whose members it "
+                   "couldn't read.")
 # Read from GAM's source at the 7.52.04 tag (doPrintLicenses, printShowSharedDrives, printShowSharedDriveACLs,
 # doPrintSharedDriveOrganizers, doPrintOrgs, doPrintMobileDevices, doPrintGroupMembers, doPrintShowDataTransfers,
 # doPrintShowAlerts). Every one writes its titles even with no row; a failure that writes no titles is unknown already.
@@ -686,18 +695,27 @@ NAMED_READS: Dict[str, NamedRead] = {
                                          note=("GAM lists one organizer per drive: the first that is a user in the primary "
                                                "domain. A second organizer isn't shown, so adding or removing one changes "
                                                "nothing here, and a drive run by a group or an outside account shows none. "
-                                               "The Shared drive permissions run lists every member."),
+                                               "The Shared drive permissions audit run, above, lists every member."),
                                          empty_why=("GAM listed no drive. It says that too when Google refused every "
                                                     "drive's members, so it is unknown, not none.")),
     # The root isn't a row; a domain with no unit below it is no row at exit 0.
     "org_units": NamedRead("orgUnitPath"),
-    "mobile_devices": NamedRead("resourceId"),
+    # lastSync moves each time a device syncs (MOBILE_TIME_OBJECTS), many times a day: every device would read as changed.
+    # No apps are listed bare (appsLimit -1), and GAM drops etag; firstSync stays put, so it is still compared.
+    "mobile_devices": NamedRead("resourceId", compare_without=("lastSync",),
+                                compare_note=("Compared without lastSync: it moves each time a device syncs, so a device "
+                                              "that only synced since then isn't a change.")),
     # A group whose members Google refused: "Group: <g>, Does not exist (i/N)", skipped, exit 56 (73 outside the domain).
     "group_members": NamedRead("group", partial_rcs=(56, 73)),
     "data_transfers": NamedRead("id", change_note=("An owner GAM couldn't name shows as uid:<ID>, so a row can change only "
                                                    "because a name couldn't be read this time.")),
     # A token refused silently writes nothing at all (unknown already); Google keeps alerts only for a time.
-    "alerts": NamedRead("alertId", change_note="Google keeps alerts for a limited time, so an alert gone may have aged out."),
+    # flattenJSON writes updateTime and metadata.updateTime, which move with any edit to an alert (etag is dropped); the
+    # edit itself shows in the columns it changed (metadata.status, metadata.assignee, metadata.severity, data.*).
+    "alerts": NamedRead("alertId", change_note="Google keeps alerts for a limited time, so an alert gone may have aged out.",
+                        compare_without=("updateTime", "metadata.updateTime"),
+                        compare_note=("Compared without updateTime and metadata.updateTime: they move with any edit to an "
+                                      "alert. A change to its status, assignee or severity still shows.")),
 }
 
 
@@ -717,7 +735,7 @@ def named_run(report: NamedReport, cmd) -> Optional[Run]:
     step = Step("read", report.title, facts.key_column, ok_rcs=facts.ok_rcs, partial_rcs=facts.partial_rcs,
                 empty_rcs=facts.empty_rcs, argv=argv, empty_why=facts.empty_why)
     return Run(report.key, report.title, report.what, (step,), named=report.key, change_note=facts.change_note, cid=cmd.id,
-               note=facts.note)
+               note=facts.note, compare_without=facts.compare_without, compare_note=facts.compare_note)
 
 
 def named_runs(catalog) -> Tuple[Run, ...]:
@@ -737,7 +755,8 @@ def named_finding(run: Run, reads: Sequence[StepRead], tables: Dict[str, list]) 
     rows = tables.get(step.key) or []
     columns = tuple(dict.fromkeys(c for r in rows for c in r))
     if why:
-        return Finding(NAMED_TABLE, run.title, why, columns, known=False, why=why, note=run.note, change_note=run.change_note)
+        return Finding(NAMED_TABLE, run.title, why, columns, known=False, why=why, note=run.note, change_note=run.change_note,
+                       compare_without=run.compare_without, compare_note=run.compare_note)
     read = next((r for r in reads if r.step is step), None)
     unread = read.unread if read is not None else ()
     n = len(rows)
@@ -745,4 +764,4 @@ def named_finding(run: Run, reads: Sequence[StepRead], tables: Dict[str, list]) 
                    [tuple(_cell(r.get(c)) for c in columns) for r in rows], partial=bool(unread),
                    note=" ".join(n for n in (run.note, f"GAM couldn't read {', '.join(unread)}: unknown, not none."
                                              if unread else "") if n),
-                   change_note=run.change_note)
+                   change_note=run.change_note, compare_without=run.compare_without, compare_note=run.compare_note)

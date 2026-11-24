@@ -435,6 +435,12 @@ def _screens(p: Page, st):
     p.click("#run-group_members button", "Run")
     p.settle("/Kept on this Mac, as one/.test(document.querySelector('#run-group_members')?.innerText ?? '')")
     yield "reports/runs/named"
+    # A schedule and a kept run for a report this GAM version can't run any more: never due, and only clearable.
+    from gamgui.core.audit_runs import Finding
+    st.schedules.put(st.connector.domain, "old_report", "weekly", 3, time.time())
+    st.kept_runs.keep(st.connector.domain, "old_report", time.time(), 0, [Finding("table", "Old", "", ("id",), [("1",)])])
+    p.goto("/reports/runs")
+    yield "reports/runs/stranded"
     p.goto("/")
     yield "home/scheduled"                         # Classroom is due; License usage and Group memberships aren't yet
 

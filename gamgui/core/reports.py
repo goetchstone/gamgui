@@ -152,7 +152,7 @@ NAMED_REPORTS = (
                 ADMIN_TOKEN, "https://www.googleapis.com/auth/apps.licensing"),
     NamedReport("shared_drives", "Shared drives", "Every shared drive in the domain.", "gam print shareddrives",
                 SERVICE_ACCOUNT, "https://www.googleapis.com/auth/drive"),
-    NamedReport("shared_drive_acls", "Shared drive permissions", "Who has access to each shared drive, and how.",
+    NamedReport("shared_drive_acls", "Shared drive members", "Who has access to each shared drive, and how.",
                 "gam print shareddriveacls", SERVICE_ACCOUNT, "https://www.googleapis.com/auth/drive"),
     NamedReport("shared_drive_organizers", "Shared drive organizers", "Who can manage each shared drive.",
                 "gam print shareddriveorganizers", SERVICE_ACCOUNT, "https://www.googleapis.com/auth/drive"),

@@ -35,7 +35,7 @@ from ...core.connectors.gam_connector import READ_ORIGIN_AUDIT_RUN, READ_ORIGIN_
 from ...core.gam.errors import GAMError, GAMErrorKind
 from ...core.gam.models import GAMUser
 from ...core.phishing import Incomplete
-from ...core.reports import INACTIVE_DAYS
+from ...core.reports import INACTIVE_DAYS, NAMED_REPORTS
 from ..csvutil import csv_safe
 from ..jobs import Job, start_job
 from ..server import TEMPLATES
@@ -46,6 +46,8 @@ logger = logging.getLogger(__name__)
 
 _PAGE = "audit_runs.html"
 _PANEL = "_audit_run.html"
+_STRANDED = "_audit_run_stranded.html"
+_NOT_A_RUN = "That isn't one of the audit runs."
 KIND = "audit_run"
 # Fixed words, never an exception's own text (tests/test_route_error_text.py).
 _NO_TABLE = "GAM ended without writing the table, so this step has no answer."
@@ -77,6 +79,77 @@ def _named(st) -> tuple:
 def _find(st, key: str):
     """An audit run, or a named report run here, by its key; None for anything else."""
     return runs_mod.run_named(key) or next((r for r in _named(st) if r.key == key), None)
+
+
+def _title_of(key: str) -> str:
+    """What a run was called, for a schedule kept under a key nothing here runs any more."""
+    known = runs_mod.run_named(key) or next((r for r in NAMED_REPORTS if r.key == key), None)
+    return known.title if known is not None else key
+
+
+def _stranded(st, key: str = "") -> list:
+    """The active domain's schedules and kept runs for a key nothing here runs any more: a named report whose read this GAM
+    version names differently, or no longer has. Each isn't due and can't run, but can still be unscheduled and its kept
+    runs deleted. ``key``: that one alone. StoreProblem when the stores can't be read."""
+    store, kept = schedule_stores(st)
+    domain = st.connector.domain
+    mine = store.schedules(domain)
+    runnable = {r.key for r in runs_mod.RUNS} | {r.key for r in _named(st)}
+    found = []
+    for k in sorted((set(mine) | set(kept.run_keys(domain))) - runnable):
+        if key and k != key:
+            continue
+        n = len(kept.runs(domain, k))
+        if k in mine or n:
+            found.append({"key": k, "title": _title_of(k), "schedule": mine.get(k), "kept": n})
+    return found
+
+
+def _stranded_panel(request: Request, s: dict, notice: str = "", notice_problem: bool = False) -> HTMLResponse:
+    return TEMPLATES.TemplateResponse(request, _STRANDED, {"s": s, "cadence_words": sched.CADENCE_WORDS, "notice": notice,
+                                                           "notice_problem": notice_problem})
+
+
+async def _unstrand(request: Request, key: str, cadence: str = "", delete_only: bool = False) -> HTMLResponse:
+    """Stop scheduling a key nothing here runs any more (deleting what it kept), or delete what it kept. Anything that
+    isn't a key with a schedule or kept runs on the active domain is refused, before either store is changed."""
+    st = app_state(request)
+    if st.connector is None or not sched.is_run_key(key):
+        return error_partial(request, _NOT_A_RUN)
+    try:
+        found = await asyncio.to_thread(_stranded, st, key)
+    except sched.StoreProblem as problem:
+        return error_partial(request, str(problem))
+    if not found:
+        return error_partial(request, _NOT_A_RUN)
+    if cadence.strip():
+        return _stranded_panel(request, found[0], notice="It can't run here any more, so it can't be scheduled. Stop "
+                                                         "scheduling it instead.", notice_problem=True)
+    store, kept = schedule_stores(st)
+    domain = st.connector.domain
+    try:
+        if delete_only:
+            gone: Optional[int] = await asyncio.to_thread(sched.delete_kept, kept, domain, key)
+        else:
+            _, gone = await asyncio.to_thread(sched.set_schedule, store, kept, domain, key, "", sched.KEEP_DEFAULT,
+                                              time.time())
+        left = await asyncio.to_thread(_stranded, st, key)
+    except sched.StoreProblem as problem:
+        return _stranded_panel(request, found[0], notice=str(problem), notice_problem=True)
+    except OSError as exc:
+        logger.warning("clearing a schedule that can't run failed", exc_info=exc)
+        return _stranded_panel(request, found[0], notice="It couldn't be changed. Check the disk has room, and try again.",
+                               notice_problem=True)
+    now = left[0] if left else {"key": key, "title": found[0]["title"], "schedule": None, "kept": 0}
+    if gone is None:
+        return _stranded_panel(request, now, notice="Not scheduled. Its kept runs couldn't all be deleted: try again.",
+                               notice_problem=True)
+    if delete_only:
+        return _stranded_panel(request, now, notice=f"Deleted {_runs_word(gone)} from this Mac." if gone else "Nothing was kept.")
+    notice = "Not scheduled."
+    if gone:
+        notice += f" {_runs_word(gone)} {'were' if gone != 1 else 'was'} deleted from this Mac."
+    return _stranded_panel(request, now, notice=notice)
 
 
 def _job_of(st, run) -> Optional[Job]:
@@ -138,8 +211,15 @@ async def runs_page(request: Request) -> HTMLResponse:
     panels = [_panel_context(st, run, _job_of(st, run)) for run in runs_mod.RUNS]
     named = [_panel_context(st, run, _job_of(st, run)) for run in _named(st)]
     set_aside = schedule_stores(st)[0].set_aside if st.connector is not None else None
+    stranded = []
+    if st.connector is not None:
+        try:
+            stranded = await asyncio.to_thread(_stranded, st)
+        except sched.StoreProblem:   # each panel already says the schedules can't be read
+            stranded = []
     return TEMPLATES.TemplateResponse(request, _PAGE, {"connected": st.connector is not None, "panels": panels,
-                                                       "named": named, "set_aside": set_aside})
+                                                       "named": named, "set_aside": set_aside, "stranded": stranded,
+                                                       "cadence_words": sched.CADENCE_WORDS})
 
 
 @router.get("/status", response_class=HTMLResponse)
@@ -302,8 +382,8 @@ async def save_schedule(request: Request, run: Annotated[str, Form()] = "", cade
     kept. Local: nothing reaches Google, and nothing runs."""
     st = app_state(request)
     found = _find(st, run)
-    if found is None:
-        return error_partial(request, "That isn't one of the audit runs.")
+    if found is None:   # a schedule this GAM version can't run any more can still be stopped
+        return await _unstrand(request, run, cadence)
     if st.connector is None:
         return _panel(request, found)
     cadence = cadence.strip().lower()
@@ -342,8 +422,8 @@ async def delete_kept(request: Request, run: Annotated[str, Form()] = "") -> HTM
     """Delete every run kept on this Mac for this run on the active domain. Its schedule stays. Local: no GAM."""
     st = app_state(request)
     found = _find(st, run)
-    if found is None:
-        return error_partial(request, "That isn't one of the audit runs.")
+    if found is None:   # runs kept for one this GAM version can't run any more can still be deleted
+        return await _unstrand(request, run, delete_only=True)
     if st.connector is None:
         return _panel(request, found)
     try:

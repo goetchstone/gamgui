@@ -30,5 +30,14 @@
     {% endwith %}
   {% endfor %}
   </div>
+  {% if stranded %}
+  <div class="mt-8">
+    <h2 class="font-serif text-xl text-brand-black tracking-tight">Can't run here any more</h2>
+    <p class="mt-1 text-sm text-brand-blueink">Scheduled or kept on this Mac before, for a read this GAM version doesn't have in the same form. None of these is due or can be run; each can be unscheduled, and what it kept deleted.</p>
+    <div class="mt-3 space-y-4">
+    {% for s in stranded %}{% with notice="", notice_problem=False %}{% include "_audit_run_stranded.html" %}{% endwith %}{% endfor %}
+    </div>
+  </div>
+  {% endif %}
 {% endif %}
 {% endblock %}
