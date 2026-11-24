@@ -717,8 +717,12 @@ if [ "${1:-}" = "info" ] && [ "${2:-}" = "user" ]; then
   # record's phones, printed as GAM prints only the fields named. No fixture record has any.
   # $GAM_MOCK_STATE/stray_stdout/<user>: a line that isn't the record first, as GAM prints a config banner there.
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/stray_stdout/$addr" ]; then echo "A notice GAM printed"; fi
+  # Phones changed by an earlier write replace the record's own, and the rest of the record stays: printing the phones alone
+  # once made a person read as having no organizations or org unit (roadmap 4.6's re-read compares those).
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/phones/$addr" ]; then
-    printf '{"primaryEmail": "%s", "phones": %s}\n' "$addr" "$(tr -d '\n' < "$GAM_MOCK_STATE/phones/$addr")"
+    record=$(GAM_MOCK_STATE='' "$0" info user "$addr") || exit $?
+    phones=$(tr -d '\n' < "$GAM_MOCK_STATE/phones/$addr" | sed 's/[&/\]/\\&/g')
+    printf '%s\n' "$record" | sed -e 's/, "phones": \[[^]]*\]//' -e "s/}\$/, \"phones\": $phones}/"
     exit 0
   fi
   case "$addr" in

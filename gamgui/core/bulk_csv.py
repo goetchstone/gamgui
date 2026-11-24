@@ -72,7 +72,9 @@ def _column(name: str) -> str:
 
 def _cell(value: str) -> str:
     value = (value or "").strip()
-    if len(value) >= 2 and value[0] == "'" and value[1] in _UNGUARD:   # csv_safe's guard, as this app writes it
+    # One ' comes off where this app put one: before a formula lead (csv_safe), or before a value that already began with
+    # that guard (the undo file, _undo_cell).
+    if value[:1] == "'" and (value[1:2] in _UNGUARD or (value[1:2] == "'" and value[2:3] in _UNGUARD)):
         return value[1:]
     return value
 
@@ -80,7 +82,7 @@ def _cell(value: str) -> str:
 def parse(text: str) -> Parsed:
     """The rows that set something, each refused one said by its line. The whole file is refused when it can't be read."""
     out = Parsed()
-    first = text.split("\n", 1)[0]
+    first = (text.splitlines() or [""])[0]
     delimiter = ";" if ";" in first and "," not in first else ","     # a semicolon is Excel's in some regions
     reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
     try:
@@ -93,6 +95,10 @@ def parse(text: str) -> Parsed:
         out.errors.append("The file is empty.")
         return out
     header = [_column(h) for h in records[0][1]]
+    twice = sorted({h for h in header if h in HEADER and header.count(h) > 1})
+    if twice:
+        out.errors.append(f"The CSV has more than one `{twice[0]}` column, so which to read can't be told. Keep one.")
+        return out
     if "email" not in header:
         out.errors.append("The CSV needs an `email` column: it says who each row is.")
         return out
@@ -101,6 +107,14 @@ def parse(text: str) -> Parsed:
         return out
     for name in sorted(set(header) - set(HEADER)):
         out.notes.append(f"The `{name}` column {NOT_APPLIED.get(name, 'isn’t one this reads')}, so it isn't applied.")
+    # A record over more than one line is a quote the file never closed where it meant to: the lines after it would be read
+    # as part of one cell, and one person's value land on another, so the whole file is refused (invariant 10).
+    starts = [1] + [line + 1 for line, _ in records[:-1]]
+    spans = next((start for start, (line, _) in zip(starts, records, strict=True) if line != start), None)
+    if spans is not None:
+        out.errors.append(f"Line {spans}: a cell there runs over more than one line, so where each row ends can't be told. "
+                          "Nothing is offered: fix the file and upload it again.")
+        return out
     if len(records) - 1 > MAX_ROWS:
         out.errors.append(f"The CSV has {len(records) - 1} rows, over the {MAX_ROWS} one file takes. Split it.")
         return out
@@ -150,6 +164,8 @@ def organizations_from(record: Mapping[str, Any]) -> List[Organization]:
         extra = set(o) - set(ORG_TEXT_FIELDS) - {"type", "customType", "fullTimeEquivalent", "primary"}
         if extra:
             raise ValueError(f"an organization of theirs has {', '.join(sorted(extra))}, which GAM wouldn't send back")
+        if not isinstance(o.get("primary", False), bool):
+            raise ValueError("an organization's primary isn't true or false")
         fte = o.get("fullTimeEquivalent")
         if fte is not None and not isinstance(fte, int):
             raise ValueError("an organization's full-time equivalent isn't a number")
@@ -259,19 +275,33 @@ def plan(rows: Sequence[Row], directory: Sequence[GAMUser], units: Sequence[str]
     return changes, errors, unchanged
 
 
+def _undo_cell(value: str) -> str:
+    """``value`` as the undo file writes it, so ``_cell`` reads it back as it was: formula-safe, and a value that already
+    starts with this app's guard keeps it (one ' is taken off on the way in)."""
+    if value[:1] == "'" and value[1:2] in _UNGUARD:
+        return "'" + value
+    return csv_safe(value)
+
+
+def restorable(value: str) -> bool:
+    """Whether the undo file can put ``value`` back: a blank cell changes nothing, and a cell is read trimmed, on one line."""
+    return (bool(value) and value == value.strip() and not any(unicodedata.category(ch) == "Cc" for ch in value)
+            and _cell(_undo_cell(value)) == value)
+
+
 def before_csv(changes: Sequence[Change]) -> str:
     """The undo: each changed person's values as they were, in the columns that change; every other cell blank."""
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(HEADER)
     for c in changes:
-        writer.writerow([csv_safe(c.email), *(csv_safe(c.before.get(col, "")) for col in COLUMNS)])
+        writer.writerow([csv_safe(c.email), *(_undo_cell(c.before.get(col, "")) for col in COLUMNS)])
     return out.getvalue()
 
 
 def blanks_before(changes: Sequence[Change]) -> int:
-    """How many changed values were empty before: the undo file can't put those back."""
-    return sum(1 for c in changes for col in c.after if not c.before.get(col))
+    """How many changed values the undo file can't put back: empty before, or not one a cell reads back as it was."""
+    return sum(1 for c in changes for col in c.after if not restorable(c.before.get(col, "")))
 
 
 async def run(job, conn, changes: Sequence[Change], on_changed=None) -> None:
@@ -306,14 +336,22 @@ async def _one(conn, c: Change) -> Tuple[bool, Any, str, str]:
     if held(now) != c.was:
         return False, None, f"{c.email}'s profile changed since the preview, so nothing changed for them. Preview again.", ""
     done: List[str] = []
-    if c.organizations is not None or c.phones is not None:
-        res = await conn.update_profile(c.email, c.organizations, c.phones)
-        if not res.ok:
-            return False, res.kind, res.remediation or "Something went wrong talking to GAM.", res.detail
-        done = [LABELS[col].lower() for col in c.after if col != "org_unit"]
-    if c.org_unit:
-        res = await conn.move_user_to_org_unit(c.email, c.org_unit)
-        if not res.ok:
-            set_ = f"Their {' and '.join(done)} changed; " if done else ""
-            return False, res.kind, f"{set_}the move to {c.org_unit} failed: {res.remediation or 'something went wrong talking to GAM.'}", res.detail
+    try:   # a write that raises fails this person, never the run
+        if c.organizations is not None or c.phones is not None:
+            res = await conn.update_profile(c.email, c.organizations, c.phones)
+            if not res.ok:
+                return False, res.kind, res.remediation or _FAILED, res.detail
+            done = [LABELS[col].lower() for col in c.after if col != "org_unit"]
+        if c.org_unit:
+            res = await conn.move_user_to_org_unit(c.email, c.org_unit)
+            if not res.ok:
+                set_ = f"Their {' and '.join(done)} changed; " if done else ""
+                return False, res.kind, f"{set_}the move to {c.org_unit} failed: {res.remediation or _FAILED}", res.detail
+    except Exception as exc:  # noqa: BLE001 - said as this person's failure, with what had already changed
+        set_ = f"Their {' and '.join(done)} changed; then " if done else ""
+        why = exc.remediation if isinstance(exc, GAMError) else _FAILED
+        return False, getattr(exc, "kind", None), f"{set_}{why}", str(exc) if isinstance(exc, GAMError) else ""
     return True, None, "", ""
+
+
+_FAILED = "Something went wrong talking to GAM."

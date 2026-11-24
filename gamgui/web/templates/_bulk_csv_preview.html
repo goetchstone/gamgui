@@ -31,7 +31,7 @@
       </tbody>
     </table>
   </div>
-  <p class="text-xs text-brand-blueink"><a href="/users/csv/before.csv?key={{ before | urlencode }}" download class="font-medium underline">Download the before file</a> first: it's this CSV's undo, each value as it is now. Upload it here to put them back.{% if blanks %} It can't put back the {{ blanks }} {{ "value" if blanks == 1 else "values" }} that {{ "was" if blanks == 1 else "were" }} empty: a blank cell changes nothing, so clear {{ "it" if blanks == 1 else "them" }} on the person's page.{% endif %}</p>
+  <p class="text-xs text-brand-blueink"><a href="/users/csv/before.csv?key={{ before | urlencode }}" download class="font-medium underline">Download the before file</a> first: it's this CSV's undo, each value as it is now. Upload it here to put them back.{% if blanks %} It can't put back {{ blanks }} {{ "value" if blanks == 1 else "values" }}: one that was empty (a blank cell changes nothing), or that starts or ends with a space. Set {{ "it" if blanks == 1 else "those" }} on the person's page.{% endif %}</p>
   <p class="text-xs text-brand-grayink">Each person is read again just before their change. Anyone whose organizations, phones or org unit changed since this preview is left as they are, and the run says so. A new org unit's settings and policies apply to them from then on.</p>
   <form class="flex flex-wrap items-end gap-2" hx-post="/users/csv/apply" hx-target="#bulk-csv-result" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
     <input type="hidden" name="preview" value="{{ token }}" />

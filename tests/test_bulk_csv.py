@@ -71,6 +71,7 @@ def test_this_apps_formula_guard_is_undone_and_a_formula_refused():
     ("email,name\nalice@example.com,Alice\n", "none of title"),
     ("email,title\nalice@example.com,Head\nALICE@example.com,Lead\n", "is on line 2 too"),
     ("email,title\nnot-an-address,Head\n", "isn't an email address"),
+    ("email,title,Title\nalice@example.com,Head,Lead\n", "more than one `title` column"),
     ('email,title\nalice@example.com,"Head\nof IT"\n', "more than one line"),
     ("email,title\n" + "a@example.com,T\n" * (bulk_csv.MAX_ROWS + 1), "Split it"),
 ])
@@ -243,6 +244,20 @@ def test_an_unread_directory_offers_nothing(client, monkeypatch):  # noqa: F811
     assert "Couldn't read the directory" in _text(r.text) and not token
 
 
+def test_a_write_that_raises_fails_that_person_and_the_run_goes_on(client, monkeypatch, gam_calls):  # noqa: F811
+    _, token, _ = _upload(client, "email,department\nalice@example.com,Sales\ncarol@example.com,Lab\n")
+    conn = client.app.state.gamgui.connector
+    real = conn.update_profile
+
+    async def raises_for_alice(email, organizations, phones):
+        if email == ALICE:
+            raise RuntimeError("boom")
+        return await real(email, organizations, phones)
+    monkeypatch.setattr(conn, "update_profile", raises_for_alice)
+    _, job = _apply(client, token)
+    assert job.failed_total == 1 and job.applied == 1 and job.error is None
+
+
 def test_the_run_panel_is_bounded(client):  # noqa: F811
     from gamgui.web.jobs import start_job
     job = start_job(client.app.state.gamgui.jobs, 300, kind="profile_csv", title="Change 300 people from a CSV")
@@ -255,3 +270,50 @@ def test_the_run_panel_is_bounded(client):  # noqa: F811
 def test_phone_value_round_trips_as_a_phone_object():
     assert GAMCommands.update_profile(ALICE, None, [Phone("work", "", "+1 555", True)]) == [
         "update", "user", ALICE, "phone", "type", "work", "value", "+1 555", "primary"]
+
+
+# --- what the adversarial pass proved, each held here ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    'email,name,title\nalice@example.com,"Alice,Director\nbob@example.com,Bob",Intern\n',    # Bob's title would land on Alice
+    'email,name,title\nalice@example.com,"Alice,Head\n' + "".join(f"p{i}@example.com,P,T\n" for i in range(50)),   # never closed
+])
+def test_a_cell_over_more_than_one_line_anywhere_refuses_the_whole_file(text):
+    parsed = bulk_csv.parse(text)
+    assert not parsed.rows and "runs over more than one line" in parsed.errors[0]
+
+
+def test_one_column_under_two_names_is_refused():
+    assert "more than one `org_unit` column" in bulk_csv.parse("email,Org Unit,ou\nalice@example.com,/Staff,/Students\n").errors[0]
+
+
+def test_old_mac_line_endings_with_semicolons_are_read():
+    assert bulk_csv.parse("email;title\ralice@example.com;Head, IT\r").rows[0].values == {"title": "Head, IT"}
+
+
+@pytest.mark.parametrize("was", ["'+1 desk", "'-Lead", "=SUM", "+1 555", "plain"])
+def test_the_undo_file_puts_back_exactly_what_was_there(was):
+    changes, _, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"title": "Head"})], [_user(orgs=[{"title": was, "primary": True}])], [])
+    undo = bulk_csv.parse(bulk_csv.before_csv(changes))
+    assert not undo.errors and undo.rows[0].values == {"title": was} and bulk_csv.blanks_before(changes) == 0
+
+
+@pytest.mark.parametrize("was", [" padded", " ", "", "''+x"])
+def test_a_value_the_undo_cant_put_back_is_counted(was):
+    changes, _, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"title": "Head"})], [_user(orgs=[{"title": was, "primary": True}])], [])
+    assert bulk_csv.blanks_before(changes) == 1
+
+
+def test_a_primary_that_isnt_true_or_false_refuses_the_person():
+    _, errors, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"title": "Head"})],
+                                 [_user(orgs=[{"title": "A", "primary": "false"}, {"title": "B", "primary": True}])], [])
+    assert errors and "primary" in errors[0]
+    _, errors, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"phone": "555"})], [_user(phones=[{"value": "1", "primary": "false"}])], [])
+    assert errors and "primary" in errors[0]
+
+
+def test_the_mocks_reread_keeps_the_record_once_phones_changed(client, gam_state):  # noqa: F811
+    (gam_state / "phones").mkdir(exist_ok=True)
+    (gam_state / "phones" / ALICE).write_text('[{"type": "work", "value": "+1 555 0100", "primary": true}]')
+    record = client.portal.call(client.app.state.gamgui.connector.profile_now, ALICE)
+    assert record["organizations"] and record["orgUnitPath"] == "/Staff" and record["phones"][0]["value"] == "+1 555 0100"

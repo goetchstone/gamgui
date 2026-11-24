@@ -21,6 +21,8 @@ def phones_from(record: Mapping[str, Any]) -> List[Phone]:
     phones = record.get("phones", [])
     if not isinstance(phones, list) or not all(isinstance(p, dict) for p in phones):
         raise ValueError("GAM's answer didn't list this person's phones as phones, so they aren't known")
+    if not all(isinstance(p.get("primary", False), bool) for p in phones):    # "false" would read as primary
+        raise ValueError("GAM's answer didn't say which of this person's phones is the primary")
     return [
         Phone(type=str(p.get("type") or ""), custom_type=str(p.get("customType") or ""), value=str(p.get("value") or ""),
               primary=bool(p.get("primary")))
