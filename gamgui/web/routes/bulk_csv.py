@@ -9,6 +9,7 @@ run's token.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Annotated, List
 
 from fastapi import APIRouter, File, Request, UploadFile
@@ -21,6 +22,7 @@ from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, error_partial, unread_why
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/users/csv")
 
 _FLOW = "profile_csv"
@@ -52,7 +54,8 @@ async def preview(request: Request, csv_file: Annotated[UploadFile, File()]) -> 
         return error_partial(request, NOT_CONNECTED)
     try:
         data = await csv_file.read(bulk_csv.MAX_BYTES + 1)
-    except Exception:  # noqa: BLE001 - the upload itself: said in fixed words
+    except Exception as exc:  # noqa: BLE001 - the upload itself: said in fixed words, logged
+        logger.warning("reading an uploaded CSV failed", exc_info=exc)
         return error_partial(request, "Couldn't read the file. Choose it again and try once more.")
     if len(data) > bulk_csv.MAX_BYTES:
         return error_partial(request, "That file is over 1 MB. Split it into several, or check you picked the right file.")
