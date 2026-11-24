@@ -1,0 +1,28 @@
+{#- Close Out's run (roadmap 4.5): the running job and its result. The feed is the job's bounded window (invariant 9), never its
+    whole log: a leaver in hundreds of groups is hundreds of steps. -#}
+{% from "_job_failures.html" import failures %}
+{% import "_job_live.html" as live %}
+{% if not job.finished %}
+<div hx-get="/lifecycle/closeout/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s"
+     hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2">
+    <span class="spinner"></span>{{ live.progress(job, "Closing out") }}
+    <span>Closing out {{ job.about }}… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
+    {{ live.stop(job) }}
+  </div>
+  <ul class="mt-2 space-y-0.5 text-xs">{% for o in job.recent %}<li>{{ live.mark(o.ok) }}{{ o.item }}</li>{% endfor %}</ul>
+</div>
+{% else %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.skipped) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">
+    {% if job.skipped %}Closed out {{ job.about }} in part: {{ job.applied }} of {{ job.total }} steps ran, {{ job.skipped | length }} didn't run.
+    {% elif job.failed_total %}Closed out {{ job.about }} in part: {{ job.applied }} of {{ job.total }} steps succeeded.
+    {% else %}Closed out {{ job.about }}: all {{ job.total }} step{{ "" if job.total == 1 else "s" }} succeeded.{% endif %}</p>
+  {% if job.failed_total %}
+  <div class="mt-1 text-xs">Failed ({{ job.failed_total }}):</div>
+  {{ failures(job) }}
+  {% endif %}
+  <p class="mt-1 text-xs">Check again to see what's left, and the delete.</p>
+</div>
+{% endif %}

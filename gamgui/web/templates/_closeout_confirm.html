@@ -1,0 +1,31 @@
+{#- Close Out's confirm step (roadmap 4.5): exactly what its token holds. The leaver's address is always typed. -#}
+<div class="rounded-xl border border-red-300 bg-red-50 p-4">
+  <p tabindex="-1" data-focus class="text-sm font-medium text-red-800">Closing out {{ user }}: {{ steps | length }} step{{ "" if steps | length == 1 else "s" }}</p>
+  <p class="mt-1 text-xs text-red-700">If a step fails, it is reported as failed and the rest still run. Stop works between steps.</p>
+  {% if failed_transfers %}
+  <p class="mt-1 text-xs text-red-700">A data transfer from {{ user }} failed ({{ failed_transfers | join(", ") }}): what it was moving may still be only on their account.</p>
+  {% endif %}
+  <ol class="mt-2 list-decimal space-y-2 pl-5 text-xs text-red-800">
+    {% for step in steps %}
+    <li><span class="font-medium">{{ step.label }}</span><br>{{ step.summary }}
+      {% for line in step.command_lines %}<br><code class="break-all text-brand-blueink">{{ line | truncate(300, True) }}</code>{% endfor %}</li>
+    {% endfor %}
+  </ol>
+  <form hx-post="/lifecycle/closeout/apply" hx-target="#closeout-confirm" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="preview" value="{{ token }}" />
+  <input type="hidden" name="confirmed" value="1" />
+  <div class="mt-3 flex flex-wrap items-end gap-3">
+    <label class="block text-sm text-red-800">Type {{ user }} to run {{ "them" if steps | length != 1 else "it" }}
+      <input name="confirm_email" autocomplete="off" class="mt-1 block w-72 max-w-full rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm text-ink" /></label>
+    {% if typed %}
+    <label class="block text-sm text-red-800">and type <code>confirm</code>
+      <input name="confirm" autocomplete="off" class="mt-1 block w-28 rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm text-ink" /></label>
+    {% endif %}
+  </div>
+  <div class="mt-3 flex gap-2">
+    <button type="submit" class="inline-flex items-center rounded-lg bg-red-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-800 transition-colors">Close out</button>
+    <button type="button" data-action="clear" data-clear="closeout-confirm"
+            class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-black hover:bg-paper transition-colors">Cancel</button>
+  </div>
+  </form>
+</div>

@@ -1,0 +1,90 @@
+{#- Close Out's check (roadmap 4.5): what the leaver still has, every pick off. A read that failed says so and offers nothing
+    in its place. Nothing is offered while a transfer from them is unfinished or can't be checked. The delete is the Users
+    delete zone, last, with its own refusals. -#}
+{% set field = "rounded-lg border border-brand-field bg-brand-white px-2 py-1.5 text-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+{% set box = "rounded border-brand-field text-brand-blue focus:ring-brand-blue/30" %}
+{% if found.refusal %}
+<p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">{{ found.refusal }}</p>
+{% else %}
+<form id="closeout-picks" class="space-y-4" hx-post="/lifecycle/closeout/preview" hx-target="#closeout-confirm" hx-swap="innerHTML"
+      hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="user" value="{{ found.user }}" />
+  <p class="text-sm text-brand-blueink">What {{ found.user }} still has. Nothing changes until you pick it, preview, and run.</p>
+  {% if found.failed_transfers %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ A data transfer from {{ found.user }}
+    failed ({{ found.failed_transfers | join(", ") }}): what it was moving may still be only on their account.</p>
+  {% endif %}
+  {% for line in found.unread.values() %}
+  <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ {{ line }}</p>
+  {% endfor %}
+
+  {% if found.groups is not none %}
+  <fieldset>
+    <legend class="text-sm font-medium text-brand-black">Groups</legend>
+    {% for g in found.groups %}
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="checkbox" name="group" value="{{ g }}" class="{{ box }}" /> Take them out of {{ g }}</label>
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">In no group directly.</p>{% endfor %}
+  </fieldset>
+  {% endif %}
+
+  {% if found.roles is not none %}
+  <fieldset>
+    <legend class="text-sm font-medium text-brand-black">Admin roles</legend>
+    {% for r in found.roles %}
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="checkbox" name="role" value="{{ r.id }}" class="{{ box }}" /> Remove {{ r.words }}</label>
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">No role assigned to them directly.</p>{% endfor %}
+    <p class="mt-1 text-xs text-brand-grayink">A role held through a group goes when they leave that group.</p>
+  </fieldset>
+  {% endif %}
+
+  {% if found.units is not none %}
+  <div>
+    <label for="closeout-ou" class="block text-sm font-medium text-brand-black">Org unit <span class="font-normal text-brand-grayink">· now {{ found.org_unit }}</span></label>
+    <select id="closeout-ou" name="org_unit" class="{{ field }} mt-1 w-full max-w-md">
+      <option value="">Leave it as it is</option>
+      {% for u in found.units if u != found.org_unit %}<option value="{{ u }}">Move them to {{ u }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <fieldset>
+    <legend class="text-sm font-medium text-brand-black">The account</legend>
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="radio" name="state" value="" checked class="{{ box }}" /> Leave it as it is</label>
+    {% if not found.suspended %}
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="radio" name="state" value="suspend" class="{{ box }}" /> Suspend it</label>
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">Already suspended.</p>{% endif %}
+    {% if found.archived is false %}
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="radio" name="state" value="archive" class="{{ box }}" /> Archive it</label>
+    <p class="mt-1 text-xs text-brand-grayink">{{ archive_note }} <a class="underline" href="{{ archive_source }}" target="_blank" rel="noopener">Google's help</a></p>
+    {% elif found.archived %}<p class="mt-1 text-sm text-brand-grayink">Already archived.</p>
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">Whether it's archived wasn't read, so archiving isn't offered.</p>{% endif %}
+  </fieldset>
+
+  {% if found.seats is not none %}
+  <fieldset>
+    <legend class="text-sm font-medium text-brand-black">Licenses</legend>
+    {% for s in found.seats %}
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="checkbox" name="seat" value="{{ key(s) }}" class="{{ box }}" /> Remove {{ s.sku }}</label>
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">No license found for them.</p>{% endfor %}
+  </fieldset>
+  {% endif %}
+
+  <fieldset>
+    <legend class="text-sm font-medium text-brand-black">Aliases</legend>
+    {% for a in found.aliases %}
+    <label class="mt-1 flex items-center gap-2 text-sm"><input type="checkbox" name="alias" value="{{ a }}" class="{{ box }}" /> Move {{ a }} to the manager</label>
+    {% else %}<p class="mt-1 text-sm text-brand-grayink">No alias.</p>{% endfor %}
+    {% if found.aliases %}
+    <label for="closeout-manager" class="mt-2 block text-xs text-brand-grayink">The manager the aliases go to</label>
+    <input id="closeout-manager" name="manager" autocomplete="off" placeholder="manager@{{ found.user.split('@')[1] }}" class="{{ field }} mt-1 w-full max-w-md" />
+    {% endif %}
+  </fieldset>
+
+  <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Preview changes…</button>
+</form>
+<div id="closeout-confirm" class="mt-3"></div>
+{% endif %}
+<div class="mt-5 border-t border-brand-gray/20 pt-4">
+  <p class="text-sm font-medium text-brand-black">Last: delete the account</p>
+  <div id="delete-zone" class="mt-2" hx-get="/users/delete/zone?email={{ found.user | urlencode }}" hx-trigger="load" hx-swap="innerHTML"></div>
+</div>

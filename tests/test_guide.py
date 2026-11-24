@@ -49,7 +49,7 @@ SCREENS = {
                     "_switch_warning.html", "_switch_failed.html"],
     "Find a user": ["users.html", "_users_table.html", "_as_of.html"],
     "Onboard a new hire": ["onboarding.html", "_onboard_*.html"],
-    "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html"],
+    "Offboard a leaver": ["lifecycle.html", "_offboard_*.html", "_job_*.html", "_closeout_*.html"],
     "Roll out a signature": ["signatures.html", "_sig_*.html", "_job_*.html"],
     "Share a calendar": ["calendars.html", "_calendar*.html", "user_detail.html"],
     "Find a class (school domains)": ["classroom.html", "_classroom_*.html", "index.html", "setup.html", "users.html",
