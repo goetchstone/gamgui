@@ -9,6 +9,7 @@ runs (plan F7a) say which are due on the active domain, from the schedules file:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from itertools import islice, takewhile
@@ -20,7 +21,8 @@ from fastapi.responses import HTMLResponse
 from ...core import reports as reports_mod
 from ...core import schedules as sched
 from ...core.audit import READ_ACTIONS, iter_records
-from ...core.audit_runs import RUNS
+from ...core.audit_runs import RUNS, named_runs
+from ...core.catalog.catalog import load_catalog
 from ..jobs import tray
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, as_of, friendly, schedule_stores
@@ -45,9 +47,11 @@ def _directory(st, users) -> Dict[str, Any]:
     }
 
 
-def _schedules(st) -> Dict[str, Any]:
-    """Plan F7a: the active domain's scheduled audit runs, due ones first. Unreadable schedules are said, never "none due"."""
-    none: Dict[str, Any] = {"due_runs": [], "waiting_runs": [], "schedule_problem": "", "schedule_set_aside": None}
+async def _schedules(st) -> Dict[str, Any]:
+    """Plan F7a: the active domain's scheduled audit runs, due ones first. Unreadable schedules are said, never "none due".
+    A schedule for a named report this GAM version can't run (its read renamed or gone) is never due: it is said apart."""
+    none: Dict[str, Any] = {"due_runs": [], "waiting_runs": [], "stranded_runs": [], "schedule_problem": "",
+                            "schedule_set_aside": None}
     if st.connector is None:
         return none
     store, _ = schedule_stores(st)
@@ -55,14 +59,29 @@ def _schedules(st) -> Dict[str, Any]:
         mine = store.schedules(st.connector.domain)
     except sched.StoreProblem as exc:
         return {**none, "schedule_problem": str(exc)}
+    titles = {r.key: r.title for r in RUNS}
+    runnable = set(titles)
+    if any(key not in runnable for key in mine):   # only then is the catalog needed (parsed off the event loop)
+        if st.catalog is None:
+            st.catalog = await asyncio.to_thread(load_catalog)
+        runnable |= {r.key for r in named_runs(st.catalog)}
+    titles.update({n.key: n.title for n in reports_mod.NAMED_REPORTS})
     now = time.time()
     due: List[Dict[str, Any]] = []
     waiting: List[Dict[str, Any]] = []
-    for run in RUNS:
-        if run.key in mine:
-            words = sched.due_words(run.title, mine[run.key], now)
-            (due if words.due else waiting).append({"run": run, "words": words})
-    return {**none, "due_runs": due, "waiting_runs": waiting, "schedule_set_aside": store.set_aside}
+    stranded: List[Dict[str, Any]] = []
+    # The audit runs, then the named reports run on Audit runs, then anything else a schedule names.
+    for key in list(titles) + sorted(k for k in mine if k not in titles):
+        if key not in mine:
+            continue
+        title = titles.get(key, key)
+        if key not in runnable:
+            stranded.append({"key": key, "title": title})
+            continue
+        words = sched.due_words(title, mine[key], now)
+        (due if words.due else waiting).append({"key": key, "title": title, "words": words})
+    return {**none, "due_runs": due, "waiting_runs": waiting, "stranded_runs": stranded,
+            "schedule_set_aside": store.set_aside}
 
 
 def recent_failures(request: Request, n: int = HOME_FAILURES, days: int = HOME_FAILURE_DAYS) -> List[Dict[str, Any]]:
@@ -87,7 +106,7 @@ async def index(request: Request) -> HTMLResponse:
         "connected": st.connector is not None,
         "jobs": rows[:HOME_JOBS], "running": running, "jobs_more": max(0, len(st.jobs) - HOME_JOBS),
         "failures": recent_failures(request),
-        **_schedules(st),
+        **(await _schedules(st)),
         **_directory(st, st.user_cache.cached),
     })
 

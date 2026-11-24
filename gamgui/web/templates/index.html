@@ -47,9 +47,9 @@
     </ul>
   </nav>
 
-  {% if due_runs or waiting_runs or schedule_problem or schedule_set_aside %}
+  {% if due_runs or waiting_runs or stranded_runs or schedule_problem or schedule_set_aside %}
   {#- Plan F7a: the active domain's scheduled audit runs. Each opens on its page, where one click runs it. -#}
-  <section aria-labelledby="home-due-h" class="rounded-2xl border {{ 'border-amber-300' if due_runs or schedule_problem else 'border-brand-gray/40' }} bg-brand-white p-5 shadow-sm">
+  <section aria-labelledby="home-due-h" class="rounded-2xl border {{ 'border-amber-300' if due_runs or stranded_runs or schedule_problem else 'border-brand-gray/40' }} bg-brand-white p-5 shadow-sm">
     <h2 id="home-due-h" class="eyebrow text-brand-grayink">Scheduled audit runs</h2>
     {% if schedule_problem %}<p class="mt-2 text-sm text-amber-800">{{ schedule_problem }}</p>{% endif %}
     {% if schedule_set_aside %}<p class="mt-2 text-sm text-amber-800">The schedules file wasn't one GamGUI could read, so it was moved to <code class="break-all">{{ schedule_set_aside }}</code> and the schedules started empty.</p>{% endif %}
@@ -57,7 +57,7 @@
     <ul class="mt-1 divide-y divide-brand-gray/30">
       {% for d in due_runs %}
       <li class="py-2">
-        <a href="/reports/runs#run-{{ d.run.key }}" class="text-sm font-medium text-amber-800 {{ link }}">{{ d.words.headline }}</a>
+        <a href="/reports/runs#run-{{ d.key }}" class="text-sm font-medium text-amber-800 {{ link }}">{{ d.words.headline }}</a>
         <p class="mt-0.5 text-xs text-brand-blueink">{{ d.words.detail }}</p>
       </li>
       {% endfor %}
@@ -65,8 +65,11 @@
     {% elif not schedule_problem %}
     <p class="mt-2 text-sm text-brand-blueink">Nothing is due.</p>
     {% endif %}
+    {% for s in stranded_runs %}
+    <p class="mt-1 text-sm text-amber-800"><a href="/reports/runs#stranded-{{ s.key }}" class="font-medium {{ link }}">{{ s.title }} can't run here any more</a>: this GAM version has no plain read for it, so it isn't due. Stop scheduling it on Audit runs.</p>
+    {% endfor %}
     {% if waiting_runs %}
-    <p class="mt-1 text-xs text-brand-grayink">Not due yet: {% for w in waiting_runs %}<a href="/reports/runs#run-{{ w.run.key }}" class="text-brand-blueink {{ link }}">{{ w.run.title }}</a> ({{ w.words.headline[:1] | lower }}{{ w.words.headline[1:] }}){{ "; " if not loop.last else "." }}{% endfor %}</p>
+    <p class="mt-1 text-xs text-brand-grayink">Not due yet: {% for w in waiting_runs %}<a href="/reports/runs#run-{{ w.key }}" class="text-brand-blueink {{ link }}">{{ w.title }}</a> ({{ w.words.headline[:1] | lower }}{{ w.words.headline[1:] }}){{ "; " if not loop.last else "." }}{% endfor %}</p>
     {% endif %}
     <p class="mt-1 text-xs text-brand-grayink">Nothing runs on its own: open one and press Run.</p>
   </section>

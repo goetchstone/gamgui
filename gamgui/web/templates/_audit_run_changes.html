@@ -1,6 +1,7 @@
 {#- Plan F7a: what changed in one table since the run's last kept run that read it whole (core/schedules.changes_since).
     A row counts by all its cells, so one with any cell changed is gone and new. A table not compared says why: never
-    "no change" (invariant 10). Each list draws `shown` rows (invariant 9). Context: change (a Change), f (its finding). -#}
+    "no change" (invariant 10). Each list draws `shown` rows (invariant 9). A column that moves on its own (a device's last
+    sync) is left out of the comparison, and said. Context: change (a Change), f (its finding). -#}
 <div class="mt-2 rounded-xl border border-brand-gray/30 px-3 py-2">
 {% if not change.compared %}
   <p class="text-xs text-brand-grayink">{{ change.why }}</p>
@@ -11,11 +12,11 @@
   {% for label, rows in (("New", change.new), ("Gone", change.gone)) if rows %}
   <details class="mt-1">
     <summary class="cursor-pointer text-sm text-brand-blueink hover:text-brand-black">{{ label }} since then ({{ rows | length }})<span class="sr-only">: {{ f.title }}</span></summary>
-    <div class="mt-1 max-h-96 overflow-auto rounded-xl border border-brand-gray/30">
+    <div class="mt-1 max-h-96 overflow-auto rounded-xl border border-brand-gray/30" tabindex="0" role="region" aria-label="{{ label }} in {{ f.title }}">
       <table class="w-full text-sm">
         <caption class="sr-only">{{ label }} in {{ f.title }} since {{ when_words(change.since) }}{% if rows | length > shown %}, the first {{ shown }} of {{ rows | length }}{% endif %}</caption>
         <thead class="sticky top-0 bg-brand-white text-left text-xs text-brand-grayink">
-          <tr>{% for col in f.columns %}<th scope="col" class="px-3 py-2 font-medium">{{ col }}</th>{% endfor %}</tr>
+          <tr>{% for col in (change.columns or f.columns) %}<th scope="col" class="px-3 py-2 font-medium">{{ col }}</th>{% endfor %}</tr>
         </thead>
         <tbody>
           {% for row in rows[:shown] %}
@@ -29,5 +30,6 @@
   {% endfor %}
   <p class="mt-1 text-xs text-brand-grayink">A row counts by all its cells: one with any cell changed shows as gone and as new.</p>
 {% endif %}
+{% if change.compared and change.left_out %}<p class="mt-1 text-xs text-brand-grayink">{{ f.compare_note or ("Compared without " ~ (change.left_out | join(", ")) ~ ".") }}</p>{% endif %}
 {% if change.compared and f.change_note %}<p class="mt-1 text-xs text-amber-800">{{ f.change_note }}</p>{% endif %}
 </div>

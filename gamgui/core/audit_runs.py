@@ -28,10 +28,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .connected_apps import Reach, describe, grants_from, looks_like_ai
+from .connectors.base import RiskLevel
 from .gam.commands import CACHE_FIELDS, COURSE_STATES, GAMCommands, is_one_address
 from .gam.models import GAMUser
 from .licenses import ONLY_SEATS_READ
-from .reports import INACTIVE_DAYS, _parse_dt, build_reports
+from .reports import INACTIVE_DAYS, NAMED_REPORTS, NamedReport, _parse_dt, build_reports, named_report_command
 
 ROWS_SHOWN = 100                           # rows a finished table draws; its count and its CSV are the whole of it
 INACTIVE_WINDOWS = (30, 60, 90, 180, 365)  # the window picker's choices, in days
@@ -51,6 +52,8 @@ class Step:
     ok_rcs: Tuple[int, ...] = (0,)          # exits that are the step's whole answer
     partial_rcs: Tuple[int, ...] = ()       # exits whose rows stand, with accounts GAM named as unread
     empty_rcs: Optional[Tuple[int, ...]] = None   # exits at which no row at all is an answer; None: any of ok_rcs
+    argv: Tuple[str, ...] = ()              # a named report's catalog read, as the Builder builds it bare (plan F7a)
+    empty_why: str = ""                     # a named report's read that can't honestly be empty: why none is unknown
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,12 @@ class Run:
     title: str
     what: str
     steps: Tuple[Step, ...]
+    named: str = ""            # a named report (F2) run as a one-step read here, so it can be scheduled (F7a)
+    change_note: str = ""      # a named report's: what a change since an earlier run can't tell (Finding.change_note)
+    cid: str = ""              # a named report's catalog command, which the Builder opens
+    note: str = ""             # a named report's: what its table can't show (Finding.note)
+    compare_without: Tuple[str, ...] = ()   # a named report's columns that move on their own (Finding.compare_without)
+    compare_note: str = ""                  # and the words that say so beside a comparison
 
 
 DIRECTORY = Step("directory", "The directory, suspended accounts included", "primaryEmail")
@@ -98,8 +107,9 @@ def run_named(key: str) -> Optional[Run]:
 
 
 def step_command(run: Run, step: Step) -> str:
-    """What a step's read record names as its ``command``: the run and the step, e.g. ``license_usage/licenses``."""
-    return f"{run.key}/{step.key}"
+    """What a step's read record names as its ``command``: the run and the step, e.g. ``license_usage/licenses``; a named
+    report's one read, the report's key (``licenses``, origin ``named_report``)."""
+    return run.named or f"{run.key}/{step.key}"
 
 
 @dataclass
@@ -131,6 +141,10 @@ class Finding:
     # What a change since an earlier run can't tell, said beside it (plan F7a): a read GAM can cut short without a word
     # makes a row that's gone, or a count that fell, look the same as one it couldn't read this time.
     change_note: str = ""
+    # Columns that move on their own (a device's last sync), left out when it's compared with an earlier run, so a row that
+    # differs only there isn't a change; ``compare_note`` says which, beside the comparison.
+    compare_without: Tuple[str, ...] = ()
+    compare_note: str = ""
 
 
 @dataclass
@@ -199,6 +213,8 @@ def step_argv(step: Step, tables: Optional[Dict[str, list]] = None) -> Optional[
     """The GAM read a step runs, from its GAMCommands builder. The directory is the user cache's own read (CACHE_FIELDS,
     suspended accounts included); the seats are `print licenses` with no product named. The admins' apps are read for the
     people the admins step found, so None when that step has no table: the step can't run, and is unknown."""
+    if step.argv:
+        return list(step.argv)
     if step is DIRECTORY:
         return GAMCommands.print_users(fields=CACHE_FIELDS)
     if step is LICENSES:
@@ -224,6 +240,8 @@ def implausibly_empty(step: Step, rows: int) -> str:
     holds a seat; GAM also passes over a product it can't read without a word, so no seat at all is unknown."""
     if rows:
         return ""
+    if step.empty_why:
+        return step.empty_why
     if step is DIRECTORY:
         return "GAM listed no account at all, and a domain always has one, so the directory is unknown."
     if step is LICENSES:
@@ -609,6 +627,8 @@ def findings_for(run: Run, reads: Sequence[StepRead], tables: Dict[str, list], n
                  days: int = INACTIVE_DAYS, leaving: frozenset = frozenset()) -> List[Finding]:
     """The run's tables, from its step reads and their kept tables. A finding whose step is unknown says so."""
     now = now or datetime.now(timezone.utc)
+    if run.named:
+        return [named_finding(run, reads, tables)]
     if run is INACTIVE_USERS:
         why = unknown_because(reads, DIRECTORY)
         if why:
@@ -626,3 +646,122 @@ def findings_for(run: Run, reads: Sequence[StepRead], tables: Dict[str, list], n
     if run is ADMIN_TOKEN_REVIEW:
         return admin_token_findings(tables.get(ADMINS.key, []), users, tables.get(ADMIN_TOKENS.key, []), reads)
     raise ValueError(f"no findings for run {run.key!r}")
+
+
+# --- named reports, run here (plan F7a) -------------------------------------------------------------------------------
+# A named report (F2) opens its read in the Builder. To be given a schedule it also runs here, as a one-step run of the
+# same catalog read built bare, recorded as a `read` of origin `named_report` whose `command` is the report's key. Its one
+# table is the read's own rows. What each read does when it fails or comes up short was read from GAM's source at the pin;
+# a report with no entry in NAMED_READS isn't offered here.
+NAMED_TABLE = "table"
+
+
+@dataclass(frozen=True)
+class NamedRead:
+    key_column: str                       # a title GAM always writes for this read: without it, no table came back
+    ok_rcs: Tuple[int, ...] = (0,)        # exits that are the whole answer (GAM's own "none" included where it writes titles)
+    partial_rcs: Tuple[int, ...] = ()     # exits whose rows stand, with the accounts GAM named as unread
+    empty_rcs: Optional[Tuple[int, ...]] = None   # exits at which no row is an answer (Step.empty_rcs)
+    empty_why: str = ""                   # set when no row at all can't be an honest answer
+    change_note: str = ""                 # what a change since an earlier run can't tell (a silent skip)
+    note: str = ""                        # what the table itself can't show, said under it
+    compare_without: Tuple[str, ...] = ()  # columns that move on their own, left out of changed-since
+    compare_note: str = ""                # what the comparison says of them
+
+
+_DRIVES_DROPPED = ("GAM passes over a drive whose members Google won't return, without a word, so a drive gone since then may "
+                   "be one it couldn't read this time. The Shared drive permissions audit run, above, names each drive whose members it "
+                   "couldn't read.")
+# Read from GAM's source at the 7.52.04 tag (doPrintLicenses, printShowSharedDrives, printShowSharedDriveACLs,
+# doPrintSharedDriveOrganizers, doPrintOrgs, doPrintMobileDevices, doPrintGroupMembers, doPrintShowDataTransfers,
+# doPrintShowAlerts). Every one writes its titles even with no row; a failure that writes no titles is unknown already.
+NAMED_READS: Dict[str, NamedRead] = {
+    # Titles before any query; 60 never set; with no product named, a product Google refuses is passed over silently.
+    "licenses": NamedRead("skuId", empty_why=("GAM listed no license seat at all. It passes over a product Google won't let "
+                                              "it read without saying so, so the seats are unknown, not none."),
+                          change_note=("GAM passes over a product it can't read without saying so, so a seat gone since "
+                                       "then may be one it couldn't read this time.")),
+    # None is 60; a service-account token refused silently writes the titles alone at exit 0.
+    "shared_drives": NamedRead("id", ok_rcs=(0, NO_ENTITIES_FOUND_RC), empty_rcs=(NO_ENTITIES_FOUND_RC,)),
+    # A drive whose permissions.list fails, and one with no permission, are dropped silently; with none left GAM sets 60,
+    # so no row can't be told from every drive refused.
+    "shared_drive_acls": NamedRead("createdTime", ok_rcs=(0, NO_ENTITIES_FOUND_RC), empty_rcs=(NO_ENTITIES_FOUND_RC,),
+                                   change_note=_DRIVES_DROPPED,
+                                   empty_why=("GAM listed no drive's members. It says that too when Google refused every "
+                                              "drive's, so it is unknown, not none.")),
+    # oneOrganizer defaults True: `organizers` is a drive's first user organizer in the primary domain with an address.
+    "shared_drive_organizers": NamedRead("organizers", ok_rcs=(0, NO_ENTITIES_FOUND_RC), empty_rcs=(NO_ENTITIES_FOUND_RC,),
+                                         change_note=_DRIVES_DROPPED,
+                                         note=("GAM lists one organizer per drive: the first that is a user in the primary "
+                                               "domain. A second organizer isn't shown, so adding or removing one changes "
+                                               "nothing here, and a drive run by a group or an outside account shows none. "
+                                               "The Shared drive permissions audit run, above, lists every member."),
+                                         empty_why=("GAM listed no drive. It says that too when Google refused every "
+                                                    "drive's members, so it is unknown, not none.")),
+    # The root isn't a row; a domain with no unit below it is no row at exit 0.
+    "org_units": NamedRead("orgUnitPath"),
+    # lastSync moves each time a device syncs (MOBILE_TIME_OBJECTS), many times a day: every device would read as changed.
+    # No apps are listed bare (appsLimit -1), and GAM drops etag; firstSync stays put, so it is still compared.
+    "mobile_devices": NamedRead("resourceId", compare_without=("lastSync",),
+                                compare_note=("Compared without lastSync: it moves each time a device syncs, so a device "
+                                              "that only synced since then isn't a change.")),
+    # A group whose members Google refused: "Group: <g>, Does not exist (i/N)", skipped, exit 56 (73 outside the domain).
+    "group_members": NamedRead("group", partial_rcs=(56, 73)),
+    "data_transfers": NamedRead("id", change_note=("An owner GAM couldn't name shows as uid:<ID>, so a row can change only "
+                                                   "because a name couldn't be read this time.")),
+    # A token refused silently writes nothing at all (unknown already); Google keeps alerts only for a time.
+    # flattenJSON writes updateTime and metadata.updateTime, which move with any edit to an alert (etag is dropped); the
+    # edit itself shows in the columns it changed (metadata.status, metadata.assignee, metadata.severity, data.*).
+    "alerts": NamedRead("alertId", change_note="Google keeps alerts for a limited time, so an alert gone may have aged out.",
+                        compare_without=("updateTime", "metadata.updateTime"),
+                        compare_note=("Compared without updateTime and metadata.updateTime: they move with any edit to an "
+                                      "alert. A change to its status, assignee or severity still shows.")),
+}
+
+
+def named_run(report: NamedReport, cmd) -> Optional[Run]:
+    """``report`` as a run of ``cmd``, its catalog read built bare; None when it can't be one: no single command in this
+    GAM version, not a plain read, sensitive, needing a value, or not studied (NAMED_READS)."""
+    facts = NAMED_READS.get(report.key)
+    if (facts is None or cmd is None or not cmd.buildable or cmd.sensitive or cmd.risk != RiskLevel.READ_ONLY
+            or any(s.required for s in cmd.slots)):
+        return None
+    try:
+        argv = tuple(cmd.build({s.key: "" for s in cmd.slots}))
+    except ValueError:
+        return None
+    if argv[:1] != ("print",):
+        return None
+    step = Step("read", report.title, facts.key_column, ok_rcs=facts.ok_rcs, partial_rcs=facts.partial_rcs,
+                empty_rcs=facts.empty_rcs, argv=argv, empty_why=facts.empty_why)
+    return Run(report.key, report.title, report.what, (step,), named=report.key, change_note=facts.change_note, cid=cmd.id,
+               note=facts.note, compare_without=facts.compare_without, compare_note=facts.compare_note)
+
+
+def named_runs(catalog) -> Tuple[Run, ...]:
+    """Every named report that runs here, in the Reports page's order."""
+    found = (named_run(r, named_report_command(catalog, r)) for r in NAMED_REPORTS)
+    return tuple(r for r in found if r is not None)
+
+
+def _cell(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def named_finding(run: Run, reads: Sequence[StepRead], tables: Dict[str, list]) -> Finding:
+    """A named report's one table: the read's rows as GAM wrote them, columns in the order they first appear."""
+    step = run.steps[0]
+    why = unknown_because(reads, step)
+    rows = tables.get(step.key) or []
+    columns = tuple(dict.fromkeys(c for r in rows for c in r))
+    if why:
+        return Finding(NAMED_TABLE, run.title, why, columns, known=False, why=why, note=run.note, change_note=run.change_note,
+                       compare_without=run.compare_without, compare_note=run.compare_note)
+    read = next((r for r in reads if r.step is step), None)
+    unread = read.unread if read is not None else ()
+    n = len(rows)
+    return Finding(NAMED_TABLE, run.title, f"{n} row{'' if n == 1 else 's'}.", columns,
+                   [tuple(_cell(r.get(c)) for c in columns) for r in rows], partial=bool(unread),
+                   note=" ".join(n for n in (run.note, f"GAM couldn't read {', '.join(unread)}: unknown, not none."
+                                             if unread else "") if n),
+                   change_note=run.change_note, compare_without=run.compare_without, compare_note=run.compare_note)

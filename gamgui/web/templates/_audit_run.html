@@ -6,7 +6,11 @@
 <section id="run-{{ run.key }}" aria-labelledby="run-{{ run.key }}-title" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
   <h2 id="run-{{ run.key }}-title" class="font-medium text-brand-black">{{ run.title }}</h2>
   <p class="mt-0.5 text-sm text-brand-blueink">{{ run.what }}</p>
+  {% if run.named %}
+  <p class="mt-0.5 text-xs text-brand-grayink">Runs <code class="break-all">gam {{ run.steps[0].argv | join(" ") }}</code>, the Builder's read with no options. <a class="underline hover:text-brand-black" href="/builder?cid={{ run.cid | urlencode }}">Open it in the Builder<span class="sr-only">: {{ run.title }}</span></a> to narrow it or export it to a Sheet.</p>
+  {% else %}
   <p class="mt-0.5 text-xs text-brand-grayink">Reads: {% for s in run.steps %}{{ s.title | lower if not loop.first else s.title }}{{ "; " if not loop.last else "." }}{% endfor %}</p>
+  {% endif %}
 {% if scheduling and (schedule or schedule_problem) %}
   {#- Plan F7a: when it's due, on the active domain. Nothing runs on its own: the Run button below is the run. -#}
   <p class="mt-2 text-sm {{ 'font-medium text-amber-800' if due or schedule_problem else 'text-brand-blueink' }}">{{ due_line or schedule_problem }}</p>
@@ -59,7 +63,8 @@
       {% set change = result.changes.get(f.key) %}
       {% if change %}{% include "_audit_run_changes.html" %}{% endif %}
       {% if f.rows %}
-      <div class="mt-2 max-h-96 overflow-auto rounded-xl border border-brand-gray/30">
+      {#- Focusable, so the keyboard can scroll a table too wide or long for the box (axe scrollable-region-focusable). -#}
+      <div class="mt-2 max-h-96 overflow-auto rounded-xl border border-brand-gray/30" tabindex="0" role="region" aria-label="{{ f.title }}">
         <table class="w-full text-sm">
           <caption class="sr-only">{{ f.title }}{% if f.rows | length > shown %}, the first {{ shown }} of {{ f.rows | length }}{% endif %}</caption>
           <thead class="sticky top-0 bg-brand-white text-left text-xs text-brand-grayink">

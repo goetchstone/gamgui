@@ -1,0 +1,4 @@
+id,requestTime,oldOwnerUserEmail,newOwnerUserEmail,overallTransferStatusCode,application,applicationId,status,PRIVACY_LEVEL,RELEASE_RESOURCES
+T100,2026-10-02T14:03:11Z,leaver1@example.com,mgr@example.com,completed,Drive and Docs,55656082996,completed,PRIVATE,
+T100,2026-10-02T14:03:11Z,leaver1@example.com,mgr@example.com,completed,Calendar,435070579839,completed,,TRUE
+T101,2026-11-19T09:20:45Z,leaver2@example.com,mgr@example.com,inProgress,Drive and Docs,55656082996,inProgress,PRIVATE,

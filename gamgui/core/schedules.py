@@ -53,7 +53,8 @@ CADENCE_WORDS = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
 KEEP_DEFAULT = 5          # runs kept when the operator doesn't say
 KEEP_CAP = 12             # at most: a year of monthly runs
 KEEP_ROWS_CAP = 50_000    # rows a kept table may hold; a larger one isn't kept, and can't be compared with later
-FILE_VERSION = 1
+FILE_VERSION = 1          # the schedules file's
+KEPT_VERSION = 2          # a kept run's: 2 holds each table's columns with its rows, never in its first line (1 did)
 TZ: Optional[tzinfo] = None   # the Mac's own time zone (tests set one)
 
 _LOCK = threading.RLock()     # one load-change-save of the schedules file at a time in this process
@@ -62,7 +63,7 @@ _LOCK = threading.RLock()     # one load-change-save of the schedules file at a 
 _KEEP_LOCK = threading.RLock()
 _MAX_TIME = 1e11              # seconds since 1970 a stored time may be (the year 5138): past it, the file isn't a store
 _MAX_DAYS = 10_000            # a kept run's window, in days
-_RUN_KEY = re.compile(r"^[a-z][a-z_]{0,39}$")
+_RUN_KEY = re.compile(r"[a-z][a-z_]{0,39}")
 _KEPT_NAME = re.compile(r"^\d{13}-[0-9a-f]{8}\.jsonl$")
 _TEMP_PREFIX = ".kept-"
 _HEADER_CAP = 1_000_000   # bytes the first line of a kept run may take
@@ -71,6 +72,11 @@ _STALE_TEMP = 3600        # a half-written kept run older than this is a crash's
 
 class StoreProblem(Exception):
     """A schedule or a kept run couldn't be read or kept. ``str()`` says why, in words."""
+
+
+def is_run_key(key: str) -> bool:
+    """A key a schedule or a kept run may be filed under: never a path, never a newline."""
+    return isinstance(key, str) and bool(_RUN_KEY.fullmatch(key))
 
 
 def default_root() -> Path:
@@ -136,7 +142,7 @@ def _a_time(value: object) -> bool:
 
 
 def _schedule_from(run: str, raw: object) -> Schedule:
-    if not isinstance(raw, dict) or not _RUN_KEY.match(run):
+    if not isinstance(raw, dict) or not _RUN_KEY.fullmatch(run):
         raise ValueError("not a schedule")
     cadence, keep, since, done = raw.get("cadence"), raw.get("keep"), raw.get("since"), raw.get("done", 0)
     if cadence not in CADENCES or isinstance(keep, bool) or not isinstance(keep, int) or not 1 <= keep <= KEEP_CAP:
@@ -295,7 +301,7 @@ class ScheduleStore:
     def put(self, domain: str, run: str, cadence: str, keep: int, now: float) -> Optional[Schedule]:
         """Schedule ``run`` on ``domain``, or (``cadence`` "") stop scheduling it. A run already scheduled keeps when it
         last counted. StoreProblem, or OSError, when it couldn't be saved."""
-        if not _RUN_KEY.match(run) or not _domain(domain):
+        if not _RUN_KEY.fullmatch(run) or not _domain(domain):
             raise ValueError("not a run")
         if cadence and (cadence not in CADENCES or not 1 <= keep <= KEEP_CAP or not _a_time(now)):
             raise ValueError("not a schedule")
@@ -401,7 +407,7 @@ class KeptRuns:
         """The run's folder on ``domain``. Every folder from the store's own down is a real folder, never a link: a link
         anywhere in it would lead a read, a keep or a delete outside the store. None when one doesn't exist yet and
         ``make`` is off."""
-        if not _RUN_KEY.match(run):
+        if not _RUN_KEY.fullmatch(run):
             raise ValueError("not a run")
         folder = self._top(domain) / run
         chain = (self.root.parent, self.root, folder.parent, folder)
@@ -432,12 +438,15 @@ class KeptRuns:
         kept_id = f"{last + 1:013d}-{secrets.token_hex(4)}"
         tables = [KeptTable(f.key, f.title, tuple(f.columns), bool(f.known), bool(f.partial), len(f.rows),
                             bool(f.known) and len(f.rows) <= KEEP_ROWS_CAP) for f in findings]
-        header = {"version": FILE_VERSION, "id": kept_id, "domain": _domain(domain), "run": run, "when": when,
+        # The first line, which listing reads alone, holds no columns: a read GAM flattens has as many as its widest record
+        # needs (13 a member for every member of the largest shared drive), which would make it too long to read back.
+        header = {"version": KEPT_VERSION, "id": kept_id, "domain": _domain(domain), "run": run, "when": when,
                   "days": int(days),
-                  "tables": [{"key": t.key, "title": t.title, "columns": list(t.columns), "known": t.known,
-                              "partial": t.partial, "count": t.count, "kept": t.kept} for t in tables]}
+                  "tables": [{"key": t.key, "title": t.title, "known": t.known, "partial": t.partial, "count": t.count,
+                              "kept": t.kept} for t in tables]}
         lines = [json.dumps(header, ensure_ascii=False)]
-        lines += [json.dumps({"table": f.key, "rows": [list(_cells(r)) for r in f.rows]}, ensure_ascii=False)
+        lines += [json.dumps({"table": f.key, "columns": list(t.columns), "rows": [list(_cells(r)) for r in f.rows]},
+                             ensure_ascii=False)
                   for f, t in zip(findings, tables, strict=True) if t.kept]
         temp = folder / f"{_TEMP_PREFIX}{kept_id}"
         fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -492,17 +501,24 @@ class KeptRuns:
             pass
         return gone
 
+    def run_keys(self, domain: str) -> List[str]:
+        """The runs ``domain`` has a kept-runs folder for, whatever they hold. StoreProblem when that can't be told."""
+        top = self._top(domain)
+        if not all(_existing_folder(level) for level in (self.root.parent, self.root, top)):
+            return []
+        try:
+            return sorted(p.name for p in top.iterdir() if _RUN_KEY.fullmatch(p.name) and not p.is_symlink())
+        except FileNotFoundError:
+            return []
+        except OSError as exc:
+            raise StoreProblem("The kept runs' folder couldn't be read just now. Try again.") from exc
+
     def forget_domain(self, domain: str) -> int:
         """Every kept run of ``domain``, of every run it has a folder for (Setup removed it); how many went."""
         top = self._top(domain)
-        if not all(_existing_folder(level) for level in (self.root.parent, self.root, top)):
+        runs = self.run_keys(domain)
+        if not runs and not _existing_folder(top):
             return 0
-        try:
-            runs = [p.name for p in top.iterdir() if _RUN_KEY.match(p.name) and not p.is_symlink()]
-        except FileNotFoundError:
-            return 0
-        except OSError as exc:
-            raise StoreProblem("The kept runs' folder couldn't be read just now. Try again.") from exc
         gone = sum(self.delete_all(domain, run) for run in runs)
         try:
             top.rmdir()
@@ -536,27 +552,33 @@ class KeptRuns:
             return KeptRun(kept_id, problem="It couldn't be read just now.")
         try:
             head = json.loads(first.decode("utf-8"))
-            if (not isinstance(head, dict) or head.get("version") != FILE_VERSION or head.get("id") != kept_id
+            if (not isinstance(head, dict) or head.get("version") not in (1, KEPT_VERSION) or head.get("id") != kept_id
                     or head.get("domain") != _domain(domain) or head.get("run") != run):
                 raise ValueError("not this run")
             when, days = head["when"], head["days"]
             if not _a_time(when) or isinstance(days, bool) or not isinstance(days, int) or not 0 <= days <= _MAX_DAYS:
                 raise ValueError("not this run")
             found = KeptRun(kept_id, float(when), days)
-            for t in head["tables"]:
-                found.tables.append(KeptTable(str(t["key"]), str(t["title"]), tuple(str(c) for c in t["columns"]),
+            for t in head["tables"]:   # version 1 kept the columns here; 2 keeps them with the rows
+                columns = tuple(str(c) for c in t["columns"]) if head["version"] == 1 else ()
+                found.tables.append(KeptTable(str(t["key"]), str(t["title"]), columns,
                                               t["known"] is True, t["partial"] is True, int(t["count"]), t["kept"] is True))
             if whole:
-                rows: Dict[str, List[Tuple[str, ...]]] = {}
+                rows: Dict[str, Tuple[Optional[Tuple[str, ...]], List[Tuple[str, ...]]]] = {}
                 for line in rest.decode("utf-8").split("\n"):
                     if line:
                         body = json.loads(line)
-                        rows[str(body["table"])] = [_cells(r) for r in body["rows"] if isinstance(r, list)]
+                        cols = tuple(str(c) for c in body["columns"]) if "columns" in body else None
+                        rows[str(body["table"])] = (cols, [_cells(r) for r in body["rows"] if isinstance(r, list)])
                 for t in found.tables:
                     if t.kept:
-                        if t.key not in rows or len(rows[t.key]) != t.count:
+                        if t.key not in rows or len(rows[t.key][1]) != t.count:
                             raise ValueError("a table isn't whole")
-                        t.rows = rows[t.key]
+                        cols, t.rows = rows[t.key]
+                        if cols is not None:
+                            t.columns = cols
+                        elif head["version"] != 1:
+                            raise ValueError("a table's columns aren't kept")
         except (ValueError, TypeError, KeyError, AttributeError, UnicodeDecodeError, OverflowError, RecursionError):
             return KeptRun(kept_id, problem="It isn't whole.")
         return found
@@ -592,6 +614,8 @@ class Change:
     new: List[Tuple[str, ...]] = field(default_factory=list)
     gone: List[Tuple[str, ...]] = field(default_factory=list)
     why: str = ""
+    columns: Tuple[str, ...] = ()   # the columns ``new`` and ``gone`` are in, when not the table's own (see ``_aligned``)
+    left_out: Tuple[str, ...] = ()  # columns that move on their own, left out of the comparison (Finding.compare_without)
 
     @property
     def compared(self) -> bool:
@@ -604,6 +628,21 @@ NOTHING_BEFORE = "No earlier run that read this table whole is kept, so there's 
 KEPT_RUN_UNREAD = ("A run kept before couldn't be read, so this table isn't compared. Delete the kept runs if it stays "
                    "that way.")
 NOT_ANSWERED = "A step of this run has no answer, so its tables aren't compared: one may hold \"unknown\" where it had a value."
+
+
+def _aligned(now_cols: Sequence[str], now_rows: List[Tuple[str, ...]], then_cols: Sequence[str],
+             then_rows: List[Tuple[str, ...]]) -> Tuple[Tuple[str, ...], List[Tuple[str, ...]], List[Tuple[str, ...]]]:
+    """Both tables in one set of columns: now's, then any only the earlier one had, a cell a table lacks being "". A read
+    whose JSON GAM flattens gets as many columns as its widest record needs (`permissions.5.role` once a drive has a sixth
+    member), so its columns can differ from run to run while the rows they share don't."""
+    now_cols, then_cols = tuple(now_cols), tuple(then_cols)
+    if now_cols == then_cols:
+        return now_cols, now_rows, then_rows
+    union = now_cols + tuple(c for c in then_cols if c not in now_cols)
+
+    def project(cols: Tuple[str, ...], rows: List[Tuple[str, ...]]) -> List[Tuple[str, ...]]:
+        return [tuple(dict(zip(cols, r, strict=False)).get(c, "") for c in union) for r in rows]
+    return union, project(now_cols, now_rows), project(then_cols, then_rows)
 
 
 def _difference(rows: Sequence[Tuple[str, ...]], minus: Sequence[Tuple[str, ...]]) -> List[Tuple[str, ...]]:
@@ -764,7 +803,16 @@ def changes_since(findings: Sequence, days: int, earlier: Sequence[KeptRun],
                 change = Change(f.key, why=f"The run kept on {when_words(head.when)} couldn't be read whole, so this "
                                            "table isn't compared.")
                 break
-            change = Change(f.key, head.when, _difference(now_rows, whole.rows), _difference(whole.rows, now_rows))
+            cols, now_cmp, then_cmp = _aligned(f.columns, now_rows, whole.columns, whole.rows)
+            skip = set(getattr(f, "compare_without", ()) or ())
+            left_out = tuple(c for c in cols if c in skip)
+            if left_out:   # a column that moves on its own (a device's last sync) would make every row look changed
+                keep = [i for i, c in enumerate(cols) if c not in skip]
+                cols = tuple(cols[i] for i in keep)
+                now_cmp = [tuple(r[i] for i in keep) for r in now_cmp]
+                then_cmp = [tuple(r[i] for i in keep) for r in then_cmp]
+            change = Change(f.key, head.when, _difference(now_cmp, then_cmp), _difference(then_cmp, now_cmp),
+                            columns=cols if cols != tuple(f.columns) else (), left_out=left_out)
             break
         out[f.key] = change
     return out

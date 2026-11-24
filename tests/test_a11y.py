@@ -428,8 +428,21 @@ def _screens(p: Page, st):
     p.fill("#run-classroom_courses select[name=cadence]", "monthly")
     p.click("#run-classroom_courses button", "Save schedule")
     p.settle("/Saved: monthly/.test(document.querySelector('#run-classroom_courses')?.innerText ?? '')")
+    # A named report run here (plan F7a): its gam line and Builder link, its read's table, scheduled and kept.
+    p.fill("#run-group_members select[name=cadence]", "daily")
+    p.click("#run-group_members button", "Save schedule")
+    p.settle("/Saved: daily/.test(document.querySelector('#run-group_members')?.innerText ?? '')")
+    p.click("#run-group_members button", "Run")
+    p.settle("/Kept on this Mac, as one/.test(document.querySelector('#run-group_members')?.innerText ?? '')")
+    yield "reports/runs/named"
+    # A schedule and a kept run for a report this GAM version can't run any more: never due, and only clearable.
+    from gamgui.core.audit_runs import Finding
+    st.schedules.put(st.connector.domain, "old_report", "weekly", 3, time.time())
+    st.kept_runs.keep(st.connector.domain, "old_report", time.time(), 0, [Finding("table", "Old", "", ("id",), [("1",)])])
+    p.goto("/reports/runs")
+    yield "reports/runs/stranded"
     p.goto("/")
-    yield "home/scheduled"                         # Classroom is due; License usage isn't yet
+    yield "home/scheduled"                         # Classroom is due; License usage and Group memberships aren't yet
 
     p.goto("/audit", "!/Loading/.test(document.querySelector('#audit-rows')?.innerText ?? 'Loading')")
     yield "audit"

@@ -73,8 +73,32 @@ page's `cid`; an id the catalog doesn't hold opens none), where it runs, filters
   service-account row names its scope and says Setup lists it. Drive was already delegated; the Alert Center's `apps.alerts`
   is offered beside the devices scope (`setup.OPTIONAL_DWD_SCOPES`), never asked of verify, so only that read is refused
   without it.
-- **Not run on a real domain yet.** The mock models none of the nine (it fails anything it doesn't handle); check each by eye
-  on its first live run.
+- **Run here too, so it can be scheduled (plan F7a).** Each is also a one-step run on Audit runs (`audit_runs.named_run`):
+  the same catalog read built bare (`print licenses`, `print orgs`, …), through `audit_read`, recorded as `read` of origin
+  `named_report` with `command` = the report's key. Its one table (`NAMED_TABLE`) is the read's rows, columns in the order
+  they first appear; the table's CSV is the whole read. A report is offered only with an entry in `NAMED_READS`, which holds
+  what GAM's source (7.52.04) says of that read: a title always written (`key_column`), the exits that are its answer, the
+  ones at which no row is an answer (`empty_rcs`: 60 for the shared drive reads, since a token Google refuses silently
+  writes titles alone at 0), when no row is never an answer (`empty_why`: licences, drive members, organizers), the
+  partial exits (group members: "Group: <g>, Does not exist (i/N)", 56/73, the group named and the table partial), and
+  what a change since an earlier run can't tell (`change_note`: a product, a drive, an owner's name or an aged-out alert
+  passed over silently), and the columns that move on their own, left out of changed-since and said beside it
+  (`compare_without`: mobile's `lastSync`, alerts' `updateTime` and `metadata.updateTime`; review of #178: every phone that
+  synced read as gone and new). Reports links each to its panel ("Run or schedule it"). The named `shared_drive_acls` is
+  "Shared drive members", never the audit run's "Shared drive permissions": the notes that point to that run name it.
+- **The mock** models each bare read as GAM prints it: `print orgs` (four titles, the root never a row; `orgs_failed` 50
+  with no CSV), `print mobile` (`email` the first owner, sort titles first; `no_mobile`, `denied/mobile` 12), `print
+  group-members` (six titles; `members_gone/<group>` 56), `print alerts` (`no_alerts`, `denied/alerts` 73 with no CSV,
+  `alerts_token_silent` nothing at all), `print shareddrives` (with `orgUnit`, which GAM reads the org units for:
+  `orgs_failed` is a traceback, no CSV), `print shareddriveacls` (the `permissions` count, then each member; a drive with no
+  member left out), `print shareddriveorganizers` (every drive, its FIRST user organizer in the primary domain: GAM's
+  `oneOrganizer` default, so the panel says a second one never shows); all three with `drive_token_silent`, `nodrives`,
+  `acl_dropped`. `print alerts` also writes `metadata.*` and `updateTime` (`alerts_edited` moves the times alone,
+  `alerts_closed` closes one). Bare `print datatransfers` lists `datatransfers_all.csv` (a row an application of a
+  transfer, GAM's sort titles); no transfer is the `id` title alone (`no_transfers`, and `olduser` with none),
+  `denied/datatransfers` 50 and `denied/transferapps` 61 with no CSV (review of #178: it once answered through the olduser
+  branch, with titles GAM never writes alone).
+- **Not run on a real domain yet**; check each by eye on its first live run.
 
 ## Inactive → suspend (roadmap 3.3, D3)
 The one write on this screen. The Inactive card's **Suspend these…** posts `/reports/inactive/preview`, which:
@@ -212,9 +236,9 @@ A step that reads for what an earlier step found (`step_argv(step, tables)` is N
 - **Not run on a real domain yet**, none of them; the Classroom run can't be until an Education domain is there.
 
 ### Schedules (plan F7a)
-A run can be given a cadence per domain: it then says when it's due, on Home and on its own panel. **Nothing runs on its
-own**: there is no background runner, and the run is the operator's Run button, recorded as ever (`read`, origin
-`audit_run`). No write, no sensitive read, no Sheet export.
+A run, or a named report run here, can be given a cadence per domain: it then says when it's due, on Home and on its own
+panel. **Nothing runs on its own**: there is no background runner, and the run is the operator's Run button, recorded as
+ever (`read`, origin `audit_run`, or `named_report` for a named report). No write, no sensitive read, no Sheet export.
 - **Files.** `core/schedules.py` (cadence, due, `ScheduleStore`, `KeptRuns`, `changes_since`, `after_run`), the panel's
   `/reports/runs/schedule` and `/reports/runs/kept/delete` (both LOCAL_ONLY), `_audit_run_schedule.html`,
   `_audit_run_changes.html`, Home's "Scheduled audit runs" (`routes/home._schedules`), Setup's Remove
@@ -227,8 +251,11 @@ own**: there is no background runner, and the run is the operator's Run button, 
   step since it was scheduled.` / `<Cadence>; its last run that read every step was on <Wed 18 Nov 2026>.`; not due:
   `<Cadence>, next due <day>`.
 - **Kept runs.** Only a scheduled run that counts is kept: its findings (what the panel shows, never the steps' raw reads),
-  in `<app data>/schedules/kept/<sha256(domain)[:24]>/<run>/<seq>-<hex>.jsonl`, a header line then one line of rows per
-  kept table, written under a temp name and renamed. Named by a sequence, so the newest is the last kept whatever the
+  in `<app data>/schedules/kept/<sha256(domain)[:24]>/<run>/<seq>-<hex>.jsonl`, a header line (each table's key, title,
+  known, partial, count, kept: never its columns) then one line per kept table of its columns and rows, written under a
+  temp name and renamed. Version 2: version 1 kept the columns in the header, which a flattened read (13 columns a member
+  of the largest shared drive) could push past the 1 MB a header may take, and every such kept run read as broken; a
+  version 1 run is still read. Named by a sequence, so the newest is the last kept whatever the
   clock said (a run kept with the clock a year ahead once sorted first forever, and survived prunes). `keep` per run: default 5, 1 to 12; a table over 50,000 rows isn't
   kept (its header says so). The oldest beyond `keep` go after each kept run and when the count is lowered; all go when the
   run is unscheduled, on Delete the kept runs, or when Setup removes the domain (unless another spelling is still listed).
@@ -237,11 +264,20 @@ own**: there is no background runner, and the run is the operator's Run button, 
   walk and says so: it may be the run to compare with. A run with any step unanswered compares nothing: a table built on
   that step can hold "unknown" cells without a partial flag (Seats per license with the directory unread). Rows compared
   whole, as a multiset: a row with any cell changed is gone and new. A table unknown or partial now, or no earlier run to
-  compare with, says why and is never "no change". Each list draws 100 rows. Shared drive members and unlooked-after
+  compare with, says why and is never "no change". Each list draws 100 rows. A read whose JSON GAM flattens can grow or
+  shed columns between runs (`permissions.1.*` once a drive has a second member): both tables are compared on the union
+  of their columns, a cell a table lacks being "" (`_aligned`). Shared drive members and unlooked-after
   drives leave out a drive whose members GAM dropped without a word, so with any such drive (or the drive list unknown)
   both are `partial` and never compared (review of #176: a dropped drive's members read as "gone"). GAM's other silent
   skips can't be seen at all, so the licence tables and Classroom's class list carry `Finding.change_note`, shown beside
-  every change: a gone seat, or a count fallen to 0, may be one it couldn't read this time.
+  every change: a gone seat, or a count fallen to 0, may be one it couldn't read this time. A column in
+  `Finding.compare_without` is left out of both sides before the compare (`Change.left_out`), and the panel says so.
+- **A schedule that can't run any more.** A schedule, or kept runs, under a key nothing here runs (a GAM bump renamed a
+  named report's read, or a report was dropped) is never due: Home says "<Title> can't run here any more" and links the
+  runs page's "Can't run here any more" section (`_audit_run_stranded.html`), where it can be unscheduled (its kept runs
+  deleted) or, kept runs alone, deleted. `/schedule` and `/kept/delete` take such a key only when it has a schedule or
+  kept runs on the active domain, checked as a whole run key (`is_run_key`) before either store is touched; giving it a
+  cadence is refused. (Review of #178: it was "due" forever, and "That isn't one of the audit runs." refused both.)
 - **Store rules.** `schedules.json` is read again on every look and change, its folder held by a descriptor opened
   `O_NOFOLLOW | O_DIRECTORY` (a linked `schedules/` is refused, never followed), the file opened `O_NOFOLLOW | O_NONBLOCK`
   and read only if it is a regular file of at most 1 MB (a FIFO there once would have hung the page), its temp file and

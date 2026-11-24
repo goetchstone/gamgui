@@ -1,0 +1,30 @@
+{#- Plan F7a: a schedule, or runs kept on this Mac, for a run nothing here can run any more (a GAM version whose read for a
+    named report changed). It isn't due and can't be run; it can still be unscheduled, and what it kept deleted. Context:
+    s ({key, title, schedule, kept}: kept is how many), cadence_words, notice, notice_problem. -#}
+<section id="stranded-{{ s.key }}" aria-labelledby="stranded-{{ s.key }}-title" class="rounded-2xl border border-amber-300 bg-brand-white p-5 shadow-sm">
+  <h3 id="stranded-{{ s.key }}-title" class="font-medium text-brand-black">{{ s.title }}</h3>
+  {% if notice %}
+  <p data-announce="stranded-{{ s.key }}" class="mt-2 rounded-lg border px-4 py-2.5 text-sm {{ 'border-amber-300 bg-amber-50 text-amber-800' if notice_problem else 'border-emerald-300 bg-emerald-50 text-emerald-800' }}">{{ notice }}</p>
+  {% endif %}
+  {% if s.schedule or s.kept %}
+  <p class="mt-1 text-sm text-amber-800">It can't run here any more: this GAM version has no plain read for it, so it isn't due and can't be run.
+    {%- if s.schedule %} It is still scheduled {{ cadence_words[s.schedule.cadence] | lower }}{% if s.kept %}, with {{ s.kept }} run{{ 's' if s.kept != 1 }} kept on this Mac{% endif %}.
+    {%- else %} {{ s.kept }} run{{ 's are' if s.kept != 1 else ' is' }} still kept on this Mac.{% endif %}</p>
+  {% if s.schedule %}
+  <form class="mt-3" hx-post="/reports/runs/schedule" hx-target="#stranded-{{ s.key }}" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="run" value="{{ s.key }}" />
+    <input type="hidden" name="cadence" value="" />
+    <button type="submit" class="inline-flex items-center rounded-lg border border-brand-gray/60 bg-brand-white px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-paper transition-colors">Stop scheduling it<span class="sr-only">: {{ s.title }}</span></button>
+  </form>
+  <p class="mt-1 text-xs text-brand-grayink">Not scheduled keeps none: this deletes the runs it kept too.</p>
+  {% else %}
+  <form class="mt-3" hx-post="/reports/runs/kept/delete" hx-target="#stranded-{{ s.key }}" hx-swap="outerHTML" hx-disabled-elt="find button"
+        hx-confirm="Delete the {{ s.kept }} run{{ 's' if s.kept != 1 }} of {{ s.title }} kept on this Mac?">
+    <input type="hidden" name="run" value="{{ s.key }}" />
+    <button type="submit" class="inline-flex items-center rounded-lg border border-red-700 bg-brand-white px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition-colors">Delete the kept runs<span class="sr-only"> of {{ s.title }}</span></button>
+  </form>
+  {% endif %}
+  {% else %}
+  <p class="mt-1 text-sm text-brand-blueink">Not scheduled, and nothing of it is kept on this Mac.</p>
+  {% endif %}
+</section>
