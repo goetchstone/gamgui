@@ -1,0 +1,6 @@
+{#- A settings change that landed (roadmap 4.4): the lists above still show the settings from before, so read them again. -#}
+<div class="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+  <p tabindex="-1" data-focus>{{ message }}</p>
+  <button type="button" hx-get="/groups/settings?group={{ group | urlencode }}" hx-target="#group-settings" hx-swap="innerHTML"
+          hx-disabled-elt="this" class="mt-2 inline-flex items-center rounded-lg border border-emerald-400 px-3 py-1.5 text-xs font-medium text-emerald-900 hover:bg-emerald-100 transition-colors">Show the settings again</button>
+</div>

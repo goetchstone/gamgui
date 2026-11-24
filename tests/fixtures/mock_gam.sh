@@ -2330,6 +2330,110 @@ if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && [ "${2:-}" = "group" 
   exit 0
 fi
 
+# A group's settings (roadmap 4.4), from group_settings.tsv (made up; one row a group, setting and Google's value), or as an
+# `update group` under GAM_MOCK_STATE left them. A group is one the file lists; GAM reads and writes no settings of an
+# abuse@ or postmaster@ group (GroupIsAbuseOrPostmaster at the 7.52.04 tag), and its update still says Updated.
+settings_file() {
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/group_settings.tsv" ]; then echo "$GAM_MOCK_STATE/group_settings.tsv"
+  else echo "$GAM_MOCK_FIXTURES/group_settings.tsv"; fi
+}
+settings_group() { awk -F '\t' -v g="$1" '$1 == g { f = 1 } END { exit !f }' "$(settings_file)"; }
+settings_skipped() { case "$1" in abuse@*|postmaster@*) return 0 ;; esac; return 1; }
+gs_value() {  # <attribute> <value>: Google's value as GAM sends it (getChoice drops `_`/`-`, lowercased), or GAM's refusal
+  v=$(lower "$2" | tr -d '_-')
+  case "$1" in
+    allowexternalmembers|allowwebposting|isarchived)
+      case "$v" in true|on|yes|enabled|1) echo true ;; false|off|no|disabled|0) echo false ;;
+        *) not_modelled "a group setting's <Boolean> left out" ;; esac ;;
+    whocanpostmessage) case "$v" in
+      nonecanpost|allmanagerscanpost|allmemberscanpost|allownerscanpost|allindomaincanpost|anyonecanpost) ;;
+      *) invalid_choice "$2" "nonecanpost|allmanagerscanpost|allmemberscanpost|allownerscanpost|allindomaincanpost|anyonecanpost" ;; esac ;;
+    whocanjoin) case "$v" in anyonecanjoin|allindomaincanjoin|invitedcanjoin|canrequesttojoin) ;;
+      *) invalid_choice "$2" "anyonecanjoin|allindomaincanjoin|invitedcanjoin|canrequesttojoin" ;; esac ;;
+    whocanviewmembership) case "$v" in allindomaincanview|allmemberscanview|allmanagerscanview|allownerscanview) ;;
+      *) invalid_choice "$2" "allindomaincanview|allmemberscanview|allmanagerscanview|allownerscanview" ;; esac ;;
+    messagemoderationlevel) case "$v" in moderateallmessages|moderatenonmembers|moderatenewmembers|moderatenone) ;;
+      *) invalid_choice "$2" "moderateallmessages|moderatenonmembers|moderatenewmembers|moderatenone" ;; esac ;;
+  esac
+  case "$1" in allowexternalmembers|allowwebposting|isarchived) return ;; esac
+  # Google's name, as GAM's choice map gives it whichever spelling it was handed
+  case "$v" in
+    nonecanpost) echo NONE_CAN_POST ;;
+    allmanagerscanpost) echo ALL_MANAGERS_CAN_POST ;;
+    allmemberscanpost) echo ALL_MEMBERS_CAN_POST ;;
+    allownerscanpost) echo ALL_OWNERS_CAN_POST ;;
+    allindomaincanpost) echo ALL_IN_DOMAIN_CAN_POST ;;
+    anyonecanpost) echo ANYONE_CAN_POST ;;
+    anyonecanjoin) echo ANYONE_CAN_JOIN ;;
+    allindomaincanjoin) echo ALL_IN_DOMAIN_CAN_JOIN ;;
+    invitedcanjoin) echo INVITED_CAN_JOIN ;;
+    canrequesttojoin) echo CAN_REQUEST_TO_JOIN ;;
+    allindomaincanview) echo ALL_IN_DOMAIN_CAN_VIEW ;;
+    allmemberscanview) echo ALL_MEMBERS_CAN_VIEW ;;
+    allmanagerscanview) echo ALL_MANAGERS_CAN_VIEW ;;
+    allownerscanview) echo ALL_OWNERS_CAN_VIEW ;;
+    moderateallmessages) echo MODERATE_ALL_MESSAGES ;;
+    moderatenonmembers) echo MODERATE_NON_MEMBERS ;;
+    moderatenewmembers) echo MODERATE_NEW_MEMBERS ;;
+    moderatenone) echo MODERATE_NONE ;;
+  esac
+}
+gs_field() {  # <attribute>: the Groups Settings API's name
+  case "$1" in
+    allowexternalmembers) echo allowExternalMembers ;; allowwebposting) echo allowWebPosting ;; isarchived) echo isArchived ;;
+    whocanpostmessage) echo whoCanPostMessage ;; whocanjoin) echo whoCanJoin ;; whocanviewmembership) echo whoCanViewMembership ;;
+    messagemoderationlevel) echo messageModerationLevel ;;
+  esac
+}
+
+# `gam info group <group> quick fields <the app's list> formatjson` -> one JSON line, keys sorted, the settings merged into the
+# group's own fields (infoGroups). A group the file doesn't list fails as GAM's per-group failure does (exit 50, no line).
+if [ "${1:-}" = "info" ] && { [ "${2:-}" = "group" ] || [ "${2:-}" = "groups" ]; }; then
+  [ -n "${3:-}" ] || missing_arg "GroupEntity"
+  group=$(lower "$3")
+  [ $# -eq 7 ] && [ "$4" = quick ] && [ "$5" = fields ] && [ "$7" = formatjson ] || not_modelled "info group $*"
+  [ "$6" = "email,whocanpostmessage,whocanjoin,whocanviewmembership,allowexternalmembers,messagemoderationlevel,allowwebposting,isarchived" ] \
+    || not_modelled "info group fields $6"
+  if settings_skipped "$group"; then printf '{"email": "%s"}\n' "$group"; exit 0; fi
+  settings_group "$group" || { printf 'Group: %s, Show Failed: Does not exist\n' "$group" 1>&2; exit 50; }
+  { awk -F '\t' -v g="$group" '$1 == g { print $2 "\t" $3 }' "$(settings_file)"; printf 'email\t%s\n' "$group"; } | LC_ALL=C sort \
+    | awk -F '\t' 'BEGIN { printf "{" } { printf "%s\"%s\": \"%s\"", (NR > 1 ? ", " : ""), $1, $2 } END { print "}" }'
+  exit 0
+fi
+
+# `gam update group <group> <setting> <value>...` -> each of the seven settings the app offers, checked as GAM checks it; any
+# other attribute isn't modelled. GAM sends them in one settings update: Google keeps the rest. locked@example.com is a group
+# whose update Google refuses (the wording is made up: Google's own reaches the screen as it comes).
+if [ "${1:-}" = "update" ] && { [ "${2:-}" = "group" ] || [ "${2:-}" = "groups" ]; } && \
+   case "${4:-}" in whocanpostmessage|whocanjoin|whocanviewmembership|allowexternalmembers|messagemoderationlevel|allowwebposting|isarchived) true ;; *) false ;; esac; then
+  group=$(lower "$3"); shift 3; changes=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      whocanpostmessage|whocanjoin|whocanviewmembership|allowexternalmembers|messagemoderationlevel|allowwebposting|isarchived) ;;
+      *) not_modelled "update group attribute $1" ;;
+    esac
+    [ $# -ge 2 ] || missing_arg "value for $1"
+    value=$(gs_value "$1" "$2") || exit $?
+    changes="$changes$(gs_field "$1")	$value
+"
+    shift 2
+  done
+  if settings_skipped "$group"; then echo "Group: $group, Updated"; exit 0; fi   # GAM's word, though it wrote nothing
+  settings_group "$group" || { printf 'Group: %s, Update Failed: Does not exist\n' "$group" 1>&2; exit 50; }
+  if [ "$group" = "locked@example.com" ]; then
+    printf 'Group: %s, Update Failed: Invalid Value\n' "$group" 1>&2; exit 50
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ]; then
+    [ -e "$GAM_MOCK_STATE/group_settings.tsv" ] || cp "$GAM_MOCK_FIXTURES/group_settings.tsv" "$GAM_MOCK_STATE/group_settings.tsv"
+    printf '%s' "$changes" | awk -F '\t' -v g="$group" 'NR == FNR { if ($1 != "") v[$1] = $2; next }
+      $1 == g && ($2 in v) { print g "\t" $2 "\t" v[$2]; next } { print }' - "$GAM_MOCK_STATE/group_settings.tsv" \
+      > "$GAM_MOCK_STATE/group_settings.tmp"
+    mv "$GAM_MOCK_STATE/group_settings.tmp" "$GAM_MOCK_STATE/group_settings.tsv"
+  fi
+  echo "Group: $group, Updated"
+  exit 0
+fi
+
 # `gam update group <group> add|create [<GroupRole>] <member>` / `delete|remove [<GroupRole>] <member>`.
 # Real GAM 404s if the group doesn't exist (a typo'd group address is the common onboarding mistake).
 if [ "${1:-}" = "update" ] && { [ "${2:-}" = "group" ] || [ "${2:-}" = "groups" ]; }; then

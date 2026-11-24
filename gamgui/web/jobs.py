@@ -82,6 +82,7 @@ CHANGE_WORDS = {
     "remove_delegate": "Remove a mail delegate",
     "remove_from_all_calendars": "Remove from everyone's calendars",
     "remove_group_member": "Remove from a group",
+    "update_group_settings": "Change a group's settings",
     "move_org_unit": "Move to an org unit",
     "add_license": "Add a license",
     "swap_license": "Change a license",

@@ -61,6 +61,7 @@ PREVIEWS = {
     "/reports/suspended-licenses/preview",   # roadmap 4.3: read the seats and the directory, hold the suspended accounts' seats
     "/builder/sheet/preview",   # plan F4: a read's export to a Sheet, held; its one GAM call is the scope check, a read
     "/users/licenses/preview",   # roadmap 4.3: read the seats and their account, hold the one change
+    "/groups/settings/preview",   # roadmap 4.4: read the group's settings, hold the ones the form changes
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -192,6 +193,10 @@ GATED = {
     # seat it found on a suspended account (bob's two: one person, so his address is typed). Nothing in the form names them.
     "/reports/suspended-licenses/apply": Case({}, "/reports/suspended-licenses/preview", preview_data={},
                                               typed={"confirm_email": "bob@example.com"}, edit=TOKEN_ONLY),
+    # A group's settings (roadmap 4.4): the preview reads them and holds the ones the form changes; the step posts its token.
+    "/groups/settings/apply": Case({}, "/groups/settings/preview",
+                                   preview_data={"group": "sales@example.com", "whocanjoin": "invited_can_join"},
+                                   edit=TOKEN_ONLY),
     # Put Back (roadmap 4.1): a kept run's old signatures, held by the preview.
     "/signatures/putback": Case({"run": KEPT_RUN}, "/signatures/putback/preview", setup=_kept_run, edit={"run": "another"}),
     # Remove several members (roadmap 3.5): the ticked ones the group still holds, held by the preview.

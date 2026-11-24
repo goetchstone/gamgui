@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GAMCommands as C, MessageId, Phone
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GROUP_SETTINGS, GAMCommands as C, MessageId, Phone
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
 from gamgui.core.setup import DWD_SCOPES, SCOPES_NOT_AUTHORIZED_RC
 
@@ -95,6 +95,8 @@ WRITES = {
     "add_group_member": [C.add_group_member("sales@example.com", "carol@example.com", r)
                          for r in ("member", "manager", "owner")],
     "remove_group_member": [C.remove_group_member("sales@example.com", "carol@example.com")],
+    "update_group_settings": [C.update_group_settings("sales@example.com", {"whocanjoin": "invited_can_join"}),
+                              C.update_group_settings("sales@example.com", {k: v[1][0] for k, v in GROUP_SETTINGS.items()})],
 }
 
 # Reads stay canned, but each one the app issues must still have a handler. The per-user ones answer
@@ -138,6 +140,7 @@ READS = {
     "print_datatransfers": [C.print_datatransfers("carol@example.com")],
     "show_signature": [C.show_signature("alice@example.com")],
     "print_org_units": [C.print_org_units()],
+    "info_group_settings": [C.info_group_settings("sales@example.com")],
     "print_signature": [C.print_signature("alice@example.com")],
     "print_delegates": [C.print_delegates("alice@example.com")],
     "print_forwarding_addresses": [C.print_forwarding_addresses("alice@example.com")],

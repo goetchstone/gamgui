@@ -27,6 +27,14 @@
   <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Add</button>
 </form>
 
+<div class="mt-4">
+  <h3 class="eyebrow text-brand-grayink">Settings</h3>
+  <div id="group-settings" class="mt-2">
+    <button type="button" hx-get="/groups/settings?group={{ group | urlencode }}" hx-target="#group-settings" hx-swap="innerHTML"
+            hx-disabled-elt="this" class="inline-flex items-center rounded-lg border border-brand-blue/40 px-3 py-1.5 text-xs font-medium text-brand-blueink hover:bg-paper transition-colors">Show settings</button>
+  </div>
+</div>
+
 <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
   <h3 class="eyebrow text-brand-grayink">Members</h3>
   <input id="member-filter" type="search" name="q" aria-label="Filter members" placeholder="Filter members…"
