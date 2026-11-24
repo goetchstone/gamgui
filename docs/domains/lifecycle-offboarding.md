@@ -17,6 +17,26 @@ and a forwarding filter made since would keep sending their mail out after the r
 
 **Templates (back-port plan C5).** `core/offboard_templates.py`: a saved routine holds the whole form but the two addresses and the "already done" ticks. Picking one fills the form and nothing else (`GET /lifecycle/template`), so the plan is always the form's, and a template can't leave out the lock. `offboarding-templates.json`, written atomically `0600` in a `0700` folder; a file it can't read, or one holding a template that couldn't run, is moved aside whole, never saved over. The page still opens as all eight steps until the operator picks another default: SwiftGamGui opens on "Hand-over", its operator's own routine, which would have turned the calendar sweep off for anyone here.
 
+**Close Out (roadmap 4.5, plan D2).** A section of the Lifecycle page for after the transfer: `core/closeout.py`, `web/routes/closeout.py`,
+`_closeout_*.html`. It reads `print datatransfers olduser` first and offers nothing while a transfer from the leaver is unfinished,
+or when the read failed or had no table (`incomplete_transfers_for` → None): groups, the org unit and suspend can switch off what
+it needs. A failed transfer has stopped, so it is named, not refused. Then each read on its own, and a failed one offers nothing
+for it: `print groups member` (`groups_of`, strict: no `email` title is Incomplete), `print admins user` (`role_assignments_of`:
+direct roles only, each needing its numeric ID), the record (`suspended`, `archived`, `orgUnitPath`, `aliases`; `archived` missing
+is unread, so archive isn't offered), `print orgs`, `print licenses`. Every pick is off; Preview reads it all again and refuses a
+pick the read no longer has. Steps are `OffboardStep`s run by `run_offboard` with no `requires`, so a refused one doesn't stop
+the rest. Order: groups, roles (`delete admin <id>`), org unit, suspend or archive (`archived on`), licenses, aliases
+(`update alias <a> user <manager>`). Archive and a license removal aren't planned together: Google swaps the license for an
+Archived User one (Admin Help, "Archive former employee accounts"). `update alias` deletes the alias from **whoever holds it
+now**, then adds it, so Run reads the leaver again and refuses an alias no longer theirs; an add that fails after the delete
+leaves it on nobody (exit 50), and the step says so. Run also reads the transfer again, and refuses while an offboarding or
+another Close Out of them runs (and an offboarding refuses while their Close Out runs). The admin GamGUI signs in as is refused
+by Google account ID (`cut_off_refusal`, at the check and again at Run), so a renamed admin or one the token doesn't name
+can't be archived or lose its role here; `archived on` is a cut-off shape too. `incomplete_transfers_for` takes output
+without its `id` title as unread and a row with no status as unfinished, for the delete gate as well. The alias step reads
+the leaver's aliases again right before it runs. The confirm step posts only its token, the leaver's address typed, `confirm` at ten steps.
+The delete isn't a step: the check embeds the Users delete zone (`/users/delete/zone`), the one delete path. Not run live yet.
+
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on
 data-transfer completion** (advisory) and **the all-users calendar-ACL sweep is best-effort**
 (tolerates own-calendar / not-shared / no-Calendar, nothing else). Both flow through the write chokepoint (CLAUDE.md #2) and the
@@ -41,6 +61,7 @@ combined transfer service list is one argv element (CLAUDE.md #1).
 - `gamgui/web/routes/lifecycle.py` — `/lifecycle` page + `/offboard/{preview,autoreply,run,status}`.
   Starts the held steps as a progress-tracked `BatchJob` (`lifecycle.run_offboard`); name-resolution helpers;
   `_running` (one offboarding per leaver).
+- `gamgui/core/closeout.py`, `gamgui/web/routes/closeout.py` — Close Out (above): the reads, the picks, the steps, the run.
 - `gamgui/web/routes/users.py` — the **delete** flow, the only one (the Builder has none, roadmap 2.9):
   `delete_zone`, `delete_confirm` (refuses a Vault hold or an owned secondary calendar, warns on a pending or
   unknown transfer and on a read that failed, and holds which reads answered under a single-use token, flow
@@ -244,6 +265,9 @@ parser was read statically (its bytecode, never run). No mismatch found.
 | Transfer Drive + Calendar | `create datatransfer <leaver> drive,calendar <manager> all` | `gam create\|add datatransfer\|transfer <OldOwnerID> <DataTransferServiceList> <NewOwnerID> [private\|shared\|all] [release_resources] (<ParameterKey> <ParameterValue>)* [wait …]` (3598-3601) | Match; the service list is ONE element. `all` = `PRIVACY_LEVEL: PRIVATE,SHARED` (GAM's `PRIVACY_LEVEL_CHOICE_MAP`), attached by `_assignAppParameter` only to a listed app whose `transferParams` take it — Drive, not Calendar (read statically from the vendored build; GamUpdate 6.07.21 fixed it reaching every listed app). See Gotchas. |
 | Calendar sweep | `all users delete calendaracls primary <leaver>` | `gam <UserTypeEntity> delete calendaracls <UserCalendarEntity> <CalendarACLRole>] <CalendarACLScopeEntity>` (6327) | Match. The grammar line lost its `[`: the role is optional, as in `calendars … delete acls [<CalendarACLRole>]` (1689) and in GAM's parser (`getChoice(…, defaultChoice=None)`, then the scope, then no extra arguments). `all users` = `<UserTypeEntity>`, `primary` = `<UserCalendarEntity>`, a bare address = `<CalendarACLScope>` (a user). |
 | Manager reminder | `user <manager> add event primary summary <S> start allday <D> end allday <D+1> [description <T>] [attendee <E> sendupdates all]` | `gam <UserTypeEntity> create\|add event <UserCalendarEntity> [id <String>] <EventAttribute>+ [<EventNotificationAttribute>]` (6469); `<EventAttribute>` (6391): `summary`, `start\|starttime (allday <Date>)`, `end\|endtime (allday <Date>)`, `description`, `attendee <EmailAddress>`; `<EventNotificationAttribute>` (6459-6460): `sendupdates all\|…\|none` | Match. The end date is exclusive, so a one-day event on D. With an invitee, `sendupdates all`: GAM's `add event` defaults `sendUpdates` to `none` (`_getCalendarCreateImportUpdateEventOptions`, read statically), so until 2026-09-23 the invitee got no email, only a silent calendar entry (failure-log). |
+| Close Out: remove an admin role | `delete admin <id>` | `gam delete admin <RoleAssignmentId>` (1583) | Match; the ID is `print admins`' `roleAssignmentId`. |
+| Close Out: archive | `update user <leaver> archived on` | `gam update user <UserItem> <UserAttribute>*` (`archived` a PC_BOOLEAN at the 7.52.04 tag) | Match. |
+| Close Out: move an alias | `update alias <alias> user <manager>` | `gam update alias\|aliases <EmailAddressEntity> user\|group\|target <UniqueID>\|<EmailAddress> [notargetverify] [waitafterdelete <Integer>]` (1621) | Match; target verified, then delete, wait 2 s, add. |
 | Delete (later, user detail page) | `delete user <leaver>` | `gam delete user <UserItem> [noactionifalias]` (5964) | Match; `noactionifalias` unused (the page passes the primary address). |
 | Undelete (Builder) | `undelete user <email>` | `gam undelete user <UserItem> [ou\|org\|orgunit <OrgUnitPath>]` (5965) | Match. |
 | Delete gate (read) | `print datatransfers olduser <leaver>` | `gam print datatransfers\|transfers [todrive …] [olduser\|oldowner <UserItem>] …` (3603) | Match. |

@@ -25,6 +25,7 @@ from ..gam.models import (
     GAMUser,
     GroupMember,
     LicenseSeat,
+    RoleAssignment,
     ResourceCalendar,
     UserCalendar,
     Vacation,
@@ -372,6 +373,57 @@ class GAMConnector(Connector):
         argv = GAMCommands.remove_license(email, seat.product_id, seat.sku_id)
         return await self._run_write("remove_license", email, argv, RiskLevel.DESTRUCTIVE,
                                      about={"product": seat.product_id, "sku": seat.sku_id})
+
+    # --- Close Out (roadmap 4.5): what a leaver still has, and taking it away ----------------
+    async def groups_of(self, email: str) -> List[str]:
+        """The groups ``email`` is a direct member of. GAM writes the `email` title even for none; output without it never
+        answered, and is Incomplete, never "in no group" (invariant 10)."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_groups_member(email))
+        rows = _rows_from_titles(out, "email", f"GAM answered without {email}'s groups, so which they're in can't be told.")
+        return [str(r.get("email") or "").strip() for r in rows if "@" in str(r.get("email") or "")]
+
+    async def role_assignments_of(self, email: str) -> List[RoleAssignment]:
+        """The admin roles assigned to ``email`` directly. Without the titles the read never answered (Incomplete), and a row
+        without its assignment ID could never be removed by name, so it fails the read too."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_admins(email))
+        rows = _rows_from_titles(out, "roleAssignmentId", f"GAM answered without {email}'s admin roles, so which they hold can't be told.")
+        roles = [RoleAssignment.from_row(r) for r in rows]
+        if any(not r.id.isdigit() for r in roles):
+            raise Incomplete(f"GAM listed an admin role of {email}'s without its assignment ID, so it can't be named.")
+        return roles
+
+    async def delete_admin_role(self, email: str, role: RoleAssignment) -> ChangeResult:
+        argv = GAMCommands.delete_admin_role(role.id)
+        return await self._run_write("delete_admin_role", email, argv, RiskLevel.DESTRUCTIVE,
+                                     about={"role": role.role, "assignment": role.id})
+
+    async def suspend_user(self, email: str) -> ChangeResult:
+        return await self._run_write("suspend_user", email, GAMCommands.set_suspended(email, True), RiskLevel.DESTRUCTIVE)
+
+    async def archive_user(self, email: str) -> ChangeResult:
+        return await self._run_write("archive_user", email, GAMCommands.set_archived(email), RiskLevel.DESTRUCTIVE)
+
+    async def move_alias(self, email: str, alias: str, to: str) -> ChangeResult:
+        """Move ``alias`` from ``email`` to ``to``: GAM deletes it, then adds it there. A failure may have come after the
+        delete, so its remediation says the alias may be on nobody, whatever GAM's own words were."""
+        argv = GAMCommands.move_alias(alias, to)
+        # `update alias` deletes it from whoever holds it now, so it is read as theirs right before; a read that fails
+        # refuses too (the steps before this one in a run take time, and the alias may have moved meanwhile).
+        try:
+            mine = {a.lower() for a in (await self.get_user(email, fields=("primaryEmail", "aliases"))).aliases}
+        except Exception as exc:  # noqa: BLE001 - unread: never moved, whatever it was
+            mine, why = set(), f"Couldn't read {email}'s aliases ({exc})"
+        else:
+            why = f"{alias} isn't {email}'s alias any more"
+        if alias.lower() not in mine:
+            preview = ChangePreview(connector_id=self.id, target=email, summary="Move an alias", risk=RiskLevel.DESTRUCTIVE)
+            return ChangeResult(preview=preview, ok=False, detail=why,
+                                remediation=f"{why}, so it wasn't moved: moving it would take it from whoever has it now.")
+        result = await self._run_write("move_alias", email, argv, RiskLevel.DESTRUCTIVE, about={"alias": alias, "to": to})
+        if result.ok:
+            return result
+        return replace(result, remediation=f"{alias} may now be on nobody: GAM removes it from {email} before adding it to {to}. "
+                                           f"Check {email}'s page, and add it to {to} on theirs if it's gone. {result.remediation}".strip())
 
     async def list_group_members(self, group: str) -> List[GroupMember]:
         argv = GAMCommands.print_group_members(group)
@@ -1016,12 +1068,15 @@ class GAMConnector(Connector):
         except Exception as exc:  # noqa: BLE001 - any failure leaves the answer unknown, whatever it was
             logger.warning("the data-transfer check for a delete failed", exc_info=exc)
             return None
-        if not out.strip():       # GAM prints the header even with no transfers: no table is no answer
+        try:                      # GAM prints the `id` title even with no transfers: output without it is no answer
+            rows = _rows_from_titles(out, "id", "GAM answered without the data transfers.")
+        except Incomplete:
             return None
         pending = []
-        for r in parse_records(out):
-            status = str(r.get("overallTransferStatusCode") or r.get("status") or "")
-            if status and status.lower() != "completed":
+        for r in rows:
+            # A row without a status is unfinished as far as anyone can tell, never completed (invariant 10).
+            status = str(r.get("overallTransferStatusCode") or r.get("status") or "").strip() or "status unknown"
+            if status.lower() != "completed":
                 pending.append({"application": str(r.get("application") or "data"), "status": status})
         return pending
 

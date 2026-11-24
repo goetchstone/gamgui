@@ -113,7 +113,8 @@ def cut_off_account(argv: Sequence[str]) -> Optional[str]:
         for i, word in enumerate(attributes):
             if word == "password":
                 return original[2]
-            if word in ("suspended", "suspend") and attributes[i + 1:i + 2] not in (["off"], ["false"]):
+            # Archived can't sign in either (Close Out, roadmap 4.5): GAM's own token goes with it.
+            if word in ("suspended", "suspend", "archived", "archive") and attributes[i + 1:i + 2] not in (["off"], ["false"]):
                 return original[2]
     return None
 
@@ -693,6 +694,12 @@ class GAMCommands:
         # `update user ... suspended on/off` is the canonical, version-stable form.
         return ["update", "user", email, "suspended", "on" if suspended else "off"]
 
+    @staticmethod
+    def set_archived(email: str) -> List[str]:
+        # Close Out (roadmap 4.5): `archived` is a UProp.PC_BOOLEAN of `update user` (getUserAttributes). Google swaps the
+        # person's license for an Archived User one, and refuses without one to give.
+        return ["update", "user", email, "archived", "on"]
+
     # --- calendar access ---------------------------------------------------------------
     @staticmethod
     def print_calendar_acls(email: str, calendar: str = "primary") -> List[str]:
@@ -1043,6 +1050,14 @@ class GAMCommands:
         return ["user", email, "delete", "sendas", address]
 
     @staticmethod
+    def delete_admin_role(assignment_id: str) -> List[str]:
+        # `delete admin <RoleAssignmentId>` (doDeleteAdmin): the ID `print admins` lists, digits only. A failure is a warning,
+        # exit 50.
+        if not (assignment_id or "").isdigit():
+            raise ValueError("a role assignment is named by its numeric ID")
+        return ["delete", "admin", assignment_id]
+
+    @staticmethod
     def print_admins(email: str) -> List[str]:
         # The roles assigned to the person directly. Not one held through a group: that takes `recursive`.
         return ["print", "admins", "user", email]
@@ -1117,6 +1132,15 @@ class GAMCommands:
     @staticmethod
     def delete_alias(alias: str) -> List[str]:
         return ["delete", "alias", alias]
+
+    @staticmethod
+    def move_alias(alias: str, to: str) -> List[str]:
+        # Close Out (roadmap 4.5): `update alias <a> user <u>` (doCreateUpdateAliases at the 7.52.04 tag) checks the new owner
+        # exists, deletes the alias from whoever holds it, waits 2s, then adds it to <u>. An add that fails after the delete
+        # leaves the alias on nobody, exit 50. Both are one address: a list here would move them all.
+        if not (is_one_address(alias) and is_one_address(to)):
+            raise ValueError("an alias is moved to one account, each one address")
+        return ["update", "alias", alias, "user", to]
 
     @staticmethod
     def todrive_args(title: str = "") -> List[str]:

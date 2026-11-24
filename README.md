@@ -22,7 +22,9 @@ time.
 - **Onboard** a hire: the account, OU, signature, groups, shared calendars, a setup checklist and a
   welcome email — one person, or a CSV of them.
 - **Offboard** a leaver: reset the password, revoke access and sign out, turn off forwarding, hand the
-  mailbox to a delegate, set an auto-reply, transfer Drive and calendars, remind the manager.
+  mailbox to a delegate, set an auto-reply, transfer Drive and calendars, remind the manager. Once the
+  transfer has finished, **Close out** takes away what's left, each step picked: groups, admin roles, the
+  org unit, suspend or archive, licenses, aliases to the manager, then the delete.
 - **Roll out a signature** to one person, a group, an OU, a department or everyone, with a live
   preview.
 - **Find anyone** in the directory; edit title and department (one person or in bulk), delegates,
@@ -259,6 +261,7 @@ school domain is the most useful one of all.
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
 | Change a group's settings (`update group <group> <setting> <value>`) | Groups | not yet: run on a throwaway group |
+| Close Out: remove an admin role (`delete admin <id>`), archive (`update user <u> archived on`), move an alias to the manager (`update alias <a> user <manager>`); its group, org unit, suspend and license steps reuse those screens' writes | Lifecycle | not yet: run on a throwaway account after its transfer |
 | Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 
 **A new account isn't ready at once.** On the first live onboarding (2026-09-30) the account,

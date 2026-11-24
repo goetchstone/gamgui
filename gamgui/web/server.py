@@ -535,6 +535,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.home import router as home_router
     from .routes.jobs import router as jobs_router
     from .routes.lifecycle import router as lifecycle_router
+    from .routes.closeout import router as closeout_router
     from .routes.onboarding import router as onboarding_router
     from .routes.incident import router as incident_router
     from .routes.incident_kept import router as incident_kept_router
@@ -564,6 +565,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(classroom_router)
     app.include_router(roster_router)
     app.include_router(lifecycle_router)
+    app.include_router(closeout_router)
     app.include_router(onboarding_router)
     app.include_router(builder_router)
     app.include_router(audit_router)

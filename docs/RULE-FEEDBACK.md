@@ -30,6 +30,20 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-24 — A new way to cut an account off slipped the shape list; a shared read still took "no table" as "none"
+- **What happened:** Close Out (roadmap 4.5), before merge. An adversarial workflow showed, by running code, that archiving and
+  removing an admin role ran on the admin GamGUI signs in as when the token named it by an old address or not at all: the route
+  compared addresses, and `cut_off_account` knew delete, suspend, password and sign-out, not `archived`. It also showed
+  `incomplete_transfers_for` reading output without its `id` title, and a row with no status, as "nothing pending". Both fixed
+  in the PR; `/code-review` and `/security-review` had passed them.
+- **Invariant in force:** 10 for the transfer read; the cut-off refusal (no number, `GAMConnector.cut_off_refusal`) for the admin.
+- **Why it didn't hold:** wrong layer. The cut-off list is matched by shape, so a new write that signs an account out is
+  safe only if someone remembers to add its shape; nothing asks. The transfer read predates `_rows_from_titles`.
+- **Would a rule have caught it?** Only if enforced differently: a tripwire that every builder writing `update user` with an
+  attribute that stops sign-in (`suspended`, `archived`, `password`) is in `cut_off_account`, and one that every per-user
+  `print` read the app makes goes through `_rows_from_titles` or says why not.
+- **Enforcement home if changed:** tripwire test (beside `test_write_routes_guarded.py`).
+
 ## 2026-11-21 — Invariant #3's text no longer matches the read export it describes
 - **What happened:** plan F4 (#174) made a read's export to a Google Sheet a curated write run only from its own preview
   (the read's argv plus `todrive tdtitle <t> tdnobrowser true tdnoemail true`, a single-use token, `guard.enforce` with

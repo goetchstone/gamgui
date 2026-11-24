@@ -208,6 +208,29 @@ class LicenseSeat:
                    sku=str(d.get("skuDisplay") or "").strip() or sku_id)
 
 
+@dataclass(frozen=True)
+class RoleAssignment:
+    """One admin role assigned to a person directly, as `print admins user <u>` lists it (Close Out, roadmap 4.5): the
+    assignment's ID is what `delete admin` names, and the role and its scope are what the screen shows. A role held through
+    a group isn't one: `print admins` without `recursive` lists the group's row, not its members."""
+    id: str
+    role: str
+    scope: str = ""
+
+    @classmethod
+    def from_row(cls, d: Dict[str, Any]) -> "RoleAssignment":
+        role = str(d.get("role") or d.get("roleId") or "").strip()
+        unit = str(d.get("orgUnit") or "").strip()
+        in_unit = str(d.get("scopeType") or "").strip().upper() == "ORG_UNIT"
+        return cls(id=str(d.get("roleAssignmentId") or "").strip(),
+                   role="Super Admin" if role == "_SEED_ADMIN_ROLE" else role,
+                   scope=f"the org unit {unit}" if in_unit else "the whole domain")
+
+    @property
+    def words(self) -> str:
+        return f"{self.role}, for {self.scope}"
+
+
 @dataclass
 class CalendarACL:
     """One access rule on a calendar: who has access (scope) and at what role."""

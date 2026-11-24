@@ -41,6 +41,7 @@ VALUE_ERRORS_FROM_OUR_VALIDATORS: Dict[Tuple[str, str], str] = {
     ("calendars.py", "share"): "GAMCommands.add_calendar_acl_cal's argument validation",
     ("calendars.py", "_grant_and_subscribe"): "GAMCommands.add_calendar_acl_cal's validation, via the connector",
     ("incident.py", "secure_preview"): "core/incident/secure.steps' refusals",
+    ("closeout.py", "preview"): "core/closeout.steps' refusals",
     ("lifecycle.py", "template_save"): "OffboardTemplateStore.save's name and field checks",
     ("lifecycle.py", "template_delete"): "OffboardTemplateStore.delete's checks (its load falls back on any error)",
     ("lifecycle.py", "offboard_preview"): "core/lifecycle.build_offboard_steps' refusals",

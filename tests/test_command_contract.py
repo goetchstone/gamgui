@@ -95,6 +95,9 @@ ENUM_ARGS = {
     # A group's settings (roadmap 4.4): each setting, and every value each takes, as the builder sends them.
     ("info_group_settings", "group"): (SEARCH_ADDRESS,),   # one address: a list would read several groups
     ("update_group_settings", "group"): (SEARCH_ADDRESS,),
+    ("delete_admin_role", "assignment_id"): ("9170001",),   # roadmap 4.5: the numeric ID `print admins` lists
+    ("move_alias", "alias"): (SEARCH_ADDRESS,),              # one address each: a list would move several
+    ("move_alias", "to"): (SEARCH_ADDRESS,),
     ("update_group_settings", "changes"): tuple({k: v} for k, (_, values) in GROUP_SETTINGS.items() for v in values),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
@@ -539,6 +542,7 @@ AUDITED_OUTSIDE_CONNECTOR = {
     ("gamgui/core/setup.py", "remove_domain"): "Setup's Remove deletes a domain's Keychain credentials",
     ("gamgui/web/routes/lifecycle.py", "offboard_run"): "`offboard_plan`: the steps left out of an offboarding",
     ("gamgui/web/routes/incident.py", "secure_apply"): "`incident_secure`: the steps one Secure run planned",
+    ("gamgui/web/routes/closeout.py", "apply"): "`closeout`: the steps one Close Out run planned",
     ("gamgui/web/routes/roster.py", "_keep"): "`roster_import`: a SIS roster (student data) kept on this Mac, from an "
                                                "export or a mapped spreadsheet — counts, "
                                                "never rows",

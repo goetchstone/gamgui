@@ -31,6 +31,7 @@ PANELS = {
     "signatures": "/signatures/apply/status",
     "department": "/users/bulk/status",
     "offboard": "/lifecycle/offboard/status",
+    "closeout": "/lifecycle/closeout/status",   # roadmap 4.5: Stop between its steps
     "subscribe": "/calendars/share/status",
     "index": "/calendars/index/status",
     "roster_compare": "/classroom/import/compare/status",
@@ -87,6 +88,10 @@ CHANGE_WORDS = {
     "add_license": "Add a license",
     "swap_license": "Change a license",
     "remove_license": "Remove a license",
+    "delete_admin_role": "Remove an admin role",
+    "suspend_user": "Suspend",
+    "archive_user": "Archive",
+    "move_alias": "Move an alias",
     "onboard_runbook": "Create a task list",
     "reset_password": "Reset a password",
     "revoke_access": "Revoke access",

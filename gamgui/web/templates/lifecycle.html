@@ -13,7 +13,7 @@
   <div>
     <p class="eyebrow text-brand-blue">Lifecycle</p>
     <h1 class="font-serif text-2xl text-brand-black tracking-tight">Offboard a user</h1>
-    <p class="text-brand-blueink mt-1 text-sm">Runs the sequence in order: {% for key in routine %}{{ step_names[key] }}{{ " → " if not loop.last }}{% endfor %}. The account is <strong>not</strong> deleted — IT does that later from the user's detail page.</p>
+    <p class="text-brand-blueink mt-1 text-sm">Runs the sequence in order: {% for key in routine %}{{ step_names[key] }}{{ " → " if not loop.last }}{% endfor %}. The account is <strong>not</strong> deleted — IT does that later, from Close out below or the user's detail page.</p>
   </div>
 
   {% include "_offboard_templates.html" %}
@@ -28,6 +28,19 @@
   </form>
 
   <div id="offboard-result" class="max-h-[22rem] overflow-y-auto"></div>
+
+  {# Close Out (roadmap 4.5): after the transfer has finished. Its own section, its own form: nothing here runs with the routine. #}
+  <section aria-labelledby="closeout-title" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+    <h2 id="closeout-title" class="font-serif text-lg text-brand-black">Close out</h2>
+    <p class="mt-1 text-sm text-brand-blueink">Once their data transfer has finished: take them out of groups and admin roles, move their org unit, suspend or archive them, remove licenses, move aliases to the manager, then delete the account. Each one is off until you pick it.</p>
+    <form id="closeout-form" class="mt-3 flex flex-wrap items-end gap-2" hx-get="/lifecycle/closeout/check" hx-target="#closeout-result" hx-swap="innerHTML"
+          hx-disabled-elt="find button[type=submit]">
+      <label class="block text-sm text-brand-black">The leaver
+        <input name="user" autocomplete="off" required class="mt-1 block w-72 max-w-full rounded-lg border border-brand-field bg-brand-white px-3 py-1.5 text-sm" /></label>
+      <button type="submit" class="inline-flex items-center rounded-lg border border-brand-blue/40 px-3.5 py-2 text-sm font-medium text-brand-blueink hover:bg-paper transition-colors">Check what's left</button>
+    </form>
+    <div id="closeout-result" class="mt-4"></div>
+  </section>
 </div>
 {% endif %}
 {% endblock %}

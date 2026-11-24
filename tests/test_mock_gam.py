@@ -97,6 +97,9 @@ WRITES = {
     "remove_group_member": [C.remove_group_member("sales@example.com", "carol@example.com")],
     "update_group_settings": [C.update_group_settings("sales@example.com", {"whocanjoin": "invited_can_join"}),
                               C.update_group_settings("sales@example.com", {k: v[1][0] for k, v in GROUP_SETTINGS.items()})],
+    "delete_admin_role": [C.delete_admin_role("9170001")],
+    "set_archived": [C.set_archived("alice@example.com")],
+    "move_alias": [C.move_alias("a.anders@example.com", "bob@example.com")],
 }
 
 # Reads stay canned, but each one the app issues must still have a handler. The per-user ones answer

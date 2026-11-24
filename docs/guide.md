@@ -146,6 +146,23 @@ the leaver's own calendar, which it visits too, and is expected on every run. If
 its line says why and later steps that depended on it were not run. Fix the cause, tick the steps
 that already succeeded, preview again and run — the checklist covers each failure.
 
+### Close out, once the transfer has finished
+
+Further down **Lifecycle**, **Close out** is for later, once Google has finished the transfer. Type the leaver and click
+**Check what's left**. It reads their groups, the admin roles assigned to them directly, their org unit, whether they're
+suspended or archived, their licenses and their aliases. Nothing is picked: tick what should go, and for the aliases name the
+manager they move to. **Preview changes** reads it all again and lists each step with its exact command; type the leaver's
+address (and `confirm` for ten or more steps) and click **Close out**.
+
+While a transfer from them hasn't finished, or when that can't be checked, nothing is offered: taking them out of groups,
+moving them or suspending them can stop what the transfer still needs. A read that failed says so and offers nothing for it.
+Archiving swaps their license for an Archived User one, so archive and removing a license aren't picked together. A step
+that fails is reported and the rest still run. Moving an alias removes it from the leaver, then adds it to the manager: if
+the add fails, add it to the manager on their page.
+
+**Last: delete the account** sits under the check. It is the same delete as on the user's page, with the same refusals and
+the address typed to confirm.
+
 ### Save your routine as a template
 
 **Templates** at the top of the page hold the whole form but the two addresses and the "already done" ticks. Click one to fill
