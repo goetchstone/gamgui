@@ -68,7 +68,7 @@ async def preview(request: Request, csv_file: Annotated[UploadFile, File()]) -> 
     refused, unchanged = list(parsed.errors), 0
     if parsed.rows:
         try:   # the directory as it is now (never a stale list), and the units only when a row names one
-            directory = await st.users()
+            directory = await st.users(force=True)   # a cached record's fields are patched, its lists aren't
             units = await conn.org_units() if any("org_unit" in r.values for r in parsed.rows) else []
         except Exception as exc:  # noqa: BLE001 - unread: nothing is offered, whatever it was
             return error_partial(request, "Couldn't read the directory or the org units, so nothing is offered. "

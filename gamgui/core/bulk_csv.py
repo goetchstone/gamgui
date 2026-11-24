@@ -169,6 +169,8 @@ def organizations_from(record: Mapping[str, Any]) -> List[Organization]:
         fte = o.get("fullTimeEquivalent")
         if fte is not None and not isinstance(fte, int):
             raise ValueError("an organization's full-time equivalent isn't a number")
+        if not any(o.get(k) for k in (*ORG_TEXT_FIELDS, "type", "customType", "fullTimeEquivalent")):
+            raise ValueError("an organization of theirs is empty, and GAM would send it back as nothing")
         kind = str(o.get("type") or "")
         if kind and kind not in ORG_TYPES and not (kind == "custom" and o.get("customType")):
             raise ValueError(f"an organization's type “{kind}” isn't one GAM sends back")
@@ -193,9 +195,16 @@ def _with(org: Organization, **values: str) -> Organization:
 
 
 def held(record: Mapping[str, Any]) -> str:
-    """What the run compares, as read: the organizations, the phones and the org unit (a missing list is none)."""
-    return json.dumps({"organizations": record.get("organizations") or [], "phones": record.get("phones") or [],
-                       "orgUnitPath": record.get("orgUnitPath") or "/"}, sort_keys=True)
+    """What the run compares: the organizations and phones as they'd be sent back, and the org unit. Read through the same
+    parsers on both sides, so the directory list and a one-person read compare by what they hold, not how GAM printed it;
+    lists those parsers refuse compare as printed, and so never match a sendable one."""
+    try:
+        shape: Dict[str, Any] = {"organizations": [repr(o) for o in organizations_from(record)],
+                                 "phones": [repr(p) for p in phones_mod.phones_from(record)]}
+    except ValueError:
+        shape = {"unsendable": [record.get("organizations"), record.get("phones")]}
+    shape["orgUnitPath"] = record.get("orgUnitPath") or "/"
+    return json.dumps(shape, sort_keys=True, default=str)
 
 
 @dataclass(frozen=True)
@@ -264,11 +273,11 @@ def plan(rows: Sequence[Row], directory: Sequence[GAMUser], units: Sequence[str]
             if unit:
                 before["org_unit"], after["org_unit"] = user.org_unit_path, unit
             change = Change(who, user.full_name, before, after, orgs, new_phones, unit, held(record))
-            change.argv   # noqa: B018 - every command built now: one GAM couldn't send refuses the row here, not at the run
+            runs = change.argv   # every command built now: one GAM couldn't send refuses the row here, not at the run
         except ValueError as exc:
             errors.append(f"Line {row.line}: {who} isn't changed: {exc}. Change them on their page.")
             continue
-        if not after:
+        if not runs:
             unchanged += 1
             continue
         changes.append(change)

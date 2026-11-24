@@ -300,7 +300,8 @@ def test_the_undo_file_puts_back_exactly_what_was_there(was):
 
 @pytest.mark.parametrize("was", [" padded", " ", "", "''+x"])
 def test_a_value_the_undo_cant_put_back_is_counted(was):
-    changes, _, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"title": "Head"})], [_user(orgs=[{"title": was, "primary": True}])], [])
+    changes, _, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"title": "Head"})],
+                                  [_user(orgs=[{"title": was, "department": "IT", "primary": True}])], [])
     assert bulk_csv.blanks_before(changes) == 1
 
 
@@ -317,3 +318,32 @@ def test_the_mocks_reread_keeps_the_record_once_phones_changed(client, gam_state
     (gam_state / "phones" / ALICE).write_text('[{"type": "work", "value": "+1 555 0100", "primary": true}]')
     record = client.portal.call(client.app.state.gamgui.connector.profile_now, ALICE)
     assert record["organizations"] and record["orgUnitPath"] == "/Staff" and record["phones"][0]["value"] == "+1 555 0100"
+
+
+# --- what the code review found, each held here --------------------------------------------------------------------------------
+
+def test_the_reread_compares_what_the_lists_hold_not_how_gam_printed_them():
+    cached = {"primaryEmail": ALICE, "orgUnitPath": "/Staff", "organizations": [{"title": "T", "primary": True}]}
+    reread = {"primaryEmail": ALICE, "orgUnitPath": "/Staff", "phones": [],
+              "organizations": [{"primary": True, "title": "T", "customType": ""}]}
+    assert bulk_csv.held(cached) == bulk_csv.held(reread)
+    assert bulk_csv.held(cached) != bulk_csv.held({**reread, "organizations": [{"title": "T", "primary": True}, {"name": "Board"}]})
+
+
+def test_an_empty_organization_refuses_the_person():
+    _, errors, _ = bulk_csv.plan([bulk_csv.Row(2, ALICE, {"title": "Head"})],
+                                 [_user(orgs=[{"title": "A", "primary": True}, {"primary": False}])], [])
+    assert errors and "empty" in errors[0]
+
+
+def test_the_preview_reads_the_directory_fresh(client, monkeypatch):  # noqa: F811
+    st = client.app.state.gamgui
+    asked = []
+    real = st.users
+
+    async def users(force=False, stale_ok=False):
+        asked.append(force)
+        return await real(force=force, stale_ok=stale_ok)
+    monkeypatch.setattr(st, "users", users)
+    _upload(client, "email,title\nalice@example.com,Head\n")
+    assert asked == [True]
