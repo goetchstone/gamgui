@@ -126,6 +126,10 @@ IDENTIFIERS = (
     Spec("transfer_calendar_ownership", ("new_owner",), (), {"calendar_ids": st.just(["c_x@group.calendar.google.com"])}),
     Spec("delete_filters", ("email",), (), {"filter_ids": st.just(["F1", "F2"])}),
     Spec("update_phones", ("email",), (), {"phones": st.just([commands.Phone("work", "", "+1 555 0100", True)])}),
+    # Roadmap 4.6: each organization's text and each phone, one element apiece, the lists sent whole.
+    Spec("update_profile", ("email",), (), {
+        "organizations": st.builds(lambda t, d: [commands.Organization((("title", t), ("department", d)), primary=True)], WORD, WORD),
+        "phones": st.just([commands.Phone("work", "", "+1 555 0100", True)])}),
     Spec("print_chrome_profiles", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_mobile_devices", (), (), {"user": _SEARCH_ADDRESS}),
     Spec("print_devices", (), (), {"user": _SEARCH_ADDRESS}),

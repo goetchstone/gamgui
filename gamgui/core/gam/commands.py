@@ -20,7 +20,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Mapping, Optional, Sequence
+from typing import List, Mapping, Optional, Sequence, Tuple
 
 # The GAM7 version GamGUI is pinned to and tested against — the SINGLE SOURCE OF TRUTH.
 # `scripts/fetch_gam.sh` (TAG), the mock, and the version tests must all match this; that's enforced by
@@ -154,6 +154,28 @@ class Phone:
     custom_type: str = ""
     value: str = ""
     primary: bool = False
+
+
+# GAM's organization types (`organization [type domain_only|school|unknown|work] [customtype <String>]`), and the text fields it
+# sends back by these words (ORGANIZATION_ARGUMENT_TO_FIELD_MAP at the 7.52.04 tag), keyed by Google's name for each.
+ORG_TYPES = frozenset({"domain_only", "school", "unknown", "work"})
+ORG_TEXT_FIELDS = {"name": "name", "title": "title", "department": "department", "symbol": "symbol", "costCenter": "costcenter",
+                   "location": "location", "description": "description", "domain": "domain"}
+
+
+@dataclass(frozen=True)
+class Organization:
+    """One of a person's organizations as Google keeps it (roadmap 4.6). ``fields`` are Google's text fields by Google's name,
+    only the ones it has. GAM sends the organizations it's given as the list Google keeps in place of the old one."""
+
+    fields: Tuple[Tuple[str, str], ...] = ()
+    type: str = ""
+    custom_type: str = ""
+    full_time_equivalent: Optional[int] = None
+    primary: bool = False
+
+    def get(self, key: str) -> str:
+        return dict(self.fields).get(key, "")
 
 
 # RFC 5322's atext, less Gmail's { and }, and *.
@@ -446,28 +468,23 @@ class GAMCommands:
         # out is deleted, and none left is `phone clear`. A phone GAM wouldn't send back as it is raises ValueError: two
         # primaries, a type it would keep as custom, a custom type it would trim, or a number over lines. SwiftGamGui's
         # updatePhones.
-        if sum(p.primary for p in phones) > 1:
-            raise ValueError("only one phone can be the primary")
+        return ["update", "user", email, *_phone_args(phones)]
+
+    @staticmethod
+    def update_profile(email: str, organizations: Optional[Sequence["Organization"]] = None,
+                       phones: Optional[Sequence[Phone]] = None) -> List[str]:
+        """A person's organizations and phones in one `update user` (roadmap 4.6): each list given is sent whole, as Google
+        keeps it in place of the old one, so every entry not changed goes back as it was read. One GAM couldn't send back as
+        it is raises ValueError, and so does a field it would drop (GAM keeps a text field only when it isn't empty)."""
+        if organizations is None and phones is None:
+            raise ValueError("nothing to send")
         argv = ["update", "user", email]
-        for phone in phones:
-            if not phone.value or any(unicodedata.category(c) == "Cc" for c in phone.value):
-                raise ValueError("each phone is a number on one line")
-            kind = phone.type.lower()
-            if kind != "custom" and phone.custom_type:
-                raise ValueError(f"a phone of type “{phone.type}” with its own name would lose the name")
-            typed: List[str] = []
-            if kind == "custom":
-                if not phone.custom_type.strip():
-                    raise ValueError("a custom phone type has a name")
-                if phone.custom_type.strip() != phone.custom_type:
-                    raise ValueError(f"the custom phone type “{phone.custom_type}” would come back without its spaces")
-                typed = ["type", "custom", phone.custom_type]
-            elif kind:
-                if kind not in PHONE_TYPES:
-                    raise ValueError(f"“{phone.type}” isn't a phone type GAM keeps as it is")
-                typed = ["type", kind]
-            argv += ["phone", *typed, "value", phone.value, "primary" if phone.primary else "notprimary"]
-        return argv if phones else [*argv, "phone", "clear"]
+        if organizations is not None:
+            argv += _organization_args(organizations)
+        if phones is not None:
+            argv += _phone_args(phones)
+        return argv
+
 
     @staticmethod
     def set_password(email: str, password: str) -> List[str]:
@@ -1316,3 +1333,59 @@ def build_user_query(search: str = "", include_suspended: bool = True) -> Option
     if not include_suspended:
         clauses.append("isSuspended=false")
     return " ".join(clauses) if clauses else None
+
+
+def _organization_args(organizations: Sequence[Organization]) -> List[str]:
+    if sum(o.primary for o in organizations) > 1:
+        raise ValueError("only one organization can be the primary")
+    if not organizations:
+        return ["organization", "clear"]
+    argv: List[str] = []
+    for org in organizations:
+        part = ["organization"]
+        if org.custom_type:
+            if org.type not in ("", "custom"):
+                raise ValueError(f"an organization of type “{org.type}” with its own name would lose one of them")
+            part += ["customtype", org.custom_type]
+        elif org.type:
+            if org.type not in ORG_TYPES:
+                raise ValueError(f"“{org.type}” isn't an organization type GAM keeps as it is")
+            part += ["type", org.type]
+        for key, value in org.fields:
+            if key not in ORG_TEXT_FIELDS:
+                raise ValueError(f"an organization's “{key}” isn't a field GAM sends back")
+            if not value:
+                raise ValueError(f"an organization's {key} is empty, and GAM would drop it")
+            part += [ORG_TEXT_FIELDS[key], value]
+        if org.full_time_equivalent is not None:
+            if not 0 <= org.full_time_equivalent <= 100000:
+                raise ValueError("an organization's full-time equivalent is 0 to 100000")
+            part += ["fulltimeequivalent", str(org.full_time_equivalent)]
+        argv += [*part, "primary" if org.primary else "notprimary"]
+    return argv
+
+
+def _phone_args(phones: Sequence[Phone]) -> List[str]:
+    """The phones' validation and argv, shared by update_phones and update_profile."""
+    if sum(p.primary for p in phones) > 1:
+        raise ValueError("only one phone can be the primary")
+    argv: List[str] = []
+    for phone in phones:
+        if not phone.value or any(unicodedata.category(c) == "Cc" for c in phone.value):
+            raise ValueError("each phone is a number on one line")
+        kind = phone.type.lower()
+        if kind != "custom" and phone.custom_type:
+            raise ValueError(f"a phone of type “{phone.type}” with its own name would lose the name")
+        typed: List[str] = []
+        if kind == "custom":
+            if not phone.custom_type.strip():
+                raise ValueError("a custom phone type has a name")
+            if phone.custom_type.strip() != phone.custom_type:
+                raise ValueError(f"the custom phone type “{phone.custom_type}” would come back without its spaces")
+            typed = ["type", "custom", phone.custom_type]
+        elif kind:
+            if kind not in PHONE_TYPES:
+                raise ValueError(f"“{phone.type}” isn't a phone type GAM keeps as it is")
+            typed = ["type", kind]
+        argv += ["phone", *typed, "value", phone.value, "primary" if phone.primary else "notprimary"]
+    return argv if phones else [*argv, "phone", "clear"]

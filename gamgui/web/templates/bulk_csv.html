@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{#- Change many people from a CSV (roadmap 4.6): upload, preview each change, then run. A blank cell leaves a value alone. -#}
+{% block title %}Bulk: change from a CSV — GamGUI Console{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <a href="/users" class="text-sm text-brand-blueink hover:text-brand-black">← Users</a>
+    <p class="eyebrow text-brand-blue mt-2">Directory</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Bulk: change from a CSV</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Upload a CSV with an <code>email</code> column and any of <code>title</code>, <code>department</code>, <code>phone</code> and <code>org_unit</code>. A blank cell leaves that value alone: nothing here clears one. The <strong>No title</strong>, <strong>No department</strong> and <strong>No phone</strong> sheets on Reports download in this shape, ready to fill in.</p>
+  </div>
+  <form id="bulk-csv-form" class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm space-y-3"
+        hx-post="/users/csv/preview" hx-encoding="multipart/form-data" hx-target="#bulk-csv-result" hx-swap="innerHTML"
+        hx-disabled-elt="find button[type=submit]">
+    <label class="block text-sm text-brand-blueink">The CSV (up to {{ max_rows }} rows, 1 MB)
+      <input type="file" name="csv_file" accept=".csv,text/csv" required class="mt-1 block text-sm" /></label>
+    <div class="flex flex-wrap items-center gap-3">
+      <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Preview changes</button>
+      <a href="/users/csv/template.csv" download class="text-sm text-brand-blueink hover:text-brand-black">Download an empty sheet</a>
+    </div>
+    <p class="text-xs text-brand-grayink">The phone is the one a signature shows: their primary, or their first. Google keeps a person's organizations and phones each as one list, so a change sends every other entry back as it is.</p>
+  </form>
+  <div id="bulk-csv-result"></div>
+</div>
+{% endif %}
+{% endblock %}

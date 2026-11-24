@@ -1,0 +1,22 @@
+{#- Change from a CSV (roadmap 4.6): the running job and its result. The feed is the job's bounded window (invariant 9). -#}
+{% from "_job_failures.html" import failures %}
+{% import "_job_live.html" as live %}
+{% if not job.finished %}
+<div hx-get="/users/csv/status?job={{ job.id }}" hx-trigger="load delay:600ms, every 1s" hx-target="this" hx-swap="outerHTML"
+     class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-brand-blueink">
+  <div class="flex items-center gap-2">
+    <span class="spinner"></span>{{ live.progress(job, "Changing") }}
+    <span>Changing… <strong>{{ job.done }}</strong> of {{ job.total }}{% if job.current %} · <span class="text-brand-grayink">{{ job.current }}</span>{% endif %}</span>
+    {{ live.stop(job) }}
+  </div>
+  <ul class="mt-2 space-y-0.5 text-xs">{% for o in job.recent %}<li>{{ live.mark(o.ok) }}{{ o.item }}</li>{% endfor %}</ul>
+</div>
+{% else %}
+<div class="rounded-lg border px-4 py-2.5 text-sm {{ 'border-emerald-300 bg-emerald-50 text-emerald-800' if not (job.failed_total or job.error) else 'border-amber-300 bg-amber-50 text-amber-800' }}">
+  <p {{ live.ended(job) }} data-announce="{{ job.id }}">{% if job.error %}{{ job.error }}<br>{% endif %}Changed {{ job.applied }} of {{ job.total }}.</p>
+  {% if job.failed_total %}
+  <div class="mt-1 text-xs">Not changed ({{ job.failed_total }}):</div>
+  {{ failures(job) }}
+  {% endif %}
+</div>
+{% endif %}

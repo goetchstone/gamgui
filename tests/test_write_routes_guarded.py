@@ -63,6 +63,7 @@ PREVIEWS = {
     "/users/licenses/preview",   # roadmap 4.3: read the seats and their account, hold the one change
     "/groups/settings/preview",   # roadmap 4.4: read the group's settings, hold the ones the form changes
     "/lifecycle/closeout/preview",   # roadmap 4.5: read what the leaver has, hold the picked steps
+    "/users/csv/preview",   # roadmap 4.6: read the CSV and the directory, hold each person's change
 }
 # Local state only, no GAM write: the Builder's working sequence, saved templates/roles, the bulk
 # onboarding credentials sheet, the setup wizard (Keychain import, printed commands, a read-only
@@ -200,6 +201,10 @@ GATED = {
                                    edit=TOKEN_ONLY),
     # Close Out (roadmap 4.5): the preview reads what the leaver has and holds the picked steps; the step posts its token, and
     # the leaver's address is typed.
+    # Change from a CSV (roadmap 4.6): the preview reads the file and the directory and holds each change; the step posts its token.
+    "/users/csv/apply": Case({}, "/users/csv/preview",
+                             preview_files={"csv_file": ("people.csv", b"email,department\nalice@example.com,Sales\n", "text/csv")},
+                             edit=TOKEN_ONLY),
     "/lifecycle/closeout/apply": Case({}, "/lifecycle/closeout/preview",
                                       preview_data={"user": "alice@example.com", "group": "staff@example.com"},
                                       typed={"confirm_email": "alice@example.com"}, edit=TOKEN_ONLY),

@@ -89,6 +89,14 @@ class Previews:
             return None, f"The {what} changed after the preview — {again}, so what runs is what you checked."
         return held.value, None
 
+    def peek(self, flow: str, token: str) -> Optional[Any]:
+        """The value ``token`` holds for ``flow``, left in place, or None when it's gone, expired or from another tenant. For a
+        flow that only reads what a preview held (a CSV change's undo file, roadmap 4.6), never one whose value runs."""
+        held = self._flows.get(flow, {}).get(token) if token else None
+        if held is None or clock.now() - held.at > PREVIEW_TTL or held.tenant != self._tenant():
+            return None
+        return held.value
+
     def drop(self, flow: str, form: Hashable) -> None:
         """Forget every preview of this ``form``: for a flow where running an older one would undo a newer one."""
         held = self._flows.get(flow, {})

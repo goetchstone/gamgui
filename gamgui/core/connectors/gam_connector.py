@@ -16,7 +16,7 @@ from dataclasses import replace
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ..audit import AuditLog, redact_secrets
-from ..gam.commands import GAMCommands, MessageId, Phone, build_user_query, carries_todrive, cut_off_account
+from ..gam.commands import GAMCommands, MessageId, Organization, Phone, build_user_query, carries_todrive, cut_off_account
 from ..gam.errors import GAMError, GAMErrorKind, only_unknown_owners
 from ..gam.models import (
     CalendarACL,
@@ -690,6 +690,22 @@ class GAMConnector(Connector):
     async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:
         argv = GAMCommands.update_organization(email, title=title, department=department)
         return await self._run_write("set_organization", email, argv, RiskLevel.LOW)
+
+    async def profile_now(self, email: str) -> Dict[str, Any]:
+        """A person's organizations, phones and org unit read now (roadmap 4.6): what a CSV change compares before its write.
+        An answer that isn't their record is Incomplete, never a person with none."""
+        record = parse_one(await self.runner.run_authenticated(
+            self.domain, GAMCommands.info_user(email, fields=("primaryEmail", "organizations", "phones", "orgUnitPath"))))
+        if str(record.get("primaryEmail") or "").strip().lower() != email.strip().lower():
+            raise Incomplete(f"GAM answered without {email}'s record, so their profile can't be compared.")
+        return record
+
+    async def update_profile(self, email: str, organizations: Optional[Sequence[Organization]],
+                             phones: Optional[Sequence[Phone]]) -> ChangeResult:
+        """A person's whole organizations list and phones, as the CSV change planned them (``GAMCommands.update_profile``)."""
+        argv = GAMCommands.update_profile(email, organizations, phones)
+        sent = [name for name, given in (("organizations", organizations), ("phones", phones)) if given is not None]
+        return await self._run_write("update_profile", email, argv, RiskLevel.LOW, about={"lists": ",".join(sent)})
 
     # --- calendar access ---------------------------------------------------------------
     async def list_calendar_acls(self, email: str, calendar: str = "primary") -> List[CalendarACL]:

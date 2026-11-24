@@ -87,7 +87,8 @@ and have only run offline: see
 - **Users** — a fast, cached list (search name, email, title, department or org unit; sort any
   column; 15–50 a page; opening a person and coming back keeps your place) and detail, profile
   editing (title/department and the phone a signature shows — location is shown but not editable) with a bulk "set department"
-  tool, mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
+  tool and **changes from a CSV** (title, department, phone and org unit for many people, each change previewed, a blank cell
+  left alone, the "before" file kept as the undo), mailbox **delegates**, **vacation responders**, group membership, per-user calendar sharing
   (grant/revoke access to that person's own calendar), **sign out everywhere**, a guarded
   **suspend**, and a **move to another org unit** (the tree read when asked, from and to previewed) — one person from
   their page, or many from a group or a pasted list as a job with Stop and a retry of the ones that failed.
@@ -224,6 +225,7 @@ school domain is the most useful one of all.
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
+| Change from a CSV: a person's whole organizations list and phones in one `update user` | Users (bulk *change from a CSV*) | not yet: run on a throwaway account with a second organization first |
 | Move to an org unit (`update org <ou> move user <email>`) | Users (one person, or many as a job) | not yet: the tenant has no org units, so the check creates one first |
 | Create, rename, delete an org unit | Builder | not yet: the check creates a throwaway unit, renames it, then deletes it |
 | Add, change, remove a license (`user <email> add\|update\|delete license nv:<product>:<sku>`) | Users; removal from suspended accounts as a job on Reports | not yet: needs a spare seat (`print licenses countsonly` first), run on a throwaway |

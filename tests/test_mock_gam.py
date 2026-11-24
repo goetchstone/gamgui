@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GROUP_SETTINGS, GAMCommands as C, MessageId, Phone
+from gamgui.core.gam.commands import CALENDAR_ACL_ROLES, GROUP_SETTINGS, GAMCommands as C, MessageId, ORG_TEXT_FIELDS, Organization, Phone
 from gamgui.core.gam.errors import GAMError, GAMErrorKind
 from gamgui.core.setup import DWD_SCOPES, SCOPES_NOT_AUTHORIZED_RC
 
@@ -48,6 +48,11 @@ WRITES = {
     "delete_messages": [C.delete_messages("carol@example.com", ["19a0c0ffee000011"])],
     "update_phones": [C.update_phones("alice@example.com", [Phone("work", "", "+1 555 0100", True)]),
                       C.update_phones("alice@example.com", [])],
+    "update_profile": [C.update_profile("alice@example.com", [Organization(tuple((k, f"{k} value") for k in ORG_TEXT_FIELDS), "work",
+                                                                         full_time_equivalent=100000, primary=True),
+                                                            Organization((("name", "Board"),), custom_type="volunteer")],
+                                        [Phone("work", "", "+1 555 0100", True)]),
+                       C.update_profile("alice@example.com", None, [Phone("work", "", "+1 555 0100", True)])],
     "signout_user": [C.signout_user("alice@example.com")],
     "deprovision_user": [C.deprovision_user("alice@example.com")],
     "delete_user": [C.delete_user("alice@example.com")],
