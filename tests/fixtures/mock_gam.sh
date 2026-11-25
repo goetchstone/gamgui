@@ -3089,6 +3089,12 @@ fi
 # buildGAPIServiceObject -> handleOAuthTokenError(softErrors) returns None with no word, the loop `continue`s before the
 # none check, so both reads write their titles alone and exit 0 (printShowSharedDrives, printShowSharedDriveACLs).
 drives_admin() { printf 'admin@example.com'; }
+# The drives' permissions: the fixture, or under GAM_MOCK_STATE the copy a member change (roadmap 4.7) made, so every read
+# after a write sees it.
+drive_acls_file() {
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_acls.tsv" ]; then printf '%s' "$GAM_MOCK_STATE/drive_acls.tsv"
+  else printf '%s' "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv"; fi
+}
 drives_refused() {  # <titles>
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_token_silent" ]; then printf '%s\n' "$1"; exit 0; fi
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/denied/drives" ]; then
@@ -3144,7 +3150,7 @@ if [ "${1:-}" = "print" ] && { [ "${2:-}" = "shareddriveacls" ] || [ "${2:-}" = 
     sd_id=$(json_text id "$record")
     if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/acl_dropped/$sd_id" ]; then continue; fi
     printf '%s\t%s\t%s' "$sd_id" "$(json_text name "$record")" "$(json_text createdTime "$record")"
-    grep "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv" | cut -f 2 | while IFS= read -r perm; do
+    grep "^$sd_id$TAB" "$(drive_acls_file)" | cut -f 2 | while IFS= read -r perm; do
       printf '\t%s|%s|%s' "$(json_opt emailAddress "$perm")" "$(json_opt role "$perm")" "$(json_opt type "$perm")"
     done
     printf '\n'
@@ -3192,15 +3198,138 @@ if [ "${1:-}" = "print" ] && [ "${2:-}" = "shareddriveacls" ]; then
     sd_id=$(json_text id "$record"); sd_name=$(json_text name "$record"); sd_made=$(json_text createdTime "$record")
     if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/acl_dropped/$sd_id" ]; then continue; fi
     sd_wrote=1
-    if ! grep -q "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv"; then
+    if ! grep -q "^$sd_id$TAB" "$(drive_acls_file)"; then
       gam_row "$(drives_admin)" "$sd_id" "$sd_name" "$sd_made" '{}'   # shownopermissionsdrives true: the drive, no permission
       continue
     fi
-    grep "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv" | cut -f 2 | while IFS= read -r perm; do
+    grep "^$sd_id$TAB" "$(drive_acls_file)" | cut -f 2 | while IFS= read -r perm; do
       gam_row "$(drives_admin)" "$sd_id" "$sd_name" "$sd_made" "{\"permission\": $perm}"
     done
   done < "$GAM_MOCK_FIXTURES/shared_drives.json"
   [ -n "$sd_wrote" ] || exit 60      # every drive dropped: matchFeed empty, NO_ENTITIES_FOUND_RC, as for none
+  exit 0
+fi
+
+# One shared drive's members (roadmap 4.7): the top-level drivefileacl commands as the 7.52.05 tag runs them, the admin with
+# domain admin access on the drive itself (doPrintShowDriveFileACLs, doCreateDriveFileACL, doUpdateDriveFileACLs,
+# doDeleteDriveFileACLs). Only the shapes the app sends: `shareddriveid <id>`, a member as `id:<permission ID>`, formatjson.
+# The read writes one row per drive it read, `Owner,id,JSON`, JSON {"permissions": [...]} even with none. Google not knowing
+# the drive (notFound) or refusing it (GAM_MOCK_STATE/acl_dropped/<id>: forbidden) is entityActionFailedWarning, exit 50,
+# the titles alone. GAM_MOCK_STATE/drive_token_silent skips the admin without a word (_validateUserGetFileIDs gets no
+# service): the read writes its titles alone and a write writes nothing, both exit 0. A write that ran says "Drive
+# File/Folder ID: <drive>, Permission ID: <id>, <Created|Updated|Deleted>" on stdout (entityActionPerformed). Google's own
+# refusals: a role of owner (ownerOnTeamDriveItemNotSupported), an outside address on a drive limited to the domain's users
+# (teamDriveDomainUsersOnlyRestriction), each exit 50; an update or a delete of a permission the drive doesn't hold is
+# entityDoesNotHaveItemWarning, exit 56. Under GAM_MOCK_STATE a write changes drive_acls.tsv there, which every read uses.
+drive_known() { grep -q "\"id\": \"$1\"" "$GAM_MOCK_FIXTURES/shared_drives.json"; }
+drive_silent() { [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_token_silent" ]; }
+drive_acls_copy() {  # the permissions a write may change: GAM_MOCK_STATE's copy (without a state dir, nothing is kept)
+  [ -n "${GAM_MOCK_STATE:-}" ] || return 1
+  [ -e "$GAM_MOCK_STATE/drive_acls.tsv" ] || cp "$GAM_MOCK_FIXTURES/shared_drive_acls.tsv" "$GAM_MOCK_STATE/drive_acls.tsv"
+}
+drive_role() {  # <GAM's word>: Drive's role (DRIVEFILE_ACL_ROLES_MAP), nothing for a word getChoice refuses
+  case "$(lower "$1")" in
+    commenter) echo commenter ;; contentmanager|fileorganizer|fileorganiser) echo fileOrganizer ;;
+    contributor|editor|writer) echo writer ;; manager|organizer|organiser) echo organizer ;; owner) echo owner ;;
+    read|reader|viewer) echo reader ;;
+  esac
+}
+DRIVE_ROLE_WORDS='commenter|contentmanager|contributor|editor|fileorganizer|fileorganiser|manager|organizer|organiser|owner|read|reader|viewer|writer'
+drive_acl_member() {  # <drive> <permission ID>: whether the drive holds it
+  awk -F '\t' -v d="$1" -v p="\"id\": \"$2\"" '$1 == d && index($2, p) { found = 1 } END { exit !found }' "$(drive_acls_file)"
+}
+drive_acl_unknown() {  # <verb> <drive>: Google doesn't know the drive
+  printf '  User: %s, Shared Drive: %s, %s Failed: Shared drive not found: %s\n' "$(drives_admin)" "$2" "$1" "$2" 1>&2
+  exit 50
+}
+if [ "${1:-}" = "print" ] && [ "${2:-}" = "drivefileacls" ]; then
+  { [ $# -eq 5 ] && [ "$3" = shareddriveid ] && [ "$5" = formatjson ]; } \
+    || not_modelled "print drivefileacls other than shareddriveid <id> formatjson"
+  sd_id=$4
+  if drive_silent; then printf 'Owner,id,JSON\n'; exit 0; fi
+  if ! drive_known "$sd_id"; then
+    printf 'User: %s, Shared Drive: %s, Print Failed: Shared drive not found: %s\n' "$(drives_admin)" "$sd_id" "$sd_id" 1>&2
+    printf 'Owner,id,JSON\n'; exit 50
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/acl_dropped/$sd_id" ]; then
+    printf 'User: %s, Drive File/Folder ID: %s, Print Failed: The user does not have sufficient permissions for this file.\n' \
+      "$(drives_admin)" "$sd_id" 1>&2
+    printf 'Owner,id,JSON\n'; exit 50
+  fi
+  TAB=$(printf '\t')
+  perms=$(grep "^$sd_id$TAB" "$(drive_acls_file)" | cut -f 2 | paste -sd ',' -)
+  printf 'Owner,id,JSON\n'
+  gam_row "$(drives_admin)" "$sd_id" "{\"permissions\": [$perms]}"
+  exit 0
+fi
+if { [ "${1:-}" = "create" ] || [ "${1:-}" = "add" ]; } && [ "${2:-}" = "drivefileacl" ]; then
+  { [ $# -eq 8 ] && [ "$3" = shareddriveid ] && [ "$7" = role ]; } \
+    || not_modelled "create drivefileacl other than shareddriveid <id> user|group <address> role <role>"
+  sd_id=$4; kind=$(lower "$5"); who=$(lower "$6")
+  case "$kind" in
+    user|group) ;;
+    anyone|domain) not_modelled "create drivefileacl $kind" ;;
+    *) usage_error "Invalid choice ($5): Expected <anyone|domain|group|user>" ;;
+  esac
+  role=$(drive_role "$8"); [ -n "$role" ] || usage_error "Invalid choice ($8): Expected <$DRIVE_ROLE_WORDS>"
+  if drive_silent; then exit 0; fi
+  if [ "$1" = create ]; then verb=Create; done_word=Created; else verb=Add; done_word=Added; fi
+  printf 'User: %s, %s 1 Drive File/Folder ACL\n' "$(drives_admin)" "$verb"
+  drive_known "$sd_id" || drive_acl_unknown "$verb" "$sd_id"
+  failed() { printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, %s Failed: %s\n' "$(drives_admin)" "$sd_id" "$who" "$verb" "$1" 1>&2; exit 50; }
+  [ "$role" != owner ] || failed "Owner role is not supported for items in shared drives."
+  if grep "\"id\": \"$sd_id\"" "$GAM_MOCK_FIXTURES/shared_drives.json" | grep -q '"domainUsersOnly": true' \
+     && [ "${who#*@}" != example.com ]; then
+    failed "This shared drive only allows members from its own domain."
+  fi
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_acl_refused" ]; then failed "Bad Request"; fi
+  if drive_acls_copy; then
+    new_id="09$(wc -l < "$GAM_MOCK_STATE/drive_acls.tsv" | tr -d ' ')1"
+    printf '%s\t{"deleted": false, "domain": "%s", "emailAddress": "%s", "id": "%s", "kind": "drive#permission", "role": "%s", "type": "%s"}\n' \
+      "$sd_id" "${who#*@}" "$who" "$new_id" "$role" "$kind" >> "$GAM_MOCK_STATE/drive_acls.tsv"
+  fi
+  printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, %s\n' "$(drives_admin)" "$sd_id" "$who" "$done_word"
+  exit 0
+fi
+if [ "${1:-}" = "update" ] && [ "${2:-}" = "drivefileacl" ]; then
+  { [ $# -eq 7 ] && [ "$3" = shareddriveid ] && [ "$6" = role ]; } \
+    || not_modelled "update drivefileacl other than shareddriveid <id> id:<permission ID> role <role>"
+  sd_id=$4
+  case "$5" in id:?*) pid=${5#id:} ;; *) not_modelled "a drive member named other than id:<permission ID>" ;; esac
+  role=$(drive_role "$7"); [ -n "$role" ] || usage_error "Invalid choice ($7): Expected <$DRIVE_ROLE_WORDS>"
+  if drive_silent; then exit 0; fi
+  printf 'User: %s, Update 1 Drive File/Folder ACL\n' "$(drives_admin)"
+  drive_known "$sd_id" || drive_acl_unknown Update "$sd_id"
+  failed() { printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, Update Failed: %s\n' "$(drives_admin)" "$sd_id" "$pid" "$1" 1>&2; exit 50; }
+  if ! drive_acl_member "$sd_id" "$pid"; then   # permissionNotFound: entityDoesNotHaveItemWarning, as for a delete
+    printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, Does not exist\n' "$(drives_admin)" "$sd_id" "$pid" 1>&2
+    exit 56
+  fi
+  [ "$role" != owner ] || failed "Owner role is not supported for items in shared drives."
+  if drive_acls_copy; then
+    awk -F '\t' -v OFS='\t' -v d="$sd_id" -v p="\"id\": \"$pid\"" -v r="$role" \
+      '$1 == d && index($2, p) { gsub(/"role": "[A-Za-z]*"/, "\"role\": \"" r "\"", $2) } { print }' \
+      "$GAM_MOCK_STATE/drive_acls.tsv" > "$GAM_MOCK_STATE/drive_acls.tmp" && mv "$GAM_MOCK_STATE/drive_acls.tmp" "$GAM_MOCK_STATE/drive_acls.tsv"
+  fi
+  printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, Updated\n' "$(drives_admin)" "$sd_id" "$pid"
+  exit 0
+fi
+if [ "${1:-}" = "delete" ] && [ "${2:-}" = "drivefileacl" ]; then
+  { [ $# -eq 5 ] && [ "$3" = shareddriveid ]; } || not_modelled "delete drivefileacl other than shareddriveid <id> id:<permission ID>"
+  sd_id=$4
+  case "$5" in id:?*) pid=${5#id:} ;; *) not_modelled "a drive member named other than id:<permission ID>" ;; esac
+  if drive_silent; then exit 0; fi
+  printf 'User: %s, Delete 1 Drive File/Folder ACL\n' "$(drives_admin)"
+  drive_known "$sd_id" || drive_acl_unknown Delete "$sd_id"
+  if ! drive_acl_member "$sd_id" "$pid"; then
+    printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, Does not exist\n' "$(drives_admin)" "$sd_id" "$pid" 1>&2
+    exit 56
+  fi
+  if drive_acls_copy; then
+    awk -F '\t' -v d="$sd_id" -v p="\"id\": \"$pid\"" '!($1 == d && index($2, p))' \
+      "$GAM_MOCK_STATE/drive_acls.tsv" > "$GAM_MOCK_STATE/drive_acls.tmp" && mv "$GAM_MOCK_STATE/drive_acls.tmp" "$GAM_MOCK_STATE/drive_acls.tsv"
+  fi
+  printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, Deleted\n' "$(drives_admin)" "$sd_id" "$pid"
   exit 0
 fi
 

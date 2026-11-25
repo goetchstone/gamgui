@@ -1,0 +1,25 @@
+{#- The Shared drives finder's matches (roadmap 4.7): the cached list, capped, its age shown. A list that couldn't be read says
+    so: never "no drives". -#}
+{% if find_error %}
+<p class="text-xs text-amber-800">{{ find_error }}</p>
+{% elif drives %}
+<ul class="max-h-[calc(100vh-22rem)] min-h-[6rem] divide-y divide-brand-gray/20 overflow-y-auto text-sm" aria-label="Shared drives">
+  {% for d in drives %}
+  <li>
+    <button type="button" class="block w-full rounded-md px-2.5 py-1.5 text-left hover:bg-paper"
+            hx-get="/drives/members?id={{ d.id | urlencode }}" hx-target="#drive-panel" hx-swap="innerHTML">
+      <span class="block truncate text-brand-black">{{ d.name or d.id }}</span>
+      <span class="block truncate font-mono text-[11px] text-brand-grayink">{{ d.id }}</span>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% if more %}<p class="mt-1 text-[11px] text-brand-grayink">Showing the first {{ drives | length }}: keep typing to narrow.</p>{% endif %}
+{% else %}
+<p class="text-sm text-brand-grayink">{% if find_q %}No shared drive matches “{{ find_q }}”.{% else %}The domain has no shared drive.{% endif %}</p>
+{% endif %}
+{% if as_of is defined and not find_error %}
+<p class="mt-1 text-[11px] text-brand-grayink">Shared drives {% include "_as_of.html" %} ·
+  <button type="button" title="Reload from Google" class="underline hover:text-brand-black"
+          hx-get="/drives/search?refresh=1&amp;q={{ find_q | urlencode }}" hx-target="#drive-results" hx-swap="innerHTML">Refresh</button></p>
+{% endif %}

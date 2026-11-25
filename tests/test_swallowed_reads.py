@@ -41,6 +41,7 @@ HARMLESS: Dict[Tuple[str, str], str] = {
     ("core/setup.py", "engine_version"): "a version label; the drift warning says nothing when it's blank, never blocks",
     ("web/routes/_common.py", "admin_address"): "who did it, in what's kept: a label left unsaid",
     ("web/routes/builder.py", "pick"): "type-ahead suggestions; typing still works",
+    ("web/routes/drives.py", "_drive"): "only a drive's display name comes from it; its ID is what runs",
     ("web/routes/groups.py", "_cached_groups"): "only a heading's display name comes from it",
     ("web/routes/groups.py", "people"): "type-ahead suggestions; typing still works",
     ("web/routes/incident_logs.py", "_context_for"): "{} becomes Context.people=None, read as the directory unread",

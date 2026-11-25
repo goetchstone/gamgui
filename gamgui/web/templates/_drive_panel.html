@@ -1,0 +1,75 @@
+{#- One shared drive's members, read now (roadmap 4.7), with the add form and each member's change and remove. Each posts to
+    /drives/preview, which reads the members again and shows the one change before anything runs. A read that failed is
+    said, never shown as "no members" (invariant 10). -#}
+{% set fld = "rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30" %}
+<div class="flex flex-wrap items-baseline justify-between gap-x-3">
+  <h2 tabindex="-1" data-focus class="font-serif text-xl text-brand-black">{{ drive.name or drive.id }}</h2>
+  <span class="font-mono text-xs text-brand-grayink">{{ drive.id }}</span>
+</div>
+
+{% if message %}<div class="mt-3">{% with ok=True, announce=drive.id %}{% include "_action_result.html" %}{% endwith %}</div>{% endif %}
+{% if error %}<div class="mt-3">{% with ok=False, message=error %}{% include "_action_result.html" %}{% endwith %}</div>{% endif %}
+
+<form class="mt-3 flex flex-wrap items-end gap-2" autocomplete="off"
+      hx-post="/drives/preview" hx-target="#drive-confirm" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="drive" value="{{ drive.id }}" />
+  <input type="hidden" name="action" value="add" />
+  <label class="block min-w-[16rem] flex-1 text-xs text-brand-grayink">Add a person or group: their email
+    <input name="email" type="text" spellcheck="false" autocapitalize="off" placeholder="person@example.com" class="{{ fld }} mt-1 w-full" /></label>
+  <label class="block text-xs text-brand-grayink">Who
+    <select name="kind" class="{{ fld }} mt-1 block">
+      {% for k, word in kinds.items() %}<option value="{{ k }}">{{ word }}</option>{% endfor %}
+    </select></label>
+  <label class="block text-xs text-brand-grayink">Role
+    <select name="role" class="{{ fld }} mt-1 block">
+      {% for word, name in roles %}<option value="{{ word }}"{% if word == "writer" %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select></label>
+  <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Preview</button>
+</form>
+
+<div id="drive-confirm" class="mt-3"></div>
+
+<h3 class="eyebrow mt-4 text-brand-grayink">Members</h3>
+{% if unread %}
+<p class="mt-2 text-sm text-amber-800">Couldn't read {{ drive.name or drive.id }}'s members. {{ unread }}</p>
+{% elif not members %}
+<p class="mt-2 text-sm text-brand-grayink">{{ drive.name or drive.id }} has no members: no one can manage it until a manager is added above.</p>
+{% else %}
+<table class="mt-2 w-full text-left text-sm">
+  <caption class="sr-only">{{ drive.name or drive.id }}'s members and their roles</caption>
+  <thead class="text-xs text-brand-grayink">
+    <tr><th scope="col" class="py-1 pr-3 font-normal">Member</th><th scope="col" class="py-1 pr-3 font-normal">Role</th><th scope="col" class="py-1 font-normal"><span class="sr-only">Change</span></th></tr>
+  </thead>
+  <tbody>
+    {% for m in members %}
+    <tr class="border-t border-brand-gray/30 align-top">
+      <th scope="row" class="py-1.5 pr-3 font-normal">
+        <span class="block text-brand-black">{{ m.who }}</span>
+        <span class="block text-[11px] text-brand-grayink">{{ kinds.get(m.kind, m.kind) }}{% if m.name and m.email %} · {{ m.name }}{% endif %}{% if m.deleted %} · account deleted{% endif %}</span>
+      </th>
+      <td class="py-1.5 pr-3 text-brand-blueink">{{ label(m.role) }}</td>
+      <td class="py-1.5">
+        <div class="flex flex-wrap items-center gap-2">
+          <form class="flex items-center gap-1.5" hx-post="/drives/preview" hx-target="#drive-confirm" hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="drive" value="{{ drive.id }}" />
+            <input type="hidden" name="action" value="role" />
+            <input type="hidden" name="member" value="{{ m.id }}" />
+            <select name="role" aria-label="New role for {{ m.who }}" class="rounded-md border border-brand-field bg-brand-white px-2 py-1 text-xs text-ink">
+              {% if label(m.role) not in roles | map("last") %}<option value="" selected>{{ label(m.role) }}</option>{% endif %}
+              {% for word, name in roles %}<option value="{{ word }}"{% if label(m.role) == name %} selected{% endif %}>{{ name }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="rounded-md border border-brand-blue/40 px-2 py-1 text-xs font-medium text-brand-blueink hover:bg-paper">Change…<span class="sr-only"> {{ m.who }}'s role</span></button>
+          </form>
+          <form hx-post="/drives/preview" hx-target="#drive-confirm" hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="drive" value="{{ drive.id }}" />
+            <input type="hidden" name="action" value="remove" />
+            <input type="hidden" name="member" value="{{ m.id }}" />
+            <button type="submit" aria-label="Remove {{ m.who }}" class="rounded-md border border-amber-400/70 px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-50">Remove…</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

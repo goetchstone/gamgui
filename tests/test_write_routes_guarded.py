@@ -62,6 +62,7 @@ PREVIEWS = {
     "/builder/sheet/preview",   # plan F4: a read's export to a Sheet, held; its one GAM call is the scope check, a read
     "/users/licenses/preview",   # roadmap 4.3: read the seats and their account, hold the one change
     "/groups/settings/preview",   # roadmap 4.4: read the group's settings, hold the ones the form changes
+    "/drives/preview",   # roadmap 4.7: read the drive's members, hold the one change asked for
     "/lifecycle/closeout/preview",   # roadmap 4.5: read what the leaver has, hold the picked steps
     "/users/csv/preview",   # roadmap 4.6: read the CSV and the directory, hold each person's change
 }
@@ -205,6 +206,9 @@ GATED = {
     "/users/csv/apply": Case({}, "/users/csv/preview",
                              preview_files={"csv_file": ("people.csv", b"email,department\nalice@example.com,Sales\n", "text/csv")},
                              edit=TOKEN_ONLY),
+    # A shared drive's members (roadmap 4.7): the preview reads the members and holds the one change; the step posts its token.
+    "/drives/apply": Case({}, "/drives/preview", preview_data={"drive": "0AFINANCEuk9PVA", "action": "remove", "member": "07001"},
+                          edit=TOKEN_ONLY),
     "/lifecycle/closeout/apply": Case({}, "/lifecycle/closeout/preview",
                                       preview_data={"user": "alice@example.com", "group": "staff@example.com"},
                                       typed={"confirm_email": "alice@example.com"}, edit=TOKEN_ONLY),

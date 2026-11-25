@@ -112,6 +112,9 @@ and have only run offline: see
 - **Groups** — find a group, see its members and their roles, add someone with a role, remove a member after a confirm step;
   and seven of its settings (who can post, join and see the members, outside members, moderation, web posting, history),
   each change previewed as it is and as it would be.
+- **Shared drives** — find a shared drive, see its members and their roles, add a person or group with a role, change a
+  member's role, or remove one, each change previewed and run only if the members haven't changed since; a drive is never
+  left without a manager.
 - **Classroom** (school domains, read only) — find any class and see its teachers and students, a person's classes
   (with a warning at offboarding when a leaver owns some), and who may create classes. **Plan an import** reads your
   SIS's roster export on this Mac (OneRoster 1.1 or 1.2, Clever's CSV files, or one spreadsheet you map by its
@@ -263,6 +266,7 @@ school domain is the most useful one of all.
 | Create / delete an alias | Builder | not yet |
 | Create a group | Builder | not yet |
 | Change a group's settings (`update group <group> <setting> <value>`) | Groups | not yet: run on a throwaway group |
+| Add, re-role, remove a shared drive member (`create\|update\|delete drivefileacl shareddriveid <id> …`) | Shared drives | not yet: run on a throwaway shared drive |
 | Close Out: remove an admin role (`delete admin <id>`), archive (`update user <u> archived on`), move an alias to the manager (`update alias <a> user <manager>`); its group, org unit, suspend and license steps reuse those screens' writes | Lifecycle | not yet: run on a throwaway account after its transfer |
 | Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 

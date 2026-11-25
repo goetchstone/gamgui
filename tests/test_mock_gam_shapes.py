@@ -50,6 +50,8 @@ HEADERS = {
     # Audit runs (F3), read at the 7.52.04 tag (printShowSharedDrives, printShowSharedDriveACLs; admin access: no `role`).
     "print_shared_drives": "User,id,name,JSON",
     "print_shared_drive_acls": "User,id,name,createdTime,JSON",
+    # A shared drive's members (roadmap 4.7), read at the 7.52.05 tag (printShowDriveFileACLs: CSVPrintFile(['Owner', 'id'])).
+    "print_drive_members": "Owner,id,JSON",
 }
 
 

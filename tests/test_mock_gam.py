@@ -105,6 +105,10 @@ WRITES = {
     "delete_admin_role": [C.delete_admin_role("9170001")],
     "set_archived": [C.set_archived("alice@example.com")],
     "move_alias": [C.move_alias("a.anders@example.com", "bob@example.com")],
+    "add_drive_member": [C.add_drive_member("0AFINANCEuk9PVA", k, "carol@example.com", r)
+                         for k in ("user", "group") for r in ("organizer", "fileorganizer", "writer", "commenter", "reader")],
+    "set_drive_member_role": [C.set_drive_member_role("0AFINANCEuk9PVA", "07001", "reader")],
+    "remove_drive_member": [C.remove_drive_member("0AFINANCEuk9PVA", "07001")],
 }
 
 # Reads stay canned, but each one the app issues must still have a handler. The per-user ones answer
@@ -149,6 +153,7 @@ READS = {
     "show_signature": [C.show_signature("alice@example.com")],
     "print_org_units": [C.print_org_units()],
     "info_group_settings": [C.info_group_settings("sales@example.com")],
+    "print_drive_members": [C.print_drive_members("0AFINANCEuk9PVA")],
     "print_signature": [C.print_signature("alice@example.com")],
     "print_delegates": [C.print_delegates("alice@example.com")],
     "print_forwarding_addresses": [C.print_forwarding_addresses("alice@example.com")],

@@ -10,6 +10,7 @@ HTTP layer offline.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import secrets
@@ -123,6 +124,10 @@ class AppState:
     user_cache: UserCache = field(default_factory=UserCache)
     group_cache: UserCache = field(default_factory=UserCache)  # cached `gam print groups` for the pickers
     course_cache: UserCache = field(default_factory=UserCache)  # cached Classroom classes, for the Classes finder
+    drive_cache: UserCache = field(default_factory=UserCache)   # cached shared drive list, for the Shared drives finder
+    # A shared drive member change's read-again and write, one at a time (routes/drives.apply): two confirm steps clicked
+    # together could each see the other manager and both remove one.
+    drive_member_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     course_index_failed: Optional[tuple] = None  # (clock.now(), what to say) of the last failed index read: not re-run per keystroke
     jobs: dict = field(default_factory=dict)  # id -> web.jobs.Job, for polled progress on long batch ops
     previews: Previews = field(default_factory=Previews)  # per flow: single-use token -> what a preview showed
@@ -217,6 +222,7 @@ class AppState:
         self.invalidate_users()
         self.invalidate_groups()
         self.course_cache.invalidate()
+        self.drive_cache.invalidate()
         self.course_index_failed = None
         self.roster_compare = None             # compared on the tenant being replaced
         self.roster_compare_job = ""           # and its compare, still running, is the old tenant's: never shown here
@@ -342,6 +348,14 @@ class AppState:
         async def fetch() -> list:
             return await conn.list_courses(states=("active", "provisioned"), owner_email=False)
         return await self.course_cache.get(fetch, force=force, stale_ok=stale_ok)
+
+    async def drives(self, force: bool = False, stale_ok: bool = False) -> list:
+        """The cached shared drive list (roadmap 4.7), for the finder; ``stale_ok`` as for ``users``. A change reads the
+        drive's members fresh, never this."""
+        conn = self.connector
+        if conn is None:
+            return []
+        return await self.drive_cache.get(conn.shared_drives, force=force, stale_ok=stale_ok)
 
     async def tenant_domains(self) -> tuple:
         """The domains an internal address ends in: the primary, secondaries and domain aliases, from one
@@ -532,6 +546,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     from .routes.classroom import router as classroom_router
     from .routes.roster import router as roster_router
     from .routes.groups import router as groups_router
+    from .routes.drives import router as drives_router
     from .routes.home import router as home_router
     from .routes.jobs import router as jobs_router
     from .routes.lifecycle import router as lifecycle_router
@@ -561,6 +576,7 @@ def create_app(state: AppState, *, allowed_hosts) -> FastAPI:
     app.include_router(audit_runs_router)
     app.include_router(reports_router)
     app.include_router(groups_router)
+    app.include_router(drives_router)
     app.include_router(signatures_router)
     app.include_router(calendars_router)
     app.include_router(classroom_router)

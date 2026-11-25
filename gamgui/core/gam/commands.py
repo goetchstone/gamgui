@@ -30,6 +30,19 @@ EXPECTED_GAM_VERSION = "7.52.05"
 
 # Roles accepted by Google Directory for group membership.
 GROUP_ROLES = ("member", "manager", "owner")
+# A shared drive member's roles (roadmap 4.7), as GAM is given them: `<DriveFileACLRole>` words that DRIVEFILE_ACL_ROLES_MAP
+# turns into Drive's organizer, fileOrganizer, writer, commenter and reader. Never `owner`: a shared drive has none, and GAM
+# reads it as an ownership transfer.
+DRIVE_ROLES = ("organizer", "fileorganizer", "writer", "commenter", "reader")
+# Who a member is (`<DriveFileACLType>`): a drive's members are users and groups only, never anyone or a domain.
+DRIVE_MEMBER_TYPES = ("user", "group")
+# A shared drive's ID and a permission's ID as Drive makes them (0AB…Uk9PVA; a run of digits, `anyoneWithLink`): letters,
+# digits, `-` and `_`. Anything else could be a GAM keyword or a second entity, so it is refused before GAM.
+_DRIVE_ITEM_ID = re.compile(r"[A-Za-z0-9_-]{1,200}")
+
+
+def is_drive_item_id(value: str) -> bool:
+    return bool(_DRIVE_ITEM_ID.fullmatch(value or ""))
 # `<CalendarACLRole>` in the vendored grammar, verbatim (tests/test_command_contract.py pins it).
 CALENDAR_ACL_ROLES = ("editor", "freebusy", "freebusyreader", "owner", "reader", "writer",
                       "writerwithoutprivateaccess", "none")
@@ -650,6 +663,49 @@ class GAMCommands:
         # The grammar's `gam print shareddriveacls` line omits shownopermissionsdrives (its `<UserTypeEntity>` form has it);
         # printShowSharedDriveACLs, which both forms run, takes it.
         return ["print", "shareddriveacls", "oneitemperrow", "shownopermissionsdrives", "true", "formatjson"]
+
+    @staticmethod
+    def print_drive_members(drive_id: str) -> List[str]:
+        # One shared drive's members (roadmap 4.7): `print drivefileacls <SharedDriveEntityAdmin>`, run as the admin with domain
+        # admin access (doPrintShowDriveFileACLs). Without oneitemperrow a read drive is exactly one row, CSV `Owner,id,JSON`,
+        # JSON {"permissions": [...]}, even with none; a drive GAM passed over (a token Google refused without a word) is no
+        # row at all, so no row is unknown, never "no members".
+        if not is_drive_item_id(drive_id):
+            raise ValueError(f"{drive_id!r} isn't a shared drive ID")
+        return ["print", "drivefileacls", "shareddriveid", drive_id, "formatjson"]
+
+    @staticmethod
+    def add_drive_member(drive_id: str, kind: str, email: str, role: str) -> List[str]:
+        # `create drivefileacl <SharedDriveEntityAdmin> (user <UserItem>)|(group <GroupItem>) role <DriveFileACLRole>`
+        # (createDriveFileACL as the admin). No sendemail: GAM sends Google's notice only when asked. A bare name would get
+        # GAM's domain and a list would add several, so the member is one full address.
+        if not is_drive_item_id(drive_id):
+            raise ValueError(f"{drive_id!r} isn't a shared drive ID")
+        if kind not in DRIVE_MEMBER_TYPES:
+            raise ValueError(f"{kind!r} isn't a member type: {', '.join(DRIVE_MEMBER_TYPES)}")
+        if role not in DRIVE_ROLES:
+            raise ValueError(f"{role!r} isn't a shared drive role: {', '.join(DRIVE_ROLES)}")
+        if not is_one_address(email):
+            raise ValueError(f"{email!r} isn't one email address")
+        return ["create", "drivefileacl", "shareddriveid", drive_id, kind, email, "role", role]
+
+    @staticmethod
+    def set_drive_member_role(drive_id: str, permission_id: str, role: str) -> List[str]:
+        # `update drivefileacl <SharedDriveEntityAdmin> <DriveFilePermissionIDorEmail> role <DriveFileACLRole>`. The member is
+        # named by its permission ID (`id:`), as the members read gave it: an address would send GAM to Drive v2's
+        # getIdForEmail first (getPermissionIdForEmail), a second call that can fail on its own.
+        if not is_drive_item_id(drive_id) or not is_drive_item_id(permission_id):
+            raise ValueError("a shared drive ID and a permission ID are letters, digits, - and _")
+        if role not in DRIVE_ROLES:
+            raise ValueError(f"{role!r} isn't a shared drive role: {', '.join(DRIVE_ROLES)}")
+        return ["update", "drivefileacl", "shareddriveid", drive_id, f"id:{permission_id}", "role", role]
+
+    @staticmethod
+    def remove_drive_member(drive_id: str, permission_id: str) -> List[str]:
+        # `delete drivefileacl <SharedDriveEntityAdmin> <DriveFilePermissionIDorEmail>`, the member by permission ID as above.
+        if not is_drive_item_id(drive_id) or not is_drive_item_id(permission_id):
+            raise ValueError("a shared drive ID and a permission ID are letters, digits, - and _")
+        return ["delete", "drivefileacl", "shareddriveid", drive_id, f"id:{permission_id}"]
 
     @staticmethod
     def all_users_print_forward() -> List[str]:
