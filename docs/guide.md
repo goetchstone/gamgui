@@ -179,6 +179,11 @@ the add fails, add it to the manager on their page.
 **Last: delete the account** sits under the check. It is the same delete as on the user's page, with the same refusals and
 the address typed to confirm.
 
+The check, and the delete's confirm step wherever it runs, also says which shared drives the leaver is the only active
+manager of: once their account is suspended or deleted, no one can manage those. Another manager counts when it's a group or
+an account that isn't suspended. Each drive has an **Add a manager** link to its members on **Shared drives**. It's a
+warning, not a refusal. If the drives couldn't be read, or GAM skipped some, it says so rather than "none".
+
 ### Save your routine as a template
 
 **Templates** at the top of the page hold the whole form but the two addresses and the "already done" ticks. Click one to fill

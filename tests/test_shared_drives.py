@@ -307,3 +307,94 @@ def test_a_write_gam_skipped_without_a_word_isnt_done(client, gam_state, gam_cal
     assert "GAM exited without saying it did this" in text and "Removed" not in text
     audit = (client.app.state.gamgui.connector.audit.path).read_text()
     assert '"action": "remove_drive_member"' in audit and '"ok": false' in audit
+
+
+# --- the orphan check: drives a leaver is the only active manager of ------------------------------------------------------
+
+class _U:
+    def __init__(self, email, suspended=False):
+        self.primary_email, self.suspended = email, suspended
+
+
+def _acl(drive, email, role="organizer", kind="user", deleted=False):
+    return {"id": drive, "permission": {"id": "1", "emailAddress": email, "role": role, "type": kind, "deleted": deleted}}
+
+
+FIN, LEG = sd.SharedDrive(FINANCE, "Finance"), sd.SharedDrive(LEGAL, "Legal hold")
+PEOPLE = [_U("alice@example.com"), _U("carol@example.com"), _U("bob@example.com", suspended=True)]
+
+
+def test_a_drive_only_they_manage_is_at_risk_and_one_someone_else_manages_isnt():
+    found = sd.managed_alone("Alice@example.com", [FIN, LEG], [
+        _acl(FINANCE, "alice@example.com"), _acl(FINANCE, "pat@partner.org", role="writer"),
+        _acl(LEGAL, "alice@example.com"), _acl(LEGAL, "carol@example.com")], PEOPLE)
+    assert [(a.drive.id, a.why) for a in found.at_risk] == [(FINANCE, "no other manager")] and found.unread == ()
+
+
+@pytest.mark.parametrize("other, why", [
+    (_acl(FINANCE, "bob@example.com"), "bob@example.com: suspended"),
+    (_acl(FINANCE, "gone@example.com"), "gone@example.com: not in the directory"),
+    (_acl(FINANCE, "carol@example.com", deleted=True), "no other manager"),             # its account is gone
+    (_acl(FINANCE, "carol@example.com", role="fileOrganizer"), "no other manager"),     # not a manager
+])
+def test_another_manager_who_cant_act_doesnt_count(other, why):
+    found = sd.managed_alone("alice@example.com", [FIN], [_acl(FINANCE, "alice@example.com"), other], PEOPLE)
+    assert [a.why for a in found.at_risk] == [why]
+
+
+def test_a_group_manager_counts_and_a_drive_they_dont_manage_isnt_listed():
+    rows = [_acl(FINANCE, "alice@example.com"), _acl(FINANCE, "it@example.com", kind="group"),
+            _acl(LEGAL, "alice@example.com", role="writer")]
+    assert sd.managed_alone("alice@example.com", [FIN, LEG], rows, PEOPLE).at_risk == ()
+
+
+def test_a_drive_the_permissions_read_left_out_is_unknown_never_not_theirs():
+    found = sd.managed_alone("alice@example.com", [FIN, LEG], [_acl(FINANCE, "carol@example.com")], PEOPLE)
+    assert found.at_risk == () and found.unread == (LEG,)
+    found = sd.managed_alone("alice@example.com", [FIN], [{"id": FINANCE}], PEOPLE)   # read, no member at all
+    assert found.at_risk == () and found.unread == ()
+
+
+def test_the_check_names_each_drive_they_manage_alone_and_links_it(client, gam_calls):  # noqa: F811
+    page = client.get("/drives/orphans?email=alice@example.com").text
+    text = _text(page)
+    assert "alice@example.com is the only active manager of 2 shared drives." in text
+    assert "Finance" in text and "Legal hold" in text and f'href="/drives?id={FINANCE}"' in page
+    assert "isn't the only active manager" in _text(client.get("/drives/orphans?email=carol@example.com").text)
+    assert "Old projects" in _text(client.get("/drives/orphans?email=bob@example.com").text)
+    text = _text(client.get("/drives/orphans?email=a.anders@example.com").text)    # alice's alias: read as alice
+    assert "alice@example.com is the only active manager of 2 shared drives." in text
+    text = _text(client.get("/drives/orphans?email=nobody@example.com").text)
+    assert "Couldn't check which shared drives" in text and "isn't the only active manager" not in text
+    assert gam_writes(gam_calls()) == []
+
+
+def test_a_check_that_couldnt_read_says_so_never_none(client, gam_state):  # noqa: F811
+    (gam_state / "drive_token_silent").touch()
+    text = _text(client.get("/drives/orphans?email=alice@example.com").text)
+    assert "Couldn't check which shared drives alice@example.com manages alone." in text
+    assert "isn't the only active manager" not in text
+    (gam_state / "drive_token_silent").unlink()
+    (gam_state / "acl_dropped").mkdir()
+    (gam_state / "acl_dropped" / FINANCE).touch()     # GAM passes it over without a word
+    text = _text(client.get("/drives/orphans?email=alice@example.com").text)
+    assert "only active manager of 1 shared drive" in text and "Legal hold" in text
+    assert "GAM didn't read the members of Finance" in text
+
+
+def test_adding_a_manager_clears_the_warning(client, gam_state):  # noqa: F811
+    _, token = _preview(client, action="add", email="carol@example.com", kind="user", role="organizer")
+    _apply(client, token)
+    text = _text(client.get("/drives/orphans?email=alice@example.com").text)
+    assert "only active manager of 1 shared drive" in text and "Finance" not in text
+
+
+def test_the_delete_and_close_out_run_the_check_and_its_link_opens_the_drive(client):  # noqa: F811
+    confirm = client.post("/users/delete/confirm", data={"email": "alice@example.com"}).text
+    assert 'hx-get="/drives/orphans?email=alice%40example.com"' in confirm
+    # Each sits inside a form whose hx-target it would inherit (htmx), which once put the warning in the wrong box: its own.
+    assert '<div id="del-drives" hx-target="this"' in confirm
+    check = client.get("/lifecycle/closeout/check?user=carol@example.com").text
+    assert '<div id="closeout-drives" hx-target="this"' in check and "/drives/orphans?email=carol%40example.com" in check
+    assert f'hx-get="/drives/members?id={FINANCE}"' in client.get(f"/drives?id={FINANCE}").text
+    assert "Reading the drive's members" not in client.get("/drives?id=0A x").text   # not a drive ID: nothing opened

@@ -36,6 +36,8 @@ can't be archived or lose its role here; `archived on` is a cut-off shape too. `
 without its `id` title as unread and a row with no status as unfinished, for the delete gate as well. The alias step reads
 the leaver's aliases again right before it runs. The confirm step posts only its token, the leaver's address typed, `confirm` at ten steps.
 The delete isn't a step: the check embeds the Users delete zone (`/users/delete/zone`), the one delete path. Not run live yet.
+The check and the delete's confirm step both load the shared drive orphan check (`/drives/orphans`, roadmap 4.7; see
+web-screens-jobs): the drives the leaver is the only active manager of, a warning with an "Add a manager" link, never a refusal.
 
 **Owns invariant(s):** the two domain rules called out in the task — **delete is gated on
 data-transfer completion** (advisory) and **the all-users calendar-ACL sweep is best-effort**

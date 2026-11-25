@@ -1,0 +1,27 @@
+{#- The orphan check (roadmap 4.7), on the delete and on Close Out: the shared drives this person is the only active manager
+    of. A warning, never a refusal. A read that failed, or drives whose members weren't read, say so: never "none"
+    (invariant 10). -#}
+{% if why %}
+<p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ Couldn't check which shared drives
+  {{ email }} manages alone. {{ why }} A drive only they manage has no manager once their account is suspended or deleted.</p>
+{% else %}
+{% if found.at_risk %}
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+  <p>⚠ {{ email }} is the only active manager of {{ found.at_risk | length }} shared drive{{ "s" if found.at_risk | length != 1 }}.
+    Once their account is suspended or deleted, no one can manage {{ "them" if found.at_risk | length != 1 else "it" }}: add a manager first.</p>
+  <ul class="mt-1.5 space-y-1">
+    {% for a in found.at_risk %}
+    <li><strong>{{ a.drive.name or a.drive.id }}</strong> <span class="text-xs">({{ a.why }})</span> ·
+      <a href="/drives?id={{ a.drive.id | urlencode }}" class="underline hover:text-brand-black">Add a manager<span class="sr-only"> to {{ a.drive.name or a.drive.id }}</span></a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% if found.unread %}
+<p class="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ GAM didn't read the members of
+  {% for d in found.unread %}{{ d.name or d.id }}{{ ", " if not loop.last }}{% endfor %}, so whether {{ email }} manages {{ "these" if found.unread | length != 1 else "it" }} alone is unknown.</p>
+{% endif %}
+{% if not found.at_risk and not found.unread %}
+<p class="text-xs text-brand-grayink">{{ email }} isn't the only active manager of any shared drive.</p>
+{% endif %}
+{% endif %}
