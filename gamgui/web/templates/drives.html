@@ -27,8 +27,9 @@
       <div id="drive-results" class="mt-2">{% include "_drive_results.html" %}</div>
     </div>
 
-    <section id="drive-panel" aria-label="Shared drive members" class="min-w-0 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
-      <p class="text-sm text-brand-grayink">Pick a shared drive to see its members and change them.</p>
+    <section id="drive-panel" aria-label="Shared drive members" class="min-w-0 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm"
+             {% if opened %}hx-get="/drives/members?id={{ opened | urlencode }}" hx-trigger="load" hx-swap="innerHTML"{% endif %}>
+      <p class="text-sm text-brand-grayink">{% if opened %}Reading the drive's members…{% else %}Pick a shared drive to see its members and change them.{% endif %}</p>
     </section>
   </div>
 </div>

@@ -3,6 +3,10 @@
   Account deleted. Recoverable for ~20 days (Admin Console, or <code>gam undelete user {{ email }}</code>).
 </div>
 {% elif confirming %}
+{#- Outside the form: inside it, the panel would inherit the form's hx-target and hx-disabled-elt (roadmap 4.7). -#}
+<div id="del-drives" class="mb-2" hx-get="/drives/orphans?email={{ email | urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+  <p class="text-xs text-brand-grayink">Checking which shared drives {{ email }} manages alone…</p>
+</div>
 <form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" class="space-y-2">
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="hidden" name="confirmed" value="1" />

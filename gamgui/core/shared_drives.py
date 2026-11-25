@@ -209,3 +209,55 @@ def moved(change: Change, members: Sequence[Member]) -> str:
     if _last_manager(member, members):   # still a manager (role as read), and now the only one: a demotion or removal
         return LAST_MANAGER.format(who=change.who, drive=name)
     return ""
+
+
+# --- the orphan check (roadmap 4.7): drives a leaver is the only active manager of ------------------------------------------
+@dataclass(frozen=True)
+class AtRisk:
+    drive: SharedDrive
+    why: str   # who else manages it, and why they don't count, in words
+
+
+@dataclass(frozen=True)
+class Alone:
+    """What the orphan check found: the drives ``email`` manages with no other active manager, and the drives whose members
+    weren't read (GAM passes over a drive Google refuses without a word), for which it can't be told."""
+
+    at_risk: Tuple[AtRisk, ...]
+    unread: Tuple[SharedDrive, ...]
+
+
+def managed_alone(email: str, drives: Sequence[SharedDrive], acl_rows: Sequence[Dict[str, Any]],
+                  users: Sequence[Any]) -> Alone:
+    """The drives ``email`` manages where no one else does who can: from every drive's permissions (``print shareddriveacls
+    oneitemperrow shownopermissionsdrives true formatjson``, one row a permission) and the directory, suspended accounts
+    included. Another manager counts when it is a group (its members can't be told from here, as the Shared drive
+    permissions audit run reads it) or an account the directory lists and hasn't suspended; one whose account is gone, isn't
+    in the directory or is suspended doesn't. A drive the list holds but the permissions read left out is unread: unknown,
+    never "not theirs"."""
+    me = email.strip().lower()
+    status = {str(u.primary_email).strip().lower(): u for u in users}
+    by_drive: Dict[str, List[Dict[str, Any]]] = {}
+    for r in acl_rows:
+        perms = by_drive.setdefault(str(r.get("id") or ""), [])
+        if isinstance(r.get("permission"), dict):
+            perms.append(r["permission"])
+    at_risk = []
+    for drive in drives:
+        organizers = [p for p in by_drive.get(drive.id, []) if p.get("role") == "organizer" and p.get("deleted") is not True]
+        if not any(str(p.get("emailAddress") or "").strip().lower() == me for p in organizers):
+            continue
+        whys, counted = [], False
+        for p in organizers:
+            address = str(p.get("emailAddress") or "").strip().lower()
+            if address == me:
+                continue
+            holder = status.get(address)
+            if p.get("type") == "group" or (holder is not None and not getattr(holder, "suspended", False)):
+                counted = True
+                break
+            whys.append(f"{address or 'an account'}: {'suspended' if holder is not None else 'not in the directory'}")
+        if not counted:
+            at_risk.append(AtRisk(drive, "; ".join(whys) or "no other manager"))
+    unread = tuple(d for d in drives if d.id not in by_drive)
+    return Alone(tuple(sorted(at_risk, key=lambda a: a.drive.name.lower())), unread)

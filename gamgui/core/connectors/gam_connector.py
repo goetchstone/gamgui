@@ -721,6 +721,21 @@ class GAMConnector(Connector):
             raise NoRowUnsaid("GAM listed no shared drive without saying there are none, so they can't be told.")
         return sorted(drives, key=lambda d: (d.name.lower(), d.id))
 
+    async def drive_permissions(self) -> List[Dict[str, Any]]:
+        """Every shared drive's permissions, one row each (the Shared drive permissions audit run's read), for the orphan
+        check. Exit 60 is GAM's none. GAM drops a drive whose permissions Google refused without a word, so the caller
+        holds these against ``shared_drives`` and calls a drive missing here unread; output without the `id` titles is
+        Incomplete."""
+        argv = GAMCommands.print_shared_drive_acls()
+        res = await self.runner.run_any_exit(self.domain, argv, timeout=DOMAIN_WIDE_TIMEOUT)
+        if res.returncode not in (0, NO_ENTITIES_FOUND_RC):
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        lines = (res.stdout or "").split("\n")
+        start = next((i for i, ln in enumerate(lines) if "id" in (c.strip() for c in ln.split(","))), None)
+        if start is None:
+            raise Incomplete("GAM ended without the shared drives' members, so who manages them can't be told.")
+        return await asyncio.to_thread(parse_records, "\n".join(lines[start:]))
+
     async def drive_members(self, drive_id: str) -> List[DriveMember]:
         """One shared drive's members, read now. A run that didn't print that drive's one row is unknown (``shared_drives.Unread``)."""
         out = await self.runner.run_authenticated(self.domain, GAMCommands.print_drive_members(drive_id))

@@ -6,6 +6,10 @@
 {% if found.refusal %}
 <p class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">{{ found.refusal }}</p>
 {% else %}
+{#- Outside the form: inside it, the panel would inherit the form's hx-target and hx-disabled-elt (roadmap 4.7). -#}
+<div id="closeout-drives" class="mb-3" hx-get="/drives/orphans?email={{ found.user | urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+  <p class="text-xs text-brand-grayink">Checking which shared drives {{ found.user }} manages alone…</p>
+</div>
 <form id="closeout-picks" class="space-y-4" hx-post="/lifecycle/closeout/preview" hx-target="#closeout-confirm" hx-swap="innerHTML"
       hx-disabled-elt="find button[type=submit]">
   <input type="hidden" name="user" value="{{ found.user }}" />

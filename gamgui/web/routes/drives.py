@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core import shared_drives as sd
 from ...core.connectors.base import RiskLevel
-from ...core.gam.commands import is_drive_item_id
+from ...core.gam.commands import is_drive_item_id, is_one_address
 from ...core.phishing import Incomplete
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
@@ -72,11 +72,40 @@ def _panel(request: Request, ctx: dict, retarget: bool = False) -> HTMLResponse:
 
 
 @router.get("", response_class=HTMLResponse)
-async def board(request: Request) -> HTMLResponse:
+async def board(request: Request, id: str = "") -> HTMLResponse:   # noqa: A002 — a drive to open, as the orphan check links it
     st = app_state(request)
     connected = st.connector is not None
-    return TEMPLATES.TemplateResponse(request, "drives.html", {"connected": connected,
+    return TEMPLATES.TemplateResponse(request, "drives.html", {"connected": connected, "opened": id if is_drive_item_id(id) else "",
                                                                **(await _choices(st) if connected else {})})
+
+
+@router.get("/orphans", response_class=HTMLResponse)
+async def orphans(request: Request, email: str = "") -> HTMLResponse:
+    """The orphan check (roadmap 4.7): the shared drives ``email`` is the only active manager of, for the delete and Close
+    Out. A warning, never a refusal; a read that failed says so, never "none" (invariant 10). Writes nothing."""
+    st = app_state(request)
+    conn = st.connector
+    if conn is None:
+        return error_partial(request, NOT_CONNECTED)
+    email = email.strip()
+    if not is_one_address(email):
+        return error_partial(request, "Pick a person first.")
+    ctx: dict = {"email": email, "found": None, "why": ""}
+    try:   # the drive list and every drive's permissions read now; the directory (suspended included) fresh within its TTL
+        drives, rows, users = await asyncio.gather(conn.shared_drives(), conn.drive_permissions(), st.users())
+    except Exception as exc:  # noqa: BLE001 — unknown, never "manages none alone"
+        ctx["why"] = _why(exc)
+        return TEMPLATES.TemplateResponse(request, "_drive_orphans.html", ctx)
+    # A drive's members name the primary address, so an alias typed is read as the account it belongs to.
+    key = email.lower()
+    account = next((u for u in users if u.primary_email.lower() == key
+                    or key in (a.lower() for a in [*u.aliases, *u.non_editable_aliases])), None)
+    if account is None:
+        ctx["why"] = "The directory doesn't list that address, so its account can't be matched to a drive's members."
+    else:
+        ctx["email"] = account.primary_email
+        ctx["found"] = sd.managed_alone(account.primary_email, drives, rows, users)
+    return TEMPLATES.TemplateResponse(request, "_drive_orphans.html", ctx)
 
 
 @router.get("/search", response_class=HTMLResponse)

@@ -507,3 +507,16 @@ def test_every_write_button_disables_itself_while_in_flight():
                     inheriting.append(f"{path.name}: {tag.group(0)[:60]}")
     assert not missing, missing
     assert not inheriting, inheriting
+
+
+def test_an_htmx_control_inside_a_targeted_form_names_its_own_target():
+    # hx-target is inherited: a control inside a form with one swaps its answer there unless it names its own. The orphan
+    # check, loaded inside Close Out's picks form, once put its warning in the confirm box, and inside the delete form would
+    # have replaced the form itself (roadmap 4.7).
+    inheriting = []
+    for path in sorted(TEMPLATES_DIR.glob("*.html")):
+        for form in re.finditer(r'<form\b[^>]*hx-target="[^"]+"[^>]*>(.*?)</form>', path.read_text(), re.S):
+            for tag in re.finditer(r"<\w+\b[^>]*>", form.group(1)):
+                if re.search(r"hx-(get|post)=", tag.group(0)) and "hx-target=" not in tag.group(0):
+                    inheriting.append(f"{path.name}: {tag.group(0)[:70]}")
+    assert not inheriting, inheriting

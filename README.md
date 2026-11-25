@@ -114,7 +114,7 @@ and have only run offline: see
   each change previewed as it is and as it would be.
 - **Shared drives** — find a shared drive, see its members and their roles, add a person or group with a role, change a
   member's role, or remove one, each change previewed and run only if the members haven't changed since; a drive is never
-  left without a manager.
+  left without a manager. Deleting someone, and Close Out, warn about each shared drive they're the only active manager of.
 - **Classroom** (school domains, read only) — find any class and see its teachers and students, a person's classes
   (with a warning at offboarding when a leaver owns some), and who may create classes. **Plan an import** reads your
   SIS's roster export on this Mac (OneRoster 1.1 or 1.2, Clever's CSV files, or one spreadsheet you map by its
