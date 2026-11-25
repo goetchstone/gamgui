@@ -72,8 +72,8 @@ Everything below is planned for both apps.
 
 ## Later
 
-- **Grow the buildable command set — specifically the writes.** Of 1,082 catalog entries, 545 can
-  run today: 30 hand-curated commands (the only ones that can *change* anything) plus 515
+- **Grow the buildable command set — specifically the writes.** Of 1,087 catalog entries, 550 can
+  run today: 35 hand-curated commands (the only ones that can *change* anything) plus 515
   grammar-derived commands auto-promoted because they are confidently read-only. The other 537 —
   every write, and anything whose risk could not be inferred with confidence — are inert, syntax
   display only. That asymmetry is the safety boundary: a command can become runnable automatically

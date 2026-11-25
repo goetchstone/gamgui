@@ -143,6 +143,11 @@ def cut_off_account(argv: Sequence[str]) -> Optional[str]:
         return "all users"
     if len(words) >= 4 and words[0] == "update" and words[1] in entity:
         attributes = words[3:]
+        # A new primary address (roadmap 5.1): GamGUI knows its admin by address, and whether the token and the service
+        # account's sign-in as that address outlive a rename isn't proven, so it counts. `primaryemail` anywhere; `email`
+        # and `username` only as the first word, where rename_user puts it, since they are also a title or a name.
+        if "primaryemail" in attributes or attributes[0] in ("email", "username"):
+            return original[2]
         for i, word in enumerate(attributes):
             if word == "password":
                 return original[2]
@@ -727,6 +732,30 @@ class GAMCommands:
             raise ValueError("a shared drive ID and a permission ID are letters, digits, - and _")
         return ["delete", "drivefileacl", "shareddriveid", drive_id, f"id:{permission_id}"]
 
+    # Create and rename a shared drive (roadmap 5.1).
+    @staticmethod
+    def create_shared_drive(email: str, name: str) -> List[str]:
+        # `<UserTypeEntity> create shareddrive <Name>` (createSharedDrive at the 7.52.05 tag): created as that person, who
+        # becomes its only Manager. One address (`user` never splits it; a bare name would get GAM's domain). The name is
+        # read by position before any option, so a missing one would make the next word the name: it is never blank. No
+        # restrictions, theme or org unit: each is a second call after a sleep that can fail once the drive exists.
+        if not is_one_address(email):
+            raise ValueError(f"{email!r} isn't one email address")
+        if not (name or "").strip():
+            raise ValueError("a shared drive needs a name")
+        return ["user", email, "create", "shareddrive", name]
+
+    @staticmethod
+    def rename_shared_drive(drive_id: str, name: str) -> List[str]:
+        # `update shareddrive <SharedDriveEntity> name <Name>` as the admin (updateSharedDrive, useDomainAdminAccess). The
+        # drive as `shareddriveid <ID>`: a bare word could be a keyword (`name`, `shareddrive`) that makes the next word a
+        # drive *name*, which GAM matches case-insensitively against every drive.
+        if not is_drive_item_id(drive_id):
+            raise ValueError("a shared drive ID is letters, digits, - and _ (Shared drives lists each drive's)")
+        if not (name or "").strip():
+            raise ValueError("a shared drive needs a name")
+        return ["update", "shareddrive", "shareddriveid", drive_id, "name", name]
+
     @staticmethod
     def print_shared_drive_files(email: str, drive_id: str) -> List[str]:
         # A shared drive's files (roadmap 4.7), read as one of its members: `<UserTypeEntity> print filelist select
@@ -840,6 +869,20 @@ class GAMCommands:
         # Close Out (roadmap 4.5): `archived` is a UProp.PC_BOOLEAN of `update user` (getUserAttributes). Google swaps the
         # person's license for an Archived User one, and refuses without one to give.
         return ["update", "user", email, "archived", "on"]
+
+    @staticmethod
+    def rename_user(email: str, new_email: str) -> List[str]:
+        # Roadmap 5.1: `update user <UserItem> primaryemail <EmailAddress> noactionifalias` (updateUsers at the 7.52.05 tag).
+        # users.update takes an alias as the key and renames its owner, so `noactionifalias` reads the account first and
+        # does nothing (51, "Not Performed") unless the address given is its primary. A bare name gets GAM's domain, so
+        # both are one full address. GAM turns a new address whose name is `vfe` into a random `vfe.<user>.<NNNNN>`.
+        if not is_one_address(email) or not is_one_address(new_email):
+            raise ValueError("the account and its new address are each one full email address")
+        if new_email.partition("@")[0].lower() == "vfe":
+            raise ValueError("GAM reads a new address named vfe@ as “make one up”: choose another name")
+        if new_email.strip().lower() == email.strip().lower():
+            raise ValueError("that is the address the account has now")
+        return ["update", "user", email, "primaryemail", new_email, "noactionifalias"]
 
     # --- calendar access ---------------------------------------------------------------
     @staticmethod
@@ -1199,6 +1242,26 @@ class GAMCommands:
         return ["delete", "admin", assignment_id]
 
     @staticmethod
+    def create_admin(email: str, role: str, org_unit: str = "") -> List[str]:
+        # Roadmap 5.1: `create admin <EmailAddress> <RoleItem> customer|(org_unit <OrgUnitItem>)` (doCreateAdmin at the
+        # 7.52.05 tag). The holder is a user, else a group (an alias reads as its owner); a bare name would get GAM's
+        # domain. The role is its name as Google keeps it (`_HELP_DESK_ADMIN_ROLE`, a custom role's own), matched without
+        # case: an unknown one is a usage error (2) listing every name, and an `id:`/`uid:` prefix sends what follows as a
+        # role ID unchecked. No org unit is the whole organization. GAM prints "Admin Role Assignment: <ID>", the ID
+        # `delete admin` takes back.
+        if not is_one_address(email):
+            raise ValueError(f"{email!r} isn't one email address")
+        role = role or ""
+        if not role.strip() or role != role.strip() or re.match(r"(?i)u?id:", role):
+            raise ValueError("name the role as Google has it, such as _HELP_DESK_ADMIN_ROLE (`print adminroles` lists them)")
+        if not org_unit:
+            return ["create", "admin", email, role, "customer"]
+        # GAM makes a path absolute dropping one trailing `/` (makeOrgUnitPathAbsolute), so `//` is the top-level unit too.
+        if not org_unit.strip().strip("/") or org_unit.strip().lower() == "root":
+            raise ValueError("That is the top-level org unit: leave the org unit blank for the whole organization.")
+        return ["create", "admin", email, role, "org_unit", org_unit]
+
+    @staticmethod
     def print_admins(email: str) -> List[str]:
         # The roles assigned to the person directly. Not one held through a group: that takes `recursive`.
         return ["print", "admins", "user", email]
@@ -1377,6 +1440,15 @@ class GAMCommands:
         if description:
             argv += ["description", description]
         return argv
+
+    @staticmethod
+    def delete_group(group: str) -> List[str]:
+        # Roadmap 5.1: `delete group <GroupEntity> noactionifalias` (doDeleteGroups at the 7.52.05 tag). Google deletes the
+        # group an alias belongs to, so `noactionifalias` reads it first and does nothing (51) unless this is its own
+        # address. One full address: GAM splits a list on commas and spaces, and reads `csv`/`file` as a list's source.
+        if not is_one_address(group):
+            raise ValueError(f"{group!r} isn't one group address")
+        return ["delete", "group", group, "noactionifalias"]
 
     @staticmethod
     def print_group_members(group: str) -> List[str]:

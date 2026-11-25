@@ -276,6 +276,12 @@ and the CSV download takes the filtered rows.
 Clicking an address in a result offers follow-ups for that person (delegates, forwarding,
 signature, suspend and more). A Builder change only ever runs from its preview.
 
+A few changes have no screen of their own and live in the Builder: rename a user (their new primary address; Google
+keeps the old one as an alias), delete a group, give a user or group an admin role (over the whole organization or one
+org unit), and create or rename a shared drive. Each is named by its own address or ID: GAM refuses an alias rather
+than rename or delete what it points to. When one is done, the result shows GAM's own line, with a new drive's ID or the
+admin role assignment's ID. Renaming the admin GamGUI signs in as is refused. None has been run on a real domain yet.
+
 **Export to a Google Sheet**, beside **Download CSV**, puts a read's table in a new Sheet in your own Drive (the admin
 GamGUI signs in as), shared with nobody. Its preview shows the exact command, and that the Sheet holds a fresh read:
 GAM runs the read again, so its rows can differ from the table, and a filter doesn't apply. It checks that the service
@@ -397,7 +403,7 @@ the members again and makes the change only if they're as the preview found them
 
 The roles are Google's: Manager, Content manager, Contributor, Commenter and Viewer. A drive's last manager can't be
 removed or given another role here, since a drive with none can only be looked after from the Admin console: add another
-manager first. A drive limited to your domain's users refuses an outside address, in Google's words. To see a drive's files, the **Builder** has “List a shared drive's files”: name one of its members and the drive's ID, which **Shared drives** shows. If the members can't be
+manager first. A drive limited to your domain's users refuses an outside address, in Google's words. To make a drive or rename one, the Builder has “Create a shared drive” and “Rename a shared drive”. To see a drive's files, the **Builder** has “List a shared drive's files”: name one of its members and the drive's ID, which **Shared drives** shows. If the members can't be
 read, the screen says so rather than showing none. Not yet verified live.
 
 ## Move a folder into a shared drive

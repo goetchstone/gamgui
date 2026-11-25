@@ -31,7 +31,7 @@ from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands, carries_todrive
 from ...core.gam.errors import GAMError
 from ...core.setup import SetupService
-from ...core.connectors.gam_connector import READ_ORIGIN_SEQUENCE
+from ...core.connectors.gam_connector import READ_ORIGIN_SEQUENCE, builder_done
 from ...core.gam.parser import table_records
 from ...core.bulk import stop_requested
 from ...core.shared_drives import folder_move_of, manages_directly
@@ -166,6 +166,14 @@ async def _answer(read) -> tuple:
         return await read, ""
     except Exception as exc:  # noqa: BLE001 — the preview says it couldn't tell, and why
         return None, friendly(exc)
+
+
+def said_line(argv, output: str) -> str:
+    """GAM's own line for a write that has one (roadmap 5.1, ``builder_done``): the new drive's ID, the role assignment's,
+    the address renamed. "" for any other command, whose output this never shows."""
+    if builder_done(argv) is None:
+        return ""
+    return next((line.strip() for line in (output or "").splitlines() if line.strip()), "")
 
 
 # A mutation runs exactly what its preview showed: the preview holds the argv under a single-use token
@@ -511,7 +519,10 @@ async def run(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse:
     result = (await conn.apply([preview]))[0]
     if not result.ok:   # what didn't happen, in words; GAM's own line one click away (roadmap 0.4)
         return write_failed(request, f"{cmd.name} failed.", result)
-    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": cmd.name + " — done"})
+    # GAM's line for a write that has one (roadmap 5.1): the new drive's ID, the role assignment's, the address renamed.
+    said = said_line(preview.argv or [], result.output)
+    return TEMPLATES.TemplateResponse(request, "_action_result.html", {"ok": True, "message": cmd.name + " — done",
+                                                                      "said": said})
 
 
 # --- export a read's table to a Google Sheet (plan F4) ------------------------------------
@@ -709,6 +720,8 @@ async def _run_sequence(job, conn, previews, catalog=None) -> None:
                 else:
                     res = (await conn.apply([p]))[0]
                     ok, why, detail = res.ok, res.remediation, res.detail
+                    if res.ok:   # GAM's line for a write that has one (a new drive's ID, a role assignment's), then any
+                        detail = " ".join(filter(None, (said_line(p.argv or [], res.output), res.detail)))   # audit note
             except Exception as exc:  # noqa: BLE001 — report every step, never abort the run
                 if not isinstance(exc, GAMError):
                     logger.warning("a sequence step failed", exc_info=exc)

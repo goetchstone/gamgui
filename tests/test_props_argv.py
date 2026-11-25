@@ -208,6 +208,13 @@ IDENTIFIERS = (
     Spec("move_folder_to_shared_drive", (), (), {"email": _SEARCH_ADDRESS, "folder_id": _DRIVE_ID, "drive_id": _DRIVE_ID}),
     Spec("copy_rest_of_folder_to_shared_drive", (), (), {"email": _SEARCH_ADDRESS, "folder_id": _DRIVE_ID,
                                                          "drive_id": _DRIVE_ID}),
+    # The closed list of writes (roadmap 5.1): addresses and a drive ID as their builders take them; a name is never blank.
+    Spec("rename_user", (), (), {"email": _SEARCH_ADDRESS, "new_email": st.sampled_from(["dave@example.com", "New.Name@Example.net"])}),
+    Spec("delete_group", (), (), {"group": _SEARCH_ADDRESS}),
+    Spec("create_admin", (), (), {"email": _SEARCH_ADDRESS, "role": st.sampled_from(["_HELP_DESK_ADMIN_ROLE", "Help Desk Lite"]),
+                                  "org_unit": st.sampled_from(["", "/Sales/East", "id:03ph8a2z1"])}),
+    Spec("create_shared_drive", (), (), {"email": _SEARCH_ADDRESS, "name": WORD.filter(str.strip)}),
+    Spec("rename_shared_drive", (), (), {"drive_id": _DRIVE_ID, "name": WORD.filter(str.strip)}),
 )
 
 

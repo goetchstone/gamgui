@@ -114,6 +114,13 @@ WRITES = {
     "move_folder_to_shared_drive": [C.move_folder_to_shared_drive("alice@example.com", "1FOLDERours", "0AFINANCEuk9PVA")],
     "copy_rest_of_folder_to_shared_drive": [
         C.copy_rest_of_folder_to_shared_drive("alice@example.com", "1FOLDERours", "0AFINANCEuk9PVA")],
+    # The closed list of writes (roadmap 5.1); their refusals are tested in test_closed_list_writes.py.
+    "rename_user": [C.rename_user("bob@example.com", "robert@example.com")],
+    "delete_group": [C.delete_group("sales@example.com")],
+    "create_admin": [C.create_admin("bob@example.com", "_HELP_DESK_ADMIN_ROLE"),
+                     C.create_admin("it@example.com", "_GROUPS_ADMIN_ROLE", "/Sales")],
+    "create_shared_drive": [C.create_shared_drive("alice@example.com", "Finance 2027")],
+    "rename_shared_drive": [C.rename_shared_drive("0AFINANCEuk9PVA", "Finance (closed)")],
 }
 
 # Reads stay canned, but each one the app issues must still have a handler. The per-user ones answer

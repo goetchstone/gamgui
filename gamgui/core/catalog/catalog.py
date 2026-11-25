@@ -203,6 +203,18 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.print_filelist(s["email"], s.get("query", "")),
              "gam user <email> print filelist query <QueryDriveFile>",
              "Search a user's Drive by a Drive query — by name, type, owner, sharing, or modified date…"),
+        _cmd("build.create_shared_drive", "Shared Drives", "", "Create a shared drive", RiskLevel.LOW,
+             [_slot("email", "Created as (its first Manager)", U), _slot("name", "Name", SlotKind.TEXT)],
+             lambda s: GAMCommands.create_shared_drive(s["email"], s.get("name", "")),
+             "gam user <email> create shareddrive <name>",
+             "Create a shared drive as this person, who becomes its only Manager; add others on Shared drives. Google "
+             "allows two drives with one name, so look there first. GAM prints the new drive's ID."),
+        _cmd("build.rename_shared_drive", "Shared Drives", "", "Rename a shared drive", RiskLevel.LOW,
+             [_slot("drive_id", "Shared drive ID", SlotKind.TEXT, placeholder="0AB…Uk9PVA (Shared drives lists each one's)"),
+              _slot("name", "New name", SlotKind.TEXT)],
+             lambda s: GAMCommands.rename_shared_drive(s.get("drive_id", ""), s.get("name", "")),
+             "gam update shareddrive shareddriveid <drive ID> name <name>",
+             "Rename a shared drive, as the admin: no need to be a member of it. Its files and members stay as they are."),
         _cmd("build.shared_drive_files", "Shared Drives", "", "List a shared drive's files", RiskLevel.READ_ONLY,
              [_slot("email", "A member of the drive", U),
               _slot("drive_id", "Shared drive ID", SlotKind.TEXT, placeholder="0AB…Uk9PVA (Shared drives lists each one's)")],
@@ -264,6 +276,13 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.create_group(s.get("email", ""), s.get("name", ""), s.get("description", "")),
              "gam create group <email> name <name> description <desc>",
              "Create a new Google Group; optionally set its display name and description."),
+        # DESTRUCTIVE: members, settings, aliases and the archive go with it (roadmap 5.1).
+        _cmd("build.delete_group", "Groups", "", "Delete a group", RiskLevel.DESTRUCTIVE,
+             [_slot("group", "Group", SlotKind.GROUP)],
+             lambda s: GAMCommands.delete_group(s.get("group", "")),
+             "gam delete group <group> noactionifalias",
+             "Delete a group, with its members list, settings, aliases and conversations. Named by its own address: GAM "
+             "refuses one of its aliases rather than delete the group behind it."),
         # Org units (roadmap 4.2). Moving people is on Users (one from their page, many as a job); these shape the tree.
         _cmd("build.create_org_unit", "Organizational Units", "", "Create an org unit", RiskLevel.LOW,
              [_slot("path", "Path", SlotKind.TEXT, placeholder="/Sales/East"),
@@ -305,6 +324,26 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.undelete_user(s.get("email", "")),
              "gam undelete user <email>",
              "Restore a recently deleted account (within Google's ~20-day recovery window)."),
+        # DESTRUCTIVE (roadmap 5.1): the address they sign in with changes, and anything that knows them by it breaks.
+        _cmd("build.rename_user", "Users", "", "Rename a user (change their address)", RiskLevel.DESTRUCTIVE,
+             [_slot("email", "User (their address now)", U), _slot("new_email", "New address", SlotKind.EMAIL)],
+             lambda s: GAMCommands.rename_user(s["email"], s.get("new_email", "")),
+             "gam update user <email> primaryemail <new address> noactionifalias",
+             "Change a user's primary address. They sign in with the new one, and Google keeps the old one as an alias so "
+             "mail to it still arrives. Google refuses an address someone already has. Named by their address now: GAM "
+             "refuses an alias rather than rename the account behind it."),
+        # DESTRUCTIVE (roadmap 5.1): an admin role takes effect at once, up to the whole domain's (_SEED_ADMIN_ROLE).
+        _cmd("build.create_admin", "Administrators", "", "Add an admin role", RiskLevel.DESTRUCTIVE,
+             [_slot("email", "User or group", U),
+              _slot("role", "Role", SlotKind.TEXT, placeholder="_HELP_DESK_ADMIN_ROLE"),
+              _slot("org_unit", "Org unit", SlotKind.TEXT, required=False,
+                    placeholder="/Sales (blank: the whole organization)")],
+             lambda s: GAMCommands.create_admin(s["email"], s.get("role", ""), s.get("org_unit", "")),
+             "gam create admin <email> <role> customer|org_unit <org unit>",
+             "Give a user or group an admin role, over the whole organization or one org unit, in effect at once. The role "
+             "is its name as Google keeps it: built-in roles read like _HELP_DESK_ADMIN_ROLE, and _SEED_ADMIN_ROLE is Super "
+             "Admin. An alias counts as the account or group it belongs to. `print adminroles` lists every name. GAM prints the assignment's ID. Taking a role back isn't offered "
+             "here: use the Admin console, or Close Out for a leaver."),
         # DESTRUCTIVE: handed-over ownership can't be taken back by a second transfer (see the offboarding
         # runbook), so the Builder asks for Confirm & run — and the typed word at ten in a sequence.
         _cmd("build.transfer_data", "Data Transfers", "", "Transfer Drive/Calendar ownership", RiskLevel.DESTRUCTIVE,
