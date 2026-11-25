@@ -56,7 +56,7 @@ from ..incident.logs import rows_from as log_rows_from
 from ..phones import phones_from
 from ..shared_drives import Change as DriveChange
 from ..shared_drives import Member as DriveMember
-from ..shared_drives import SharedDrive, members_from
+from ..shared_drives import FolderCount, SharedDrive, count_folder, members_from
 from ..person_reads import (
     DEVICE_WRITE_NOTE,
     ChromeProfile,
@@ -735,6 +735,25 @@ class GAMConnector(Connector):
         if start is None:
             raise Incomplete("GAM ended without the shared drives' members, so who manages them can't be told.")
         return await asyncio.to_thread(parse_records, "\n".join(lines[start:]))
+
+    async def folder_count(self, email: str, folder_id: str, domains: Sequence[str]) -> FolderCount:
+        """What a folder holds, by who owns each file, read now as its owner (roadmap 4.8: the move's preview). The read lists
+        the folder itself (`showparent`), so a folder that was read is never "no row": exit 60 is printFileList's no row,
+        which it also gives a folder it couldn't find (the 60 overwrites the failure's 50), so that is Incomplete with what GAM
+        said, and so is output without the folder's own row or the `id` titles (invariant 10). Any other exit raises."""
+        argv = GAMCommands.print_folder_files(email, folder_id)
+        res = await self.runner.run_any_exit(self.domain, argv)
+        if res.returncode == NO_ENTITIES_FOUND_RC:
+            said = (res.stderr or "").strip().splitlines()
+            raise Incomplete(f"GAM didn't list folder {folder_id}: it may not exist, or {email} can't see it."
+                             + (f" GAM said: {said[-1].strip()}" if said else ""))
+        if res.returncode != 0:
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        lines = (res.stdout or "").split("\n")
+        start = next((i for i, ln in enumerate(lines) if "id" in (c.strip() for c in ln.split(","))), None)
+        if start is None:
+            raise Incomplete("GAM ended without listing the folder, so what would move can't be told.")
+        return count_folder(parse_records("\n".join(lines[start:])), email, domains, folder_id)
 
     async def drive_members(self, drive_id: str) -> List[DriveMember]:
         """One shared drive's members, read now. A run that didn't print that drive's one row is unknown (``shared_drives.Unread``)."""

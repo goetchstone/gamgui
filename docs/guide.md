@@ -400,6 +400,24 @@ removed or given another role here, since a drive with none can only be looked a
 manager first. A drive limited to your domain's users refuses an outside address, in Google's words. To see a drive's files, the **Builder** has “List a shared drive's files”: name one of its members and the drive's ID, which **Shared drives** shows. If the members can't be
 read, the screen says so rather than showing none. Not yet verified live.
 
+## Move a folder into a shared drive
+A folder often holds files that other people own. Google moves a file into a shared drive only for someone who may move
+it, and never moves one owned outside your domain. The **Builder** does it in two steps, queued in a sequence in this
+order, each naming the folder's owner, the folder's ID (the end of its Drive address) and the drive's ID:
+
+1. **Move a folder into a shared drive** makes the folders again in the drive and moves each file it can. The original
+   folders stay, holding whatever didn't move.
+2. **Copy what didn't move into a shared drive** copies the files still in the folder that someone else owns into the
+   same folders in the drive. The originals stay with their owners.
+
+The preview counts the folder's files: the owner's, other people's in your domain (Google moves one only when its owner
+is a member of the drive), and those owned outside it, naming a few of the last. Files in the trash aren't counted or
+copied. The owner must be a Manager of the drive in their own name, not through a group: the preview stops if
+they aren't. Neither step has a dry run, and what moved stays moved if a run stops partway. A file whose name is already
+taken in the drive's folder is left alone, never overwritten, so running step 2 again copies nothing twice (GAM reports
+each file it skipped, so that run reads as failed). When Google refuses some files, or the folder holds one in the trash,
+the move step reads as failed, and the copy step still runs. Not yet verified live.
+
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.

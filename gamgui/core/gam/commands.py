@@ -39,10 +39,26 @@ DRIVE_MEMBER_TYPES = ("user", "group")
 # A shared drive's ID and a permission's ID as Drive makes them (0AB…Uk9PVA; a run of digits, `anyoneWithLink`): letters,
 # digits, `-` and `_`. Anything else could be a GAM keyword or a second entity, so it is refused before GAM.
 _DRIVE_ITEM_ID = re.compile(r"[A-Za-z0-9_-]{1,200}")
+# The file IDs read as a whole Drive, never one folder: the Drive API's aliases ("root", "appDataFolder") and GAM's own
+# (cleanFileIDsList reads `rootid` as root, even after `id:`).
+_DRIVE_ID_ALIASES = {"root", "rootid", "appdatafolder"}
 
 
 def is_drive_item_id(value: str) -> bool:
     return bool(_DRIVE_ITEM_ID.fullmatch(value or ""))
+
+
+def _folder_and_drive(email: str, folder_id: str, *drive_id: str) -> None:
+    """A folder's move into a shared drive (roadmap 4.8): one address, a folder ID and (for the writes) a shared drive ID,
+    or ValueError."""
+    if not is_one_address(email):
+        raise ValueError(f"{email!r} isn't one email address")
+    if not is_drive_item_id(folder_id):
+        raise ValueError("a folder ID is letters, digits, - and _ (the end of the folder's Drive address)")
+    if folder_id.lower() in _DRIVE_ID_ALIASES:   # Drive's own aliases: `id:root` is the person's whole My Drive
+        raise ValueError(f"{folder_id!r} is Drive's name for a whole Drive, not a folder: name the folder by its ID")
+    if not all(is_drive_item_id(d) for d in drive_id):
+        raise ValueError("a shared drive ID is letters, digits, - and _ (Shared drives lists each drive's)")
 # `<CalendarACLRole>` in the vendored grammar, verbatim (tests/test_command_contract.py pins it).
 CALENDAR_ACL_ROLES = ("editor", "freebusy", "freebusyreader", "owner", "reader", "writer",
                       "writerwithoutprivateaccess", "none")
@@ -87,6 +103,8 @@ CROS_LIST_FIELDS = ("deviceId", "serialNumber", "status", "orgUnitPath", "annota
 FILE_LIST_FIELDS = ("id", "name", "mimeType", "owners", "modifiedTime", "webViewLink")
 # A shared drive's files have no owner (the drive owns them), so its list names who changed each last instead.
 SHARED_DRIVE_FILE_FIELDS = ("id", "name", "mimeType", "modifiedTime", "lastModifyingUser", "webViewLink")
+# What a folder's move into a shared drive counts (roadmap 4.8): each item's kind and who owns it.
+FOLDER_FILE_FIELDS = ("id", "name", "mimeType", "owners")
 # Superset fetched once and cached to serve the users list (needs title), reports, AND the detail
 # view (so opening a user is instant + uses the reliable JSON path, not the `info user` text format).
 CACHE_FIELDS = (
@@ -721,6 +739,41 @@ class GAMCommands:
             raise ValueError("a shared drive ID is letters, digits, - and _ (Shared drives lists each drive's)")
         return ["user", email, "print", "filelist", "select", "shareddriveid", drive_id, "showownedby", "any",
                 "fields", ",".join(SHARED_DRIVE_FILE_FIELDS), "formatjson"]
+
+    # A folder of mixed ownership into a shared drive (roadmap 4.8): a count, a move, then a copy of what didn't move. The
+    # folder is named `id:<ID>`, so a value like `root`, `mydrive` or `ownedby_me` (DriveFileEntity keywords) can't stand for
+    # a whole Drive. The person is the folder's owner, and GAM requires them to be a Manager of the drive (verifyorganizer).
+    @staticmethod
+    def print_folder_files(email: str, folder_id: str) -> List[str]:
+        # Every item under the folder, at any depth (`select` recurses unless told `norecursion`), whoever owns it, and the
+        # folder itself (`showparent`): printFileList exits 60 both for an empty folder and for one it couldn't find (its
+        # "no row" overwrites the failure's 50), so only the folder's own row tells them apart. Trashed items are left out,
+        # as the copy leaves them.
+        _folder_and_drive(email, folder_id)
+        return ["user", email, "print", "filelist", "select", f"id:{folder_id}", "showparent", "showownedby", "any",
+                "excludetrashed", "fields", ",".join(FOLDER_FILE_FIELDS), "formatjson"]
+
+    @staticmethod
+    def move_folder_to_shared_drive(email: str, folder_id: str, drive_id: str) -> List[str]:
+        # moveDriveFile: into a shared drive GAM rebuilds the folders there and moves each file. `retainsourcefolders` keeps
+        # the original folders, which still hold what couldn't move (a file owned outside the domain); `duplicatefolders
+        # merge` joins a same-named folder already in the drive; `duplicatefiles skip` leaves a file whose name is taken
+        # where it is, where GAM's default (overwriteolder) would replace the older one.
+        _folder_and_drive(email, folder_id, drive_id)
+        return ["user", email, "move", "drivefile", f"id:{folder_id}", "teamdriveparentid", drive_id,
+                "retainsourcefolders", "duplicatefolders", "merge", "duplicatefiles", "skip"]
+
+    @staticmethod
+    def copy_rest_of_folder_to_shared_drive(email: str, folder_id: str, drive_id: str) -> List[str]:
+        # copyDriveFile, after the move: what is still in the folder and someone else owns (`copysubfilesownedby others`) is
+        # copied into the same folders in the drive (`duplicatefolders merge`); a file already there by name is skipped, so
+        # a second run copies nothing twice. The originals stay where they are. `excludetrashed`: the copy lists a folder's
+        # children trashed or not and would bring a trashed file back live. `suppressnotselectedmessages`: each of the
+        # person's own files left behind would otherwise be a NOT_SELECTED warning, exit 51, on a copy that did its work.
+        _folder_and_drive(email, folder_id, drive_id)
+        return ["user", email, "copy", "drivefile", f"id:{folder_id}", "teamdriveparentid", drive_id, "recursive",
+                "copysubfilesownedby", "others", "duplicatefolders", "merge", "duplicatefiles", "skip", "excludetrashed",
+                "suppressnotselectedmessages"]
 
     @staticmethod
     def all_users_print_forward() -> List[str]:

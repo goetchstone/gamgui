@@ -203,6 +203,11 @@ IDENTIFIERS = (
                                            "role": st.sampled_from(commands.DRIVE_ROLES)}),
     Spec("remove_drive_member", (), (), {"drive_id": _DRIVE_ID, "permission_id": _DRIVE_ID}),
     Spec("print_shared_drive_files", (), (), {"email": _SEARCH_ADDRESS, "drive_id": _DRIVE_ID}),
+    # A folder into a shared drive (roadmap 4.8): the folder and the drive by Drive's IDs.
+    Spec("print_folder_files", (), (), {"email": _SEARCH_ADDRESS, "folder_id": _DRIVE_ID}),
+    Spec("move_folder_to_shared_drive", (), (), {"email": _SEARCH_ADDRESS, "folder_id": _DRIVE_ID, "drive_id": _DRIVE_ID}),
+    Spec("copy_rest_of_folder_to_shared_drive", (), (), {"email": _SEARCH_ADDRESS, "folder_id": _DRIVE_ID,
+                                                         "drive_id": _DRIVE_ID}),
 )
 
 

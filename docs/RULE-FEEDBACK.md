@@ -30,6 +30,19 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 
 ---
 
+## 2026-11-25 — GAM's exit code is the last warning's, and the mock gave the first
+- **What happened:** roadmap 4.8's folder count took exit 60 as "an empty folder". In GAM 7.52.05, printFileList gives a folder
+  it can't find a warning (50) and then, having printed no row, sets 60 over it (setSysExitRC is a plain assignment). So a
+  mistyped folder ID would have previewed as "holds no files". The mock exited 50 for the not-found case, so the test of the
+  failed read passed. Adversarial review with GAM's source caught it before the commit, along with a copy that brought trashed
+  files back live and a mock copy that hid GAM's NOT_SELECTED exit 51.
+- **Invariant in force:** 10, and "the mock lies".
+- **Why it didn't hold:** known mode, wrong layer. The mock's exits are written from one warning's code, not from the order
+  GAM sets them, and nothing checks that a read's "no row" exit can't also follow a failure.
+- **Would a rule have caught it?** Only if enforced differently: a read whose "none" is an exit code must have a row that proves
+  it read the thing (here `showparent`), or must tell "none" from "failed" another way.
+- **Enforcement home if changed:** skill (`pre-commit`, for a read that takes exit 60 as an answer).
+
 ## 2026-11-25 — A panel loaded inside a form swapped its answer into the form's target
 - **What happened:** the orphan check (roadmap 4.7) loads on its own (`hx-trigger="load"`) inside Close Out's picks form and
   the delete's confirm form. htmx inherits `hx-target`, so its warning landed in Close Out's confirm box, and in the delete

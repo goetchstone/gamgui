@@ -111,9 +111,11 @@ def test_only_a_reviewed_read_may_use_the_any_exit_door():
     # each step names (60 is GAM's none; 56/73 keep the rows and name who wasn't read); any other raises.
     # shared_drives, drive_permissions: `print shareddrives` and `print shareddriveacls` (READS builders), whose 60 is GAM's
     # none; any other non-zero exit raises (4.7).
+    # folder_count: `print filelist select id:<folder> showparent` (a READS builder), whose 60 is a folder GAM didn't read,
+    # said as unknown; any other non-zero exit raises (4.8).
     assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy", "script_projects", "_courses_read",
                        "owned_calendars", "_mail_read", "signature_exact", "audit_read", "shared_drives",
-                       "drive_permissions"}
+                       "drive_permissions", "folder_count"}
 
 
 # --- MessageCopies ------------------------------------------------------------------------------------------------------

@@ -65,6 +65,7 @@ SCREENS = {
                                    "_audit_run.html", "_suspended_licenses.html", "_suspended_licenses_run.html"],
     "Change a group's settings": ["groups.html", "_group_panel.html", "_group_settings.html", "_group_settings_confirm.html"],
     "Change a shared drive's members": ["groups.html", "drives.html", "_drive_*.html"],
+    "Move a folder into a shared drive": ["builder.html", "_builder_*.html", "_sequence*.html", "_folder_move_note.html"],
     "Respond to an incident": ["_incident_nav.html", "_incident_logs.html", "_incident_reading.html"],
     "Make the incident's report": ["_incident_nav.html", "_incident_report.html", "_incident_report_list.html", "_incident_report_export.html"],
     "See what was left on the account": ["incident.html", "_incident_nav.html", "_incident_check.html"],
@@ -141,6 +142,9 @@ def test_every_bold_label_in_the_guide_is_on_its_screen():
         words = _screen_words(SCREENS[section])
         if section == "Audit external sharing":
             words |= _catalog_words()   # "Users → Drive → Print drivefileacls" is the catalog's path
+        if "builder.html" in SCREENS[section]:   # the Builder shows each curated command by its name
+            from gamgui.core.catalog import load_catalog   # noqa: PLC0415
+            words |= {c.name for c in load_catalog().commands if c.buildable}
         for span in re.findall(r"\*\*(.+?)\*\*", text, flags=re.S):
             span = " ".join(span.split())
             if span.endswith((":", ".")) or "](" in span or span in NOT_A_LABEL:

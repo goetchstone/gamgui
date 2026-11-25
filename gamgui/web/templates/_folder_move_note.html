@@ -1,0 +1,24 @@
+{#- A folder of mixed ownership into a shared drive (roadmap 4.8), on the Builder's preview and a sequence's: what the folder
+    holds by owner, read now, and what GAM can't take back. A read that failed says so: never an empty folder, never a
+    Manager (invariant 10). `folder_moves` comes from builder._folder_moves. -#}
+{% for f in folder_moves | default([]) %}
+<div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 space-y-1">
+  {% if f.count is none %}
+  <p>⚠ Couldn't count what folder {{ f.folder }} holds. {{ f.count_why }} What would move and what would be copied is unknown.</p>
+  {% elif f.count.files == 0 %}
+  <p>Folder {{ f.folder }} holds no files{% if f.count.folders %}, only {{ f.count.folders }} folder{{ "s" if f.count.folders != 1 }}{% endif %}.</p>
+  {% else %}
+  <p>Folder {{ f.folder }} holds {{ f.count.files }} file{{ "s" if f.count.files != 1 }}{% if f.count.folders %} in {{ f.count.folders }} folder{{ "s" if f.count.folders != 1 }} below it{% endif %}:</p>
+  <ul class="list-disc pl-5">
+    {% if f.count.mine %}<li><strong>{{ f.count.mine }}</strong> {{ f.email }} owns: the move takes {{ "them" if f.count.mine != 1 else "it" }} into the drive.</li>{% endif %}
+    {% if f.count.domain %}<li><strong>{{ f.count.domain }}</strong> someone else in the domain owns: Google moves {{ "each" if f.count.domain != 1 else "it" }} only if {{ f.email }} may and the owner is a member of the drive. A file it won't move stays where it is, and step 2 copies it.</li>{% endif %}
+    {% if f.count.outside %}<li><strong>{{ f.count.outside }}</strong> owned outside {{ f.domains | join(", ") }}, which Google never moves into a shared drive: step 2 copies {{ "them" if f.count.outside != 1 else "it" }}, and {{ "the originals stay with their owners" if f.count.outside != 1 else "the original stays with its owner" }}
+      ({% for n in f.count.outside_names %}{{ n }}{{ ", " if not loop.last }}{% endfor %}{% if f.count.outside > f.count.outside_names | length %} and {{ f.count.outside - f.count.outside_names | length }} more{% endif %}).</li>{% endif %}
+  </ul>
+  {% endif %}
+  {% if f.manager is none %}
+  <p>⚠ Couldn't check that {{ f.email }} is a Manager of the drive. {{ f.manager_why }} GAM refuses to move or copy into it unless they are, in their own name.</p>
+  {% endif %}
+  <p>Files in the trash aren't counted or copied, and the move reports each as not moved, so a folder holding one reads as failed. GAM has no dry run for either step, and a run that stops partway can't be undone: what moved stays moved. The original folders stay in {{ f.email }}'s Drive.</p>
+</div>
+{% endfor %}

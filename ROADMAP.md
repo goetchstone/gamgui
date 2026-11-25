@@ -48,6 +48,8 @@ Everything below is planned for both apps.
   Builder recipe — a read that counts what will move (internal) and what must be copied (external),
   then `move drivefile … retainsourcefolders duplicatefolders merge` and `copy drivefile … recursive
   copysubfilesownedby others duplicatefolders merge` (GAM has no dry run for either).
+  **Built** (members, the orphan check, a drive's file list and the folder move, as two Builder steps whose preview
+  counts the folder's files by owner; 2026-11-25). What's owed is a live run on a throwaway drive and folder.
 - **Google Classroom and SIS rostering, reads and planning only**, for schools on Workspace for
   Education: find a class by name or teacher, see a person's classes, warn at offboarding about classes
   they own, and compare a student information system's export (OneRoster first, then others) with
@@ -70,8 +72,8 @@ Everything below is planned for both apps.
 
 ## Later
 
-- **Grow the buildable command set — specifically the writes.** Of 1,080 catalog entries, 543 can
-  run today: 28 hand-curated commands (the only ones that can *change* anything) plus 515
+- **Grow the buildable command set — specifically the writes.** Of 1,082 catalog entries, 545 can
+  run today: 30 hand-curated commands (the only ones that can *change* anything) plus 515
   grammar-derived commands auto-promoted because they are confidently read-only. The other 537 —
   every write, and anything whose risk could not be inferred with confidence — are inert, syntax
   display only. That asymmetry is the safety boundary: a command can become runnable automatically

@@ -1,0 +1,8 @@
+1FOLDERmixed	alice@example.com	{"id": "1MIXold", "mimeType": "application/vnd.google-apps.document", "name": "Old notes", "owners": [{"displayName": "Bob Baker", "emailAddress": "bob@example.com"}], "trashed": true}
+1FOLDERmixed	alice@example.com	{"id": "1MIXplan", "mimeType": "application/vnd.google-apps.document", "name": "Plan", "owners": [{"displayName": "Alice Anders", "emailAddress": "alice@example.com"}]}
+1FOLDERmixed	alice@example.com	{"id": "1MIXnotes", "mimeType": "application/vnd.google-apps.document", "name": "Notes", "owners": [{"displayName": "Bob Baker", "emailAddress": "bob@example.com"}]}
+1FOLDERmixed	alice@example.com	{"id": "1MIXquote", "mimeType": "application/pdf", "name": "Quote.pdf", "owners": [{"displayName": "Pat Partner", "emailAddress": "pat@partner.org"}]}
+1FOLDERmixed	alice@example.com	{"id": "1MIXdrafts", "mimeType": "application/vnd.google-apps.folder", "name": "Drafts", "owners": [{"displayName": "Alice Anders", "emailAddress": "alice@example.com"}]}
+1FOLDERmixed	alice@example.com	{"id": "1MIXdraft1", "mimeType": "application/vnd.google-apps.document", "name": "Draft 1", "owners": [{"displayName": "Alice Anders", "emailAddress": "alice@example.com"}]}
+1FOLDERours	alice@example.com	{"id": "1OURSbrief", "mimeType": "application/vnd.google-apps.document", "name": "Brief", "owners": [{"displayName": "Alice Anders", "emailAddress": "alice@example.com"}]}
+1FOLDERempty	alice@example.com	-
