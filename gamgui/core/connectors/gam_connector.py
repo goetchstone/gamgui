@@ -114,7 +114,7 @@ SWEEP_TOLERATED = (GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAM
 # ENTITY_DOES_NOT_EXIST_RC and SERVICE_NOT_APPLICABLE_RC: entityUnknownWarning, a warning in a per-account loop.
 _ONE_ACCOUNT_WARNING_RCS = (56, 73)
 PER_USER_RCS = (0, 50, 51, 60, 73)   # phishing.PER_USER_EXIT_CODES: read the lines; any other, the read says so
-NO_DRIVES_RC = 60   # NO_ENTITIES_FOUND_RC: `print shareddrives` wrote its titles and found none
+NO_ENTITIES_FOUND_RC = 60   # GAM's none: `print shareddrives` wrote its titles and found no drive
 
 
 class NoRowUnsaid(Incomplete):
@@ -708,7 +708,7 @@ class GAMConnector(Connector):
         is output without the `id` titles (invariant 10)."""
         argv = GAMCommands.print_shared_drives()
         res = await self.runner.run_any_exit(self.domain, argv)
-        if res.returncode not in (0, NO_DRIVES_RC):
+        if res.returncode not in (0, NO_ENTITIES_FOUND_RC):
             raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
         # The titles line on, as _rows_from_titles finds it (a notice GAM printed first isn't the header); formatjson's JSON
         # column is the record.
@@ -717,7 +717,7 @@ class GAMConnector(Connector):
         if start is None:
             raise Incomplete("GAM ended without listing the shared drives, so they can't be told.")
         drives = [d for d in (SharedDrive.from_record(r) for r in parse_records("\n".join(lines[start:]))) if d is not None]
-        if not drives and res.returncode != NO_DRIVES_RC:
+        if not drives and res.returncode != NO_ENTITIES_FOUND_RC:
             raise NoRowUnsaid("GAM listed no shared drive without saying there are none, so they can't be told.")
         return sorted(drives, key=lambda d: (d.name.lower(), d.id))
 
