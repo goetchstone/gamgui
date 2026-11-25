@@ -1,0 +1,14 @@
+{#- One shared drive member change, previewed (roadmap 4.7). The form posts only the token, so nothing in it names what runs;
+    the change reads the members again first and runs only if it still fits. -#}
+<div class="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm">
+  <p tabindex="-1" data-focus class="font-medium text-brand-black">{{ change.question }}</p>
+  <p class="mt-1 font-mono text-xs text-brand-grayink">gam {{ change.argv | join(" ") }}</p>
+  <p class="mt-2 text-xs text-brand-blueink">{% if change.action == "add" %}Google sends no email about it. {% endif %}The members are read again first; if they changed since this preview, nothing is changed.</p>
+  <form class="mt-2 flex gap-2" hx-post="/drives/apply" hx-target="#drive-confirm" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <input type="hidden" name="preview" value="{{ token }}" />
+    <input type="hidden" name="confirmed" value="1" />
+    <button type="submit" class="inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">{% if change.action == "remove" %}Remove{% elif change.action == "add" %}Add{% else %}Change{% endif %}</button>
+    <button type="button" data-action="clear" data-clear="drive-confirm"
+            class="inline-flex items-center rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors">Cancel</button>
+  </form>
+</div>

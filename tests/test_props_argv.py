@@ -93,6 +93,7 @@ FREE_TEXT = (
 )
 
 _SEARCH_ADDRESS = st.sampled_from(["carol@example.com", "O'Neil.a-b_c@Sub.Example-1.com"])
+_DRIVE_ID = st.from_regex(r"[A-Za-z0-9_-]{1,40}", fullmatch=True)   # a shared drive's or a permission's ID, as Drive makes them
 _DEVICE_USER = st.sampled_from(["devices/0vmcarol01/deviceUsers/u1", "devices/a-b_C/deviceUsers/D-1_e"])
 _PRODUCT_ID = st.sampled_from(["Google-Apps", "Google-Vault", "101031", "nv-product"])
 _SKU_ID = st.sampled_from(["1010020028", "Google-Vault-Former-Employee", "a:b", "Google-Apps-Unlimited"])
@@ -194,6 +195,13 @@ IDENTIFIERS = (
     Spec("delete_admin_role", (), (), {"assignment_id": st.from_regex(r"[0-9]{1,20}", fullmatch=True)}),
     Spec("set_archived", ("email",)),
     Spec("move_alias", (), (), {"alias": _SEARCH_ADDRESS, "to": _SEARCH_ADDRESS}),
+    # A shared drive's members (roadmap 4.7): the drive and a member by Drive's IDs, a role and a kind from their lists.
+    Spec("print_drive_members", (), (), {"drive_id": _DRIVE_ID}),
+    Spec("add_drive_member", (), (), {"drive_id": _DRIVE_ID, "kind": st.sampled_from(commands.DRIVE_MEMBER_TYPES),
+                                      "email": _SEARCH_ADDRESS, "role": st.sampled_from(commands.DRIVE_ROLES)}),
+    Spec("set_drive_member_role", (), (), {"drive_id": _DRIVE_ID, "permission_id": _DRIVE_ID,
+                                           "role": st.sampled_from(commands.DRIVE_ROLES)}),
+    Spec("remove_drive_member", (), (), {"drive_id": _DRIVE_ID, "permission_id": _DRIVE_ID}),
 )
 
 

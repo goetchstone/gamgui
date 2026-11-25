@@ -54,6 +54,9 @@ from ..incident.logs import CAP as LOG_CAP
 from ..incident.logs import Row as LogRow
 from ..incident.logs import rows_from as log_rows_from
 from ..phones import phones_from
+from ..shared_drives import Change as DriveChange
+from ..shared_drives import Member as DriveMember
+from ..shared_drives import SharedDrive, members_from
 from ..person_reads import (
     DEVICE_WRITE_NOTE,
     ChromeProfile,
@@ -111,6 +114,7 @@ SWEEP_TOLERATED = (GAMErrorKind.NOT_FOUND, GAMErrorKind.SERVICE_NOT_ENABLED, GAM
 # ENTITY_DOES_NOT_EXIST_RC and SERVICE_NOT_APPLICABLE_RC: entityUnknownWarning, a warning in a per-account loop.
 _ONE_ACCOUNT_WARNING_RCS = (56, 73)
 PER_USER_RCS = (0, 50, 51, 60, 73)   # phishing.PER_USER_EXIT_CODES: read the lines; any other, the read says so
+NO_DRIVES_RC = 60   # NO_ENTITIES_FOUND_RC: `print shareddrives` wrote its titles and found none
 
 
 class NoRowUnsaid(Incomplete):
@@ -236,6 +240,17 @@ def device_user_done(name: str) -> Callable[[str], str]:
             return "GAM exited without saying it did this, so it may not have happened. Check the account again."
         if "in progress" in out:
             return "Google took this but hasn't finished it. Check the account again before counting on it."
+        return ""
+    return said
+
+
+def drive_acl_done(drive_id: str) -> Callable[[str], str]:
+    """A shared drive member change GAM exited 0 for, and whether it made it: GAM says "Drive File/Folder ID: <drive>,
+    Permission ID: <id>, <done>" for each (entityActionPerformed), and nothing when it skipped the admin for a token Google
+    refused, which is still exit 0."""
+    def said(out: str) -> str:
+        if f"Drive File/Folder ID: {drive_id}, Permission ID: " not in out:
+            return "GAM exited without saying it did this, so it may not have happened. Show the drive's members again."
         return ""
     return said
 
@@ -685,6 +700,39 @@ class GAMConnector(Connector):
         argv = GAMCommands.update_group_settings(group, changes)
         return await self._run_write("update_group_settings", group, argv, RiskLevel.LOW,
                                      about={"settings": ", ".join(f"{k} {v}" for k, v in changes.items())})
+
+    # --- shared drives (roadmap 4.7) ----------------------------------------------------
+    async def shared_drives(self) -> List[SharedDrive]:
+        """Every shared drive, as the admin. Exit 60 with the titles is GAM's own "none". Exit 0 with no row isn't: GAM writes
+        the titles alone when Google refuses its token without a word (printShowSharedDrives), so that is Incomplete, and so
+        is output without the `id` titles (invariant 10)."""
+        argv = GAMCommands.print_shared_drives()
+        res = await self.runner.run_any_exit(self.domain, argv)
+        if res.returncode not in (0, NO_DRIVES_RC):
+            raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=res.stdout)
+        # The titles line on, as _rows_from_titles finds it (a notice GAM printed first isn't the header); formatjson's JSON
+        # column is the record.
+        lines = (res.stdout or "").split("\n")
+        start = next((i for i, ln in enumerate(lines) if "id" in (c.strip() for c in ln.split(","))), None)
+        if start is None:
+            raise Incomplete("GAM ended without listing the shared drives, so they can't be told.")
+        drives = [d for d in (SharedDrive.from_record(r) for r in parse_records("\n".join(lines[start:]))) if d is not None]
+        if not drives and res.returncode != NO_DRIVES_RC:
+            raise NoRowUnsaid("GAM listed no shared drive without saying there are none, so they can't be told.")
+        return sorted(drives, key=lambda d: (d.name.lower(), d.id))
+
+    async def drive_members(self, drive_id: str) -> List[DriveMember]:
+        """One shared drive's members, read now. A run that didn't print that drive's one row is unknown (``shared_drives.Unread``)."""
+        out = await self.runner.run_authenticated(self.domain, GAMCommands.print_drive_members(drive_id))
+        return members_from(parse_records(out), drive_id)
+
+    async def change_drive_member(self, change: DriveChange) -> ChangeResult:
+        """One member added, given a new role or removed, as its preview held it. GAM exits 0 without a word when Google refuses
+        its token (createDriveFileACL and kin skip the admin), so a run that doesn't say it acted on the drive has failed."""
+        action = {"add": "add_drive_member", "role": "set_drive_member_role", "remove": "remove_drive_member"}[change.action]
+        return await self._run_write(action, change.who, change.argv, RiskLevel.LOW,
+                                     about={"drive": f"{change.drive_name} ({change.drive_id})", "role": change.new_label},
+                                     verify=drive_acl_done(change.drive_id))
 
     # --- directory profile (title = role, department) -----------------------------------
     async def set_organization(self, email: str, title: str = "", department: str = "") -> ChangeResult:

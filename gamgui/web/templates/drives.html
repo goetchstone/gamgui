@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{#- Shared drives (roadmap 4.7): find a drive, see its members, add, re-role or remove one, each change previewed. -#}
+{% block title %}Shared drives — GamGUI Console{% endblock %}
+{% block container_class %}max-w-none{% endblock %}
+{% block content %}
+{% if not connected %}
+  <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-6 shadow-sm">
+    <p class="eyebrow text-brand-blue">Not connected</p>
+    <h1 class="mt-2 font-serif text-2xl text-brand-black">Connect a domain first</h1>
+    <a href="/setup" class="mt-4 inline-flex items-center rounded-lg bg-brand-blue px-3.5 py-2 text-sm font-medium text-brand-white hover:bg-brand-blueink transition-colors">Run setup</a>
+  </div>
+{% else %}
+<div class="space-y-4">
+  <div>
+    <a href="/groups" class="text-sm text-brand-blueink hover:text-brand-black">← Groups</a>
+    <p class="eyebrow text-brand-blue mt-2">Membership</p>
+    <h1 class="font-serif text-2xl text-brand-black tracking-tight">Shared drives</h1>
+    <p class="text-brand-blueink mt-1 text-sm">Find a shared drive, then add a person or group with a role, change a member's role, or remove one. Each change is previewed, and a drive is never left without a manager.</p>
+  </div>
+
+  <div class="grid items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+    <div class="rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <label for="drive-q" class="eyebrow text-brand-grayink">Find a shared drive</label>
+      <input id="drive-q" type="search" name="q" autocomplete="off" placeholder="Name or ID…"
+             class="mt-2 w-full rounded-lg border border-brand-field bg-brand-white px-3 py-2 text-sm text-ink placeholder:text-brand-grayink focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+             hx-get="/drives/search" hx-trigger="input changed delay:250ms, search" hx-target="#drive-results" hx-swap="innerHTML" />
+      <div id="drive-results" class="mt-2">{% include "_drive_results.html" %}</div>
+    </div>
+
+    <section id="drive-panel" aria-label="Shared drive members" class="min-w-0 rounded-2xl border border-brand-gray/40 bg-brand-white p-5 shadow-sm">
+      <p class="text-sm text-brand-grayink">Pick a shared drive to see its members and change them.</p>
+    </section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

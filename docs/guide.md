@@ -382,6 +382,19 @@ says which. Google refuses some combinations itself, and then the screen gives G
 A setting Google gives a value this screen doesn't offer is shown as Google's and left alone. GAM doesn't read or change
 the settings of an abuse@ or postmaster@ group, so for those use the Admin console. Not yet verified live.
 
+## Change a shared drive's members
+
+On **Groups**, follow **Shared drives**, find the drive by name and pick it. Its members are read fresh, managers first.
+To add someone, type their full address, choose whether it's a person or a group and a role, and click
+**Preview**. To change a member's role, pick the new one beside them and click **Change**; to take someone off, click
+**Remove**. Each shows the one change and the GAM command before anything runs. **Add**, **Change** or **Remove** reads
+the members again and makes the change only if they're as the preview found them; Google sends no email about an add.
+
+The roles are Google's: Manager, Content manager, Contributor, Commenter and Viewer. A drive's last manager can't be
+removed or given another role here, since a drive with none can only be looked after from the Admin console: add another
+manager first. A drive limited to your domain's users refuses an outside address, in Google's words. If the members can't be
+read, the screen says so rather than showing none. Not yet verified live.
+
 ## Respond to an incident
 1. Pull the logs and click **Read the logs** on **Investigate**. Findings are there. A sign-in Google flagged that was really the person: **That was them** asks how you know, and it stops making a suspect. **Marked as theirs** lists each, with an **Undo**.
 2. Open **Respond**. **Where each account stands** says who the attacker had and whether each is locked. **Still to do** lists what's left, each with its button: Secure opens Check Account, Do It Here opens it with only that fix picked, **Show the events** narrows the logs to the events the item is about, and **Pull again** reads the logs that stopped short for just those accounts.

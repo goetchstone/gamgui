@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from gamgui.core.gam.commands import (CALENDAR_ACL_ROLES, COURSE_STATES, EXPECTED_GAM_VERSION, GROUP_ROLES, GROUP_SETTINGS, GAMCommands,
+from gamgui.core.gam.commands import (CALENDAR_ACL_ROLES, COURSE_STATES, DRIVE_MEMBER_TYPES, DRIVE_ROLES, EXPECTED_GAM_VERSION, GROUP_ROLES, GROUP_SETTINGS, GAMCommands,
                                      ORG_TEXT_FIELDS, Organization,
                                       MessageId, Phone)
 
@@ -42,7 +42,7 @@ SEARCH_ADDRESS = "person@example.com"
 DEVICE_USER = "devices/D1/deviceUsers/U1"
 VALIDATED_VALUES = {DEVICE_USER, "c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled",
                     "2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "198.51.100.23", "1000", "DEVICE_REGISTER_UNREGISTER_EVENT",
-                    "500000000002"}
+                    "500000000002", "0AFINANCEuk9PVA", "id:07001"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -106,6 +106,17 @@ ENUM_ARGS = {
     ("move_alias", "alias"): (SEARCH_ADDRESS,),              # one address each: a list would move several
     ("move_alias", "to"): (SEARCH_ADDRESS,),
     ("update_group_settings", "changes"): tuple({k: v} for k, (_, values) in GROUP_SETTINGS.items() for v in values),
+    # A shared drive's members (roadmap 4.7): the drive and a member by the IDs Drive gives, each role and kind offered.
+    ("print_drive_members", "drive_id"): ("0AFINANCEuk9PVA",),
+    ("add_drive_member", "drive_id"): ("0AFINANCEuk9PVA",),
+    ("add_drive_member", "kind"): DRIVE_MEMBER_TYPES,
+    ("add_drive_member", "email"): (SEARCH_ADDRESS,),
+    ("add_drive_member", "role"): DRIVE_ROLES,
+    ("set_drive_member_role", "drive_id"): ("0AFINANCEuk9PVA",),
+    ("set_drive_member_role", "permission_id"): ("07001",),
+    ("set_drive_member_role", "role"): DRIVE_ROLES,
+    ("remove_drive_member", "drive_id"): ("0AFINANCEuk9PVA",),
+    ("remove_drive_member", "permission_id"): ("07001",),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
