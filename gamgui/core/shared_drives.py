@@ -311,7 +311,7 @@ def count_folder(records: Sequence[Dict[str, Any]], email: str, domains: Sequenc
                              "none), so what would move can't be told.")
         if owner == me:
             mine += 1
-        elif is_internal(owner, domains):
+        elif is_internal(owner, domains) or any(owner.endswith("." + d.lower()) for d in domains):   # or a subdomain
             domain += 1
         else:
             outside += 1

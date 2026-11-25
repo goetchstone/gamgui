@@ -220,14 +220,14 @@ def _curated() -> List[CatalogCommand]:
              "gam user <email> move drivefile id:<FolderID> teamdriveparentid <SharedDriveID> retainsourcefolders "
              "duplicatefolders merge duplicatefiles skip",
              "Step 1 of 2. Moves a folder's files into a shared drive, making its folders again there. Google won't move a file "
-             "owned outside the domain, so those stay where they are, and the original folders stay to hold them: queue step 2 "
+             "owned outside the domain, or one whose owner isn't a member of the drive, so those stay where they are, and the original folders stay to hold them: queue step 2 "
              "after this one to copy them. The person must own the folder and be a Manager of the drive."),
         _cmd(COPY_FOLDER_REST, "Shared Drives", "", "Copy what didn't move into a shared drive", RiskLevel.LOW,
              _FOLDER_SLOTS,
              lambda s: GAMCommands.copy_rest_of_folder_to_shared_drive(s["email"], s.get("folder_id", "").strip(),
                                                                        s.get("drive_id", "").strip()),
              "gam user <email> copy drivefile id:<FolderID> teamdriveparentid <SharedDriveID> recursive "
-             "copysubfilesownedby others duplicatefolders merge duplicatefiles skip",
+             "copysubfilesownedby others duplicatefolders merge duplicatefiles skip excludetrashed suppressnotselectedmessages",
              "Step 2 of 2, after the move. Copies the files still in the folder that someone else owns into the same folders "
              "in the drive. The originals stay with their owners. A file already there by name is skipped, so running it "
              "again copies nothing twice."),

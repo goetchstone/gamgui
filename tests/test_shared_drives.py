@@ -471,10 +471,10 @@ def test_the_preview_reads_the_person_folder_and_drive_off_the_argv_it_holds():
 
 
 def test_the_count_splits_files_by_owner_and_counts_folders_apart():
-    records = [_item("Top", "alice@example.com", sd.FOLDER), _item("Mine", "Alice@Example.com"), _item("Theirs", "bob@example.com"), _item("Sub", "alice@example.com",
+    records = [_item("Top", "alice@example.com", sd.FOLDER), _item("Mine", "Alice@Example.com"), _item("Sub", "x@eu.example.com"), _item("Theirs", "bob@example.com"), _item("Sub", "alice@example.com",
                sd.FOLDER)] + [_item(f"Out{i}", "pat@partner.org") for i in range(7)]
     count = sd.count_folder(records, "alice@example.com", ("example.com",), "1Top")
-    assert (count.mine, count.domain, count.outside, count.folders, count.files) == (1, 1, 7, 1, 9)   # the folder isn't counted
+    assert (count.mine, count.domain, count.outside, count.folders, count.files) == (1, 2, 7, 1, 10)   # the folder isn't counted
     assert count.outside_names == ("Out0", "Out1", "Out2", "Out3", "Out4")    # bounded; the rest are counted
     assert sd.count_folder(records[:1], "alice@example.com", ("example.com",), "1Top").files == 0   # read, and empty
     # A file's ID names that one file, which is counted.
