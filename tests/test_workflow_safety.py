@@ -166,7 +166,7 @@ def test_every_job_has_a_timeout():
 # The checks branch protection requires on a pull request into main (the "main: PR gate" ruleset).
 # A required check passes on "skipped" and never passes if it never reports, so each must come from a
 # job that always runs on a pull request: no job-level if:, no continue-on-error, no paths filter.
-REQUIRED = {"ci.yml": {"ci-ok"}, "codeql.yml": {"analyze"}, "dependency-review.yml": {"review"}}
+REQUIRED = {"ci.yml": {"ci-ok"}, "codeql.yml": {"analyze"}, "dependency-review.yml": {"review"}, "pr-rules.yml": {"rules"}}
 
 
 def test_ci_ok_needs_every_blocking_job():

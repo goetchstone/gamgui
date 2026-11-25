@@ -1,3 +1,6 @@
+<!-- Title: a type, then the change in words, e.g. `feat: rename a user (roadmap 5.1)`. A `fix:` adds a
+     docs/failure-log/ entry. Both are checked (PR rules); the rest of the rules are in CONTRIBUTING.md. -->
+
 ## What and why
 
 <!-- The change, and the problem it solves. Link the issue if there is one. -->

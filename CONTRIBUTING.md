@@ -17,9 +17,44 @@ Taking part here is under the [code of conduct](CODE_OF_CONDUCT.md). Questions g
 [Discussions](https://github.com/goetchstone/gamgui/discussions) — [SUPPORT.md](SUPPORT.md) says what
 goes where — and issues use the forms on **New issue**: a bug, a feature request, or *I tried it on a
 real domain* when you've run something against a real domain (two minutes; Classroom reports are the most wanted). A pull request fills in the
-template's checklist, and branch protection requires CI to pass before it merges: `ci-ok` (tests on
-macOS and Linux, lint, accessibility, the GAM compatibility check, the app build, fuzzing), CodeQL, and
-dependency review.
+template's checklist, and the `main` rulesets require CI to pass before it merges: `ci-ok` (tests on
+macOS and Linux, lint, accessibility, the GAM compatibility check, the app build, fuzzing), CodeQL,
+dependency review and the PR rules (below).
+
+## Rules, and what enforces each
+
+Each rule below has a home that holds it: a test or CI job fails, the `main` rulesets refuse the merge, or review
+catches it. A rule enforced only by review says so. [SwiftGamGui](https://github.com/goetchstone/SwiftGamGui), the
+same app in Swift, keeps the same rules where they apply to it, with its own homes.
+
+| Rule | Enforced by |
+| --- | --- |
+| Every change reaches `main` through a pull request; no force-push, no deleting `main` | rulesets `main: PR gate` and `main: history` |
+| A PR merges only with CI green: `ci-ok`, CodeQL (and no high alert), Dependency review, PR rules | the `main: PR gate` ruleset's required checks |
+| The PR title has a type (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`…): the squash merge makes it the commit | `PR rules` (`scripts/pr_rules.py`) |
+| A `fix:` adds an entry to [docs/failure-log/](docs/failure-log/) (symptom, cause, why not caught, fix, prevention) | `PR rules` |
+| Every `gam` call is an argv list from a `GAMCommands` builder; an operator's value is exactly one element | `tests/test_props_argv.py`, `tests/test_command_contract.py` |
+| Every write goes preview → `guard.enforce()` in its route → `_run_write` (audited); none runs on a bare POST | `tests/test_write_routes_guarded.py` |
+| Only a confidently read-only command becomes runnable on its own; a write is curated by hand | `tests/test_builder.py` (the promotion boundary) |
+| The mock `gam` fails the way GAM does, and every argv the suite sends is a shape GAM's grammar takes | `gam-compat` (the end-of-session argv sweep, on the pinned GAM) |
+| Credentials live in the Keychain only, and the per-call copy is wiped | `tests/test_vault.py`, `tests/test_ephemeral.py`; secret scanning with push protection |
+| The loopback server refuses another origin; scripts are same-origin files, never inline | `tests/test_server_security.py` |
+| No `\| tojson` inside a double-quoted HTML attribute | `tests/test_template_safety.py` |
+| A read that failed or stopped short is never an answer ("none", "not found") | review, and a test on the failing exit for any read that drives a decision |
+| A screen is usable by keyboard and screen reader, and text reads at WCAG AA | `a11y` (axe-core ratchet), `tests/test_contrast.py` |
+| Coverage stays at or above the floor in `pyproject.toml` | the coverage leg of `test` |
+| Dependencies are hash-locked, and `pyproject.toml` and the locks agree | `tests/test_locks.py`, Dependency review |
+| Docs follow code: the guide maps each screen, and the catalog counts are true | `tests/test_guide.py`, `tests/test_polish.py` |
+| A write isn't called working until it has run on a real domain | the README's live verification table, and review |
+| Nothing private in an issue or PR: no credentials, real domains or real people | the forms' required checkbox, secret scanning, review |
+
+The invariants behind these, and the incidents that made them, are in [CLAUDE.md](CLAUDE.md). A rule that strains is
+recorded in [docs/RULE-FEEDBACK.md](docs/RULE-FEEDBACK.md), and changed by a PR of its own.
+
+**A good first contribution:** run something on a real domain and send the [I tried it
+form](https://github.com/goetchstone/gamgui/issues/new?template=live_verification.yml) (it moves the README's live
+table), an issue labelled [good first issue](https://github.com/goetchstone/gamgui/labels/good%20first%20issue), a
+gap in the [user guide](docs/guide.md), or an accessibility fix (`make a11y`).
 
 ## Quick start
 
