@@ -90,7 +90,7 @@ async def orphans(request: Request, email: str = "") -> HTMLResponse:
     email = email.strip()
     if not is_one_address(email):
         return error_partial(request, "Pick a person first.")
-    ctx = {"email": email, "found": None, "why": ""}
+    ctx: dict = {"email": email, "found": None, "why": ""}
     try:   # the drive list and every drive's permissions read now; the directory (suspended included) fresh within its TTL
         drives, rows, users = await asyncio.gather(conn.shared_drives(), conn.drive_permissions(), st.users())
     except Exception as exc:  # noqa: BLE001 — unknown, never "manages none alone"

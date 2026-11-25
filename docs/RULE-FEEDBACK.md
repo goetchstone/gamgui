@@ -34,7 +34,8 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **What happened:** the orphan check (roadmap 4.7) loads on its own (`hx-trigger="load"`) inside Close Out's picks form and
   the delete's confirm form. htmx inherits `hx-target`, so its warning landed in Close Out's confirm box, and in the delete
   form it would have replaced the form itself. Every offline test passed: TestClient renders HTML, it doesn't run htmx. Seen
-  in the mock preview before commit.
+  in the mock preview before commit. Naming `hx-target` and `hx-disabled-elt="this"` on it then left `htmx-request` on the
+  panel, which only CI's a11y run (real htmx in headless Chrome) caught; the panel moved outside the form.
 - **Invariant in force:** none numbered. The existing tripwire held `hx-disabled-elt` inheritance only.
 - **Why it didn't hold:** not a rules problem so much as a missing tripwire for a known htmx behaviour.
 - **Would a rule have caught it?** A tripwire does: `test_an_htmx_control_inside_a_targeted_form_names_its_own_target`

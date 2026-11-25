@@ -3,6 +3,10 @@
   Account deleted. Recoverable for ~20 days (Admin Console, or <code>gam undelete user {{ email }}</code>).
 </div>
 {% elif confirming %}
+{#- Outside the form: inside it, the panel would inherit the form's hx-target and hx-disabled-elt (roadmap 4.7). -#}
+<div id="del-drives" class="mb-2" hx-get="/drives/orphans?email={{ email | urlencode }}" hx-trigger="load" hx-swap="innerHTML">
+  <p class="text-xs text-brand-grayink">Checking which shared drives {{ email }} manages alone…</p>
+</div>
 <form hx-post="/users/delete/apply" hx-target="#delete-zone" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" class="space-y-2">
   <input type="hidden" name="email" value="{{ email }}" />
   <input type="hidden" name="confirmed" value="1" />
@@ -22,9 +26,6 @@
     the Admin console first.
   </div>
   {% endif %}
-  <div id="del-drives" hx-target="this" hx-disabled-elt="this" hx-get="/drives/orphans?email={{ email | urlencode }}" hx-trigger="load" hx-swap="innerHTML">
-    <p class="text-xs text-brand-grayink">Checking which shared drives {{ email }} manages alone…</p>
-  </div>
   {% for line in unread %}
   <div id="del-unread-{{ loop.index }}" class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">⚠ {{ line }}</div>
   {% endfor %}

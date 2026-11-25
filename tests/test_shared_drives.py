@@ -392,9 +392,11 @@ def test_adding_a_manager_clears_the_warning(client, gam_state):  # noqa: F811
 def test_the_delete_and_close_out_run_the_check_and_its_link_opens_the_drive(client):  # noqa: F811
     confirm = client.post("/users/delete/confirm", data={"email": "alice@example.com"}).text
     assert 'hx-get="/drives/orphans?email=alice%40example.com"' in confirm
-    # Each sits inside a form whose hx-target it would inherit (htmx), which once put the warning in the wrong box: its own.
-    assert '<div id="del-drives" hx-target="this"' in confirm
+    # Each sits outside its form: inside, it inherited the form's hx-target (the warning landed in the wrong box) and
+    # hx-disabled-elt (left htmx-request on it, so the page never settled).
+    assert confirm.index('id="del-drives"') < confirm.index("<form")
     check = client.get("/lifecycle/closeout/check?user=carol@example.com").text
-    assert '<div id="closeout-drives" hx-target="this"' in check and "/drives/orphans?email=carol%40example.com" in check
+    assert check.index('id="closeout-drives"') < check.index('<form id="closeout-picks"')
+    assert "/drives/orphans?email=carol%40example.com" in check
     assert f'hx-get="/drives/members?id={FINANCE}"' in client.get(f"/drives?id={FINANCE}").text
     assert "Reading the drive's members" not in client.get("/drives?id=0A x").text   # not a drive ID: nothing opened
