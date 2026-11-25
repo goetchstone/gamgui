@@ -193,6 +193,13 @@ def _curated() -> List[CatalogCommand]:
              lambda s: GAMCommands.print_filelist(s["email"], s.get("query", "")),
              "gam user <email> print filelist query <QueryDriveFile>",
              "Search a user's Drive by a Drive query — by name, type, owner, sharing, or modified date…"),
+        _cmd("build.shared_drive_files", "Shared Drives", "", "List a shared drive's files", RiskLevel.READ_ONLY,
+             [_slot("email", "A member of the drive", U),
+              _slot("drive_id", "Shared drive ID", SlotKind.TEXT, placeholder="0AB…Uk9PVA (Shared drives lists each one's)")],
+             lambda s: GAMCommands.print_shared_drive_files(s["email"], s.get("drive_id", "").strip()),
+             "gam user <email> print filelist select shareddriveid <SharedDriveID> showownedby any",
+             "Every file in a shared drive, read as one of its members: who changed each last and when. "
+             "Someone who isn't a member gets Google's refusal."),
         _cmd("build.print_forwarding", "Users", _SUBCAT_FORWARDING, "List forwarding addresses", RiskLevel.READ_ONLY,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.print_forwarding_addresses(s["email"]),

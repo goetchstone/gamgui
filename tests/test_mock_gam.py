@@ -119,6 +119,7 @@ READS = {
     "print_users": [C.print_users(), C.print_users(query="isSuspended=false")],
     "print_cros": [C.print_cros("status:ACTIVE")],
     "print_filelist": [C.print_filelist("alice@example.com", "name contains 'x'")],
+    "print_shared_drive_files": [C.print_shared_drive_files("alice@example.com", "0AFINANCEuk9PVA")],
     "report_users": [C.report_users("2026-06-16", ["accounts:used_quota_in_mb"])],
     "print_tokens": [C.print_tokens()],
     "print_licenses": [C.print_licenses()],
