@@ -42,7 +42,7 @@ SEARCH_ADDRESS = "person@example.com"
 DEVICE_USER = "devices/D1/deviceUsers/U1"
 VALIDATED_VALUES = {DEVICE_USER, "c_x@group.calendar.google.com", "F1", "987654", "M1", "send.as@example.com", "in:drafts", "in:scheduled",
                     "2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "198.51.100.23", "1000", "DEVICE_REGISTER_UNREGISTER_EVENT",
-                    "500000000002", "0AFINANCEuk9PVA", "id:07001"}
+                    "500000000002", "0AFINANCEuk9PVA", "id:07001", "id:1FOLDERmixed"}
 
 # Arguments a builder validates or branches on: every accepted value is tried, and one that lands in
 # the argv is a keyword like any other. A new validated argument fails with ValueError until listed.
@@ -119,6 +119,10 @@ ENUM_ARGS = {
     ("remove_drive_member", "permission_id"): ("07001",),
     ("print_shared_drive_files", "email"): (SEARCH_ADDRESS,),
     ("print_shared_drive_files", "drive_id"): ("0AFINANCEuk9PVA",),
+    # A folder into a shared drive (roadmap 4.8): the folder by its ID (sent as `id:<ID>`) and the drive by Drive's.
+    **{(b, a): v for b in ("print_folder_files", "move_folder_to_shared_drive", "copy_rest_of_folder_to_shared_drive")
+       for a, v in (("email", (SEARCH_ADDRESS,)), ("folder_id", ("1FOLDERmixed",)), ("drive_id", ("0AFINANCEuk9PVA",)))
+       if not (b == "print_folder_files" and a == "drive_id")},
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}

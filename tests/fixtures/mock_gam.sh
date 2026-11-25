@@ -1407,6 +1407,49 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ] 
   exit 0
 fi
 
+# A folder of mixed ownership (roadmap 4.8): drive_folders.tsv holds, per folder, its owner and each item under it at any
+# depth (a `-` item: the folder is empty). Under GAM_MOCK_STATE, folder_moved.tsv names the files a move took into a drive
+# and folder_copied.tsv those a copy made there, so the count read after a move sees only what is left.
+folder_items() {  # <folder>: the item records under it, minus those a move took
+  TAB=$(printf '\t')
+  grep "^$1$TAB" "$GAM_MOCK_FIXTURES/drive_folders.tsv" | cut -f 3 | grep -v '^-$' | while IFS= read -r record; do
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/folder_moved.tsv" ] \
+      && grep -qx "$(json_text id "$record")" "$GAM_MOCK_STATE/folder_moved.tsv"; then continue; fi
+    printf '%s\n' "$record"
+  done
+}
+folder_owner() { grep "^$1$(printf '\t')" "$GAM_MOCK_FIXTURES/drive_folders.tsv" | head -n 1 | cut -f 2; }
+item_owner() { printf '%s' "$1" | sed -n 's/.*"owners": \[{[^]]*"emailAddress": "\([^"]*\)".*/\1/p'; }
+# `user <u> print filelist select id:<folder> showparent showownedby any excludetrashed fields id,name,mimeType,owners
+# formatjson`, read as the folder's owner: the folder's own row first (showparent), then each item under it not in the trash.
+# A folder Google doesn't show the person (not in the fixture, or someone else's) is notFound: entityActionFailedWarning sets
+# 50, then printFileList's "no row" sets 60 over it (setSysExitRC is last-wins), so the titles alone and exit 60 — the same
+# exit an empty folder would give without showparent. The titles with rows are approximate (Owner,id,name,JSON).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ] && [ "${5:-}" = "select" ] \
+  && [ "${6#id:}" != "${6:-}" ]; then
+  { [ $# -eq 13 ] && [ "$7" = showparent ] && [ "$8" = showownedby ] && [ "$9" = any ] && [ "${10}" = excludetrashed ] \
+    && [ "${11}" = fields ] && [ "${13}" = formatjson ]; } \
+    || not_modelled "print filelist select id:<folder> other than showparent showownedby any excludetrashed fields … formatjson"
+  [ "${12}" = "id,name,mimeType,owners" ] || not_modelled "print filelist select id:<folder> with fields ${12}"
+  user=$(lower "$2"); folder=${6#id:}
+  if ! known_user "$user"; then
+    printf 'User: %s, User Print Failed: invalid_grant: Invalid email or User ID\n' "$user" 1>&2
+    echo "Owner,id,name,owners.emailAddress"; exit 60
+  fi
+  if [ "$(folder_owner "$folder")" != "$user" ]; then
+    printf 'User: %s, Drive Folder/File: %s, Print Failed: Not Found\n' "$user" "$folder" 1>&2
+    echo "Owner,id,name,owners.emailAddress"; exit 60
+  fi
+  echo "Owner,id,name,JSON"
+  gam_row "$user" "$folder" "$folder" \
+    "{\"id\": \"$folder\", \"mimeType\": \"application/vnd.google-apps.folder\", \"name\": \"$folder\", \"owners\": [{\"emailAddress\": \"$user\"}]}"
+  folder_items "$folder" | while IFS= read -r record; do
+    case "$record" in *'"trashed": true'*) continue ;; esac
+    gam_row "$user" "$(json_text id "$record")" "$(json_text name "$record")" "$record"
+  done
+  exit 0
+fi
+
 # A shared drive's files (roadmap 4.7, the Builder's "List a shared drive's files"), read as a member: only `select
 # shareddriveid <id> showownedby any fields <the app's fields> formatjson`. Data: shared_drive_files.tsv (drive id, a file).
 # Someone not among the drive's members (shared_drive_acls.tsv, or GAM_MOCK_STATE's copy once a member change made one) gets
@@ -3361,6 +3404,97 @@ if [ "${1:-}" = "delete" ] && [ "${2:-}" = "drivefileacl" ]; then
   fi
   printf '  User: %s, Drive File/Folder ID: %s, Permission ID: %s, Deleted\n' "$(drives_admin)" "$sd_id" "$pid"
   exit 0
+fi
+
+# A folder into a shared drive (roadmap 4.8), moveDriveFile and copyDriveFile at the 7.52.05 tag, as the app sends them:
+#   user <u> move drivefile id:<folder> teamdriveparentid <drive> retainsourcefolders duplicatefolders merge duplicatefiles skip
+#   user <u> copy drivefile id:<folder> teamdriveparentid <drive> recursive copysubfilesownedby others duplicatefolders merge
+#        duplicatefiles skip excludetrashed suppressnotselectedmessages
+# A folder the person doesn't own (drive_folders.tsv) is fileNotFound: entityActionFailedWarning, exit 50. A drive Google
+# doesn't know is the same. verifyorganizer (on by default) asks Drive for the person's own permission on the drive: anything
+# but organizer is entityActionNotPerformedWarning "Role must be organizer", exit 51, and nothing moves. The move lists each
+# folder's children trashed or not: a trashed one into a shared drive is NOT_MOVABLE_IN_TRASH (not performed, 51). Each other
+# file is one Drive update: the person's own moves; another's in the domain moves only when its owner is a member of the
+# drive (else fileOwnerNotMemberOfTeamDrive); one owned outside the domain (example.com here) Drive refuses
+# (crossDomainMoveRestriction). A refusal is entityActionFailedWarning, 50, and the rest still move. The copy skips the trash
+# (excludetrashed) and, silently (suppressnotselectedmessages), the person's own files; it copies each other file still in
+# the folder, and one it already copied is a duplicate the `skip` leaves (not performed, 51). setSysExitRC is last-wins, so
+# the exit is the last warning's. Line wording approximate. Under GAM_MOCK_STATE, folder_moved.tsv and folder_copied.tsv keep
+# what each run did.
+if [ "${1:-}" = "user" ] && { [ "${3:-}" = "move" ] || [ "${3:-}" = "copy" ]; } && [ "${4:-}" = "drivefile" ]; then
+  verb=$3
+  if [ "$verb" = move ]; then
+    { [ $# -eq 12 ] && [ "${5#id:}" != "$5" ] && [ "$6" = teamdriveparentid ] && [ "$8" = retainsourcefolders ] \
+      && [ "$9" = duplicatefolders ] && [ "${10}" = merge ] && [ "${11}" = duplicatefiles ] && [ "${12}" = skip ]; } \
+      || not_modelled "move drivefile other than id:<folder> teamdriveparentid <drive> retainsourcefolders duplicatefolders merge duplicatefiles skip"
+  else
+    { [ $# -eq 16 ] && [ "${5#id:}" != "$5" ] && [ "$6" = teamdriveparentid ] && [ "$8" = recursive ] \
+      && [ "$9" = copysubfilesownedby ] && [ "${10}" = others ] && [ "${11}" = duplicatefolders ] && [ "${12}" = merge ] \
+      && [ "${13}" = duplicatefiles ] && [ "${14}" = skip ] && [ "${15}" = excludetrashed ] \
+      && [ "${16}" = suppressnotselectedmessages ]; } \
+      || not_modelled "copy drivefile other than id:<folder> teamdriveparentid <drive> recursive copysubfilesownedby others duplicatefolders merge duplicatefiles skip excludetrashed suppressnotselectedmessages"
+  fi
+  user=$(lower "$2"); folder=${5#id:}; sd_id=$7; TAB=$(printf '\t')
+  Verb=$( [ "$verb" = move ] && echo Move || echo Copy )
+  if ! known_user "$user"; then
+    printf 'User: %s, Drive File/Folder ID: %s, %s Failed: invalid_grant: Invalid email or User ID\n' "$user" "$folder" "$Verb" 1>&2
+    exit 50
+  fi
+  if [ "$(folder_owner "$folder")" != "$user" ]; then
+    printf 'User: %s, Drive File/Folder ID: %s, %s Failed: File not found: %s.\n' "$user" "$folder" "$Verb" "$folder" 1>&2
+    exit 50
+  fi
+  drive_known "$sd_id" || { printf 'User: %s, Drive File/Folder ID: %s, %s Failed: File not found: %s.\n' \
+    "$user" "$sd_id" "$Verb" "$sd_id" 1>&2; exit 50; }
+  role=$(grep "^$sd_id$TAB" "$(drive_acls_file)" | cut -f 2 | grep "\"emailAddress\": \"$user\"" \
+    | sed -n 's/.*"role": "\([a-zA-Z]*\)", "type".*/\1/p' | head -n 1)
+  if [ "$role" != organizer ]; then
+    printf 'User: %s, Shared Drive ID: %s, Role: %s, Not Performed: Role must be organizer\n' "$user" "$sd_id" "${role:-Unknown}" 1>&2
+    exit 51
+  fi
+  rc=0
+  printf 'User: %s, %s 1 Drive File/Folder\n' "$user" "$Verb"
+  items=$(folder_items "$folder")
+  while IFS= read -r record; do
+    [ -n "$record" ] || continue
+    id=$(json_text id "$record"); name=$(json_text name "$record"); owner=$(lower "$(item_owner "$record")")
+    case "$record" in *'"mimeType": "application/vnd.google-apps.folder"'*) continue ;; esac
+    trashed=""; case "$record" in *'"trashed": true'*) trashed=1 ;; esac
+    if [ "$verb" = move ]; then
+      if [ -n "$trashed" ]; then
+        printf '  User: %s, Drive File: %s(%s), Not Performed: Not movable, in trash\n' "$user" "$name" "$id" 1>&2
+        rc=51; continue
+      fi
+      member=""
+      grep "^$sd_id$TAB" "$(drive_acls_file)" | grep -q "\"emailAddress\": \"$owner\"" && member=1
+      why=""
+      case "$owner" in
+        "$user") ;;
+        *@example.com) [ -n "$member" ] || why="The file owner is not a member of the shared drive." ;;
+        *) why="Moving files across domains is not allowed." ;;
+      esac
+      if [ -n "$why" ]; then
+        printf '  User: %s, Drive File: %s(%s), Move Failed: %s\n' "$user" "$name" "$id" "$why" 1>&2
+        rc=50; continue
+      fi
+      [ -n "${GAM_MOCK_STATE:-}" ] && printf '%s\n' "$id" >> "$GAM_MOCK_STATE/folder_moved.tsv"
+      printf '  User: %s, Drive File: %s(%s), Moved To: Shared Drive ID: %s, Drive File: %s(%s)\n' \
+        "$user" "$name" "$id" "$sd_id" "$name" "$id"
+    else
+      { [ -n "$trashed" ] || [ "$owner" = "$user" ]; } && continue
+      if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/folder_copied.tsv" ] && grep -qx "$id" "$GAM_MOCK_STATE/folder_copied.tsv"; then
+        printf '  User: %s, Drive File: %s, Drive File: %s, Not Performed: Duplicate\n' "$user" "$name" "$name" 1>&2
+        rc=51; continue
+      fi
+      [ -n "${GAM_MOCK_STATE:-}" ] && printf '%s\n' "$id" >> "$GAM_MOCK_STATE/folder_copied.tsv"
+      printf '  User: %s, Drive File: %s(%s), Copied To: Shared Drive ID: %s, Drive File: %s(c%s)\n' \
+        "$user" "$name" "$id" "$sd_id" "$name" "$id"
+    fi
+  done <<EOF_ITEMS
+$items
+EOF_ITEMS
+  [ "$verb" = move ] && printf '  User: %s, Drive Folder: (%s), Retained\n' "$user" "$folder"
+  exit $rc
 fi
 
 # `gam print alerts` (doPrintShowAlerts at the 7.52.04 tag; a named report, plan F7a): the Alert Center through the service

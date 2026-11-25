@@ -115,6 +115,8 @@ and have only run offline: see
 - **Shared drives** — find a shared drive, see its members and their roles, add a person or group with a role, change a
   member's role, or remove one, each change previewed and run only if the members haven't changed since; a drive is never
   left without a manager. Deleting someone, and Close Out, warn about each shared drive they're the only active manager of.
+  The Builder moves a folder of mixed ownership into a shared drive in two steps: a move, then a copy of the files owned
+  outside the domain, which Google won't move. The preview counts the files by owner first.
 - **Classroom** (school domains, read only) — find any class and see its teachers and students, a person's classes
   (with a warning at offboarding when a leaver owns some), and who may create classes. **Plan an import** reads your
   SIS's roster export on this Mac (OneRoster 1.1 or 1.2, Clever's CSV files, or one spreadsheet you map by its
@@ -142,8 +144,8 @@ and have only run offline: see
   password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
   OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
   setup, and a templated welcome email — for one person, or a CSV of hires as a background job.
-- **Command Builder** — browse/search the full categorized GAM catalog (1,080 commands, 543 of them
-  runnable: 28 hand-curated, the only ones that can change anything, plus 515 read-only commands
+- **Command Builder** — browse/search the full categorized GAM catalog (1,082 commands, 545 of them
+  runnable: 30 hand-curated, the only ones that can change anything, plus 515 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
   preview → run, linear sequencing, and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
@@ -267,6 +269,7 @@ school domain is the most useful one of all.
 | Create a group | Builder | not yet |
 | Change a group's settings (`update group <group> <setting> <value>`) | Groups | not yet: run on a throwaway group |
 | Add, re-role, remove a shared drive member (`create\|update\|delete drivefileacl shareddriveid <id> …`) | Shared drives | not yet: run on a throwaway shared drive |
+| Move a folder into a shared drive, then copy what didn't move (`move drivefile` / `copy drivefile … teamdriveparentid <drive>`) | Builder | not yet: run on a throwaway folder holding a file owned outside the domain, including whether Google moves a file another person in the domain owns |
 | Close Out: remove an admin role (`delete admin <id>`), archive (`update user <u> archived on`), move an alias to the manager (`update alias <a> user <manager>`); its group, org unit, suspend and license steps reuse those screens' writes | Lifecycle | not yet: run on a throwaway account after its transfer |
 | Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 

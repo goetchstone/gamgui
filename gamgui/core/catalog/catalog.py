@@ -26,6 +26,16 @@ from .readbuilder import make_build, parse_read_template
 _ROLE_MEMBER = "member"
 GROUP_ROLES = [_ROLE_MEMBER, "manager", "owner"]
 _SERVICE_DRIVE = "drive"
+# A folder of mixed ownership into a shared drive (roadmap 4.8): the two steps, and the slots both take.
+MOVE_FOLDER = "build.move_folder_to_shared_drive"
+COPY_FOLDER_REST = "build.copy_rest_of_folder_to_shared_drive"
+_FOLDER_SLOTS = [
+    CommandSlot(key="email", label="The folder's owner (a Manager of the drive)", kind=SlotKind.TARGET_USER),
+    CommandSlot(key="folder_id", label="Folder ID", kind=SlotKind.TEXT,
+                placeholder="1AbC… (the end of the folder's Drive address)"),
+    CommandSlot(key="drive_id", label="Shared drive ID", kind=SlotKind.TEXT,
+                placeholder="0AB…Uk9PVA (Shared drives lists each one's)"),
+]
 
 
 def _transfer(old_owner: str, service: str, new_owner: str) -> list:
@@ -200,6 +210,27 @@ def _curated() -> List[CatalogCommand]:
              "gam user <email> print filelist select shareddriveid <SharedDriveID> showownedby any",
              "Every file in a shared drive, read as one of its members: who changed each last and when. "
              "Someone who isn't a member gets Google's refusal."),
+        # Roadmap 4.8: a folder of mixed ownership into a shared drive, as two steps queued in that order. The move's preview
+        # counts what the folder holds by owner (web/routes/builder.py, _folder_moves). Neither has a dry run, and a run that
+        # stops partway can't be undone, so the move asks for Confirm and both previews say so.
+        _cmd(MOVE_FOLDER, "Shared Drives", "", "Move a folder into a shared drive", RiskLevel.DESTRUCTIVE,
+             _FOLDER_SLOTS,
+             lambda s: GAMCommands.move_folder_to_shared_drive(s["email"], s.get("folder_id", "").strip(),
+                                                               s.get("drive_id", "").strip()),
+             "gam user <email> move drivefile id:<FolderID> teamdriveparentid <SharedDriveID> retainsourcefolders "
+             "duplicatefolders merge duplicatefiles skip",
+             "Step 1 of 2. Moves a folder's files into a shared drive, making its folders again there. Google won't move a file "
+             "owned outside the domain, so those stay where they are, and the original folders stay to hold them: queue step 2 "
+             "after this one to copy them. The person must own the folder and be a Manager of the drive."),
+        _cmd(COPY_FOLDER_REST, "Shared Drives", "", "Copy what didn't move into a shared drive", RiskLevel.LOW,
+             _FOLDER_SLOTS,
+             lambda s: GAMCommands.copy_rest_of_folder_to_shared_drive(s["email"], s.get("folder_id", "").strip(),
+                                                                       s.get("drive_id", "").strip()),
+             "gam user <email> copy drivefile id:<FolderID> teamdriveparentid <SharedDriveID> recursive "
+             "copysubfilesownedby others duplicatefolders merge duplicatefiles skip",
+             "Step 2 of 2, after the move. Copies the files still in the folder that someone else owns into the same folders "
+             "in the drive. The originals stay with their owners. A file already there by name is skipped, so running it "
+             "again copies nothing twice."),
         _cmd("build.print_forwarding", "Users", _SUBCAT_FORWARDING, "List forwarding addresses", RiskLevel.READ_ONLY,
              [_slot("email", "User", U)],
              lambda s: GAMCommands.print_forwarding_addresses(s["email"]),

@@ -427,3 +427,139 @@ def test_the_builder_lists_a_drives_files_for_a_member_and_googles_refusal_for_a
                                                     "drive_id": "0A x"}).text)
     assert "letters, digits" in text
     assert gam_writes(gam_calls()) == []
+
+
+# --- a folder of mixed ownership into a shared drive (roadmap 4.8) ----------------------------------------------------------
+MIXED = "1FOLDERmixed"   # mock: alice's; Plan and Draft 1 hers, Notes bob's (not a FINANCE member), Quote.pdf pat@partner.org's,
+#                          Old notes bob's in the trash; a Drafts folder
+MOVE, COPY = "build.move_folder_to_shared_drive", "build.copy_rest_of_folder_to_shared_drive"
+
+
+def _item(name, owner, mime="application/pdf"):
+    return {"id": f"1{name}", "name": name, "mimeType": mime, "owners": [{"emailAddress": owner}]}
+
+
+def test_the_folder_is_named_by_id_and_neither_step_can_overwrite():
+    assert GAMCommands.print_folder_files("alice@example.com", MIXED) == [
+        "user", "alice@example.com", "print", "filelist", "select", f"id:{MIXED}", "showparent", "showownedby", "any",
+        "excludetrashed", "fields", "id,name,mimeType,owners", "formatjson"]
+    assert GAMCommands.move_folder_to_shared_drive("alice@example.com", MIXED, FINANCE) == [
+        "user", "alice@example.com", "move", "drivefile", f"id:{MIXED}", "teamdriveparentid", FINANCE,
+        "retainsourcefolders", "duplicatefolders", "merge", "duplicatefiles", "skip"]
+    assert GAMCommands.copy_rest_of_folder_to_shared_drive("alice@example.com", MIXED, FINANCE) == [
+        "user", "alice@example.com", "copy", "drivefile", f"id:{MIXED}", "teamdriveparentid", FINANCE, "recursive",
+        "copysubfilesownedby", "others", "duplicatefolders", "merge", "duplicatefiles", "skip", "excludetrashed",
+        "suppressnotselectedmessages"]
+    # `root` would be the whole My Drive (a Drive API alias, even as `id:root`); an address list, a path or a query isn't one.
+    for email, folder, drive in (("alice@example.com", "root", FINANCE), ("alice@example.com", "ROOT", FINANCE),
+                                 ("alice@example.com", "rootid", FINANCE),
+                                 ("alice@example.com", "appDataFolder", FINANCE), ("alice@example.com", "a/b", FINANCE),
+                                 ("alice@example.com", "", FINANCE), ("alice@example.com", MIXED, "0A x"),
+                                 ("alice@example.com,bob@example.com", MIXED, FINANCE)):
+        for build in (GAMCommands.move_folder_to_shared_drive, GAMCommands.copy_rest_of_folder_to_shared_drive):
+            with pytest.raises(ValueError):
+                build(email, folder, drive)
+    with pytest.raises(ValueError):
+        GAMCommands.print_folder_files("alice@example.com", "root")
+
+
+def test_the_preview_reads_the_person_folder_and_drive_off_the_argv_it_holds():
+    for build in (GAMCommands.move_folder_to_shared_drive, GAMCommands.copy_rest_of_folder_to_shared_drive):
+        assert sd.folder_move_of(build("alice@example.com", MIXED, FINANCE)) == ("alice@example.com", MIXED, FINANCE)
+    assert sd.folder_move_of(GAMCommands.print_folder_files("alice@example.com", MIXED)) is None
+    assert sd.folder_move_of(GAMCommands.remove_drive_member(FINANCE, PAT_ID)) is None
+
+
+def test_the_count_splits_files_by_owner_and_counts_folders_apart():
+    records = [_item("Top", "alice@example.com", sd.FOLDER), _item("Mine", "Alice@Example.com"), _item("Theirs", "bob@example.com"), _item("Sub", "alice@example.com",
+               sd.FOLDER)] + [_item(f"Out{i}", "pat@partner.org") for i in range(7)]
+    count = sd.count_folder(records, "alice@example.com", ("example.com",), "1Top")
+    assert (count.mine, count.domain, count.outside, count.folders, count.files) == (1, 1, 7, 1, 9)   # the folder isn't counted
+    assert count.outside_names == ("Out0", "Out1", "Out2", "Out3", "Out4")    # bounded; the rest are counted
+    assert sd.count_folder(records[:1], "alice@example.com", ("example.com",), "1Top").files == 0   # read, and empty
+    # A file's ID names that one file, which is counted.
+    assert sd.count_folder([_item("Solo", "pat@partner.org")], "alice@example.com", ("example.com",), "1Solo").outside == 1
+
+
+def test_a_count_without_the_folders_own_row_is_unknown_never_empty():
+    # GAM exits 60 for an empty folder and for one it couldn't find alike, so only the folder's own row (showparent) says
+    # the folder was read.
+    for records in ([], [_item("Other", "alice@example.com")]):
+        with pytest.raises(sd.Incomplete):
+            sd.count_folder(records, "alice@example.com", ("example.com",), "1Top")
+
+
+@pytest.mark.parametrize("record", [{"id": "1x", "name": "x", "mimeType": "application/pdf"},           # no owner
+                                    {"id": "1x", "name": "x", "mimeType": "application/pdf", "owners": []},
+                                    {"id": "1x", "name": "x", "mimeType": "application/pdf", "owners": [{}]},
+                                    {"name": "x", "mimeType": "application/pdf"},                       # no ID
+                                    {"id": "1x", "name": "x"}])                                         # no kind
+def test_an_item_that_cant_be_placed_makes_the_count_unknown_never_a_guess(record):
+    with pytest.raises(sd.Incomplete):
+        sd.count_folder([_item("Top", "alice@example.com", sd.FOLDER), record], "alice@example.com", ("example.com",), "1Top")
+
+
+def test_only_a_manager_in_their_own_name_counts():
+    members = [_m("1", "organizer", "alice@example.com"), _m("2", "organizer", "team@example.com", kind="group"),
+               _m("3", "writer", "pat@partner.org"), _m("4", "organizer", "gone@example.com", deleted=True)]
+    assert sd.manages_directly("Alice@example.com", members)
+    assert not sd.manages_directly("team@example.com", members)   # a group: GAM asks for the person's own permission
+    assert not sd.manages_directly("pat@partner.org", members)
+    assert not sd.manages_directly("gone@example.com", members)
+
+
+def test_the_move_preview_counts_by_owner_says_what_cant_be_undone_and_asks_for_confirm(client, gam_calls):  # noqa: F811
+    from gamgui.core.catalog.catalog import load_catalog   # noqa: PLC0415 — the curated entries, as the Builder reads them
+    catalog = load_catalog()
+    assert catalog.by_id(MOVE).risk.name == "DESTRUCTIVE" and catalog.by_id(COPY).risk.name == "LOW"
+    page = client.post("/builder/preview", data={"cid": MOVE, "email": "alice@example.com", "folder_id": MIXED,
+                                                 "drive_id": FINANCE}).text
+    text = _text(page)
+    assert f"gam user alice@example.com move drivefile id:{MIXED} teamdriveparentid {FINANCE}" in text
+    assert f"Folder {MIXED} holds 4 files in 1 folder below it" in text
+    assert "2 alice@example.com owns: the move takes them into the drive." in text
+    assert "1 someone else in the domain owns: Google moves it only if alice@example.com may and the owner is a member" in text
+    assert "1 owned outside example.com" in text and "(Quote.pdf)" in text and "Old notes" not in text   # trash left out
+    assert "no dry run" in text and "can't be undone" in text
+    assert "Confirm &amp; run" in page and '"preview": "' in page
+    assert gam_writes(gam_calls()) == []
+
+
+def test_a_person_who_isnt_a_manager_of_the_drive_is_refused_at_the_preview(client):  # noqa: F811
+    page = client.post("/builder/preview", data={"cid": MOVE, "email": "alice@example.com", "folder_id": MIXED,
+                                                 "drive_id": OLD}).text   # bob alone manages OLD
+    assert "isn&#39;t a Manager of that shared drive" in page and '"preview": "' not in page
+    assert "Confirm &amp; run" not in page
+
+
+def test_a_count_that_failed_is_unknown_never_an_empty_folder(client):  # noqa: F811
+    # bob manages OLD, but Google shows him no folder by that ID: the count is unknown, and GAM's own refusal still stands.
+    text = _text(client.post("/builder/preview", data={"cid": MOVE, "email": "bob@example.com", "folder_id": MIXED,
+                                                       "drive_id": OLD}).text)
+    assert f"Couldn't count what folder {MIXED} holds" in text and "is unknown" in text
+    assert "holds no files" not in text
+    text = _text(client.post("/builder/preview", data={"cid": MOVE, "email": "alice@example.com", "folder_id": "1FOLDERempty",
+                                                       "drive_id": FINANCE}).text)
+    assert "Folder 1FOLDERempty holds no files." in text
+
+
+def test_the_two_steps_in_a_sequence_move_what_google_allows_then_copy_the_rest(client, gam_state, gam_calls):  # noqa: F811
+    from .helpers import wait_for_job   # noqa: PLC0415
+    from .test_builder import _seq_preview   # noqa: PLC0415
+    slots = {"email": "alice@example.com", "folder_id": MIXED, "drive_id": FINANCE}
+    client.post("/builder/sequence/add", data={"cid": MOVE, **slots})
+    client.post("/builder/sequence/add", data={"cid": COPY, **slots})
+    page, token = _seq_preview(client)
+    assert "1 owned outside example.com" in _text(page) and token
+    run = client.post("/builder/sequence/run", data={"confirmed": "1", "preview": token})
+    job = client.app.state.gamgui.jobs[re.search(r"status\?job=([A-Za-z0-9_\-]+)", run.text).group(1)]
+    wait_for_job(client, job)
+    # Google refused bob's file (he isn't a member of the drive) and the one owned outside the domain, and the trashed one
+    # can't move: the move reads as failed with alice's files moved, and the copy step copied the two refused files, not the
+    # trashed one. What's left in the folder is those two originals and the folders GAM kept.
+    assert job.applied == 1 and len(job.failed) == 1
+    assert [c[2] for c in gam_writes(gam_calls())] == ["move", "copy"]
+    assert sorted((gam_state / "folder_moved.tsv").read_text().split()) == ["1MIXdraft1", "1MIXplan"]
+    assert sorted((gam_state / "folder_copied.tsv").read_text().split()) == ["1MIXnotes", "1MIXquote"]
+    text = _text(client.post("/builder/preview", data={"cid": COPY, **slots}).text)
+    assert f"Folder {MIXED} holds 2 files in 1 folder below it" in text and "(Quote.pdf)" in text

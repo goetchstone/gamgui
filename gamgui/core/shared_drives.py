@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .gam.commands import DRIVE_MEMBER_TYPES, DRIVE_ROLES, GAMCommands, is_drive_item_id, is_one_address
-from .phishing import Incomplete
+from .phishing import Incomplete, is_internal
 
 # Drive's role -> GAM's word for it (DRIVEFILE_ACL_ROLES_MAP), and the label the Drive screen uses.
 GAM_WORD = {"organizer": "organizer", "fileOrganizer": "fileorganizer", "writer": "writer", "commenter": "commenter",
@@ -261,3 +261,76 @@ def managed_alone(email: str, drives: Sequence[SharedDrive], acl_rows: Sequence[
             at_risk.append(AtRisk(drive, "; ".join(whys) or "no other manager"))
     unread = tuple(d for d in drives if d.id not in by_drive)
     return Alone(tuple(sorted(at_risk, key=lambda a: a.drive.name.lower())), unread)
+
+
+# --- a folder of mixed ownership into a shared drive (roadmap 4.8) ----------------------------------------------------------
+FOLDER = "application/vnd.google-apps.folder"
+NAMES_SHOWN = 5   # the files owned outside the domain a preview names; the rest are counted
+
+
+@dataclass(frozen=True)
+class FolderCount:
+    """What a folder holds, by who owns each file: what its move takes into the drive, what Google may refuse to move (a file
+    someone else in the domain owns), and what must be copied (a file owned outside the domain, which Google never moves into
+    a shared drive). Folders are made again in the drive, so they are counted apart."""
+
+    mine: int
+    domain: int
+    outside: int
+    folders: int
+    outside_names: Tuple[str, ...]
+
+    @property
+    def files(self) -> int:
+        return self.mine + self.domain + self.outside
+
+
+def count_folder(records: Sequence[Dict[str, Any]], email: str, domains: Sequence[str], folder_id: str) -> FolderCount:
+    """Count ``print filelist select id:<folder> showparent … excludetrashed``, read as the folder's owner. The folder's own row
+    must be there: without it GAM didn't read the folder (it may not exist, or the person can't see it), never "empty". A
+    file without an owner can't be placed (one in a shared drive has none), so the count is Incomplete rather than a guess,
+    and so is a row that isn't an item (invariant 10)."""
+    me = email.strip().lower()
+    mine = domain = outside = folders = 0
+    names: List[str] = []
+    if not any(r.get("id") == folder_id for r in records):
+        raise Incomplete(f"GAM didn't list folder {folder_id} itself: it may not exist, or {email} can't see it.")
+    for r in records:
+        if not r.get("id") or not r.get("mimeType"):
+            raise Incomplete("GAM listed something in the folder without its ID or kind, so what would move can't be told.")
+        if r["id"] == folder_id and r["mimeType"] == FOLDER:
+            continue   # the folder itself (showparent); a file ID names one file, which is counted
+        if r["mimeType"] == FOLDER:
+            folders += 1
+            continue
+        owners = r.get("owners")
+        owner = str(owners[0].get("emailAddress") or "").strip().lower() \
+            if isinstance(owners, list) and owners and isinstance(owners[0], dict) else ""
+        if not owner:
+            raise Incomplete(f"GAM listed {r.get('name') or r['id']} without its owner (a file already in a shared drive has "
+                             "none), so what would move can't be told.")
+        if owner == me:
+            mine += 1
+        elif is_internal(owner, domains):
+            domain += 1
+        else:
+            outside += 1
+            if len(names) < NAMES_SHOWN:
+                names.append(str(r.get("name") or r["id"]))
+    return FolderCount(mine, domain, outside, folders, tuple(names))
+
+
+def folder_move_of(argv: Sequence[str]) -> Optional[Tuple[str, str, str]]:
+    """(person, folder ID, drive ID) of a move or copy ``GAMCommands`` built for roadmap 4.8, else None: what the Builder's
+    preview counts and checks. Read off the argv the preview holds, so the count is of what will run."""
+    if (len(argv) >= 7 and argv[0] == "user" and argv[2] in ("move", "copy") and argv[3] == "drivefile"
+            and argv[4].startswith("id:") and argv[5] == "teamdriveparentid"):
+        return argv[1], argv[4][3:], argv[6]
+    return None
+
+
+def manages_directly(email: str, members: Sequence[Member]) -> bool:
+    """Whether ``email`` is a Manager of the drive in their own name: GAM's verifyorganizer asks Drive for the person's own
+    permission, so a Manager only through a group is refused."""
+    me = email.strip().lower()
+    return any(m.kind == "user" and m.email.strip().lower() == me and m.manages for m in members)

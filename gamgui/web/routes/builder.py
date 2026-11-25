@@ -25,7 +25,7 @@ from fastapi.responses import HTMLResponse, Response
 from ...core import guard as guard_mod
 from ...core import sheet_export
 from ...core.catalog import load_catalog
-from ...core.catalog.catalog import AREA_ORDER
+from ...core.catalog.catalog import AREA_ORDER, COPY_FOLDER_REST, MOVE_FOLDER
 from ...core.catalog.models import SlotKind
 from ...core.connectors.base import ChangePreview, ConnectorID, RiskLevel
 from ...core.gam.commands import GAMCommands, carries_todrive
@@ -34,6 +34,7 @@ from ...core.setup import SetupService
 from ...core.connectors.gam_connector import READ_ORIGIN_SEQUENCE
 from ...core.gam.parser import table_records
 from ...core.bulk import stop_requested
+from ...core.shared_drives import folder_move_of, manages_directly
 from ..csvutil import csv_safe
 from ..jobs import start_job
 from ..previews import TOKEN_FIELD
@@ -135,6 +136,38 @@ async def _transfers(conn, decision) -> dict:
     return {"pending_transfers": pending, "transfers_unknown": unknown}
 
 
+async def _folder_moves(st, previews) -> tuple:
+    """A folder's move into a shared drive and its copy step (roadmap 4.8), read before they're held: what the folder holds,
+    by who owns it, and whether the person is a Manager of the drive in their own name (GAM moves or copies into a drive only
+    as one, verifyorganizer). A read that failed is said, never read as an empty folder or a Manager (invariant 10); only a
+    read that answered "not a Manager" stops the preview. Returns (notes, refusals)."""
+    conn = st.connector
+    found = dict.fromkeys(m for m in (folder_move_of(p.argv) for p in previews
+                                       if p.meta.get("cid") in (MOVE_FOLDER, COPY_FOLDER_REST)) if m)
+    if conn is None or not found:
+        return [], []
+    domains = await st.tenant_domains()
+    notes, refusals = [], []
+    for email, folder, drive in found:
+        (count, count_why), (members, manager_why) = await asyncio.gather(
+            _answer(conn.folder_count(email, folder, domains)), _answer(conn.drive_members(drive)))
+        manager = None if members is None else manages_directly(email, members)
+        if manager is False:
+            refusals.append(f"{email} isn't a Manager of that shared drive in their own name, and GAM moves or copies into a "
+                            "drive only as one: make them a Manager on the Shared drives screen first.")
+        notes.append({"email": email, "folder": folder, "drive": drive, "domains": domains, "count": count, "count_why": count_why,
+                      "manager": manager, "manager_why": manager_why})
+    return notes, refusals
+
+
+async def _answer(read) -> tuple:
+    """(what a read found, "") or (None, why it didn't answer, in words): unknown, never an answer (invariant 10)."""
+    try:
+        return await read, ""
+    except Exception as exc:  # noqa: BLE001 — the preview says it couldn't tell, and why
+        return None, friendly(exc)
+
+
 # A mutation runs exactly what its preview showed: the preview holds the argv under a single-use token
 # (web/previews.py) that its Run button posts back, and Run refuses a form that no longer matches —
 # another command loaded, a slot retyped. Run once rebuilt the command from the live form, so a stale
@@ -159,12 +192,13 @@ async def _preview_page(request: Request, cmd, argv, target, slots, error: str =
     st = app_state(request)
     tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
     decision = guard_mod.evaluate([_preview_of(cmd, argv, target)])
-    blocked = await _blocked(st, decision, [argv])
+    folder_moves, refusals = await _folder_moves(st, [_preview_of(cmd, argv, target)])
+    blocked = await _blocked(st, decision, [argv]) + refusals
     token = "" if cmd.risk == RiskLevel.READ_ONLY or blocked else st.previews.hold(
         _FLOW, _form_key(cmd, slots), (list(argv), target), tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_builder_preview.html", {
         "cmd": cmd, "gam": _gam_str(argv), "decision": decision, "target": target, "slots": slots,
-        **await _transfers(st.connector, decision),
+        **await _transfers(st.connector, decision), "folder_moves": folder_moves,
         "error": " ".join(blocked) or error, "blocked": bool(blocked), "token": token,
     })
 
@@ -643,11 +677,12 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
     tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
     previews = _seq_previews(seq)
     decision = guard_mod.evaluate(previews)
-    blocked = await _blocked(st, decision, [p.argv for p in previews])
+    folder_moves, refusals = await _folder_moves(st, previews)
+    blocked = await _blocked(st, decision, [p.argv for p in previews]) + refusals
     token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
         "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
-        "token": token, **await _transfers(st.connector, decision)})
+        "token": token, "folder_moves": folder_moves, **await _transfers(st.connector, decision)})
 
 
 @router.post("/sequence/preview", response_class=HTMLResponse)

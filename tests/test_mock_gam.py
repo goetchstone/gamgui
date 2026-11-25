@@ -109,6 +109,11 @@ WRITES = {
                          for k in ("user", "group") for r in ("organizer", "fileorganizer", "writer", "commenter", "reader")],
     "set_drive_member_role": [C.set_drive_member_role("0AFINANCEuk9PVA", "07001", "reader")],
     "remove_drive_member": [C.remove_drive_member("0AFINANCEuk9PVA", "07001")],
+    # Roadmap 4.8: a folder alice owns that holds only her files, so both run clean (the mixed folder's exits are tested
+    # in test_shared_drives.py).
+    "move_folder_to_shared_drive": [C.move_folder_to_shared_drive("alice@example.com", "1FOLDERours", "0AFINANCEuk9PVA")],
+    "copy_rest_of_folder_to_shared_drive": [
+        C.copy_rest_of_folder_to_shared_drive("alice@example.com", "1FOLDERours", "0AFINANCEuk9PVA")],
 }
 
 # Reads stay canned, but each one the app issues must still have a handler. The per-user ones answer
@@ -182,6 +187,8 @@ ANY_EXIT_READS = {
     # Reports' mail review (roadmap 3.2): every active account, each announced on stderr; the last warning's code stands.
     "all_users_print_forward": [C.all_users_print_forward()],
     "all_users_print_delegates": [C.all_users_print_delegates()],
+    # Roadmap 4.8: a folder's items by owner, whose 60 is an empty folder.
+    "print_folder_files": [C.print_folder_files("alice@example.com", "1FOLDERmixed")],
 }
 
 
