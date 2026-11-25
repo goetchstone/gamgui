@@ -1407,6 +1407,36 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ] 
   exit 0
 fi
 
+# A shared drive's files (roadmap 4.7, the Builder's "List a shared drive's files"), read as a member: only `select
+# shareddriveid <id> showownedby any fields <the app's fields> formatjson`. Data: shared_drive_files.tsv (drive id, a file).
+# Someone not among the drive's members (shared_drive_acls.tsv, or GAM_MOCK_STATE's copy once a member change made one) gets
+# Google's notFound, which printFileList passes to entityActionFailedWarning: "User: <u>, Shared Drive ID: <id>, Print
+# Failed: …", exit 50. A drive with no file writes the no-data titles (Owner,id,name,owners.emailAddress with formatjson
+# and fields) and exits 60, as printFileList does with no row. The titles with rows are approximate (Owner,id,name,JSON).
+if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "filelist" ] && [ "${5:-}" = "select" ]; then
+  { [ $# -eq 12 ] && [ "$6" = shareddriveid ] && [ "$8" = showownedby ] && [ "$9" = any ] && [ "${10}" = fields ] \
+    && [ "${12}" = formatjson ]; } || not_modelled "print filelist select other than shareddriveid <id> showownedby any fields … formatjson"
+  [ "${11}" = "id,name,mimeType,modifiedTime,lastModifyingUser,webViewLink" ] \
+    || not_modelled "print filelist select with fields ${11} (the fixture holds the app's; GAM fetches only those named)"
+  user=$(lower "$2"); sd_id=$7; TAB=$(printf '\t')
+  if ! known_user "$user"; then
+    printf 'User: %s, User Print Failed: invalid_grant: Invalid email or User ID\n' "$user" 1>&2
+    echo "Owner,id,name,owners.emailAddress"; exit 60
+  fi
+  acls="$GAM_MOCK_FIXTURES/shared_drive_acls.tsv"
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/drive_acls.tsv" ]; then acls="$GAM_MOCK_STATE/drive_acls.tsv"; fi
+  if ! grep "^$sd_id$TAB" "$acls" | grep -q "\"emailAddress\": \"$user\""; then
+    printf 'User: %s, Shared Drive ID: %s, Print Failed: Shared drive not found: %s.\n' "$user" "$sd_id" "$sd_id" 1>&2
+    echo "Owner,id,name,owners.emailAddress"; exit 50
+  fi
+  if ! grep -q "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_files.tsv"; then echo "Owner,id,name,owners.emailAddress"; exit 60; fi
+  echo "Owner,id,name,JSON"
+  grep "^$sd_id$TAB" "$GAM_MOCK_FIXTURES/shared_drive_files.tsv" | cut -f 2 | while IFS= read -r record; do
+    gam_row "$user" "$(json_text id "$record")" "$(json_text name "$record")" "$record"
+  done
+  exit 0
+fi
+
 # `gam user <email> print filelist [query <String>] fields <DriveFieldNameList> formatjson` -> GAM's CSV, `Owner`, `id`,
 # `name`, the flattened owners, and a `JSON` column per file (printFileList; Builder: Find Drive files). `owners` in the
 # JSON is Drive's list of objects. printFileList exits 60 when it printed no row; a refused token is its warning first.

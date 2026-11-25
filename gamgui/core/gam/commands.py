@@ -85,6 +85,8 @@ GROUP_LIST_FIELDS = ("email", "name", "description", "directMembersCount")
 CROS_LIST_FIELDS = ("deviceId", "serialNumber", "status", "orgUnitPath", "annotatedAssetId",
                     "annotatedUser", "lastSync", "model")
 FILE_LIST_FIELDS = ("id", "name", "mimeType", "owners", "modifiedTime", "webViewLink")
+# A shared drive's files have no owner (the drive owns them), so its list names who changed each last instead.
+SHARED_DRIVE_FILE_FIELDS = ("id", "name", "mimeType", "modifiedTime", "lastModifyingUser", "webViewLink")
 # Superset fetched once and cached to serve the users list (needs title), reports, AND the detail
 # view (so opening a user is instant + uses the reliable JSON path, not the `info user` text format).
 CACHE_FIELDS = (
@@ -706,6 +708,19 @@ class GAMCommands:
         if not is_drive_item_id(drive_id) or not is_drive_item_id(permission_id):
             raise ValueError("a shared drive ID and a permission ID are letters, digits, - and _")
         return ["delete", "drivefileacl", "shareddriveid", drive_id, f"id:{permission_id}"]
+
+    @staticmethod
+    def print_shared_drive_files(email: str, drive_id: str) -> List[str]:
+        # A shared drive's files (roadmap 4.7), read as one of its members: `<UserTypeEntity> print filelist select
+        # <DriveFileEntity>` takes no admin access, so the person must be a member. `showownedby any`: GAM keeps only files
+        # owned by the person unless told otherwise (DriveListParameters.showOwnedBy defaults True, CheckShowOwnedBy), and a
+        # shared drive's files are owned by no one, so without it the list would be empty.
+        if not is_one_address(email):
+            raise ValueError(f"{email!r} isn't one email address")
+        if not is_drive_item_id(drive_id):
+            raise ValueError("a shared drive ID is letters, digits, - and _ (Shared drives lists each drive's)")
+        return ["user", email, "print", "filelist", "select", "shareddriveid", drive_id, "showownedby", "any",
+                "fields", ",".join(SHARED_DRIVE_FILE_FIELDS), "formatjson"]
 
     @staticmethod
     def all_users_print_forward() -> List[str]:

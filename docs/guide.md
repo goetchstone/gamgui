@@ -397,7 +397,7 @@ the members again and makes the change only if they're as the preview found them
 
 The roles are Google's: Manager, Content manager, Contributor, Commenter and Viewer. A drive's last manager can't be
 removed or given another role here, since a drive with none can only be looked after from the Admin console: add another
-manager first. A drive limited to your domain's users refuses an outside address, in Google's words. If the members can't be
+manager first. A drive limited to your domain's users refuses an outside address, in Google's words. To see a drive's files, the **Builder** has “List a shared drive's files”: name one of its members and the drive's ID, which **Shared drives** shows. If the members can't be
 read, the screen says so rather than showing none. Not yet verified live.
 
 ## Respond to an incident

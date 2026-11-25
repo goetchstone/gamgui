@@ -400,3 +400,30 @@ def test_the_delete_and_close_out_run_the_check_and_its_link_opens_the_drive(cli
     assert "/drives/orphans?email=carol%40example.com" in check
     assert f'hx-get="/drives/members?id={FINANCE}"' in client.get(f"/drives?id={FINANCE}").text
     assert "Reading the drive's members" not in client.get("/drives?id=0A x").text   # not a drive ID: nothing opened
+
+
+# --- the Builder's "List a shared drive's files" ----------------------------------------------------------------------------
+
+def test_the_file_list_is_read_as_a_member_with_no_owner_filter():
+    assert GAMCommands.print_shared_drive_files("alice@example.com", FINANCE) == [
+        "user", "alice@example.com", "print", "filelist", "select", "shareddriveid", FINANCE, "showownedby", "any",
+        "fields", "id,name,mimeType,modifiedTime,lastModifyingUser,webViewLink", "formatjson"]
+    for email, drive in (("alice", FINANCE), ("alice@example.com", "0A x"), ("alice@example.com", "")):
+        with pytest.raises(ValueError):
+            GAMCommands.print_shared_drive_files(email, drive)
+
+
+def test_the_builder_lists_a_drives_files_for_a_member_and_googles_refusal_for_anyone_else(client, gam_calls):  # noqa: F811
+    from gamgui.core.catalog.catalog import load_catalog   # noqa: PLC0415 — the curated entry, as the Builder reads it
+    cmd = load_catalog().by_id("build.shared_drive_files")
+    assert cmd and cmd.buildable and cmd.risk.name == "READ_ONLY"
+    text = _text(client.post("/builder/run", data={"cid": "build.shared_drive_files", "email": "alice@example.com",
+                                                    "drive_id": FINANCE}).text)
+    assert "Budget 2027" in text and "Invoices" in text
+    text = _text(client.post("/builder/run", data={"cid": "build.shared_drive_files", "email": "carol@example.com",
+                                                    "drive_id": FINANCE}).text)
+    assert "Budget 2027" not in text and "Shared drive not found" in text
+    text = _text(client.post("/builder/run", data={"cid": "build.shared_drive_files", "email": "alice@example.com",
+                                                    "drive_id": "0A x"}).text)
+    assert "letters, digits" in text
+    assert gam_writes(gam_calls()) == []

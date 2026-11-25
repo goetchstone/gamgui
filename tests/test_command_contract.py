@@ -117,6 +117,8 @@ ENUM_ARGS = {
     ("set_drive_member_role", "role"): DRIVE_ROLES,
     ("remove_drive_member", "drive_id"): ("0AFINANCEuk9PVA",),
     ("remove_drive_member", "permission_id"): ("07001",),
+    ("print_shared_drive_files", "email"): (SEARCH_ADDRESS,),
+    ("print_shared_drive_files", "drive_id"): ("0AFINANCEuk9PVA",),
 }
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
