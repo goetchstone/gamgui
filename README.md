@@ -144,8 +144,8 @@ and have only run offline: see
   password goes on a copyable, printable sheet, or Google emails it via GAM's `notify`), the role's
   OU and signature, its groups and shared calendars, a Google Tasks checklist for whoever does the
   setup, and a templated welcome email — for one person, or a CSV of hires as a background job.
-- **Command Builder** — browse/search the full categorized GAM catalog (1,082 commands, 545 of them
-  runnable: 30 hand-curated, the only ones that can change anything, plus 515 read-only commands
+- **Command Builder** — browse/search the full categorized GAM catalog (1,087 commands, 550 of them
+  runnable: 35 hand-curated, the only ones that can change anything, plus 515 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
   preview → run, linear sequencing, and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
@@ -270,6 +270,10 @@ school domain is the most useful one of all.
 | Change a group's settings (`update group <group> <setting> <value>`) | Groups | not yet: run on a throwaway group |
 | Add, re-role, remove a shared drive member (`create\|update\|delete drivefileacl shareddriveid <id> …`) | Shared drives | not yet: run on a throwaway shared drive |
 | Move a folder into a shared drive, then copy what didn't move (`move drivefile` / `copy drivefile … teamdriveparentid <drive>`) | Builder | not yet: run on a throwaway folder holding a file owned outside the domain, including whether Google moves a file another person in the domain owns |
+| Rename a user (`update user <u> primaryemail <new> noactionifalias`) | Builder | not yet: rename a throwaway account, confirm the old address stays as its alias, and try an alias as the account (GAM should refuse) |
+| Delete a group (`delete group <g> noactionifalias`) | Builder | not yet: delete a throwaway group, after trying one of its aliases (GAM should refuse) |
+| Add an admin role (`create admin <u> <role> customer\|org_unit <ou>`) | Builder | not yet: give a throwaway account a low role, read the assignment ID GAM prints, then remove it in the Admin console |
+| Create and rename a shared drive (`user <u> create shareddrive <name>`, `update shareddrive shareddriveid <id> name <name>`) | Builder | not yet: create a throwaway drive, rename it, then delete it |
 | Close Out: remove an admin role (`delete admin <id>`), archive (`update user <u> archived on`), move an alias to the manager (`update alias <a> user <manager>`); its group, org unit, suspend and license steps reuse those screens' writes | Lifecycle | not yet: run on a throwaway account after its transfer |
 | Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
 

@@ -21,7 +21,8 @@ from .test_mock_gam import WRITES
 from .test_users_web import client  # noqa: F401 - the app with the mock behind it
 
 ALICE_ID = "100000000000000000001"
-CUTS_OFF = {"delete_user", "reset_password", "set_password", "signout_user", "deprovision_user", "set_archived"}   # and suspend, below
+CUTS_OFF = {"delete_user", "reset_password", "set_password", "signout_user", "deprovision_user", "set_archived",
+            "rename_user"}   # a rename (roadmap 5.1): GamGUI knows its admin by address   # and suspend, below
 
 
 def _token(email=ADMIN, sub=ADMIN_ID) -> str:
@@ -47,6 +48,9 @@ def test_only_the_writes_that_cut_an_account_off_count():
     (["UPDATE", "users", "a@e.com", "Suspended", "on"], "a@e.com"),
     (["users", "a@e.com", "sign_out"], "a@e.com"),
     (["all", "users", "signout"], "all users"),
+    (["update", "user", "a@e.com", "username", "b@e.com"], "a@e.com"),
+    (["update", "user", "a@e.com", "Email", "b@e.com"], "a@e.com"),
+    (["update", "user", "a@e.com", "primary_email", "b@e.com", "noactionifalias"], "a@e.com"),
 ])
 def test_a_variant_of_a_cut_off_shape_counts_too(argv, who):
     assert cut_off_account(argv) == who

@@ -90,7 +90,7 @@ already is.
 
 ## What runs today
 
-The 30 curated commands, by area (several have no other screen in the app, so this is the only way to
+The 35 curated commands, by area (several have no other screen in the app, so this is the only way to
 reach them). If the count here drifts from `_curated()`, this list is stale:
 
 - **Users — Gmail:** set / turn off vacation auto-reply; add, remove and list mailbox
@@ -99,15 +99,17 @@ reach them). If the count here drifts from `_curated()`, this list is stale:
   (No signature write: Signatures and the Users page keep each old signature before replacing it, so it can be put
   back; a Builder write would walk around that. Roadmap 4.1.)
 - **Users — account:** find users; set title / department; reset password (random); sign out
-  everywhere; undelete account; suspend account. (No delete: Users → a person → Delete account refuses a
+  everywhere; undelete account; suspend account; rename a user (change their primary address; roadmap 5.1). (No delete: Users → a person → Delete account refuses a
   Vault hold or an owned secondary calendar, which a Builder delete would walk around; roadmap 2.9.)
 - **Aliases:** add an alias to a user; remove an alias.
-- **Groups:** create a group; add member to group; remove member from group.
+- **Groups:** create a group; add member to group; remove member from group; delete a group (roadmap 5.1).
+- **Administrators:** add an admin role, over the whole organization or one org unit (roadmap 5.1).
 - **Org units:** create, rename and delete an org unit (moving people is on Users, one or many; roadmap 4.2).
 - **ChromeOS Devices:** find Chromebooks.
 - **Drive:** find a user's Drive files; list a shared drive's files, read as one of its members (its members change on Shared drives);
   move a folder of mixed ownership into a shared drive, as two steps queued in a sequence (roadmap 4.8): **Move a folder into a
   shared drive**, then **Copy what didn't move into a shared drive**. The preview counts the folder's files by owner.
+  Create a shared drive (as a person, its first Manager) and rename one (as the admin) (roadmap 5.1).
 - **Data Transfers:** transfer Drive/Calendar ownership.
 
 Everything else that runs is an auto-promoted read (see above).

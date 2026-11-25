@@ -4,6 +4,7 @@
 {% macro steps(job, final) %}
 {% if job.recent %}<ul class="{{ 'mt-2' if final else 'mt-3' }} space-y-1 text-xs font-mono">{% for r in job.recent %}
   <li>{{ live.mark(r.ok) }}{{ r.item }}{% if not r.ok and r.reason %}<span class="font-sans">: {{ r.reason }}</span>{% endif %}
+    {% if r.ok and r.detail %}<span class="ml-4 block">GAM: {{ r.detail }}</span>{% endif %}
     {% if final and not r.ok and r.detail %}<details class="ml-4 font-sans"><summary class="cursor-pointer text-amber-900">GAM's error</summary>
       <pre class="mt-1 whitespace-pre-wrap break-words rounded bg-amber-100/70 px-2 py-1 font-mono text-amber-900">{{ r.detail }}</pre></details>{% endif %}
   </li>{% endfor %}</ul>{% endif %}

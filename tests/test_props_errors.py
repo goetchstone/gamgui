@@ -69,6 +69,8 @@ _KNOWN = (
      '"gam user user@domain.com update serviceaccount"', K.UNKNOWN),
     # overlap: "Domain user limit" says neither "rate limit" nor "quota"
     ("User: new.hire@example.com, Create Failed: Domain user limit reached. Contact Support.", K.LICENSE_LIMIT),
+    # noactionifalias (roadmap 5.1): verifyUserPrimaryEmail / verifyGroupPrimaryEmail, entityActionNotPerformedWarning.
+    ("Group: everyone@example.com, Delete Not Performed: Not a primary email address", K.ALIAS_REFUSED),
     ("Calendar: alice@example.com, Calendar ACL: (Scope: user:carol@example.com), "
      "Delete Failed: Internal error encountered.", K.UNKNOWN),
 )

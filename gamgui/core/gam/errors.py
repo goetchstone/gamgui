@@ -40,6 +40,9 @@ class GAMErrorKind(enum.Enum):
     # The subscription has no free license for another account ("Create Failed: Domain user limit
     # reached. Contact Support." — seen live 2026-09-30). Every later create fails the same way.
     LICENSE_LIMIT = "license_limit"
+    # `noactionifalias` (rename a user, delete a group; roadmap 5.1): the address is an alias, so GAM did nothing rather
+    # than act on the account or group it points to (verifyUserPrimaryEmail / verifyGroupPrimaryEmail, exit 51).
+    ALIAS_REFUSED = "alias_refused"
     NOT_AUTHENTICATED = "not_authenticated"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
@@ -87,6 +90,8 @@ _REMEDIATION = {
         "or unlicense a departed user's account) or add licenses under Billing in the Admin console, "
         "then run it again."
     ),
+    GAMErrorKind.ALIAS_REFUSED: ("That address is an alias, so nothing was changed. Name the account's or group's own "
+                                 "address."),
     GAMErrorKind.NOT_AUTHENTICATED: "GAM is not configured yet. Complete the setup wizard first.",
     GAMErrorKind.TIMEOUT: "The command timed out. Check connectivity and retry.",
     GAMErrorKind.UNKNOWN: "GAM reported an error. See details below.",
@@ -125,6 +130,7 @@ _PATTERNS: List[Tuple[Pattern[str], GAMErrorKind]] = [
     # project"…" is a real failure and must stay UNKNOWN. Tolerated by the offboarding calendar sweep.
     (re.compile(r"Service/App not enabled", re.I), GAMErrorKind.SERVICE_NOT_ENABLED),
     (re.compile(r"Domain user limit reached", re.I), GAMErrorKind.LICENSE_LIMIT),
+    (re.compile(r"Not Performed: Not a primary email address", re.I), GAMErrorKind.ALIAS_REFUSED),
     (re.compile(r"please run.*oauth|no.*credentials|service account", re.I), GAMErrorKind.NOT_AUTHENTICATED),
 ]
 
@@ -161,7 +167,7 @@ _SEVERITY: List[GAMErrorKind] = [
     GAMErrorKind.AUTH_EXPIRED, GAMErrorKind.NOT_AUTHENTICATED, GAMErrorKind.SCOPE_MISSING,
     GAMErrorKind.LICENSE_LIMIT, GAMErrorKind.RATE_LIMITED, GAMErrorKind.TIMEOUT, GAMErrorKind.UNKNOWN,
     GAMErrorKind.PERMISSION_DENIED, GAMErrorKind.OWN_ACL, GAMErrorKind.SERVICE_NOT_ENABLED,
-    GAMErrorKind.NOT_FOUND,
+    GAMErrorKind.ALIAS_REFUSED, GAMErrorKind.NOT_FOUND,
 ]
 
 

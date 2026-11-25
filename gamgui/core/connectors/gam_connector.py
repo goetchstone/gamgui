@@ -255,6 +255,29 @@ def drive_acl_done(drive_id: str) -> Callable[[str], str]:
     return said
 
 
+def builder_done(argv: Sequence[str]) -> Optional[Callable[[str], str]]:
+    """A Builder write (roadmap 5.1) GAM exited 0 for, and whether it says it did it: its line names what it changed
+    (entityActionPerformed). `create admin` exits 0 with no line at all when Google answers internalError, and the role
+    may or may not have been given. None for a command with no such check."""
+    words = [str(w).lower() for w in argv]
+    if words[:2] == ["create", "admin"]:
+        said, again = "Admin Role Assignment: ", "List their roles (`print admins user`) to see whether it was given."
+    elif len(words) == 5 and words[0] == "user" and words[2:4] == ["create", "shareddrive"]:
+        said, again = "Shared Drive ID: ", "Look for it on Shared drives before creating it again."
+    elif words[:3] == ["update", "shareddrive", "shareddriveid"] and len(words) > 3:
+        said, again = f"Shared Drive ID: {argv[3]}", "Look at its name on Shared drives."
+    elif words[:2] == ["delete", "group"] and len(words) > 2:
+        said, again = f"Group: {words[2]},", "Look for the group on Groups."
+    elif words[:2] == ["update", "user"] and "primaryemail" in words and len(words) > 2:
+        said, again = f"User: {words[2]},", "Look the person up on Users."
+    else:
+        return None
+
+    def check(out: str) -> str:
+        return "" if said.lower() in out.lower() else f"GAM exited without saying it did this, so it may not have happened. {again}"
+    return check
+
+
 def _says_the_scope(result: ChangeResult) -> ChangeResult:
     """Listing computers works with the devices scope's `.readonly` form, so a refusal here has its own fix."""
     if result.ok or result.kind not in (GAMErrorKind.SERVICE_NOT_ENABLED, GAMErrorKind.SCOPE_MISSING):
@@ -1356,7 +1379,7 @@ class GAMConnector(Connector):
             # A Builder change carries its catalog command id: the audit names the command, not just `apply`.
             command = str(change.meta.get("cid") or "")
             results.append(await self._run_write("apply", change.target, list(change.argv), change.risk,
-                                                 about={"command": command}))
+                                                 about={"command": command}, verify=builder_done(change.argv)))
         return results
 
     # --- the connected admin ------------------------------------------------------------
