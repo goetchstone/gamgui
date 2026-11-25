@@ -43,6 +43,7 @@ HEADERS = {
     "print_events": "calendarId,id,JSON",
     "get_event": "calendarId,id,JSON",
     "print_filelist": "Owner,id,name,owners,owners.0.displayName,owners.0.emailAddress,JSON",
+    "print_shared_drive_files": "Owner,id,name,JSON",   # roadmap 4.7: approximate, as print_filelist's
     # Read from the 7.51.00 build (doPrintCourses, doPrintCourseParticipants); the operator has no Education domain to see them on.
     "print_courses": "id,JSON",
     "print_course_participants": "courseId,courseName,JSON-teachers,JSON-students",

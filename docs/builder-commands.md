@@ -90,7 +90,7 @@ already is.
 
 ## What runs today
 
-The 27 curated commands, by area (several have no other screen in the app, so this is the only way to
+The 28 curated commands, by area (several have no other screen in the app, so this is the only way to
 reach them). If the count here drifts from `_curated()`, this list is stale:
 
 - **Users — Gmail:** set / turn off vacation auto-reply; add, remove and list mailbox
@@ -105,7 +105,7 @@ reach them). If the count here drifts from `_curated()`, this list is stale:
 - **Groups:** create a group; add member to group; remove member from group.
 - **Org units:** create, rename and delete an org unit (moving people is on Users, one or many; roadmap 4.2).
 - **ChromeOS Devices:** find Chromebooks.
-- **Drive:** find a user's Drive files.
+- **Drive:** find a user's Drive files; list a shared drive's files, read as one of its members (its members change on Shared drives).
 - **Data Transfers:** transfer Drive/Calendar ownership.
 
 Everything else that runs is an auto-promoted read (see above).

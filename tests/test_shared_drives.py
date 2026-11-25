@@ -307,3 +307,30 @@ def test_a_write_gam_skipped_without_a_word_isnt_done(client, gam_state, gam_cal
     assert "GAM exited without saying it did this" in text and "Removed" not in text
     audit = (client.app.state.gamgui.connector.audit.path).read_text()
     assert '"action": "remove_drive_member"' in audit and '"ok": false' in audit
+
+
+# --- the Builder's "List a shared drive's files" ----------------------------------------------------------------------------
+
+def test_the_file_list_is_read_as_a_member_with_no_owner_filter():
+    assert GAMCommands.print_shared_drive_files("alice@example.com", FINANCE) == [
+        "user", "alice@example.com", "print", "filelist", "select", "shareddriveid", FINANCE, "showownedby", "any",
+        "fields", "id,name,mimeType,modifiedTime,lastModifyingUser,webViewLink", "formatjson"]
+    for email, drive in (("alice", FINANCE), ("alice@example.com", "0A x"), ("alice@example.com", "")):
+        with pytest.raises(ValueError):
+            GAMCommands.print_shared_drive_files(email, drive)
+
+
+def test_the_builder_lists_a_drives_files_for_a_member_and_googles_refusal_for_anyone_else(client, gam_calls):  # noqa: F811
+    from gamgui.core.catalog.catalog import load_catalog   # noqa: PLC0415 — the curated entry, as the Builder reads it
+    cmd = load_catalog().by_id("build.shared_drive_files")
+    assert cmd and cmd.buildable and cmd.risk.name == "READ_ONLY"
+    text = _text(client.post("/builder/run", data={"cid": "build.shared_drive_files", "email": "alice@example.com",
+                                                    "drive_id": FINANCE}).text)
+    assert "Budget 2027" in text and "Invoices" in text
+    text = _text(client.post("/builder/run", data={"cid": "build.shared_drive_files", "email": "carol@example.com",
+                                                    "drive_id": FINANCE}).text)
+    assert "Budget 2027" not in text and "Shared drive not found" in text
+    text = _text(client.post("/builder/run", data={"cid": "build.shared_drive_files", "email": "alice@example.com",
+                                                    "drive_id": "0A x"}).text)
+    assert "letters, digits" in text
+    assert gam_writes(gam_calls()) == []

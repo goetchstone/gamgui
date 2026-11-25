@@ -202,6 +202,7 @@ IDENTIFIERS = (
     Spec("set_drive_member_role", (), (), {"drive_id": _DRIVE_ID, "permission_id": _DRIVE_ID,
                                            "role": st.sampled_from(commands.DRIVE_ROLES)}),
     Spec("remove_drive_member", (), (), {"drive_id": _DRIVE_ID, "permission_id": _DRIVE_ID}),
+    Spec("print_shared_drive_files", (), (), {"email": _SEARCH_ADDRESS, "drive_id": _DRIVE_ID}),
 )
 
 
