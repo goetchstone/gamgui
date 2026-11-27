@@ -80,8 +80,10 @@ Everything below is planned for both apps.
   only if it cannot mutate, so adding write coverage stays a deliberate, reviewed act of curation.
 - **Step-to-step dataflow in the sequencer** — bind one step's output to the next step's input.
   Deferred from the original Builder design; steps are independent today.
-- **Export a sequence to `gam batch` / CSV**, so the visual builder composes with GAM's own batch
-  machinery instead of competing with it.
+- **Export a sequence to `gam batch`**: built (2026-11-27). A sequence's preview writes it as a batch file,
+  one quoted line a step with `commit-batch` between, audited, a password refused. Not CSV: `gam csv` runs one
+  command per row and a sequence's steps are different commands; many people, one command, is the Users CSV.
+  Not run through a real `gam batch` yet.
 - **A GAM-native fast path for domain-wide signature apply.** The per-user loop is deliberate — it is
   what powers the live ✓/✗ feed — but a genuine whole-domain push would be minutes instead of hours
   via `gam all users` or a `gam csv` batch. Worth adding as an *opt-in alternative*, not a

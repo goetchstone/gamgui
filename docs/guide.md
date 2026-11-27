@@ -276,6 +276,12 @@ and the CSV download takes the filtered rows.
 Clicking an address in a result offers follow-ups for that person (delegates, forwarding,
 signature, suspend and more). A Builder change only ever runs from its preview.
 
+A queued sequence can also leave the app as a file for GAM's own `gam batch`: its preview has **Export as a gam batch
+file**. Each step is one line, written so GAM reads every value back exactly as typed, with a `commit-batch` line
+between steps so they run in order. The file then runs **outside GamGUI**: no preview, no confirmation and no audit
+record, so read it before you run it. The export itself is recorded (`sequence_export`, with each step's command). A step
+that sets a password, or a value with a line break in it, stops the export rather than being written.
+
 A few changes have no screen of their own and live in the Builder: rename a user (their new primary address; Google
 keeps the old one as an alias), delete a group, give a user or group an admin role (over the whole organization or one
 org unit), and create or rename a shared drive. Each is named by its own address or ID: GAM refuses an alias rather

@@ -552,6 +552,8 @@ def test_pinned_version_consistent():
 # The connector functions that may record() or run a write outside `_run_write`, each with its reason.
 AUDITED_OUTSIDE_RUN_WRITE = {
     "create_onboarding_runbook": "a two-step tasklist build; records `onboard_runbook` itself",
+    "audit_sequence_export": "a Builder sequence written as a gam batch file (roadmap 5.3): records "
+                             "`sequence_export`, runs no gam",
 }
 # Reads that record() — never the output (plan S9, operator decision D3).
 AUDITED_READS = {

@@ -75,7 +75,9 @@ guarding them:
   be hand-curated. Anything uncertain stays inert. The reads whose output is itself a secret or a
   file stay runnable and every run is audited as `sensitive_read` (the command and the target, never
   the output), as a Builder sequence step too, and so is downloading such a result as CSV
-  (`sensitive_csv_export`, with the row count). Exactly two kinds: 2-Step Verification backup
+  (`sensitive_csv_export`, with the row count). A Builder sequence exported as a `gam batch` file is recorded too
+  (`sequence_export`, each step's argv); that file then runs outside the app's guard and audit, and the export
+  refuses a step that would write a password into it. Exactly two kinds: 2-Step Verification backup
   codes and Chrome browser enrollment tokens (`show`/`print backupcodes`, `show`/`print
   browsertokens`, named), and every read with GAM's download verb `get`, by rule — today a user's
   Drive file or Doc, their Keep note attachments, ChromeOS device files, and user and contact

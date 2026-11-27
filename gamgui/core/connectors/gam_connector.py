@@ -1294,6 +1294,14 @@ class GAMConnector(Connector):
         self.audit.record("sensitive_csv_export", target=target, argv=argv, ok=True,
                           extra={"command": command, "rows": rows}, domain=self.domain)
 
+    def audit_sequence_export(self, steps: List[dict]) -> None:
+        """A Builder sequence written out as a `gam batch` file (roadmap 5.3): it then runs outside the guard and the
+        audit, so the export itself is recorded as ``sequence_export``: each step's catalog command and argv. No GAM call.
+        A step that sets a password is refused before this (core/sequence_export), so no argv here holds one."""
+        self.audit.record("sequence_export", target="sequence", ok=True, domain=self.domain,
+                          extra={"steps": len(steps), "commands": [s.get("cid", "") for s in steps],
+                                 "argvs": [list(s["argv"]) for s in steps]})
+
     def sheet_owner(self) -> str:
         """Whose Drive an export's Sheet goes in: the connected admin, the address in the sign-in token, as GAM takes it
         (``_getAdminEmail``: GamGUI's gam.cfg names no admin_email). "" when the token can't be read."""
