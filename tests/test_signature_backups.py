@@ -107,7 +107,7 @@ async def test_a_row_cut_short_is_incomplete_never_empty(connector, monkeypatch)
 
     async def short(domain, argv, timeout=None):
         return RunResult(stdout="User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature\n"
-                                f"{ALICE},,True,True,,{ALICE}\n", stderr=f"Getting Signature for {ALICE}\n", returncode=0)
+                                f"{ALICE},,True,True,,{ALICE}\n", stderr=f"Getting Signatures for {ALICE}\n", returncode=0)
 
     monkeypatch.setattr(connector.runner, "run_any_exit", short)
     with pytest.raises(Incomplete):

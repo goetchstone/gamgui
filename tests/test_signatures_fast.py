@@ -76,7 +76,7 @@ def test_a_read_is_only_who_came_back_whole():
     out = ("User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,signature,treatAsAlias,verificationStatus\n"
            "alice@example.com,,True,True,,alice@example.com,\"Best,<br>Alice\",False,accepted\n"
            "carol@example.com,,True,True,,carol@example.com,Carol,False,accepted\n")
-    err = "Getting Signature for alice@example.com (1/3)\n"          # carol's row came without GAM saying it read her
+    err = "Getting Signatures for alice@example.com (1/3)\n"          # carol's row came without GAM saying it read her
     assert fast.read_signatures(out, err, [ALICE, CAROL, "dan@example.com"]) == {ALICE: "Best,<br>Alice"}
 
 
