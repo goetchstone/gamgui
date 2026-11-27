@@ -262,12 +262,14 @@
     if (run) run(el, e);
   });
 
-  // A typed confirmation (signature Apply over the threshold): its button unlocks on the exact value.
+  // A typed confirmation (signature Apply over the threshold): its buttons (ids, space-separated) unlock on the exact value.
   document.addEventListener("input", function (e) {
     var inp = e.target;
     if (!inp.dataset || !inp.dataset.unlocks) return;
-    var btn = document.getElementById(inp.dataset.unlocks);
-    if (btn) btn.disabled = inp.value.trim() !== inp.dataset.expect;
+    inp.dataset.unlocks.split(" ").forEach(function (id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.disabled = inp.value.trim() !== inp.dataset.expect;
+    });
   });
 
   // Tabs (user detail, onboarding): show one panel at a time so a content-heavy page fits the window.

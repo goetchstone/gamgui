@@ -199,10 +199,39 @@ ANY_EXIT_READS = {
 }
 
 
+# Commands whose data goes on standard input (roadmap 5.4): each with what the app feeds it.
+STDIN_COMMANDS = {
+    "set_signatures_csv": (C.set_signatures_csv(), 'User,signature\n"alice@example.com","<b>A</b>"\n'),
+    "print_signatures_from_stdin": (C.print_signatures_from_stdin(), "alice@example.com\ncarol@example.com\n"),
+}
+
+
 def test_every_builder_is_classified():
     # A new builder must land in WRITES (and get a strict mock handler) or READS before it ships.
     builders = {name for name, v in vars(C).items() if isinstance(v, staticmethod)}
-    assert builders - set(WRITES) - set(READS) - set(ANY_EXIT_READS) - NOT_A_COMMAND == set()
+    assert builders - set(WRITES) - set(READS) - set(ANY_EXIT_READS) - set(STDIN_COMMANDS) - NOT_A_COMMAND == set()
+
+
+async def test_mock_loops_over_what_the_app_feeds_on_stdin(runner, domain):
+    argv, rows = STDIN_COMMANDS["set_signatures_csv"]
+    out = await runner.run_authenticated(domain, argv, serialize=True, stdin=rows)
+    assert "User: alice@example.com, Signature: alice@example.com, Set" in out
+    argv, emails = STDIN_COMMANDS["print_signatures_from_stdin"]
+    res = await runner.run_any_exit(domain, argv, stdin=emails)
+    assert res.returncode == 0 and "Getting Signature for carol@example.com (2/2)" in res.stderr
+    assert res.stdout.splitlines()[0].startswith("User,") and len(res.stdout.splitlines()) == 3
+
+
+@pytest.mark.parametrize("argv,stdin,needle", [
+    (C.set_signatures_csv(), 'User,body\nalice@example.com,x\n', 'Header "signature" not found'),   # GAM's csvFieldErrorExit
+    (["csv", "-", "gam", "user", "~User", "signature", "~signature", "html"], "User,signature\n", "isn't modelled"),
+    (["file", "-", "print", "signature", "compact"], "alice@example.com\n", "isn't modelled"),
+])
+@pytest.mark.hand_built_argv   # malformed on purpose
+async def test_mock_refuses_a_stdin_loop_it_doesn_t_model(runner, domain, argv, stdin, needle):
+    with pytest.raises(GAMError) as ei:
+        await runner.run_authenticated(domain, argv, serialize=True, stdin=stdin)
+    assert needle in ei.value.stderr and ei.value.exit_code != 0
 
 
 @pytest.mark.parametrize("argv", [a for cases in ANY_EXIT_READS.values() for a in cases], ids=lambda a: " ".join(a)[:60])

@@ -29,6 +29,7 @@ KEEP_FINISHED = 10 # finished jobs kept, and as many finished one-step changes
 # kind -> the status route that renders the job's own panel (its page, /jobs/<id>, loads it from there).
 PANELS = {
     "signatures": "/signatures/apply/status",
+    "signatures_fast": "/signatures/apply/status",   # roadmap 5.4: one GAM call, so no Stop (UNSTOPPABLE)
     "department": "/users/bulk/status",
     "offboard": "/lifecycle/offboard/status",
     "closeout": "/lifecycle/closeout/status",   # roadmap 4.5: Stop between its steps
@@ -55,7 +56,8 @@ PANELS = {
     "onboard": "/onboard/bulk/status",
     "finish": "/onboard/finish/status",   # steps retried until Google has set a new account up
 }
-UNSTOPPABLE = {"index", "roster_compare", "connected_apps", "mail_review", "incident_check", "incident_open", "incident_groups"}   # reads at once, not a loop: there is no "between targets"
+SIGNATURES_FAST = "signatures_fast"
+UNSTOPPABLE = {SIGNATURES_FAST, "index", "roster_compare", "connected_apps", "mail_review", "incident_check", "incident_open", "incident_groups"}   # reads at once, not a loop: there is no "between targets"
 CONFIRM_STOP = {"offboard", "incident_secure"}      # a stop leaves the leaver half offboarded, or the attacker half locked out: ask first
 ONE_STEP = "change"              # a change made from a screen's button, not a loop: no panel of its own, and no Stop
 
@@ -102,6 +104,7 @@ CHANGE_WORDS = {
     "set_organization": "Set title or department",
     "set_password": "Set a temporary password",
     "set_signature": "Set a signature",
+    "set_signatures_fast": "Set many signatures in one GAM call",
     "set_vacation": "Set an auto-reply",
     "signout_user": "Sign out everywhere",
     "subscribe_calendar": "Add a calendar to their list",
@@ -276,10 +279,11 @@ def retry_key(job_id: str) -> Tuple[str, str]:
     return ("retry", job_id)
 
 
-def retry_of(jobs: dict, job_id: str, kind: str) -> Tuple[Optional[Job], Optional[str]]:
-    """The finished ``kind`` job whose failures a retry previews (plan U5), or why there is none."""
+def retry_of(jobs: dict, job_id: str, kind) -> Tuple[Optional[Job], Optional[str]]:
+    """The finished ``kind`` job (or one of a tuple of kinds) whose failures a retry previews (plan U5), or why there is none."""
     job = jobs.get(job_id)
-    if job is None or job.kind != kind or not job.finished or job.retry is None:
+    kinds = (kind,) if isinstance(kind, str) else tuple(kind)
+    if job is None or job.kind not in kinds or not job.finished or job.retry is None:
         return None, "That run is no longer available — run it again from the start."
     if job.before_switch:
         return None, "That run was on the domain active before the switch — run it again from the start on this one."

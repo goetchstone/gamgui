@@ -14,12 +14,13 @@ from fastapi.responses import HTMLResponse
 from ...core import guard
 from ...core import signature_backups as backups
 from ...core import signatures as sig
+from ...core import signatures_fast as fast
 from ...core.bulk import stop_reason, stop_requested
 from ...core.connectors.base import RiskLevel
 from ...core.gam.commands import signature_read_as_file
 from ...core.gam.errors import GAMError
 from ...core.signatures import SignatureStore
-from ..jobs import Job, register_job, retry_key, retry_of
+from ..jobs import SIGNATURES_FAST, Job, register_job, retry_key, retry_of
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES
 from ._common import NOT_CONNECTED, friendly, gam_detail, signature_backups, signature_store
@@ -130,6 +131,66 @@ async def _run_writes(job: Job, conn, items, kept) -> None:
         job.finish()
 
 
+async def _run_fast(job: Job, conn, matched, template: str, kept) -> None:
+    """Background task, roadmap 5.4's opt-in fast path: one GAM call reads everyone's current signature, each is kept, one
+    call sets them all. No Stop between people (the job's kind is UNSTOPPABLE) and no live feed until the end. A person
+    whose row can't go through GAM's csv, whose signature wasn't read, or whom GAM doesn't say it set, is failed and
+    Retry runs them through the per-user loop. A copy that can't be kept stops it before anything is written."""
+    try:
+        ready = []
+        for u in matched:
+            body = sig.render_signature(template, u)
+            why = fast.refusal(u.primary_email, body)
+            if why:
+                job.record(u.primary_email, False, why)
+            else:
+                ready.append((u.primary_email, body))
+        if not ready:
+            return
+        job.current = f"Reading {len(ready)} current signatures in one GAM call"
+        try:
+            read = await conn.signatures_exact([e for e, _ in ready])
+        except Exception as exc:  # noqa: BLE001 — unread is unknown: nobody is overwritten
+            if not isinstance(exc, GAMError):
+                logger.warning("reading the signatures to keep failed", exc_info=exc)
+            for email, _ in ready:
+                job.record(email, False, _NOT_READ, gam_detail(exc))
+            return
+        if stop_requested(job):   # a domain switch during the read: nothing is written on the old domain
+            return
+        writes = []
+        for email, body in ready:
+            if email in read:
+                writes.append((email, body))
+            else:
+                job.record(email, False, _NOT_READ)
+        try:
+            for email, body in writes:
+                kept.keep(email, read[email], fast.as_sent(body))
+        except OSError as exc:
+            logger.warning("keeping a signature copy failed", exc_info=exc)
+            job.error = _NOT_KEPT.format(left=len(writes))
+            return
+        if not writes:
+            return
+        job.current = f"Setting {len(writes)} signatures in one GAM call"
+        result, said = await conn.set_signatures_fast(writes)
+        for email, _ in writes:
+            if email in said:
+                job.record(email, True)
+            elif result.ok:
+                job.record(email, False, fast.NOT_SAID)
+            else:
+                job.record(email, False, result.remediation or fast.NOT_SAID, result.detail)
+    except Exception as exc:  # noqa: BLE001 — the whole run failed (a sign-in expired)
+        if not isinstance(exc, GAMError):
+            logger.warning("a fast signature run failed", exc_info=exc)
+        job.error = friendly(exc)
+    finally:
+        kept.close()
+        job.finish()
+
+
 def _test_user(st, options: dict) -> str:
     """Who "Specific user (test)" opens on: the connected admin's own address when it is an active
     user, else "" (a blank choice). It once opened on whoever sorted first — a colleague, whose live
@@ -213,7 +274,7 @@ async def retry(request: Request, job: Annotated[str, Form()] = "") -> HTMLRespo
     tenant = st.tenant_key()   # before the directory read: what the preview is bound to (web/previews.py)
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": NOT_CONNECTED, "retry": job})
-    done, refusal = retry_of(st.jobs, job, "signatures")
+    done, refusal = retry_of(st.jobs, job, ("signatures", SIGNATURES_FAST))
     if done is None:
         return TEMPLATES.TemplateResponse(request, _PREVIEW_PARTIAL, {"error": refusal, "retry": job})
     try:
@@ -248,6 +309,7 @@ async def apply(
     if refusal:
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"error": refusal})
     template, matched = held
+    fast_path = str(form.get("fast") or "") == "1" and not retried and len(matched) > 1   # roadmap 5.4, opt-in
     # Only via the preview's Apply button, and over COUNT_CONFIRM_ABOVE people with the previewed count typed.
     refusal = guard.enforce(_previews(matched), form, confirm_step=True, typed_count_above=guard.COUNT_CONFIRM_ABOVE)
     if refusal:
@@ -263,9 +325,10 @@ async def apply(
         logger.warning("making a signature backup failed", exc_info=exc)
         return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {
             "error": "Couldn't make a place on this Mac to keep the old signatures, so nothing was replaced."})
-    job = register_job(st.jobs, Job(total=n, kind="signatures", retry=template,
-                                     title=f"Signature retry — {users_n}" if retried else f"Signature for {who} — {users_n}"))
-    job.task = asyncio.create_task(_run_apply(job, st.connector, matched, template, kept))
+    job = register_job(st.jobs, Job(total=n, kind=SIGNATURES_FAST if fast_path else "signatures", retry=template,
+                                     title=f"Signature retry — {users_n}" if retried else
+                                     f"Signature for {who} — {users_n}{', one GAM call' if fast_path else ''}"))
+    job.task = asyncio.create_task((_run_fast if fast_path else _run_apply)(job, st.connector, matched, template, kept))
     return TEMPLATES.TemplateResponse(request, _APPLY_PARTIAL, {"job": job})
 
 

@@ -213,6 +213,12 @@ the people and template the preview showed; more than 25 people asks you to type
 **After:** the run shows a ✓ or ✗ for each person. If some failed, **Retry the N that failed** gives
 them their own preview and confirm step — just those people.
 
+**Many people at once:** under the Apply button, **Faster: all N in one GAM call** sets everyone in one go instead of one
+at a time. Everyone's current signature is still read (in one call) and kept first, so Put Back works. It has no live ✓/✗
+list and no Stop: you see who was set when it finishes. Anyone GAM doesn't say it set is listed as failed, and Retry runs
+them one at a time. Characters outside plain English (é, —) are sent as HTML codes, which show the same, and a blank
+signature can't go this way.
+
 ## Share a calendar
 
 **Calendars** → **Find a calendar by name**. The first time, click **Build index**: a one-time

@@ -4,7 +4,8 @@
 
 Runs scripts/preview_mock.py's app (strict mock gam, fake example.com data) on port 8799 in a
 background thread and drives headless Google Chrome over the DevTools protocol at 1280 px wide, 2x:
-Users, the Home dashboard, the signature designer with a preview, a calendar's access, and an offboarding preview.
+Users, the Home dashboard, the signature designer with a preview, a calendar's access, an offboarding preview,
+Classroom, Reports, a group's members and settings, an account checked on Incident, and a Builder folder-move preview.
 Needs Google Chrome installed; `websockets` comes with uvicorn[standard]. Screenshots once showed
 the operator's company name and an internal calendar name because they were captured by hand.
 """
@@ -193,6 +194,38 @@ async def shoot():
                        ".find(el => /Biology/.test(el.innerText)).click(); return true; })()")   # it has students
             await t.wait_for("/STUDENTS · [1-9]/i.test(document.body.innerText)", 15)
             await t.shot("classroom.png")
+
+            await t.goto("/reports")
+            await t.wait_for("/NO 2-STEP/i.test(document.body.innerText) && /Suspend these/.test(document.body.innerText)", 15)
+            await t.shot("reports.png")
+
+            await t.goto("/groups")
+            await t.wait_for("/sales@example.com/.test(document.body.innerText)", 15)
+            await t.click('button[data-group="sales@example.com"]')
+            await t.wait_for("/2 members/.test(document.body.innerText)", 15)
+            await t.click_text("Show settings", "button, summary")
+            await t.wait_for("/Who can post/.test(document.body.innerText)", 15)
+            await t.shot("groups.png")
+
+            await t.goto("/incident")                                   # the mock's bob@: suspended, apps, a phone, no 2SV
+            await t.fill("input[name=person]", "bob@example.com")
+            await t.click_text("Check account")
+            await t.wait_for("/The lock/.test(document.body.innerText)", 15)
+            await t.shot("incident.png")
+
+            # A folder of mixed ownership into a shared drive (roadmap 4.8): the preview counts its files by owner.
+            await t.goto("/builder?cid=build.move_folder_to_shared_drive")
+            await t.wait_for("document.querySelector('input[name=folder_id]')", 15)
+            await t.fill("input[name=email]", "alice@example.com")
+            await t.fill("input[name=folder_id]", "1FOLDERmixed")
+            await t.fill("input[name=drive_id]", "0AFINANCEuk9PVA")
+            await t.click_text("Preview")
+            await t.wait_for("/holds 4 files/.test(document.body.innerText)", 15)
+            # The Builder is one window high (its working pane scrolls), so the preview would run under the Sequence bar:
+            # let the page grow to hold it.
+            await t.js("(() => { const page = document.getElementById('builder-grid').parentElement;"
+                       " page.style.height = 'auto'; page.style.overflow = 'visible'; return true; })()")
+            await t.shot("builder.png")
     finally:
         proc.terminate()
 

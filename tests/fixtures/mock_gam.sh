@@ -321,6 +321,13 @@ if [ -n "${GAM_MOCK_REFRESH:-}" ]; then
   printf 'refreshed-token-payload\n' > "$GAMCFGDIR/oauth2.txt"
 fi
 
+# GAM's loops over standard input (roadmap 5.4's signature fast path): `csv - … gam user ~User signature ~signature html`
+# and `file - print signature`. mock_gam_loops.py does GAM's looping and runs this mock once per row or person, so the
+# strict one-person handlers below answer each; any other `csv` or `file -` shape is refused there.
+if [ "${1:-}" = "csv" ] || { [ "${1:-}" = "file" ] && [ "${2:-}" = "-" ]; }; then
+  exec python3 "$(dirname "$0")/mock_gam_loops.py" "$0" "$@"
+fi
+
 case "${1:-}" in
   MOCKFAIL)
     # MOCKFAIL <kind> -> emit a representative stderr line and exit non-zero.
@@ -2416,7 +2423,9 @@ if [ "${1:-}" = "user" ] && { [ "${3:-}" = "signature" ] || [ "${3:-}" = "sig" ]
     mkdir -p "$GAM_MOCK_STATE/signatures"
     printf '%s' "$sig_value" > "$GAM_MOCK_STATE/signatures/$(lower "$user")"
   fi
-  echo "User: $user, SendAs Address: <$user>, Updated"
+  # setSignature → _processSendAs → entityActionPerformed([USER, user, SIGNATURE, user]) with Act.SET (glentity, glaction at the
+  # 7.52.05 tag): "Signature" and "Set". It once said "SendAs Address: <…>, Updated", which nothing read until 5.4 did.
+  echo "User: $user, Signature: $user, Set"
   exit 0
 fi
 
