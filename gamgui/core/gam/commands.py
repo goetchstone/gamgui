@@ -1119,8 +1119,10 @@ class GAMCommands:
         # input. Its reader is csv.DictReader with GAM's input defaults, so the delimiter, quote and no escape character are
         # said here, not left to gam.cfg: with the default `\\` escape a backslash in a signature would be eaten. `~User` and
         # `~signature` are whole-argument substitutions (getSubFields), so a value is never re-scanned for `~~`. An empty
-        # cell substitutes "", which clears a signature: core/signatures_fast refuses one before GAM sees it.
-        return ["csv", "-", "columndelimiter", ",", "quotechar", '"', "noescapechar", "true",
+        # cell substitutes "", which clears a signature: core/signatures_fast refuses one before GAM sees it. The options go in
+        # openCSVFileReader's own order (columndelimiter, noescapechar, quotechar), each checked once: in any other order
+        # one is left over and `gam` is refused, exit 2, after the backup read already ran (failure-log 2026-11-27).
+        return ["csv", "-", "columndelimiter", ",", "noescapechar", "true", "quotechar", '"',
                 "gam", "user", "~User", "signature", "~signature", "html"]
 
     @staticmethod

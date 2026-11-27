@@ -436,4 +436,18 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
 - **Enforcement home if changed:** skill (`pre-commit`: "a wording you match, cite its GAM source"), or a tripwire that
   compares each matched "Getting <X> for" against glentity's plurals.
 
+## 2026-11-27 — A mock that matches one exact argv vouches only for that argv
+- **What happened:** 5.4's mock handler for `csv -` compared the argv to one list copied from the builder. GAM reads csv's
+  options once each, in `openCSVFileReader`'s order, and the builder had two of them swapped. The suite passed; live, GAM
+  would have refused every fast write after the backup read. SwiftGamGui's port caught it (failure-log 2026-11-27, the csv
+  entry).
+- **Invariant in force:** the mock-lies rule: a mock that is more permissive than GAM is worse than none.
+- **Why it didn't hold:** weak wording, or the wrong layer. An exact-match handler isn't permissive, so it feels strict, but
+  it is the builder's own guess played back. It refuses only what the builder never sends, so it can't catch the builder.
+- **Would a rule have caught it?** Yes, if a handler had to parse as GAM's own function does (the same sequence, the same
+  refusals), not compare against the builder's output, and if the grammar contract checked the order of options where GAM
+  reads them in sequence.
+- **Enforcement home if changed:** tripwire (a contract test that the fixed-order groups in GamCommands.txt keep their order in
+  each builder), or skill (`add-builder-command`: "model the parser, never `argv == BUILDER()`").
+
 <!-- Add new entries ABOVE this line, newest first. -->

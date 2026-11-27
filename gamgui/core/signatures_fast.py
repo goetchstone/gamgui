@@ -6,7 +6,9 @@ neither, and the preview says so. It still keeps each person's current signature
 - **Backup read:** `gam file - print signature`, the addresses on standard input. A person is read only when their one row
   came back whole and GAM said "Getting Signatures for" them; anyone else is unread, never "no signature" (invariant 10),
   and isn't written.
-- **Write:** `gam csv - … gam user ~User signature ~signature html`, the rows on standard input. GAM 7.52.05's `csv` reads
+- **Write:** `gam csv - columndelimiter , noescapechar true quotechar " gam user ~User signature ~signature html`, the
+  options in openCSVFileReader's order (it checks each once, so any other order leaves one over and GAM refuses `gam`),
+  the rows on standard input. GAM 7.52.05's `csv` reads
   them with csv.DictReader after `sys.stdin.read()` (text mode: `\\r\\n` and `\\r` arrive as `\\n`, decoded in GAM's own
   locale), so each body has its line breaks made `\\n` and every non-ASCII character written as an HTML character
   reference: the bytes GAM reads are ASCII whatever its locale, and an HTML signature shows `&#233;` as é. The body

@@ -224,7 +224,13 @@ async def test_mock_loops_over_what_the_app_feeds_on_stdin(runner, domain):
 
 @pytest.mark.parametrize("argv,stdin,needle", [
     (C.set_signatures_csv(), 'User,body\nalice@example.com,x\n', 'Header "signature" not found'),   # GAM's csvFieldErrorExit
-    (["csv", "-", "gam", "user", "~User", "signature", "~signature", "html"], "User,signature\n", "isn't modelled"),
+    # The order #193 shipped: openCSVFileReader checks each option once, in its own order, so `noescapechar` after
+    # `quotechar` is left over and `gam` is refused (failure-log 2026-11-27).
+    (["csv", "-", "columndelimiter", ",", "quotechar", '"', "noescapechar", "true", "gam", "user", "~User", "signature",
+      "~signature", "html"], "User,signature\n", "Invalid choice (noescapechar): Expected <gam>"),
+    (["csv", "-", "noescapechar", "true", "columndelimiter", ",", "gam", "user", "~User", "signature", "~signature",
+      "html"], "User,signature\n", "Invalid choice (columndelimiter): Expected <gam>"),
+    (["csv", "-", "gam", "user", "~User", "print", "signature"], "User\n", "isn't modelled"),
     (["file", "-", "print", "signature", "compact"], "alice@example.com\n", "isn't modelled"),
 ])
 @pytest.mark.hand_built_argv   # malformed on purpose
@@ -499,3 +505,15 @@ async def test_mock_refuses_a_new_account_when_no_license_is_left(runner, domain
                                        serialize=True)
     assert ei.value.exit_code == 50 and ei.value.kind is GAMErrorKind.LICENSE_LIMIT
     assert "Create Failed: Domain user limit reached. Contact Support." in ei.value.stderr
+
+
+@pytest.mark.hand_built_argv   # the bare `csv -` form on purpose: GAM accepts it with its default reader
+async def test_without_noescapechar_gam_s_reader_eats_a_backslash(runner, domain, gam_state):
+    # GAM's csv reader escapes with a backslash unless told noescapechar: the mock reads as GAM does, so leaving the option
+    # out can't pass here and mangle a signature live.
+    argv = ["csv", "-", "gam", "user", "~User", "signature", "~signature", "html"]
+    await runner.run_authenticated(domain, argv, serialize=True, stdin='User,signature\n"alice@example.com","a\\\\b\\c"\n')
+    assert (gam_state / "signatures" / "alice@example.com").read_text() == "a\\bc"
+    await runner.run_authenticated(domain, C.set_signatures_csv(), serialize=True,
+                                   stdin='User,signature\n"alice@example.com","a\\\\b\\c"\n')
+    assert (gam_state / "signatures" / "alice@example.com").read_text() == "a\\\\b\\c"
