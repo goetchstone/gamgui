@@ -113,9 +113,11 @@ def test_only_a_reviewed_read_may_use_the_any_exit_door():
     # none; any other non-zero exit raises (4.7).
     # folder_count: `print filelist select id:<folder> showparent` (a READS builder), whose 60 is a folder GAM didn't read,
     # said as unknown; any other non-zero exit raises (4.8).
+    # signatures_exact: `file - print signature` (roadmap 5.4), the same "Getting" rule as signature_exact a person at a time;
+    # one person's failure sets the exit and the run goes on, so only who was read whole is in the answer.
     assert callers == {"find_message_copies", "find_spam_copies", "mailbox_copy", "script_projects", "_courses_read",
                        "owned_calendars", "_mail_read", "signature_exact", "audit_read", "shared_drives",
-                       "drive_permissions", "folder_count"}
+                       "drive_permissions", "folder_count", "signatures_exact"}
 
 
 # --- MessageCopies ------------------------------------------------------------------------------------------------------

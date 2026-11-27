@@ -213,6 +213,12 @@ the people and template the preview showed; more than 25 people asks you to type
 **After:** the run shows a ✓ or ✗ for each person. If some failed, **Retry the N that failed** gives
 them their own preview and confirm step — just those people.
 
+**Many people at once:** under the Apply button, **Faster: all N in one GAM call** sets everyone in one go instead of one
+at a time. Everyone's current signature is still read (in one call) and kept first, so Put Back works. It has no live ✓/✗
+list and no Stop: you see who was set when it finishes. Anyone GAM doesn't say it set is listed as failed, and Retry runs
+them one at a time. Characters outside plain English (é, —) are sent as HTML codes, which show the same, and a blank
+signature can't go this way.
+
 ## Share a calendar
 
 **Calendars** → **Find a calendar by name**. The first time, click **Build index**: a one-time
@@ -278,7 +284,7 @@ signature, suspend and more). A Builder change only ever runs from its preview.
 
 A queued sequence can also leave the app as a file for GAM's own `gam batch`: its preview has **Export as a gam batch
 file**. Each step is one line, written so GAM reads every value back exactly as typed, with a `commit-batch` line
-between steps so they run in order. The file then runs **outside GamGUI**: no preview, no confirmation and no audit
+between steps so they run in order. The file then runs outside GamGUI: no preview, no confirmation and no audit
 record, so read it before you run it. The export itself is recorded (`sequence_export`, with each step's command). A step
 that sets a password, or a value with a line break in it, stops the export rather than being written.
 

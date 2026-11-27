@@ -227,6 +227,7 @@ school domain is the most useful one of all.
 | Welcome email | Onboard | **confirmed** |
 | Reminder email (No 2SV, No recovery) | Reports | not yet; the same `sendemail` as the welcome email, one per person |
 | Set signature | Signatures (bulk), Users, Onboard | **confirmed** (the Builder no longer sets one: roadmap 4.1) |
+| Set signatures in one call (`csv -` with the rows on stdin, after one `file - print signature` backup read) | Signatures (opt-in) | not yet: set two throwaway accounts' signatures, then Put Back |
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |

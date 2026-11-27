@@ -138,13 +138,20 @@ ENUM_ARGS = {
 # Argv suffixes appended to another command, not commands: keywords checked, leading words not.
 SUFFIXES = {"todrive_args"}
 # The argv prefixes that name who a command acts on; the command's own words follow them.
-ENTITY_PREFIXES = (("user", None), ("all", "users"), ("calendars", None), ("update", "group", None))
+ENTITY_PREFIXES = (("user", None), ("file", None), ("all", "users"), ("calendars", None), ("update", "group", None))
+
+
+# Values a builder writes literally, never keywords (roadmap 5.4): `-` is a <FileName> read from standard input (setFilePath
+# leaves it alone, openFile reads stdin), `,` and `"` are <Character>s, and `~Field` is a `gam csv` column substitution
+# (getSubFields: a whole argument starting with `~` names a header field).
+LITERAL_VALUES = {"-", ",", '"'}
 
 
 def _value(tok: str) -> bool:
     # A `<param>` placeholder this test passed in, alone or joined into a list, the address joined into a search, or an
     # ID a builder validates: a real one stands in for the placeholder it would refuse.
-    return "<" in tok or SEARCH_ADDRESS in tok or tok in VALIDATED_VALUES
+    return ("<" in tok or SEARCH_ADDRESS in tok or tok in VALIDATED_VALUES or tok in LITERAL_VALUES
+            or re.fullmatch(r"~\w+", tok) is not None)
 
 
 def _refused_on_purpose(name: str, args: dict) -> bool:
@@ -232,7 +239,7 @@ def _head_accepts(head, argv, enums) -> int:
             return i
         if body == "<UserTypeEntity>":
             n = 2 if argv[i:i + 2] == ["all", "users"] or (
-                argv[i] == "user" and len(argv) > i + 1 and _value(argv[i + 1])) else 0
+                argv[i] in ("user", "file") and len(argv) > i + 1 and _value(argv[i + 1])) else 0
         else:
             alts = body.split("|")
             if _value(argv[i]):   # a value fills a slot, never a keyword
@@ -281,6 +288,12 @@ def _group_attributes_ok(pairs) -> bool:
 
 def _matches_grammar(argv) -> bool:
     _, _, heads, enums = _grammar()
+    # `gam csv <CSVLoopContent> … gam <GAMArgumentList>` (roadmap 5.4): the loop's own head, and the command it runs per
+    # row held to the grammar as a command of its own.
+    if argv[:1] == ["csv"] and "gam" in argv:
+        inner = argv.index("gam")
+        return (any(_head_accepts(h, argv[:inner], enums) >= 2 for h in heads if h[:1] == ["csv"])
+                and _matches_grammar(argv[inner + 1:]))
     if argv[:2] == ["update", "group"] and len(argv) > 3 and _value(argv[2]) and _group_attributes_ok(argv[3:]):
         return True
     # The reference says `calendars <CalendarEntity> transfer <UserItem>`, but GAM's own source and comment at the pin take
@@ -332,7 +345,8 @@ def test_builder_commands_match_a_grammar_line():
                   ["user", "<e>", "vacation", "maybe"], ["update", "group", "<g>", "insert", "<m>"],
                   ["create", "users", "<e>"], ["user", "<e>", "zzz", "delegate", "<d>"],
                   ["update", "group", "<g>", "whocanjoin", "sometimes"], ["update", "group", "<g>", "whocanfly", "true"],
-                  ["update", "group", "<g>", "isarchived", "maybe"], ["update", "group", "<g>", "isarchived"]):
+                  ["update", "group", "<g>", "isarchived", "maybe"], ["update", "group", "<g>", "isarchived"],
+                  ["csv", "-", "gam", "user", "~User", "zzz", "~signature"], ["csvv", "-", "gam", "user", "<e>", "signature", "<s>"]):
         assert not _matches_grammar(wrong), wrong
     unmatched = {f"{name}: {' '.join(argv[:_command_words(argv)])}"
                  for name, argv in builder_argvs() if name not in SUFFIXES and not _matches_grammar(argv)}
