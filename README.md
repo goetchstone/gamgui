@@ -30,8 +30,14 @@ time.
 - **Find anyone** in the directory; edit title and department (one person or in bulk), delegates,
   auto-replies and groups; sign out or suspend.
 - **Share a calendar** so it actually appears, and see who has access to any shared calendar.
-- **Audit**: 2SV gaps, inactive accounts, admins and storage in Reports; in the Builder, any of GAM's
-  read commands, filtered down to the rows that reach outside your domains.
+- **Groups and shared drives**: members and roles, a group's settings, and who manages each shared drive, each change
+  previewed; move a folder of mixed ownership into a shared drive.
+- **Respond to an incident**: check a compromised account for what an attacker changed and lock it from one preview,
+  pull the logs, see who a phishing email reached and take its copies out of every mailbox, and keep the incident's
+  report.
+- **Audit**: 2SV gaps, inactive accounts, admins and storage in Reports, with the fix a click away; audit runs you
+  can schedule (inactive users, shared drive members, license seats, admin tokens); in the Builder, any of GAM's read
+  commands, filtered down to the rows that reach outside your domains.
 - **Classroom**, for school domains: find a class and who is in it, and plan a roster import from your
   SIS's export (OneRoster, Clever, or any spreadsheet) as a change list you review and run with GAM
   yourself. Read only, and **untested on a real school domain**: if you run one,
@@ -72,6 +78,14 @@ Details in [Build from source](#build-from-source).
 ![Offboarding — a guided routine with a rendered auto-reply preview](docs/screenshots/lifecycle.png)
 
 ![Classroom — find a class and see its teachers and students, read only](docs/screenshots/classroom.png)
+
+![Reports — the gaps at a glance, each with its fix: suspend the inactive, email a reminder, take back a suspended account's licenses](docs/screenshots/reports.png)
+
+![Groups — a group's members and roles, and its settings, each change previewed](docs/screenshots/groups.png)
+
+![Incident — what an attacker commonly changes on an account, and the lock, run from one preview](docs/screenshots/incident.png)
+
+![Builder — a folder of mixed ownership into a shared drive, its files counted by owner before anything runs](docs/screenshots/builder.png)
 
 ## Status
 
