@@ -78,8 +78,10 @@ Everything below is planned for both apps.
   every write, and anything whose risk could not be inferred with confidence — are inert, syntax
   display only. That asymmetry is the safety boundary: a command can become runnable automatically
   only if it cannot mutate, so adding write coverage stays a deliberate, reviewed act of curation.
-- **Step-to-step dataflow in the sequencer** — bind one step's output to the next step's input.
-  Deferred from the original Builder design; steps are independent today.
+- **Step-to-step dataflow in the sequencer**: built (2026-11-27). A later step's field can say
+  `=step1.primaryEmail`: it runs once for each row of that earlier *read*, filled in at the preview, so the
+  confirm still runs exactly what it showed. Only reads bind, since a change's output doesn't exist until it
+  runs; a read that fell short blocks the preview.
 - **Export a sequence to `gam batch`**: built (2026-11-27). A sequence's preview writes it as a batch file,
   one quoted line a step with `commit-batch` between, audited, a password refused. Not CSV: `gam csv` runs one
   command per row and a sequence's steps are different commands; many people, one command, is the Users CSV.

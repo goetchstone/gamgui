@@ -11,7 +11,7 @@
       <li class="flex items-center gap-2 rounded border border-brand-gray/30 px-2 py-1">
         <span class="w-5 text-xs text-brand-grayink">{{ loop.index }}.</span>
         <span class="rounded px-1.5 py-0.5 text-[10px] uppercase {{ {0:'bg-emerald-50 text-emerald-700',1:'bg-brand-blue/10 text-brand-blueink',2:'bg-red-100 text-red-700'}[s.risk] }}">{{ {0:'read',1:'change',2:'destructive'}[s.risk] }}</span>
-        <span class="min-w-0 flex-1 truncate"><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-grayink">→ {{ s.target }}</span></span>
+        <span class="min-w-0 flex-1 truncate"><span class="text-brand-black">{{ s.label }}</span> <span class="text-brand-grayink">→ {{ s.target }}{% if s.binds %} from step {% for t in sequence %}{% if t.id == s.source %}{{ loop.index }}{% endif %}{% endfor %}{% endif %}</span></span>
         <button class="text-xs text-brand-grayink hover:text-brand-black disabled:opacity-30" title="move up"
                 hx-post="/builder/sequence/move" hx-vals='{"index": {{ loop.index0 }}, "to": {{ loop.index0 - 1 }}}' hx-target="#sequence" hx-swap="innerHTML" {{ 'disabled' if loop.first }}><span aria-hidden="true">↑</span><span class="sr-only">Move step {{ loop.index }} up</span></button>
         <button class="text-xs text-brand-grayink hover:text-brand-black disabled:opacity-30" title="move down"
@@ -27,6 +27,10 @@
       <button class="rounded-lg border border-brand-gray/60 px-3.5 py-2 text-sm text-brand-blueink hover:bg-paper transition-colors"
               hx-post="/builder/sequence/clear" hx-target="#sequence" hx-swap="innerHTML">Clear</button>
     </div>
+    {% if sequence | selectattr("risk", "equalto", 0) | list %}
+    {# Roadmap 5.2: a later step can take a read's results. #}
+    <p class="mt-2 text-xs text-brand-grayink">A later step can use a read's results: type <code>=step1.primaryEmail</code> in one of its fields (the step's number and any column of its table), and it runs once for each row.</p>
+    {% endif %}
     <div id="sequence-action" class="mt-3"></div>
   {% else %}
     <p class="text-sm text-brand-grayink">No steps yet. Build a command and click <em>+ Queue in sequence</em> to chain them.</p>

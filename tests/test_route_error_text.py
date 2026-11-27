@@ -38,6 +38,7 @@ OURS = frozenset({
 # (file, function) -> the validator that raises every ValueError its try body can.
 VALUE_ERRORS_FROM_OUR_VALIDATORS: Dict[Tuple[str, str], str] = {
     ("builder.py", "_assemble"): "a GAMCommands builder's argument validation (cmd.build)",
+    ("builder.py", "_resolved_step"): "a GAMCommands builder's argument validation (cmd.build), per bound value (roadmap 5.2)",
     ("calendars.py", "share"): "GAMCommands.add_calendar_acl_cal's argument validation",
     ("calendars.py", "_grant_and_subscribe"): "GAMCommands.add_calendar_acl_cal's validation, via the connector",
     ("incident.py", "secure_preview"): "core/incident/secure.steps' refusals",

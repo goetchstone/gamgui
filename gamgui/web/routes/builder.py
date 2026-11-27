@@ -23,7 +23,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core import guard as guard_mod
-from ...core import sequence_export, sheet_export
+from ...core import sequence_binds, sequence_export, sheet_export
 from ...core.catalog import load_catalog
 from ...core.catalog.catalog import AREA_ORDER, COPY_FOLDER_REST, MOVE_FOLDER
 from ...core.catalog.models import SlotKind
@@ -36,7 +36,7 @@ from ...core.gam.parser import table_records
 from ...core.bulk import stop_requested
 from ...core.shared_drives import folder_move_of, manages_directly
 from ..csvutil import csv_safe
-from ..jobs import start_job
+from ..jobs import RECENT_WINDOW, start_job
 from ..previews import TOKEN_FIELD
 from ..server import TEMPLATES, cell
 from ._common import NOT_CONNECTED, app_state, as_of, error_partial, friendly, gam_detail, write_failed
@@ -191,7 +191,9 @@ def _form_key(cmd, slots: dict) -> tuple:
 
 
 def _seq_key(seq) -> tuple:
-    return tuple((s["cid"], s["target"], tuple(s["argv"]), s["risk"]) for s in seq)
+    return tuple((s["cid"], s["target"], tuple(s["argv"]), s["risk"], s.get("id", ""),
+                  tuple(sorted((s.get("binds") or {}).items())), tuple(sorted((s.get("slots") or {}).items())))
+                 for s in seq)
 
 
 async def _preview_page(request: Request, cmd, argv, target, slots, error: str = "") -> HTMLResponse:
@@ -643,14 +645,53 @@ async def seq_add(request: Request, cid: Annotated[str, Form()]) -> HTMLResponse
         return error_partial(request, "That command can't be added.")
     if len(st.builder_sequence) >= MAX_SEQUENCE_STEPS:
         return error_partial(request, f"Sequence is capped at {MAX_SEQUENCE_STEPS} steps.")
+    form = await request.form()
+    binds = {s.key: b for s in cmd.slots if (b := sequence_binds.parse_bind(str(form.get(s.key) or "")))}
+    if binds:
+        step, error = _bound_step(st.builder_sequence, _catalog(request), cmd, binds, form)
+        if error:
+            return error_partial(request, error)
+        st.builder_sequence.append(step)
+        return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": st.builder_sequence})
     _, argv, target, error = await _assemble(request, cmd)
     if error:
         return error_partial(request, error)
     st.builder_sequence.append({
-        "cid": cid, "label": cmd.name, "target": target, "argv": argv,
+        "id": secrets.token_urlsafe(6), "cid": cid, "label": cmd.name, "target": target, "argv": argv,
         "risk": int(cmd.risk), "gam": _gam_str(argv),
     })
     return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": st.builder_sequence})
+
+
+def _bound_step(seq, catalog, cmd, binds: dict, form) -> tuple:
+    """A step whose slots take `=stepN.Column` values (roadmap 5.2): checked now that step N is an earlier read with no
+    bindings of its own, kept unresolved (its argv is built per value at the preview). ``(step, error)``."""
+    sources = {n for n, _ in binds.values()}
+    if len(sources) > 1:
+        return None, "A step can take its values from one earlier step, not several."
+    [n] = sources
+    if not 1 <= n <= len(seq):
+        return None, f"There's no step {n} before this one."
+    src = seq[n - 1]
+    src_cmd = catalog.by_id(src["cid"])
+    if src_cmd is None or src_cmd.risk != RiskLevel.READ_ONLY or src.get("binds"):
+        return None, (f"Step {n} isn't a read with its own values, so it can't feed a later step: only a read's result "
+                      "can, since a change's doesn't exist until it runs.")
+    if any(s.kind == SlotKind.CHOICE for s in cmd.slots if s.key in binds):
+        return None, "A choice can't come from another step's result."
+    slots = {}
+    for slot in cmd.slots:
+        if slot.key in binds:
+            continue
+        value = str(form.get(slot.key) or "").strip()
+        if slot.required and not value:
+            return None, f"{slot.label} is required."
+        slots[slot.key] = value
+    columns = [c for _, c in binds.values()]
+    src.setdefault("id", secrets.token_urlsafe(6))
+    return {"id": secrets.token_urlsafe(6), "cid": cmd.id, "label": cmd.name, "argv": [], "risk": int(cmd.risk),
+            "target": f"each {', '.join(columns)}", "gam": f"once for each {', '.join(columns)} in a read's result",
+            "binds": {k: c for k, (_, c) in binds.items()}, "source": src["id"], "slots": slots}, None
 
 
 @router.post("/sequence/remove", response_class=HTMLResponse)
@@ -676,6 +717,77 @@ async def seq_clear(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(request, _SEQUENCE_PAGE, {"sequence": []})
 
 
+_TOO_MANY = (f"That's more than {sequence_binds.MAX_RESOLVED_STEPS} steps once the reads' rows are filled in. For that many "
+             "people at once, use a CSV on Users.")
+
+
+async def _resolve(st, catalog, seq) -> tuple:
+    """The sequence with each bound step (roadmap 5.2) filled in from its read: ``(steps, notes, refusal)``. Each read a
+    later step binds to runs now (a recorded read, origin `sequence`); each distinct row becomes one step built by the
+    command's own builder. Any read that fell short, or a value a builder refuses, is a refusal and nothing is held."""
+    if not any(s.get("binds") for s in seq):
+        return list(seq), [], ""
+    if st.connector is None:
+        return [], [], NOT_CONNECTED
+    ids = [s.get("id") for s in seq]
+    rows_of: dict = {}
+    steps: list = []
+    notes: list = []
+    for i, s in enumerate(seq, 1):
+        if not s.get("binds"):
+            steps.append(s)
+            if len(steps) > sequence_binds.MAX_RESOLVED_STEPS:   # an unbound step after a fan-out counts too
+                return [], [], _TOO_MANY
+            continue
+        j = ids.index(s["source"]) + 1 if s.get("source") in ids else 0
+        if not 0 < j < i:
+            return [], [], f"Step {i} takes its values from a step that isn't before it any more. Remove it and queue it again."
+        src, cmd = seq[j - 1], catalog.by_id(s["cid"])
+        src_cmd = catalog.by_id(src["cid"])
+        if cmd is None or src_cmd is None or src_cmd.risk != RiskLevel.READ_ONLY:
+            return [], [], f"Step {j} isn't a read, so step {i} can't take values from it."
+        if j not in rows_of:
+            try:
+                out = await st.connector.catalog_read(src_cmd, list(src["argv"]), src["target"], origin=READ_ORIGIN_SEQUENCE)
+            except Exception as exc:  # noqa: BLE001 — unread is unknown: nothing is held (invariant 10)
+                if not isinstance(exc, GAMError):
+                    logger.warning("a bound sequence read failed", exc_info=exc)
+                return [], [], f"Step {j}'s read failed, so who step {i} runs for isn't known. Nothing will run. {friendly(exc)}"
+            rows_of[j] = table_records(out)
+        values, why = sequence_binds.values_from(rows_of[j], list(s["binds"].values()), j, i)
+        if why:
+            return [], [], why
+        if not values:
+            notes.append(f"Step {j} found nothing, so step {i} runs for no one.")
+        for value in values:
+            resolved, error = _resolved_step(cmd, s, value)
+            if error:
+                return [], [], f"Step {i} can't take “{', '.join(value)}” from step {j}: {error}"
+            steps.append({**resolved, "from": j})
+            if len(steps) > sequence_binds.MAX_RESOLVED_STEPS:
+                return [], [], _TOO_MANY
+    return steps, notes, ""
+
+
+def _typed_count_above(steps):
+    """A fan-out filled in from a read (roadmap 5.2) counts toward the guard's typed count, as a bulk run's people do: over
+    COUNT_CONFIRM_ABOVE targets the operator types the count. A queue of its own steps keeps the click."""
+    return guard_mod.COUNT_CONFIRM_ABOVE if any("from" in s for s in steps) else None
+
+
+def _resolved_step(cmd, step: dict, value: tuple) -> tuple:
+    """One bound step built for one row's values by the command's own builder (its validators check each value)."""
+    slots = {**step["slots"], **dict(zip(step["binds"].keys(), value, strict=True))}
+    try:
+        argv = list(cmd.build(slots))
+    except ValueError as exc:   # a builder's argument validation: its words are ours
+        return None, str(exc)
+    target = next((slots[s.key] for s in cmd.slots
+                   if s.kind in (SlotKind.TARGET_USER, SlotKind.USER, SlotKind.GROUP) and slots.get(s.key)), "(command)")
+    return {"id": step["id"], "cid": step["cid"], "label": step["label"], "target": target, "argv": argv,
+            "risk": step["risk"], "gam": _gam_str(argv)}, ""
+
+
 def _seq_previews(seq) -> list:
     return [ChangePreview(connector_id=ConnectorID.GOOGLE_WORKSPACE, target=s["target"],
                           summary=s["label"], risk=RiskLevel(s["risk"]), argv=s["argv"],
@@ -685,15 +797,19 @@ def _seq_previews(seq) -> list:
 async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLResponse:
     """The sequence's confirm step, holding the steps it shows under the token its Run form posts."""
     st = app_state(request)
-    tenant = st.tenant_key()   # before the alias lookups read the directory (web/previews.py)
-    previews = _seq_previews(seq)
-    decision = guard_mod.evaluate(previews)
+    tenant = st.tenant_key()   # before the alias lookups or a bound read read anything (web/previews.py)
+    steps, notes, unresolved = await _resolve(st, _catalog(request), seq)   # roadmap 5.2: what is shown, held and run
+    if unresolved:
+        steps = [s for s in seq if not s.get("binds")]
+    previews = _seq_previews(steps)
+    decision = guard_mod.evaluate(previews, typed_count_above=_typed_count_above(steps))
     folder_moves, refusals = await _folder_moves(st, previews)
-    blocked = await _blocked(st, decision, [p.argv for p in previews]) + refusals
-    token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
+    blocked = ([unresolved] if unresolved else []) + await _blocked(st, decision, [p.argv for p in previews]) + refusals
+    token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in steps], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
-        "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
-        "token": token, "folder_moves": folder_moves, "export_refusal": _export_refusal(seq),
+        "sequence": steps, "bound": any(s.get("binds") for s in seq), "notes": notes,
+        "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
+        "token": token, "folder_moves": folder_moves, "export_refusal": _export_refusal(steps),
         **await _transfers(st.connector, decision)})
 
 
@@ -788,11 +904,13 @@ async def seq_run(request: Request) -> HTMLResponse:
     # Enforce the full guard server-side (mirrors /run): a bulk-destructive sequence needs typed
     # "confirm"; any other confirmation-requiring sequence needs the Confirm & run click; an account
     # delete, its address typed.
-    refusal = guard_mod.enforce(previews, form)
+    refusal = guard_mod.enforce(previews, form, typed_count_above=_typed_count_above(held))
     if refusal:
         return await _seq_preview_page(request, seq, error=refusal)
     n = len(previews)
-    job = start_job(st.jobs, n, window=n,   # every step's row: at most MAX_SEQUENCE_STEPS
+    # Every step's row for a queue's own steps (at most MAX_SEQUENCE_STEPS); a fan-out filled in from a read (roadmap 5.2,
+    # up to MAX_RESOLVED_STEPS) keeps the usual rolling window, so a poll doesn't grow with the read (invariant 9).
+    job = start_job(st.jobs, n, window=n if n <= MAX_SEQUENCE_STEPS else RECENT_WINDOW,
                     kind="sequence", title=f"Builder sequence — {n} step{'s' if n != 1 else ''}")
     job.task = asyncio.create_task(_run_sequence(job, conn, previews, _catalog(request)))
     return TEMPLATES.TemplateResponse(request, "_sequence_run.html", {"job": job})
