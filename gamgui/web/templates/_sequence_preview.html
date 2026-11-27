@@ -1,6 +1,13 @@
 {% set destructive = decision.max_risk == 2 %}
 <div class="rounded-2xl border {{ 'border-red-300 bg-red-50' if decision.requires_confirmation else 'border-brand-gray/40 bg-brand-white' }} p-4 shadow-sm space-y-2">
   <p {% if not error %}tabindex="-1" data-focus{% endif %} class="text-sm font-medium {{ 'text-red-700' if destructive else 'text-brand-blueink' }}">{{ decision.summary }} across {{ sequence | length }} step{{ '' if sequence | length == 1 else 's' }}.</p>
+  {% for n in notes | default([]) %}<p class="text-xs text-brand-blueink">{{ n }}</p>{% endfor %}
+  {% if bound and not error %}
+  {# Roadmap 5.2: the steps filled in from their reads, exactly what Run runs. #}
+  <details open class="text-xs"><summary class="cursor-pointer text-brand-blueink">Every step, with the read's values filled in</summary>
+    <ol class="mt-1 max-h-60 list-decimal space-y-0.5 overflow-y-auto pl-5 font-mono">{% for s in sequence %}<li>{{ s.gam }}</li>{% endfor %}</ol>
+  </details>
+  {% endif %}
   {% for w in decision.warnings %}<p class="text-xs text-red-700">{{ w }}</p>{% endfor %}
   {% include "_folder_move_note.html" %}
   {% for t in pending_transfers | default([]) %}
@@ -13,6 +20,10 @@
   {% if not blocked %}
   <form hx-post="/builder/sequence/run" hx-target="#sequence-action" hx-swap="innerHTML" hx-disabled-elt="find button" class="flex items-center gap-2">
     <input type="hidden" name="preview" value="{{ token }}" />
+    {% if decision.requires_typed_count %}
+    <input name="confirm_count" inputmode="numeric" autocomplete="off" placeholder="type: {{ decision.affected_count }}" aria-label="Type {{ decision.affected_count }} to confirm"
+           class="w-32 rounded-lg border border-brand-blue bg-brand-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/30" />
+    {% endif %}
     {% if decision.requires_typed_confirmation %}
     <input name="confirm" autocomplete="off" placeholder="type: confirm" aria-label="Type confirm to run"
            class="rounded-lg border border-red-500 bg-brand-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200" />

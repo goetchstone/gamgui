@@ -282,6 +282,13 @@ and the CSV download takes the filtered rows.
 Clicking an address in a result offers follow-ups for that person (delegates, forwarding,
 signature, suspend and more). A Builder change only ever runs from its preview.
 
+A step can use an earlier read's results. Queue a read first (for example **Find users** with
+`orgUnitPath='/Leavers'`), then in a later step's field type `=step1.primaryEmail`: the step number and a column of
+that read's table. The preview runs the read and lists every step it fills in, one per row, and Run runs exactly that
+list. Only a read can feed a later step. If the read fails, prints no table, or has a row without that column, the
+preview says who the step runs for isn't known and nothing runs; a read that finds no one runs the step for no one,
+and the preview says that too.
+
 A queued sequence can also leave the app as a file for GAM's own `gam batch`: its preview has **Export as a gam batch
 file**. Each step is one line, written so GAM reads every value back exactly as typed, with a `commit-batch` line
 between steps so they run in order. The file then runs outside GamGUI: no preview, no confirmation and no audit

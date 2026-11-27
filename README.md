@@ -161,7 +161,7 @@ and have only run offline: see
 - **Command Builder** — browse/search the full categorized GAM catalog (1,087 commands, 550 of them
   runnable: 35 hand-curated, the only ones that can change anything, plus 515 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
-  preview → run, linear sequencing (a sequence can also be saved as a `gam batch` file, audited), and results export (CSV download or straight to a Google
+  preview → run, sequencing (a later step can run once for each row of an earlier read; a sequence can also be saved as a `gam batch` file, audited), and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
   keeps just the rows referencing addresses outside your domains (primary, secondaries, aliases), both over every row of the result
   and downloadable as CSV — and clicking any address in a result offers pre-filled follow-ups
