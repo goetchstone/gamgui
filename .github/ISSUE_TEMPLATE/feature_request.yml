@@ -33,12 +33,20 @@ body:
     attributes:
       label: Area
       options:
-        - Onboarding
-        - Offboarding
-        - Signatures
-        - Users / groups
-        - Calendars
-        - Builder
-        - Reports
         - Setup
+        - Home
+        - Users
+        - Groups
+        - Shared drives
+        - Signatures
+        - Calendars
+        - Classroom
+        - Builder
+        - Onboard
+        - Offboard (Lifecycle)
+        - Incident
+        - Phishing
+        - Reports
+        - Audit
+        - Files
         - Something new

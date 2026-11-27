@@ -179,7 +179,7 @@ jobs:
           Asset attested (gh attestation verify, GAM-team/GAM build.yml on main), pinned, vendored, catalog
           regenerated, mock + doc counts refreshed by scripts/bump_gam.py. $STATUS"
           git push -u origin "$BR"
-          gh pr create --title "GAM $LATEST (automated bump)" --head "$BR" --body \
+          gh pr create --title "chore: GAM $LATEST (automated bump)" --head "$BR" --body \
           "Automated bump of the vendored GAM, **$PIN → $LATEST**, via \`scripts/bump_gam.py\`.
 
           - Asset **build-attestation verified** (signed by \`GAM-team/GAM\`'s release workflow on \`main\`) before the pin was written.

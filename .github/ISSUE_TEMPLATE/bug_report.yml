@@ -32,13 +32,18 @@ body:
         - Home
         - Users
         - Groups
+        - Shared drives
         - Signatures
         - Calendars
+        - Classroom
         - Builder
         - Onboard
-        - Lifecycle (offboarding)
+        - Offboard (Lifecycle)
+        - Incident
+        - Phishing
         - Reports
         - Audit
+        - Files
         - Building or launching the app
         - Other
     validations:
@@ -62,7 +67,7 @@ body:
     id: gam
     attributes:
       label: GAM version
-      description: Shown in the app's header, e.g. `GAM 7.48.14`.
+      description: Shown in the app's header, e.g. `GAM 7.52.05`.
   - type: input
     id: macos
     attributes:
