@@ -4,7 +4,7 @@ The per-user loop stays the default: it is what draws the live ✓/✗ feed and 
 neither, and the preview says so. It still keeps each person's current signature first (roadmap 4.1), so Put Back works.
 
 - **Backup read:** `gam file - print signature`, the addresses on standard input. A person is read only when their one row
-  came back whole and GAM said "Getting Signature for" them; anyone else is unread, never "no signature" (invariant 10),
+  came back whole and GAM said "Getting Signatures for" them; anyone else is unread, never "no signature" (invariant 10),
   and isn't written.
 - **Write:** `gam csv - … gam user ~User signature ~signature html`, the rows on standard input. GAM 7.52.05's `csv` reads
   them with csv.DictReader after `sys.stdin.read()` (text mode: `\\r\\n` and `\\r` arrive as `\\n`, decoded in GAM's own
@@ -74,14 +74,18 @@ def emails_stdin(emails: Iterable[str]) -> str:
     return "".join(f"{e}\n" for e in emails)
 
 
-def _said_getting(stderr: str, email: str) -> bool:
-    pattern = re.compile(r"^Getting Signature for " + re.escape(email) + r"(?: \(\d+/\d+\))?\s*$", re.I | re.M)
+def said_getting(stderr: str, email: str) -> bool:
+    """Whether GAM said it read ``email``'s signature: "Getting Signatures for <u>" with or without its "(i/n)".
+    printGettingEntityItemForWhom writes Ent.PluralGetting(), "Signatures" for Ent.SIGNATURE at the 7.52.05 tag; the app
+    and its mock once expected "Signature", which no live read would have matched (failure-log 2026-11-27). The singular
+    is accepted too, as SwiftGamGui's port does."""
+    pattern = re.compile(r"^Getting Signatures? for " + re.escape(email) + r"(?: \(\d+/\d+\))?\s*$", re.I | re.M)
     return bool(pattern.search(stderr or ""))
 
 
 def read_signatures(stdout: str, stderr: str, emails: Sequence[str]) -> Dict[str, str]:
     """Each person's stored signature from one `file - print signature` run, only for those read whole: their one row,
-    every cell present, and GAM's "Getting Signature for" line. Missing from the result is unread, never "" (the
+    every cell present, and GAM's "Getting Signatures for" line. Missing from the result is unread, never "" (the
     per-person read's rule, GAMConnector.signature_exact)."""
     rows: Dict[str, List[dict]] = {}
     for r in parse_records(stdout or ""):
@@ -89,7 +93,7 @@ def read_signatures(stdout: str, stderr: str, emails: Sequence[str]) -> Dict[str
     read: Dict[str, str] = {}
     for email in emails:
         mine = rows.get(email.strip().lower(), [])
-        if len(mine) != 1 or any(v is None for v in mine[0].values()) or not _said_getting(stderr, email):
+        if len(mine) != 1 or any(v is None for v in mine[0].values()) or not said_getting(stderr, email):
             continue
         read[email] = str(mine[0].get("signature", ""))
     return read

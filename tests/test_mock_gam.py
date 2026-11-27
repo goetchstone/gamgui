@@ -218,7 +218,7 @@ async def test_mock_loops_over_what_the_app_feeds_on_stdin(runner, domain):
     assert "User: alice@example.com, Signature: alice@example.com, Set" in out
     argv, emails = STDIN_COMMANDS["print_signatures_from_stdin"]
     res = await runner.run_any_exit(domain, argv, stdin=emails)
-    assert res.returncode == 0 and "Getting Signature for carol@example.com (2/2)" in res.stderr
+    assert res.returncode == 0 and "Getting Signatures for carol@example.com (2/2)" in res.stderr
     assert res.stdout.splitlines()[0].startswith("User,") and len(res.stdout.splitlines()) == 3
 
 

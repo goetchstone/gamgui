@@ -8,7 +8,7 @@ every answer and these only do GAM's looping, from GAM 7.52.05's source:
   `~Field` the header lacks ends it (csvFieldErrorExit); an empty cell substitutes "" (processSubFields). Each row is its
   own child; its output is passed on whole. GAM's parent takes no child's exit code, so this exits 0 when rows failed.
 - `file - print signature` (getEntitiesFromFile, printShowSignature): the addresses one a line, read in one process;
-  "Getting Signature for <u> (i/n)" per person on stderr, one CSV of every row (titles User then sorted, the `signature`
+  "Getting Signatures for <u> (i/n)" per person on stderr, one CSV of every row (titles User then sorted, the `signature`
   column only when a row has one), written in GAM's dialect (doubled quotes and a backslash escape).
 
 Only these exact argv shapes are modelled: anything else is refused, as the mock refuses what it doesn't model.
@@ -56,7 +56,7 @@ def print_loop(mock: str) -> int:
     for i, user in enumerate(users, 1):
         res = child(mock, ["user", user, "print", "signature"])
         count = f" ({i}/{len(users)})" if len(users) > 1 else ""
-        sys.stderr.write(re.sub(r"^(Getting Signature for \S+)$", r"\1" + count.replace("\\", r"\\"), res.stderr, flags=re.M))
+        sys.stderr.write(re.sub(r"^(Getting Signatures for \S+)$", r"\1" + count.replace("\\", r"\\"), res.stderr, flags=re.M))
         if res.returncode:
             rc = res.returncode
         if res.stdout.strip():

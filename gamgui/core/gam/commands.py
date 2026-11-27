@@ -1110,7 +1110,7 @@ class GAMCommands:
     def print_signatures_from_stdin() -> List[str]:
         # Roadmap 5.4's backup read: every listed person's stored signature in one call, the addresses one a line on GAM's
         # standard input (`file -`: getEntitiesFromFile → openFile('-'), setFilePath leaves `-` alone). printShowSignature
-        # prints one CSV, a row a person and "Getting Signature for <user> (i/n)" on stderr, as print_signature does for one.
+        # prints one CSV, a row a person and "Getting Signatures for <user> (i/n)" on stderr, as print_signature does for one.
         return ["file", "-", "print", "signature"]
 
     @staticmethod

@@ -423,4 +423,17 @@ layer. Moving it (skill → hook → tripwire) is a no-text-change fix.
   ported or said to be left out.
 - **Enforcement home if changed:** skill (`start-session`, or a line in the back-port plan's Phase E).
 
+## 2026-11-27 — A stderr wording the app keys on was written from a function's name, not GAM's tables
+- **What happened:** the signature reads (roadmap 4.1, 5.4) required "Getting Signature for <u>". GAM writes
+  `Ent.PluralGetting()`, which is "Signatures". The mock was written to the same guess, so the suite passed. Live, every read
+  would have been unknown and no signature run would have written anyone. SwiftGamGui's port caught it; see failure-log
+  2026-11-27.
+- **Invariant in force:** the mock-lies rule (CLAUDE.md: check syntax against the grammar, make the mock fail as GAM fails).
+- **Why it didn't hold:** wrong layer. The grammar says what GAM accepts, not what it prints. Output wording lives in GAM's
+  source (`glentity`, `glaction`, `glmsgs`), and nothing asks for that to be read for wording the app makes a decision on.
+- **Would a rule have caught it?** Yes, if any stderr or stdout wording the app keys a decision on cites the source table it
+  came from at the pin (the entity name, the action, the message), as 5.4's "Signature: <u>, Set" line does.
+- **Enforcement home if changed:** skill (`pre-commit`: "a wording you match, cite its GAM source"), or a tripwire that
+  compares each matched "Getting <X> for" against glentity's plurals.
+
 <!-- Add new entries ABOVE this line, newest first. -->

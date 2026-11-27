@@ -993,7 +993,9 @@ if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "signature" ]
   # GAM's own titles hold no `signature`: it is a column only when Gmail's reply has the field, which an empty one doesn't.
   titles="User,displayName,isDefault,isPrimary,replyToAddress,sendAsEmail,treatAsAlias,verificationStatus"
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then echo "$titles"; exit 0; fi
-  printf 'Getting Signature for %s\n' "$user" 1>&2
+  # printGettingEntityItemForWhom writes Ent.PluralGetting(): "Signatures" (glentity at the 7.52.05 tag). This once said
+  # "Signature", as the app expected, so the mock passed and every live read would have been unknown (failure-log 2026-11-27).
+  printf 'Getting Signatures for %s\n' "$user" 1>&2
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
     echo "$titles"; printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; exit 73
   fi
