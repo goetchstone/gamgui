@@ -34,7 +34,7 @@ The stakes are nonetheless high, because of what the app can reach:
   loopback server (within the limits under *Known limitations*);
 - **hostile or malformed data returned by Google** (display names, signatures, calendar summaries,
   event titles, group descriptions) flowing into HTML, CSV, or a `gam` argument list;
-- **supply chain** — a tampered `gam` binary, or a malicious dependency;
+- **supply chain** — a tampered `gam` binary, a malicious dependency, or a compromised GitHub Action in CI;
 - **another page in the operator's browser** reaching `127.0.0.1` (CSRF / DNS rebinding).
 
 **Out of scope** — these are not defects here, and reports about them will be closed:

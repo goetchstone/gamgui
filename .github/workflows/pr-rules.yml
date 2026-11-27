@@ -1,0 +1,30 @@
+name: PR rules
+
+# The rules a pull request is held to that no test can see (scripts/pr_rules.py): a typed title, since a squash merge
+# makes it the commit on main, and a failure-log entry with every fix:. Runs again when the title is edited. Reads the
+# repository only; the title reaches the script through env:, never the script's text.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: PR rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: A typed title, and a failure-log entry with a fix
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 -I scripts/pr_rules.py
