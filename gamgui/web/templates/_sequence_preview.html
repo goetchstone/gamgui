@@ -26,5 +26,13 @@
     {% endfor %}
     <button type="submit" class="rounded-lg px-3.5 py-2 text-sm font-medium text-white {{ 'bg-red-700 hover:bg-red-800' if decision.requires_confirmation else 'bg-brand-blue hover:bg-brand-blueink' }} transition-colors">{{ 'Confirm & run' if decision.requires_confirmation else 'Run sequence' }}</button>
   </form>
+  <div class="border-t border-brand-gray/20 pt-2 text-xs text-brand-grayink">
+    {% if export_refusal %}
+    <p>Can't export as a gam batch file: {{ export_refusal }}</p>
+    {% else %}
+    <a href="/builder/sequence/export.txt?preview={{ token }}" download class="font-medium text-brand-blueink underline">Export as a gam batch file</a>
+    — for <code>gam batch</code>. The file then runs <strong>outside this app</strong>: no preview, no confirmation, no audit record. The export itself is recorded.
+    {% endif %}
+  </div>
   {% endif %}
 </div>

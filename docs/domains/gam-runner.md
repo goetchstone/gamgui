@@ -36,7 +36,9 @@ Callers (mostly `core/connectors/gam_connector.py`) build an argv list with a `G
 method and call `runner.run_authenticated(domain, argv, serialize=...)`. That opens an
 `EphemeralConfig` context (vault → `0700` dir with `0600` credential files), runs `_exec`, and on
 exit writes any refreshed `oauth2.txt` back to the vault and wipes the dir. `_exec` spawns via
-`create_subprocess_exec(str(gam_binary), *argv, ...)` with an allowlisted env carrying `GAMCFGDIR`;
+`create_subprocess_exec(str(gam_binary), *argv, ...)` with an allowlisted env carrying `GAMCFGDIR`
+(and, only when a caller passes `stdin=`, a pipe it writes UTF-8 to and closes: roadmap 5.4's `csv -` and `file -`
+read their rows and addresses there, so they never land in a file; `_run_write` forwards it and never audits it);
 a `wait_for` timeout kills the process and raises a `TIMEOUT` `GAMError` whose text says how long it
 ran and that it may have done part of its work. The timeout is `DEFAULT_TIMEOUT` (120s) unless the
 caller passes one: a domain-wide `all users …` call (the offboarding calendar sweep, the calendar-index

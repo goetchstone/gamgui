@@ -80,12 +80,14 @@ Everything below is planned for both apps.
   only if it cannot mutate, so adding write coverage stays a deliberate, reviewed act of curation.
 - **Step-to-step dataflow in the sequencer** — bind one step's output to the next step's input.
   Deferred from the original Builder design; steps are independent today.
-- **Export a sequence to `gam batch` / CSV**, so the visual builder composes with GAM's own batch
-  machinery instead of competing with it.
-- **A GAM-native fast path for domain-wide signature apply.** The per-user loop is deliberate — it is
-  what powers the live ✓/✗ feed — but a genuine whole-domain push would be minutes instead of hours
-  via `gam all users` or a `gam csv` batch. Worth adding as an *opt-in alternative*, not a
-  replacement.
+- **Export a sequence to `gam batch`**: built (2026-11-27). A sequence's preview writes it as a batch file,
+  one quoted line a step with `commit-batch` between, audited, a password refused. Not CSV: `gam csv` runs one
+  command per row and a sequence's steps are different commands; many people, one command, is the Users CSV.
+  Not run through a real `gam batch` yet.
+- **A GAM-native fast path for signatures**: built (2026-11-27), opt-in beside the per-user loop. One call
+  reads and keeps everyone's current signature, one `csv` call sets them all, the rows on GAM's standard
+  input. No live ✓/✗ list and no Stop; GAM's own per-person line, never its exit, says who was set, and
+  Retry runs the rest one at a time. Not run on a real domain yet.
 - **Notarization**, if the app is ever to be handed to another Mac. Needs an Apple Developer ID.
 
 ## Deliberate trade-offs

@@ -7,7 +7,7 @@
 <div class="mt-2 space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
   <p tabindex="-1" data-focus class="font-medium">Switching to {{ tenant }} stops what's running on {{ active }} after its current step:</p>
   <ul class="list-disc space-y-0.5 pl-5">
-    {% for j in running %}<li>{{ j.title or "A background job" }}{% if j.kind in unstoppable %} — one read, which can't stop: it finishes, and nothing it read shows on {{ tenant }}{% elif j.confirm_stop %} — stopped part-way, it is left half done: the steps after it won't run{% endif %}</li>{% endfor %}
+    {% for j in running %}<li>{{ j.title or "A background job" }}{% if j.kind == "signatures_fast" %} — one GAM call setting signatures, which can't stop: it finishes on {{ active }}{% elif j.kind in unstoppable %} — one read, which can't stop: it finishes, and nothing it read shows on {{ tenant }}{% elif j.confirm_stop %} — stopped part-way, it is left half done: the steps after it won't run{% endif %}</li>{% endfor %}
   </ul>
   <p>What already ran stays done. The steps after it won't run.</p>
   <div class="flex items-center gap-2 pt-1">

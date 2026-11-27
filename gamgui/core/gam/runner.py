@@ -130,17 +130,21 @@ class GAMRunner:
         env["GAM_NO_UPDATE_CHECK"] = "1"
         return env
 
-    async def _exec(self, argv: Sequence[str], cfgdir: Path, timeout: float) -> RunResult:
+    async def _exec(self, argv: Sequence[str], cfgdir: Path, timeout: float, stdin: Optional[str] = None) -> RunResult:
+        """``stdin``, when given, is written to GAM's standard input (UTF-8) and closed: what a `-` file argument reads
+        (roadmap 5.4's `csv -` and `file -`), so the data never lands in a file."""
         self._require_binary()
         proc = await asyncio.create_subprocess_exec(
             str(self.gam_binary),
             *argv,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=self._build_env(cfgdir),
         )
         try:
-            out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            out, err = await asyncio.wait_for(proc.communicate(None if stdin is None else stdin.encode("utf-8")),
+                                              timeout=timeout)
         except asyncio.TimeoutError:
             await _stop(proc)
             # Killed mid-run: say so, since a multi-entity command may have done part of its work.
@@ -166,6 +170,7 @@ class GAMRunner:
         argv: Sequence[str],
         timeout: Optional[float] = None,
         serialize: bool = False,
+        stdin: Optional[str] = None,
     ) -> str:
         """Run a gam command as ``domain`` (credentials materialized from the vault).
 
@@ -178,7 +183,7 @@ class GAMRunner:
 
         async def _do() -> str:
             with EphemeralConfig(self.vault, domain, base_dir=self.base_dir) as cfgdir:
-                res = await self._exec(argv, cfgdir, timeout)
+                res = await self._exec(argv, cfgdir, timeout, stdin)
             stdout = strip_cfgdir_noise(res.stdout, cfgdir)
             if res.returncode != 0:
                 raise GAMError.from_run(res.returncode, res.stderr, argv, stdout=stdout)
@@ -189,12 +194,13 @@ class GAMRunner:
                 return await _do()
         return await _do()
 
-    async def run_any_exit(self, domain: str, argv: Sequence[str], timeout: Optional[float] = None) -> RunResult:
+    async def run_any_exit(self, domain: str, argv: Sequence[str], timeout: Optional[float] = None,
+                           stdin: Optional[str] = None) -> RunResult:
         """A reviewed read whose exit code isn't its answer: an ``all users`` run's is the last user's, so never 0 across a real
         domain, and its result is on stderr. Credentials as ``run_authenticated``. Never for a write: those go through _run_write."""
         argv = list(argv)
         with EphemeralConfig(self.vault, domain, base_dir=self.base_dir) as cfgdir:
-            res = await self._exec(argv, cfgdir, timeout or self.timeout)
+            res = await self._exec(argv, cfgdir, timeout or self.timeout, stdin)
         return RunResult(stdout=strip_cfgdir_noise(res.stdout, cfgdir), stderr=res.stderr, returncode=res.returncode)
 
     async def version(self) -> str:

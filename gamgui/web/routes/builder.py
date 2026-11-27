@@ -23,7 +23,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from ...core import guard as guard_mod
-from ...core import sheet_export
+from ...core import sequence_export, sheet_export
 from ...core.catalog import load_catalog
 from ...core.catalog.catalog import AREA_ORDER, COPY_FOLDER_REST, MOVE_FOLDER
 from ...core.catalog.models import SlotKind
@@ -693,7 +693,44 @@ async def _seq_preview_page(request: Request, seq, error: str = "") -> HTMLRespo
     token = "" if blocked else st.previews.hold(_SEQ_FLOW, _seq_key(seq), [dict(s) for s in seq], tenant=tenant)
     return TEMPLATES.TemplateResponse(request, "_sequence_preview.html", {
         "sequence": seq, "decision": decision, "error": " ".join(blocked) or error, "blocked": bool(blocked),
-        "token": token, "folder_moves": folder_moves, **await _transfers(st.connector, decision)})
+        "token": token, "folder_moves": folder_moves, "export_refusal": _export_refusal(seq),
+        **await _transfers(st.connector, decision)})
+
+
+def _export_refusal(seq) -> str:
+    return sequence_export.why_not(seq)
+
+
+def _refused(text: str) -> Response:
+    return Response(text, media_type="text/plain", status_code=409)
+
+
+@router.get("/sequence/export.txt")
+async def seq_export(request: Request, preview: str = "") -> Response:
+    """The sequence its preview showed, as a `gam batch` file (roadmap 5.3): the steps held under the preview's token
+    (``peek``, so its Run still works), never what is queued now, and only for a preview with nothing blocking it. The file
+    runs outside this app's guard and audit, so the export is audited (``sequence_export``, each step's command and argv)
+    and refused with no connector to record it through, or when the record can't be written; a step that sets a password is
+    refused, not written."""
+    st = app_state(request)
+    conn = st.connector
+    held = st.previews.peek(_SEQ_FLOW, preview)
+    if held is None:
+        return _refused("That preview has expired or was already run — preview the sequence again, then export it.")
+    seq = [dict(s) for s in held]
+    why = sequence_export.why_not(seq)
+    if why:
+        return _refused(why)
+    if conn is None:
+        return _refused("Not connected — the sequence can't be exported without an audit record.")
+    body = sequence_export.batch_file(seq)
+    try:
+        conn.audit_sequence_export(seq)
+    except OSError as exc:
+        logger.warning("recording a sequence export failed", exc_info=exc)
+        return _refused("The export couldn't be recorded in the audit log, so the file wasn't written.")
+    return Response(content=body, media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=gamgui-sequence.txt"})
 
 
 @router.post("/sequence/preview", response_class=HTMLResponse)

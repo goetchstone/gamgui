@@ -1,0 +1,11 @@
+# A GamGUI Builder sequence, written for `gam batch <this file>`.
+# It runs outside GamGUI: no preview, no confirmation, no audit record. Read every line before you run it.
+# Each commit-batch waits for the step before it, so the steps run in this order.
+# 1. Reset password (random)
+gam update user alice@example.com password random changepassword off
+commit-batch
+# 2. Rename a shared drive
+gam update shareddrive shareddriveid 0AFINANCEuk9PVA name 'Finance — 2027 '"'"'Q1'"'"' $budget'
+commit-batch
+# 3. Delete a group
+gam delete group old-team@example.com noactionifalias

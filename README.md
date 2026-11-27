@@ -161,7 +161,7 @@ and have only run offline: see
 - **Command Builder** — browse/search the full categorized GAM catalog (1,087 commands, 550 of them
   runnable: 35 hand-curated, the only ones that can change anything, plus 515 read-only commands
   derived from GAM's grammar); curated commands get typed slots, drag-a-user targeting, a guarded
-  preview → run, linear sequencing, and results export (CSV download or straight to a Google
+  preview → run, linear sequencing (a sequence can also be saved as a `gam batch` file, audited), and results export (CSV download or straight to a Google
   Sheet). Result tables slice like grep — a live row filter plus an **External only** toggle that
   keeps just the rows referencing addresses outside your domains (primary, secondaries, aliases), both over every row of the result
   and downloadable as CSV — and clicking any address in a result offers pre-filled follow-ups
@@ -241,6 +241,7 @@ school domain is the most useful one of all.
 | Welcome email | Onboard | **confirmed** |
 | Reminder email (No 2SV, No recovery) | Reports | not yet; the same `sendemail` as the welcome email, one per person |
 | Set signature | Signatures (bulk), Users, Onboard | **confirmed** (the Builder no longer sets one: roadmap 4.1) |
+| Set signatures in one call (`csv -` with the rows on stdin, after one `file - print signature` backup read) | Signatures (opt-in) | not yet: set two throwaway accounts' signatures, then Put Back |
 | Keep each signature before a Signatures run replaces it (`print signature`) | Signatures | not yet: a read, run first on a throwaway |
 | Put Back a kept run's signatures | Signatures | not yet: the same `signature` write, run first on a throwaway |
 | Set title / department | Users (one person, or bulk *set department*), Builder | **confirmed** |
@@ -290,6 +291,7 @@ school domain is the most useful one of all.
 | Create and rename a shared drive (`user <u> create shareddrive <name>`, `update shareddrive shareddriveid <id> name <name>`) | Builder | not yet: create a throwaway drive, rename it, then delete it |
 | Close Out: remove an admin role (`delete admin <id>`), archive (`update user <u> archived on`), move an alias to the manager (`update alias <a> user <manager>`); its group, org unit, suspend and license steps reuse those screens' writes | Lifecycle | not yet: run on a throwaway account after its transfer |
 | Export a result to a Google Sheet (a new Sheet in the admin's Drive, shared with nobody) | Builder | not yet: modelled from GAM's source; needs the delegated Drive and Sheets scopes |
+| A sequence exported as a batch file (`commit-batch` between steps), run by GAM's batch command | Builder (the file runs outside the app) | not yet: export two harmless reads and run the file by hand |
 
 **A new account isn't ready at once.** On the first live onboarding (2026-09-30) the account,
 groups, checklist and welcome email went through, but the signature (1 s after the create) and a

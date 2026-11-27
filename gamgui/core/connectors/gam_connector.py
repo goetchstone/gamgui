@@ -13,7 +13,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from ..audit import AuditLog, redact_secrets
 from ..gam.commands import GAMCommands, MessageId, Organization, Phone, build_user_query, carries_todrive, cut_off_account
@@ -31,6 +31,7 @@ from ..gam.models import (
     Vacation,
 )
 from ..calendar_index import IndexedCalendar
+from .. import signatures_fast
 from ..classroom import Course, Roster, courses_from, owned_by, roster_from
 from ..roster_plan import Managed, managed_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
@@ -517,6 +518,35 @@ class GAMConnector(Connector):
         # GAM's titles hold no `signature` column of their own: it comes from Gmail's reply, which leaves an empty one out.
         # With the person's whole row read, no column is no signature.
         return str(rows[0].get("signature", ""))
+
+    async def signatures_exact(self, emails: List[str]) -> Dict[str, str]:
+        """Roadmap 5.4's backup read: each listed person's stored signature from one `file - print signature` run, the
+        addresses on standard input. Only those read whole are in the answer (core/signatures_fast.read_signatures): a
+        person missing from it is unread, never "no signature", whatever GAM's exit (a per-person failure sets it and the
+        run goes on). Raises when GAM couldn't run at all."""
+        if not emails:
+            return {}
+        res = await self.runner.run_any_exit(self.domain, GAMCommands.print_signatures_from_stdin(),
+                                             timeout=max(self.runner.timeout, 5.0 * len(emails)),
+                                             stdin=signatures_fast.emails_stdin(emails))
+        return signatures_fast.read_signatures(res.stdout, res.stderr, emails)
+
+    async def set_signatures_fast(self, items: List[Tuple[str, str]]) -> Tuple[ChangeResult, Set[str]]:
+        """Roadmap 5.4's write: every ``(email, body)`` in one `csv -` run through ``_run_write`` (one audit record, the
+        count in ``extra``, never a body: the rows go on standard input). Returns its result and the people GAM's own line
+        says it set; anyone else may not have been (core/signatures_fast.updated), whatever the exit."""
+        emails = [e for e, _ in items]
+        said: Set[str] = set()
+
+        def noted(out: str, _err: str) -> Dict[str, str]:
+            said.update(signatures_fast.updated(out, emails))
+            return {"set": str(len(said))}
+
+        result = await self._run_write("set_signatures_fast", f"{len(items)} people", GAMCommands.set_signatures_csv(),
+                                       RiskLevel.LOW, about={"count": str(len(items))},
+                                       timeout=max(self.runner.timeout, 5.0 * len(items)),
+                                       noted=noted, stdin=signatures_fast.rows_csv(items))
+        return result, said
 
     async def get_signature(self, email: str) -> str:
         out = await self.runner.run_authenticated(self.domain, GAMCommands.show_signature(email))
@@ -1294,6 +1324,14 @@ class GAMConnector(Connector):
         self.audit.record("sensitive_csv_export", target=target, argv=argv, ok=True,
                           extra={"command": command, "rows": rows}, domain=self.domain)
 
+    def audit_sequence_export(self, steps: List[dict]) -> None:
+        """A Builder sequence written out as a `gam batch` file (roadmap 5.3): it then runs outside the guard and the
+        audit, so the export itself is recorded as ``sequence_export``: each step's catalog command and argv. No GAM call.
+        A step that sets a password is refused before this (core/sequence_export), so no argv here holds one."""
+        self.audit.record("sequence_export", target="sequence", ok=True, domain=self.domain,
+                          extra={"steps": len(steps), "commands": [s.get("cid", "") for s in steps],
+                                 "argvs": [list(s["argv"]) for s in steps]})
+
     def sheet_owner(self) -> str:
         """Whose Drive an export's Sheet goes in: the connected admin, the address in the sign-in token, as GAM takes it
         (``_getAdminEmail``: GamGUI's gam.cfg names no admin_email). "" when the token can't be read."""
@@ -1465,6 +1503,7 @@ class GAMConnector(Connector):
         timeout: Optional[float] = None,
         verify: Optional[Callable[[str], str]] = None,
         noted: Optional[Callable[[str, str], Dict[str, str]]] = None,
+        stdin: Optional[str] = None,
     ) -> ChangeResult:
         """Run a mutation; audit it. ``tolerate_kinds`` lists GAMErrorKinds that count as success for
         a *best-effort* bulk op (e.g. an all-users sweep where 'not found' / own-calendar are expected)
@@ -1479,6 +1518,7 @@ class GAMConnector(Connector):
         ``about`` is what else the write concerned, recorded in the audit ``extra`` under the key that names
         it (``group``, ``scope``, ``event``, ``command``…) — once filed as ``group`` whatever it was.
         ``verify`` reads the output of a run that exited 0, for a command GAM can leave undone without a word: what it says is the failure.
+        ``stdin`` is fed to GAM's standard input (a `csv -` write's rows, roadmap 5.4): never audited or shown.
         ``noted`` reads what the write's own output says to keep on its record and its result (the link of the Sheet an export
         made), from GAM's stdout and stderr whether it exited 0 or not: a warning exit can follow the write itself. Never the output."""
         named = {k: v for k, v in (about or {}).items() if v}
@@ -1494,7 +1534,8 @@ class GAMConnector(Connector):
             refusal = redact_secrets(refusal, secrets)
             return ChangeResult(preview=preview, ok=False, detail=refusal, remediation=refusal)
         try:
-            out = await self.runner.run_authenticated(self.domain, argv, timeout=timeout, serialize=True)
+            fed = {"stdin": stdin} if stdin is not None else {}   # only when there is some: tests' fakes take the old keywords
+            out = await self.runner.run_authenticated(self.domain, argv, timeout=timeout, serialize=True, **fed)
         except asyncio.CancelledError:
             # Interrupted — quitting cancels an in-flight job (server._lifespan); the runner has
             # already stopped gam and wiped its dir. A BaseException, so `except Exception` below
