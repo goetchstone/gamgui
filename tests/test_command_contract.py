@@ -145,12 +145,14 @@ ENTITY_PREFIXES = (("user", None), ("file", None), ("all", "users"), ("calendars
 # leaves it alone, openFile reads stdin), `,` and `"` are <Character>s, and `~Field` is a `gam csv` column substitution
 # (getSubFields: a whole argument starting with `~` names a header field).
 LITERAL_VALUES = {"-", ",", '"'}
+# `<Config>`'s `<VariableName>`s a builder sets for one call (gam.cfg's, documented in GamUpdate.txt, not GamCommands.txt).
+CONFIG_VARIABLES = {"num_threads"}
 
 
 def _value(tok: str) -> bool:
     # A `<param>` placeholder this test passed in, alone or joined into a list, the address joined into a search, or an
     # ID a builder validates: a real one stands in for the placeholder it would refuse.
-    return ("<" in tok or SEARCH_ADDRESS in tok or tok in VALIDATED_VALUES or tok in LITERAL_VALUES
+    return ("<" in tok or SEARCH_ADDRESS in tok or tok in VALIDATED_VALUES or tok in LITERAL_VALUES or tok in CONFIG_VARIABLES
             or re.fullmatch(r"~\w+", tok) is not None)
 
 
@@ -286,8 +288,22 @@ def _group_attributes_ok(pairs) -> bool:
         w in attrs and (_value(v) if attrs[w] is None else v in attrs[w]) for w, v in zip(pairs[::2], pairs[1::2], strict=True))
 
 
+def _without_prefixes(argv):
+    """The command after GamCommands.txt's `<Config>` (`config (<VariableName> <Value>)*`) and `<Redirect>`
+    (`redirect csv <FileName> multiprocess`), which come before any command, in that order."""
+    if argv[:1] == ["config"]:
+        i = 1
+        while i + 1 < len(argv) and argv[i] in CONFIG_VARIABLES:
+            i += 2
+        argv = argv[i:]
+    if argv[:2] == ["redirect", "csv"] and argv[3:4] == ["multiprocess"]:
+        argv = argv[4:]
+    return argv
+
+
 def _matches_grammar(argv) -> bool:
     _, _, heads, enums = _grammar()
+    argv = _without_prefixes(list(argv))
     # `gam csv <CSVLoopContent> … gam <GAMArgumentList>` (roadmap 5.4): the loop's own head, and the command it runs per
     # row held to the grammar as a command of its own.
     if argv[:1] == ["csv"] and "gam" in argv:

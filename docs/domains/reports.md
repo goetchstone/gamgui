@@ -148,24 +148,30 @@ buckets download (400 otherwise), and a directory that couldn't be read answers 
 only its titles, which would read as "everyone has one" (invariant 10). Tests: `tests/test_fill_in_csv.py`.
 
 ## Forwarding & mail delegates (roadmap 3.2)
-Reports' panel for every active account's forwarding that is on, and every mail delegate: `all users print forward
-enabledonly` and `all users print delegates shownames` (`GAMCommands.all_users_print_forward/_delegates`; neither takes
-`formatjson`, the old trap). One Gmail call per account each, so like connected apps it reads only when asked, as a
+Reports' panel for every active account's forwarding that is on, and every mail delegate. Since the scale work
+(docs/scale.md) each is one GAM call that reads every active person in parallel: `GAMCommands.parallel_print_forward` and
+`parallel_print_delegates` (`config num_threads 10 redirect csv - multiprocess csv - showcmds true gam user ~primaryEmail
+print forward enabledonly` / `print delegates shownames`), the people from a fresh directory read on stdin
+(`people_csv`), the limit `parallel_timeout` (~3 s a person a worker). One process visiting each in turn (`all users …`,
+the old form) took ~5 hours for both at 20,000 people and was cut off at its hour, keeping nothing. Neither read takes
+`formatjson` (the old trap). Each person is accounted for by `mail_review.account_for_parallel`: their worker's "Getting"
+line and an End code of 0 is read; a Gmail-off warning or another code is unread; no End line, or an End with no word,
+is skipped. A parent exit other than 0 is the parent's own failure (a usage error, its sign-in) and raises. The output
+forms are read from GAM 7.52.05's source (MultiprocessGAMCommands, poolCallback, CSVFileQueueHandler) and modelled by
+`tests/fixtures/mock_gam_loops.py`; not yet seen live. One Gmail call per account each, so like connected apps it reads only when asked, as a
 background job (`mail_review`, unstoppable: one read, no "between targets"), kept per connector (`AppState.mail_review`,
 dropped on a switch, and not kept when the connection changed mid-read). Each row opens the person.
-- **Every account GAM listed is accounted for** (`mail_review.account_for`). Read statically from the vendored 7.52.03 build
-  (printShowForward, printShowDelegates): in print mode GAM announces each account on stderr before reading it ("Getting
-  Forward Enabled for <u> (i/N)", "Getting all Delegates for <u> (i/N)"), warns by name for one it can't read ("User: <u>,
-  Gmail Service/App not enabled"), and skips a refused token without a word (`if not gmail: continue`). So an account is
-  read, unread with a reason, or skipped (counted from "Got N Users" and the counter, as it can't be named). The panel says
-  "read X of N", names the unread, counts the skipped, and only says "none of the accounts read forwards" when some were.
-- **The connector runs both through `run_any_exit`** (`_mail_read`): the per-account exits (`PER_USER_RCS`) are read line by
-  line; any other raises. A run that announced no account, or wrote no table (GAM writes the titles even with no row), is
-  `Incomplete`, said in fixed words (`unread_why`), never "none".
+- **Every person the read was given is accounted for** (`mail_review.account_for_parallel`). The panel says "read X of N",
+  names the unread, counts the skipped, and only says "none of the accounts read forwards" when some were.
+- **The connector runs both through `run_any_exit`** (`_mail_read`) with the people on stdin: the parent exits 0 whatever
+  its workers did, so any other exit is its own failure and raises. People read but no table (GAM writes the merged CSV's
+  titles once anyone was read) is `Incomplete`, said in fixed words (`unread_why`), never "none".
 - **Not covered, and the panel says so:** Gmail filters that forward, which `forward off` doesn't stop either; a person's
   filters are on their page.
-- **The mock** answers both as GAM does (`all users print forward|delegates`): the active users, each "Getting" line, Gmail
-  off by name (`GAM_MOCK_STATE/nogmail/<u>`, exit 73), the silent skip (`quiet/<u>`), the titles even with no row.
+- **The mock** answers both as GAM does: `mock_gam_loops.py` reads the `config` and `redirect` prefix in GAM's order, runs the
+  strict one-person handler (`user <u> print forward enabledonly` / `print delegates shownames`) a row at a time with GAM's
+  Start and End lines, and merges the rows into one CSV. Each one-person handler gives "Getting" on stderr, Gmail off by name
+  (`GAM_MOCK_STATE/nogmail/<u>`, exit 73), the silent skip (`quiet/<u>`, titles alone, exit 0).
 - **Not run on a real domain yet.** Read only; check the counts against the Admin console on its first run.
 
 ## Audit runs (plan F3)

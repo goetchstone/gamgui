@@ -26,6 +26,9 @@ import subprocess
 import sys
 
 INNER_SIGNATURE = ["user", "~User", "signature", "~signature", "html"]
+# The parallel reads (docs/scale.md): each person's own read, `~primaryEmail` from the stdin CSV.
+INNER_READS = (["user", "~primaryEmail", "print", "forward", "enabledonly"],
+               ["user", "~primaryEmail", "print", "delegates", "shownames"])
 FILE_PRINT_SIGNATURE = ["file", "-", "print", "signature"]
 TRUE, FALSE = {"true", "on", "yes", "enabled", "1"}, {"false", "off", "no", "disabled", "0"}
 
@@ -73,11 +76,19 @@ def csv_options(argv: list) -> tuple:
         quote = value()
     if len(delimiter) != 1 or len(quote) != 1:
         raise Usage("Invalid argument: Expected <Character>")
-    if i < len(argv) and argv[i].lower() in {"fields", "matchfield", "skipfield", "showcmds", "skiprows", "maxrows"}:
+    if i < len(argv) and argv[i].lower() in {"fields", "matchfield", "skipfield", "skiprows", "maxrows"}:
+        raise NotImplementedError(argv[i])
+    show = False
+    if present("showcmds"):   # _getShowCommands: `showcmds [<Boolean>]`
+        show = True
+        if i < len(argv) and argv[i].lower() in TRUE | FALSE:
+            show = argv[i].lower() in TRUE
+            i += 1
+    if i < len(argv) and argv[i].lower() in {"skiprows", "maxrows"}:
         raise NotImplementedError(argv[i])
     if not present("gam"):
         raise Usage(f"Invalid choice ({argv[i] if i < len(argv) else ''}): Expected <gam>")
-    return delimiter, quote, (None if no_escape else "\\"), argv[i:]
+    return delimiter, quote, (None if no_escape else "\\"), argv[i:], show
 
 
 def child(mock: str, argv: list) -> subprocess.CompletedProcess:
@@ -88,21 +99,85 @@ def child(mock: str, argv: list) -> subprocess.CompletedProcess:
     return res
 
 
-def csv_loop(mock: str, argv: list) -> int:
+def _stamp() -> str:
+    from datetime import datetime
+    return datetime.now().astimezone().isoformat()
+
+
+def read_loop(mock: str, inner: list, rows: list, show: bool, merge: bool) -> int:
+    """GAM's MultiprocessGAMCommands over one read a person: with `showcmds`, "<ts>,<i>/<N>,Start,0,<cmd>" and
+    "<ts>,<i>/<N>,End,<rc>,<cmd>" on stderr per item (poolCallback, 10590 and 10706 at the tag), each worker's own stderr
+    as it runs; with `redirect csv - multiprocess` every worker's rows merged into one CSV (titles merged in the order seen,
+    rows in the order workers finish, here the input order) written once at the end. The parent exits 0 whatever its
+    workers did."""
+    n = len(rows)
+    titles, merged = [], []
+    for i, row in enumerate(rows, 1):
+        argv = [row.get("primaryEmail") or "" if a == "~primaryEmail" else a for a in inner]
+        cmd = " ".join(["gam", *argv])
+        if show:
+            sys.stderr.write(f"{_stamp()},{i}/{n},Start,0,{cmd}\n")
+        res = child(mock, argv)
+        sys.stderr.write(res.stderr)
+        if show:
+            sys.stderr.write(f"{_stamp()},{i}/{n},End,{res.returncode},{cmd}\n")
+        if merge:
+            if res.stdout.strip():
+                reader = csv.DictReader(io.StringIO(res.stdout), escapechar="\\", doublequote=True)
+                titles += [t for t in (reader.fieldnames or []) if t not in titles]
+                merged += list(reader)
+        else:
+            sys.stdout.write(res.stdout)
+    if merge and titles:
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=titles, escapechar="\\", doublequote=True, quoting=csv.QUOTE_MINIMAL,
+                                lineterminator="\n", restval="")
+        writer.writeheader()
+        writer.writerows(merged)
+        sys.stdout.write(out.getvalue())
+    return 0
+
+
+def prefixed(mock: str, argv: list) -> int:
+    """`config num_threads <n> [redirect csv - multiprocess] csv - …`: GAM reads `config` (4134) before `redirect` (4286),
+    and `config`'s loop ends at the first word that isn't a variable. Only these shapes are modelled."""
+    i = 1
+    if argv[i:i + 1] != ["num_threads"] or len(argv) < 3 or not argv[2].isdigit() or int(argv[2]) < 1:
+        sys.stderr.write(f"ERROR: mock: config {' '.join(argv[1:3])} isn't modelled\n")
+        return 2
+    i = 3
+    merge = argv[i:i + 4] == ["redirect", "csv", "-", "multiprocess"]
+    if merge:
+        i += 4
+    elif argv[i:i + 1] == ["redirect"]:
+        sys.stderr.write(f"ERROR: mock: redirect {' '.join(argv[i + 1:i + 4])} isn't modelled\n")
+        return 2
+    if argv[i:i + 1] != ["csv"]:
+        sys.stderr.write(f"ERROR: mock: config … {' '.join(argv[i:i + 2])} isn't modelled\n")
+        return 2
+    return csv_loop(mock, argv[i:], merge=merge)
+
+
+def csv_loop(mock: str, argv: list, merge: bool = False) -> int:
     try:
-        delimiter, quote, escape, inner = csv_options(argv)
+        delimiter, quote, escape, inner, show = csv_options(argv)
     except Usage as exc:
         sys.stderr.write(f"Command: gam {' '.join(argv)}\n\nERROR: {exc}\n")
         return 2
     except NotImplementedError as exc:
         sys.stderr.write(f"ERROR: mock: csv with {exc} isn't modelled\n")
         return 2
-    if inner != INNER_SIGNATURE:
+    if inner not in (INNER_SIGNATURE, *INNER_READS):
         sys.stderr.write(f"ERROR: mock: csv running gam {' '.join(inner[:4])} … isn't modelled\n")
         return 2
     # GAM's reader with the options as read: no `noescapechar true` and a backslash in a cell is eaten, as live.
     reader = csv.DictReader(io.StringIO(sys.stdin.read()), delimiter=delimiter, quotechar=quote, escapechar=escape)
     fields = reader.fieldnames or []
+    if inner in INNER_READS:
+        if "primaryEmail" not in fields:
+            sys.stderr.write(f'ERROR: Header "primaryEmail" not found in CSV headers of "{",".join(fields)}".\n')
+            return 2
+        return read_loop(mock, inner, list(reader), show, merge)
     for name in ("User", "signature"):
         if name not in fields:
             sys.stderr.write(f'ERROR: Header "{name}" not found in CSV headers of "{",".join(fields)}".\n')
@@ -142,6 +217,8 @@ def main() -> int:
     mock, argv = sys.argv[1], sys.argv[2:]
     if argv[:1] == ["csv"] and len(argv) > 1:
         return csv_loop(mock, argv)
+    if argv[:1] == ["config"]:
+        return prefixed(mock, argv)
     if argv == FILE_PRINT_SIGNATURE:
         return print_loop(mock)
     sys.stderr.write(f"ERROR: mock: {' '.join(argv[:4])} … isn't modelled\n")

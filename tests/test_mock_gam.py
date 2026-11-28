@@ -192,8 +192,6 @@ ANY_EXIT_READS = {
     "find_message_copies": [C.find_message_copies(MessageId("CAPh1sh+Notice=0001@mail.example.com"))],
     "find_spam_copies": [C.find_spam_copies(MessageId("CAPh1sh+Notice=0001@mail.example.com"))],
     # Reports' mail review (roadmap 3.2): every active account, each announced on stderr; the last warning's code stands.
-    "all_users_print_forward": [C.all_users_print_forward()],
-    "all_users_print_delegates": [C.all_users_print_delegates()],
     # Roadmap 4.8: a folder's items by owner, whose 60 is an empty folder.
     "print_folder_files": [C.print_folder_files("alice@example.com", "1FOLDERmixed")],
 }
@@ -203,6 +201,9 @@ ANY_EXIT_READS = {
 STDIN_COMMANDS = {
     "set_signatures_csv": (C.set_signatures_csv(), 'User,signature\n"alice@example.com","<b>A</b>"\n'),
     "print_signatures_from_stdin": (C.print_signatures_from_stdin(), "alice@example.com\ncarol@example.com\n"),
+    # The parallel mail review (docs/scale.md): the active people, a `primaryEmail` column.
+    "parallel_print_forward": (C.parallel_print_forward(), "primaryEmail\nalice@example.com\ncarol@example.com\n"),
+    "parallel_print_delegates": (C.parallel_print_delegates(), "primaryEmail\nalice@example.com\ncarol@example.com\n"),
 }
 
 
