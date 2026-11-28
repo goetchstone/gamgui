@@ -39,7 +39,10 @@ exit writes any refreshed `oauth2.txt` back to the vault and wipes the dir. `_ex
 `create_subprocess_exec(str(gam_binary), *argv, ...)` with an allowlisted env carrying `GAMCFGDIR`
 (and, only when a caller passes `stdin=`, a pipe it writes UTF-8 to and closes: roadmap 5.4's `csv -` and `file -`
 read their rows and addresses there, so they never land in a file; `_run_write` forwards it and never audits it);
-a `wait_for` timeout kills the process and raises a `TIMEOUT` `GAMError` whose text says how long it
+gam starts in a session of its own (`start_new_session=True`), and a cut-off (a timeout or a cancel) kills its whole
+process group (`_stop`, `os.killpg`): GAM's parallel loops (`csv`, `batch`, auto-batch) fork workers that each load the
+credentials, and killing the parent alone left them running while the directory was wiped, with the runner waiting them
+out (failure-log 2026-11-28, `tests/test_runner_stops_workers.py`). So a `wait_for` timeout kills the process group and raises a `TIMEOUT` `GAMError` whose text says how long it
 ran and that it may have done part of its work. The timeout is `DEFAULT_TIMEOUT` (120s) unless the
 caller passes one: a domain-wide `all users …` call (the offboarding calendar sweep, the calendar-index
 scan) passes `DOMAIN_WIDE_TIMEOUT` (1 h), because GAM walks every user in turn. Non-zero exit →
