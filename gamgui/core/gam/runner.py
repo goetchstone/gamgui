@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,8 +60,17 @@ def strip_cfgdir_noise(stdout: str, cfgdir: Path) -> str:
 
 
 async def _stop(proc: asyncio.subprocess.Process) -> None:
-    """Kill ``gam`` and reap it. The kill is sent first and synchronously, so even if a second
-    cancellation interrupts the wait, the process holding the plaintext credentials is already dying."""
+    """Kill ``gam`` and every process it started, then reap it. The kill is sent first and synchronously, so even if a
+    second cancellation interrupts the wait, the processes holding the credentials are already dying.
+
+    GAM's parallel loops (`csv`, `batch`, auto-batch) fork workers that each load the credentials. Killing the parent
+    alone left them running with their tokens in memory while EphemeralConfig wiped the directory, and since they hold
+    gam's pipes, the runner then waited them out: a "timed out" run went on to its end (failure-log 2026-11-28). gam
+    runs in a session of its own (``_exec``), so its process group is gam and everything under it."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass  # the group is gone: gam and its workers exited between the check and the signal
     if proc.returncode is None:
         try:
             proc.kill()
@@ -141,6 +151,7 @@ class GAMRunner:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=self._build_env(cfgdir),
+            start_new_session=True,   # gam and every worker it forks share one process group, which _stop kills whole
         )
         try:
             out, err = await asyncio.wait_for(proc.communicate(None if stdin is None else stdin.encode("utf-8")),
