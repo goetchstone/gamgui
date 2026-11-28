@@ -42,7 +42,7 @@ async def license_card(request: Request, email: str = "") -> HTMLResponse:
     if conn is None:
         return error_partial(request, NOT_CONNECTED)
     try:
-        seats = await conn.license_seats()
+        seats = await conn.license_seats_cached()   # what the card offers; the preview reads them again
     except Exception as exc:  # noqa: BLE001 — unread: nothing offered, never "holds none"
         return TEMPLATES.TemplateResponse(request, _CARD, {"email": email, "error": "Couldn't read the license seats. "
                                                            + unread_why(exc, _TRY_AGAIN)})

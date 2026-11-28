@@ -458,11 +458,12 @@ async def _run_bulk_store(job, st, conn, targets, store: str) -> None:
     directory as it lands. A failed write's outcome isn't known (a timeout may still have applied it),
     so any failure — or the loop dying — drops the whole list instead."""
     clean = False
+    patches = st.batched_patch(department=store)
     try:
-        await bulk.set_departments(job, conn, targets, store,
-                                   on_set=lambda u: st.patch_user(u.primary_email, department=store))
+        await bulk.set_departments(job, conn, targets, store, on_set=patches.add)
         clean = not job.failed_total
     finally:
+        patches.flush()
         if not clean:
             st.invalidate_users()
 
@@ -473,7 +474,7 @@ async def bulk_page(request: Request) -> HTMLResponse:
     if st.connector is None:
         return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": False})
     try:
-        groups = await st.connector.list_groups()
+        groups = await st.groups(stale_ok=True)
     except Exception as exc:
         return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "error": friendly(exc, _TRY_AGAIN), "groups": []})
     return TEMPLATES.TemplateResponse(request, _BULK_STORE_PAGE, {"connected": True, "groups": [g.email for g in groups]})
@@ -1102,10 +1103,12 @@ async def _run_ou_many(job, st, conn, emails, org_unit: str) -> None:
     """The job's task: ``bulk.move_users``, each move patched into the cached directory as it lands. A failed write's
     outcome isn't known (a timeout may still have applied it), so any failure, or the loop dying, drops the whole list."""
     clean = False
+    patches = st.batched_patch(org_unit_path=org_unit)
     try:
-        await bulk.move_users(job, conn, emails, org_unit, on_set=lambda e: st.patch_user(e, org_unit_path=org_unit))
+        await bulk.move_users(job, conn, emails, org_unit, on_set=patches.add)
         clean = not job.failed_total
     finally:
+        patches.flush()
         if not clean:
             st.invalidate_users()
 
@@ -1117,7 +1120,7 @@ async def ou_many_page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, _OU_MANY_PAGE, {"connected": False})
     try:
         paths = await st.connector.org_units()
-        groups = [g.email for g in await st.connector.list_groups()]
+        groups = [g.email for g in await st.groups(stale_ok=True)]
     except Exception as exc:  # noqa: BLE001 — unread: no unit offered, never "only /"
         return TEMPLATES.TemplateResponse(request, _OU_MANY_PAGE, {"connected": True, "paths": [], "groups": [],
                                                                    "error": "Couldn't read the org units or the groups. "

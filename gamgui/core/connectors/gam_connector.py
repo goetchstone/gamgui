@@ -31,7 +31,7 @@ from ..gam.models import (
     Vacation,
 )
 from ..calendar_index import IndexedCalendar
-from .. import signatures_fast
+from .. import clock, signatures_fast
 from ..classroom import Course, Roster, courses_from, owned_by, roster_from
 from ..roster_plan import Managed, managed_from
 from ..connected_apps import AppsRead, ConnectedApp, apps_from, grants_from, read_from
@@ -99,6 +99,8 @@ INTERRUPTED = ("interrupted (the app quit or the job was cancelled) before GAM r
 # `audit_read`, whose `command` is the run and step (`license_usage/licenses`). Schedules add theirs.
 READ_ORIGIN_BUILDER = "builder"
 READ_ORIGIN_SEQUENCE = "sequence"
+DIRECTORY_TIMEOUT = 900.0   # one `print users`: ~0.8 s a 500-row page live, so ~750,000 people before it is reached
+SEATS_TTL = 300.0           # a licence card's seats may be this old; a change's preview always reads them again
 READ_ORIGINS = (READ_ORIGIN_BUILDER, READ_ORIGIN_SEQUENCE)
 READ_ORIGIN_AUDIT_RUN = "audit_run"
 # A named report (F2) run on Audit runs so it can be scheduled (F7a): `command` is the report's key (`licenses`).
@@ -310,6 +312,7 @@ class GAMConnector(Connector):
         self._confirmed_admin: Optional[Tuple[str, str]] = None   # (address, ID) GAM has agreed with
         # (action, target) as a write starts; what it returns is told (ok, what to do) as it ends. See _watched.
         self.on_write: Optional[Callable[[str, str], Optional[Callable[[bool, str], None]]]] = None
+        self._seats: Optional[Tuple[float, List[LicenseSeat]]] = None   # (when read, seats), for the licence card only
 
     # --- connection --------------------------------------------------------------------
     async def test(self) -> ConnectionStatus:
@@ -331,7 +334,9 @@ class GAMConnector(Connector):
     ) -> List[GAMUser]:
         query = build_user_query(search, include_suspended)
         argv = GAMCommands.print_users(query=query, fields=fields)
-        stdout = await self.runner.run_authenticated(self.domain, argv)
+        # The runner's 2-minute default cut off a directory past ~75,000 people (500 a page, ~0.8 s a page), and every
+        # screen that needs the list would fail with it (docs/scale.md).
+        stdout = await self.runner.run_authenticated(self.domain, argv, timeout=DIRECTORY_TIMEOUT)
         return [GAMUser.from_json(r) for r in parse_records(stdout)]
 
     async def get_user(self, email: str, fields: Optional[Sequence[str]] = None) -> GAMUser:
@@ -386,6 +391,17 @@ class GAMConnector(Connector):
         argv = GAMCommands.move_user_to_org_unit(org_unit, email)
         return await self._run_write("move_org_unit", email, argv, RiskLevel.LOW, about={"org_unit": org_unit})
 
+    async def license_seats_cached(self) -> List[LicenseSeat]:
+        """The seats for a person's licence card: the last read up to SEATS_TTL old, else a new one. The card read every
+        seat in the domain on every click (docs/scale.md). Every add, swap or remove here drops them; a change's preview
+        reads ``license_seats`` afresh, so nothing is decided on these."""
+        if self._seats is not None and clock.now() - self._seats[0] < SEATS_TTL:
+            return self._seats[1]
+        started = clock.now()
+        seats = await self.license_seats()
+        self._seats = (started, seats)
+        return seats
+
     async def license_seats(self) -> List[LicenseSeat]:
         """Every license seat in the domain (roadmap 4.3), the read the License usage run makes. With no product named GAM
         passes over one Google refuses without a word or a code, so a seat missing here may only be unread: the screens
@@ -399,16 +415,19 @@ class GAMConnector(Connector):
         return seats
 
     async def add_license(self, email: str, seat: LicenseSeat) -> ChangeResult:
+        self._seats = None   # whatever happens, the cached seats may now be wrong
         argv = GAMCommands.add_license(email, seat.product_id, seat.sku_id)
         return await self._run_write("add_license", email, argv, RiskLevel.LOW,
                                      about={"product": seat.product_id, "sku": seat.sku_id})
 
     async def swap_license(self, email: str, old: LicenseSeat, new_sku_id: str) -> ChangeResult:
+        self._seats = None   # whatever happens, the cached seats may now be wrong
         argv = GAMCommands.swap_license(email, old.product_id, old.sku_id, new_sku_id)
         return await self._run_write("swap_license", email, argv, RiskLevel.LOW,
                                      about={"product": old.product_id, "from_sku": old.sku_id, "sku": new_sku_id})
 
     async def remove_license(self, email: str, seat: LicenseSeat) -> ChangeResult:
+        self._seats = None   # whatever happens, the cached seats may now be wrong
         argv = GAMCommands.remove_license(email, seat.product_id, seat.sku_id)
         return await self._run_write("remove_license", email, argv, RiskLevel.DESTRUCTIVE,
                                      about={"product": seat.product_id, "sku": seat.sku_id})

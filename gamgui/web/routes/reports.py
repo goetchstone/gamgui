@@ -34,6 +34,9 @@ _READ_TIMED_OUT = ("GAM reads one account at a time and didn't finish in the hou
                    "Trying again won't help on a domain this size.")
 
 
+REPORT_SHOWN = 50   # a card lists this many; the rest are in its CSV (/reports/list.csv)
+
+
 @router.get("", response_class=HTMLResponse)
 async def reports_page(request: Request, refresh: int = 0) -> HTMLResponse:
     st = request.app.state.gamgui
@@ -53,7 +56,7 @@ async def reports_page(request: Request, refresh: int = 0) -> HTMLResponse:
         _REPORTS_PAGE,
         {"connected": True, "reports": reports_mod.build_reports(users), "total": len(users), "named": named,
          "reminders": reports_mod.REMINDERS,
-         "fill_in": reports_mod.FILL_IN_REPORTS,
+         "fill_in": reports_mod.FILL_IN_REPORTS, "shown": REPORT_SHOWN,
          **as_of(st.user_cache)},
     )
 
@@ -95,6 +98,31 @@ async def fill_in_csv(request: Request, key: str = "") -> Response:
     # `key` is one of FILL_IN_REPORTS, so the name carries only filename-safe characters.
     return Response(out.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{key.replace("_", "-")}.csv"'})
+
+
+@router.get("/list.csv")
+async def bucket_csv(request: Request, key: str = "") -> Response:
+    """Everyone a card counts, as a spreadsheet: the card shows only its first REPORT_SHOWN (docs/scale.md: listing every
+    member put 12.5 MB of HTML on the page at 20,000 people). From the same cached directory; formula-safe; a list that
+    couldn't be read is said in plain text, never an empty sheet (invariant 10)."""
+    st = request.app.state.gamgui
+    if st.connector is None:
+        return Response(NOT_CONNECTED + "\n", status_code=400, media_type="text/plain")
+    try:
+        users = await st.users(stale_ok=True)
+    except Exception as exc:  # noqa: BLE001 — said in words, as a plain-text answer
+        return Response(friendly(exc, "Couldn't load users.") + "\n", status_code=502, media_type="text/plain")
+    bucket = next((r for r in reports_mod.build_reports(users) if r.key == key), None)
+    if bucket is None:
+        return Response("Not a list that downloads.\n", status_code=400, media_type="text/plain")
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(("email", "name", "org_unit", "suspended"))
+    for u in sorted(bucket.users, key=lambda u: u.primary_email.lower()):
+        writer.writerow([csv_safe(v) for v in (u.primary_email, u.full_name, u.org_unit_path, "yes" if u.suspended else "")])
+    # `key` is a report's own key, so the name carries only filename-safe characters.
+    return Response(out.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{bucket.key.replace("_", "-")}.csv"'})
 
 
 @router.get("/usage", response_class=HTMLResponse)
@@ -241,9 +269,11 @@ async def inactive_apply(request: Request) -> HTMLResponse:
 async def _run_suspend(job, st, conn, emails) -> None:
     """The job's task: each suspend GAM accepted is patched into the cached directory as it lands. A failed write's outcome
     isn't known (a timeout may still have applied it), so any failure, or the loop dying, drops the whole list instead."""
+    patches = st.batched_patch(suspended=True)
     try:
-        await bulk.suspend_users(job, conn, emails, on_set=lambda e: st.patch_user(e, suspended=True))
+        await bulk.suspend_users(job, conn, emails, on_set=patches.add)
     finally:
+        patches.flush()
         if job.failed_total or job.error:
             st.invalidate_users()
 
