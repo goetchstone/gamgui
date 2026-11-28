@@ -353,6 +353,24 @@ def license_sku(product_id: str, sku_id: str) -> str:
     return f"nv:{product_id}:{sku_id}"
 
 
+# How many GAM workers a parallel read runs at once (docs/scale.md). Each is a whole forked GAM exchanging its own token, so
+# a handful, not hundreds. GAM's dispatcher (MultiprocessGAMCommands) looks for a free worker once a second when all are
+# busy, so 10 workers manage about 10 people a second: ~33 minutes for 20,000, where one process visiting each in turn took
+# ~2.8 hours a read.
+GAM_PARALLEL = 10
+
+
+def _in_parallel(read: Sequence[str]) -> List[str]:
+    """One read a person, GAM_PARALLEL at once, by GAM 7.52.05's own loop. `config num_threads N` sets the worker pool for this
+    call only (in memory; `save` never written). `redirect csv - multiprocess` merges every worker's rows into one CSV,
+    written once at the end on stdout. `csv - showcmds true` takes the addresses from stdin (`primaryEmail`, one a row) and
+    writes "<ts>,<i>/<N>,Start,0,<cmd>" and "<ts>,<i>/<N>,End,<rc>,<cmd>" on stderr for each, which is how each person's
+    outcome is told: the parent exits 0 whatever its workers did. `<Config>` then `<Redirect>`, in that order, before the
+    command (GamCommands.txt)."""
+    return ["config", "num_threads", str(GAM_PARALLEL), "redirect", "csv", "-", "multiprocess",
+            "csv", "-", "showcmds", "true", "gam", "user", "~primaryEmail", *read]
+
+
 class GAMCommands:
     # GAM's REPORT_CHOICE_MAP keys, as `report` takes them. Not `gplus` or `jamboard`, whose services have ended.
     REPORT_APPLICATIONS = ("login", "token", "saml", "gmail", "accessevaluation", "chat", "useraccounts", "takeout", "mobile", "chrome", "drive", "calendar",
@@ -805,17 +823,15 @@ class GAMCommands:
                 "suppressnotselectedmessages"]
 
     @staticmethod
-    def all_users_print_forward() -> List[str]:
-        # Reports' mail review (roadmap 3.2): every active account's forwarding that is on (grammar `<UserTypeEntity> print
-        # forward [enabledonly]`). No formatjson: CSV `User,forwardEnabled,forwardTo,disposition`. One account at a time,
-        # each announced on stderr ("Getting Forward Enabled for <u> (i/N)"), which is how a skipped one is told apart.
-        return ["all", "users", "print", "forward", "enabledonly"]
+    def parallel_print_forward() -> List[str]:
+        # The mail review's forwarding read, GAM_PARALLEL workers at once (docs/scale.md): each active person's own `user <u>
+        # print forward enabledonly`, the addresses on stdin. See _in_parallel.
+        return _in_parallel(["print", "forward", "enabledonly"])
 
     @staticmethod
-    def all_users_print_delegates() -> List[str]:
-        # Every active account's mail delegates (grammar `<UserTypeEntity> print delegates [shownames]`). No formatjson:
-        # CSV `User,delegateName,delegateAddress,delegationStatus`, each account announced ("Getting all Delegates for <u>").
-        return ["all", "users", "print", "delegates", "shownames"]
+    def parallel_print_delegates() -> List[str]:
+        # The mail review's delegates read, in parallel as parallel_print_forward.
+        return _in_parallel(["print", "delegates", "shownames"])
 
     @staticmethod
     def info_user(email: str, fields: Optional[Sequence[str]] = None) -> List[str]:

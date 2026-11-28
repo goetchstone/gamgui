@@ -427,8 +427,9 @@ async def mail_review(request: Request, job: str = "") -> HTMLResponse:
 async def _read_mail_review(job, st, conn) -> None:
     """Background: read every account's forwarding and delegates, kept only while ``conn`` is still the connected tenant's."""
     try:
-        job.current = "Reading every account's forwarding and delegates…"
-        review = await conn.mail_review()
+        job.current = "Reading the directory, then every active account's forwarding and delegates…"
+        people = [u.primary_email for u in await st.users(force=True) if not u.suspended]   # the list each read is given
+        review = await conn.mail_review(people)
         if st.connector is conn:
             st.mail_review = (review, clock.now())
             job.applied = len(review.forwarding) + len(review.delegations)

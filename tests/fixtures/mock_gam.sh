@@ -324,7 +324,7 @@ fi
 # GAM's loops over standard input (roadmap 5.4's signature fast path): `csv - … gam user ~User signature ~signature html`
 # and `file - print signature`. mock_gam_loops.py does GAM's looping and runs this mock once per row or person, so the
 # strict one-person handlers below answer each; any other `csv` or `file -` shape is refused there.
-if [ "${1:-}" = "csv" ] || { [ "${1:-}" = "file" ] && [ "${2:-}" = "-" ]; }; then
+if [ "${1:-}" = "csv" ] || [ "${1:-}" = "config" ] || { [ "${1:-}" = "file" ] && [ "${2:-}" = "-" ]; }; then
   exec python3 "$(dirname "$0")/mock_gam_loops.py" "$0" "$@"
 fi
 
@@ -1531,22 +1531,27 @@ fi
 # while on. carol@ forwards to her own address; with GAM_MOCK_STATE, `forward` below keeps what it set.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "forward" ]; then
   user=$(lower "$2")
-  [ $# -eq 4 ] || not_modelled "print forward with $5"
+  enabledonly=""
+  if [ $# -eq 5 ] && [ "$(lower "$5")" = "enabledonly" ]; then enabledonly=1   # the parallel mail review (docs/scale.md)
+  elif [ $# -ne 4 ]; then not_modelled "print forward with $5"; fi
   titles='User,forwardEnabled,forwardTo,disposition'
   need_user "$user" Print
+  # A refused token GAM drops without a word (buildGAPIServiceObject, `if not gmail: continue`): the titles alone, exit 0.
+  if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then printf '%s\n' "$titles"; exit 0; fi
   printf 'Getting Forward Enabled for %s\n' "$user" 1>&2
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
     printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; printf '%s\n' "$titles"; exit 73
   fi
-  printf '%s\n' "$titles"
   if [ -n "${GAM_MOCK_STATE:-}" ] && [ -f "$GAM_MOCK_STATE/forward/$user" ]; then
-    printf '%s,%s\n' "$user" "$(cat "$GAM_MOCK_STATE/forward/$user")"
+    row="$user,$(cat "$GAM_MOCK_STATE/forward/$user")"
   else
     case "$user" in
-      carol@example.com) printf '%s,True,carol.home@example.org,leaveInInbox\n' "$user" ;;
-      *) printf '%s,False,,\n' "$user" ;;
+      carol@example.com) row="$user,True,carol.home@example.org,leaveInInbox" ;;
+      *) row="$user,False,," ;;
     esac
   fi
+  printf '%s\n' "$titles"
+  case "$row" in "$user,True,"*) printf '%s\n' "$row" ;; *) [ -n "$enabledonly" ] || printf '%s\n' "$row" ;; esac
   exit 0
 fi
 
@@ -1721,6 +1726,23 @@ fi
 
 # `gam user <email> print delegates` (no formatjson) -> THAT user's delegates as plain CSV, like real GAM.
 if [ "${1:-}" = "user" ] && [ "${3:-}" = "print" ] && [ "${4:-}" = "delegates" ]; then
+  if [ $# -eq 5 ] && [ "$(lower "$5")" = "shownames" ]; then   # the parallel mail review (docs/scale.md): names, as all users
+    user=$(lower "$2")
+    titles='User,delegateName,delegateAddress,delegationStatus'
+    need_user "$user" Print "$titles"
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/quiet/$user" ]; then printf '%s\n' "$titles"; exit 0; fi
+    printf 'Getting all Delegates for %s\n' "$user" 1>&2
+    if [ -n "${GAM_MOCK_STATE:-}" ] && [ -e "$GAM_MOCK_STATE/nogmail/$user" ]; then
+      printf 'User: %s, Gmail Service/App not enabled\n' "$user" 1>&2; printf '%s\n' "$titles"; exit 73
+    fi
+    printf '%s\n' "$titles"
+    for d in $(delegates_of "$user"); do
+      name=$(sed -n "s/.*\"primaryEmail\": \"$d\", \"name\": {\"givenName\": \"\([^\"]*\)\", \"familyName\": \"\([^\"]*\)\".*/\1 \2/p" \
+        "$GAM_MOCK_FIXTURES/print_users.json")
+      printf '%s,%s,%s,accepted\n' "$user" "${name:-$d}" "$d"
+    done
+    exit 0
+  fi
   [ $# -eq 4 ] || invalid_arg "$5"
   need_user "$2" Print "User,delegateAddress,delegationStatus"
   printf 'User,delegateAddress,delegationStatus\n'
