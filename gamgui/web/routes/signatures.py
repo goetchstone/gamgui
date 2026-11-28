@@ -209,7 +209,7 @@ async def page(request: Request) -> HTMLResponse:
         return TEMPLATES.TemplateResponse(request, _SIGNATURES_PAGE, {"connected": False})
     try:
         users = await st.users()
-        groups = await st.connector.list_groups()
+        groups = await st.groups(stale_ok=True)
     except Exception as exc:
         return TEMPLATES.TemplateResponse(
             request, _SIGNATURES_PAGE,

@@ -1407,9 +1407,13 @@ async def test_bulk_department_patches_each_person_and_drops_the_list_after_a_fa
     async def set_organization(email, title="", department=""):
         return _gone_result(email)
 
+    from gamgui.web.server import CachePatches
+
     patched, dropped = [], []
-    st = SimpleNamespace(patch_user=lambda email, **kw: patched.append((email, kw)),
+    # The run batches its cache updates (docs/scale.md): what it hands the cache is the same people and change.
+    st = SimpleNamespace(patch_users=lambda emails, **kw: patched.extend((e, kw) for e in emails),
                          invalidate_users=lambda: dropped.append(1))
+    st.batched_patch = lambda **changes: CachePatches(st, changes)
     conn = SimpleNamespace(set_organization=set_organization)
     await _run_bulk_store(start_job({}, 1), st, conn, [GAMUser("alice@example.com")], "Sales")
     assert (patched, dropped) == ([("alice@example.com", {"department": "Sales"})], [])

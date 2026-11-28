@@ -35,6 +35,7 @@ from ..core.secrets.vault import SecretsVault
 from ..core.usercache import UserCache
 from .jobs import ONE_STEP, tray, watch_writes
 from .previews import Previews
+from ..core import clock
 
 _WEB_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
@@ -113,6 +114,27 @@ TEMPLATES.env.globals["screens"] = SCREENS
 TOKEN_COOKIE = "gamgui_token"  # noqa: S105 — a cookie name, not a secret
 DOMAINS_RETRY = 600   # seconds before a failed `gam print domains` is tried again (a success is kept)
 
+
+
+class CachePatches:
+    """A bulk run's cache updates, batched: ``add`` each account as GAM accepts it; the cached list is rebuilt at most once
+    a ``every`` seconds and on ``flush`` (call it in the run's ``finally``)."""
+
+    def __init__(self, st, changes: dict, every: float = 1.0) -> None:
+        self.st, self.changes, self.every = st, changes, every
+        self.pending: list = []
+        self.last = clock.now()
+
+    def add(self, item) -> None:
+        self.pending.append(getattr(item, "primary_email", item))
+        if clock.now() - self.last >= self.every:
+            self.flush()
+
+    def flush(self) -> None:
+        if self.pending:
+            self.st.patch_users(self.pending, **self.changes)
+            self.pending = []
+        self.last = clock.now()
 
 @dataclass
 class AppState:
@@ -326,6 +348,16 @@ class AppState:
         key = email.strip().lower()
         self.user_cache.patch(lambda u: u.primary_email.lower() == key,
                               (lambda u: replace(u, **changes)) if changes else None)
+
+    def patch_users(self, emails, **changes) -> None:
+        """``patch_user`` for many accounts with the same known change, in one rebuild of the cached list."""
+        self.user_cache.patch_many((e.strip().lower() for e in emails), lambda u: u.primary_email.lower(),
+                                   (lambda u: replace(u, **changes)) if changes else None)
+
+    def batched_patch(self, **changes) -> "CachePatches":
+        """What a bulk run's ``on_set`` feeds: each account GAM accepted, applied to the cache at most once a second and
+        once at the end (``flush``), never a whole-list rebuild per account (docs/scale.md)."""
+        return CachePatches(self, changes)
 
     async def groups(self, force: bool = False, stale_ok: bool = False) -> list:
         """The cached group list (one ``gam print groups``), shared by the pickers; ``stale_ok`` as for ``users``."""

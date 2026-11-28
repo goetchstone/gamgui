@@ -40,7 +40,8 @@
         <details class="mt-3">
           <summary class="text-sm text-brand-blueink cursor-pointer hover:text-brand-black">View {{ r.count }}</summary>
           <ul class="mt-2 space-y-1 max-h-56 overflow-auto">
-            {% for u in r.users %}
+            {# The first `shown` only: every member of every card was 12.5 MB of HTML at 20,000 people (docs/scale.md). #}
+            {% for u in r.users[:shown | default(50)] %}
             <li class="text-sm">
               <a class="text-brand-blueink hover:text-brand-black" href="/users/detail?email={{ u.primary_email | urlencode }}">{{ u.full_name }}</a>
               {% if r.key != 'suspended' and u.suspended is defined and u.suspended %}
@@ -53,6 +54,10 @@
             </li>
             {% endfor %}
           </ul>
+          {% if r.count > shown | default(50) %}
+          <p class="mt-2 text-xs text-brand-grayink">The first {{ shown | default(50) }} of {{ r.count }}.
+            <a href="/reports/list.csv?key={{ r.key | urlencode }}" download class="text-brand-blueink underline hover:text-brand-black">Download all {{ r.count }} (CSV)</a></p>
+          {% endif %}
         </details>
         {% if r.key == "inactive" %}
         {# Reads the directory again and previews; it suspends nothing by itself (roadmap 3.3). #}

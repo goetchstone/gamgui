@@ -319,6 +319,10 @@ step.
   materialized into a locked-down temporary directory only for the duration of each `gam`
   invocation, then wiped. ([details](#security-model))
 - **Easy but powerful** — form/table UI for the common painful tasks, full GAM power underneath.
+- **Built for large domains** — one cached directory read serves every screen, tables page on the server, and every
+  bulk run's live feed stays the same size however many people it touches. [docs/scale.md](docs/scale.md) has the
+  numbers at 1,000, 5,000 and 20,000 people, measured offline by `scripts/scale_bench.py`, and says what still grows
+  with the domain.
 - **Connector-ready** — built around a connector protocol, so the Google Workspace connector is
   cleanly isolated and other systems could be added later without touching the UI.
 

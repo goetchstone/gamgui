@@ -102,6 +102,22 @@ class UserCache:
         else:
             self._items = [change(i) if pick(i) else i for i in self._items]
 
+    def patch_many(self, keys, key_of: Callable[[Any], Any], change: Optional[Callable[[Any], Any]] = None) -> None:
+        """``patch`` for many known records at once: one new list, not one a record. A bulk run patched each target as
+        it landed, and each patch rebuilt the whole list, so a 4,711-account suspend over 20,000 people spent ~5
+        minutes in the app (docs/scale.md). Any key the list doesn't hold drops the whole list, as ``patch`` does."""
+        keys = set(keys)
+        self._gen += 1
+        if self._items is None or not keys:
+            return
+        if not keys <= {key_of(i) for i in self._items}:
+            self.invalidate()
+            return
+        if change is None:
+            self._items = [i for i in self._items if key_of(i) not in keys]
+        else:
+            self._items = [change(i) if key_of(i) in keys else i for i in self._items]
+
     @property
     def cached(self) -> Optional[list]:
         """The list as it is, whatever its age, or None when nothing is cached — never a fetch and never
